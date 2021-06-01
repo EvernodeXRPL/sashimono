@@ -30,6 +30,9 @@ sudo cp -r include/jsoncons_ext/bson /usr/local/include/jsoncons_ext/
 popd > /dev/null 2>&1
 rm v0.153.3.tar.gz && rm -r jsoncons-0.153.3
 
+# Sqlite
+sudo apt-get install -y sqlite3 libsqlite3-dev
+
 # Update linker library cache.
 sudo ldconfig
 

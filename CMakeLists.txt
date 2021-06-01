@@ -13,6 +13,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wreturn-type")
 
 add_executable(sagent
+    src/util/util.cpp
+    src/conf.cpp
     src/main.cpp
 )
 

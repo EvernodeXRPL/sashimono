@@ -1,4 +1,5 @@
 #include "sqlite.hpp"
+#include "salog.hpp"
 
 namespace sqlite
 {
@@ -31,7 +32,7 @@ namespace sqlite
         const int flags = writable ? (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) : SQLITE_OPEN_READONLY;
         if ((ret = sqlite3_open_v2(db_name.data(), db, flags, 0)) != SQLITE_OK)
         {
-            std::cerr << ret << ": Sqlite error when opening database " << db_name;
+            LOG_ERROR << ret << ": Sqlite error when opening database " << db_name;
             *db = NULL;
             return -1;
         }
@@ -52,7 +53,7 @@ namespace sqlite
         char *err_msg;
         if (sqlite3_exec(db, sql.data(), callback, (callback != NULL ? (void *)callback_first_arg : NULL), &err_msg) != SQLITE_OK)
         {
-            std::cerr << "SQL error occured: " << err_msg;
+            LOG_ERROR << "SQL error occured: " << err_msg;
             sqlite3_free(err_msg);
             return -1;
         }
@@ -111,7 +112,7 @@ namespace sqlite
 
         const int ret = exec_sql(db, sql);
         if (ret == -1)
-            std::cerr << "Error when creating sqlite table " << table_name;
+            LOG_ERROR << "Error when creating sqlite table " << table_name;
 
         return ret;
     }
@@ -132,7 +133,7 @@ namespace sqlite
 
         const int ret = exec_sql(db, sql);
         if (ret == -1)
-            std::cerr << "Error when creating sqlite index '" << index_name << "' in table " << table_name;
+            LOG_ERROR << "Error when creating sqlite index '" << index_name << "' in table " << table_name;
 
         return ret;
     }
@@ -246,7 +247,7 @@ namespace sqlite
 
         if (sqlite3_close(*db) != SQLITE_OK)
         {
-            std::cerr << "Can't close database: " << sqlite3_errmsg(*db);
+            LOG_ERROR << "Can't close database: " << sqlite3_errmsg(*db);
             return -1;
         }
 

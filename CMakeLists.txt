@@ -15,6 +15,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wreturn-type")
 add_executable(sagent
     src/util/util.cpp
     src/conf.cpp
+    src/salog.cpp
     src/sqlite.cpp
     src/main.cpp
 )

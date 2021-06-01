@@ -33,6 +33,14 @@ rm v0.153.3.tar.gz && rm -r jsoncons-0.153.3
 # Sqlite
 sudo apt-get install -y sqlite3 libsqlite3-dev
 
+# Plog
+wget https://github.com/SergiusTheBest/plog/archive/1.1.5.tar.gz
+tar -zxvf 1.1.5.tar.gz
+pushd plog-1.1.5 > /dev/null 2>&1
+sudo cp -r include/plog /usr/local/include/
+popd > /dev/null 2>&1
+rm 1.1.5.tar.gz && rm -r plog-1.1.5
+
 # Update linker library cache.
 sudo ldconfig
 

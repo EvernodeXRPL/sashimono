@@ -56,9 +56,10 @@ namespace conf
         else
         {
             // Recursivly create contract directory. Return an error if unable to create
-            if (util::create_dir_tree_recursive(ctx.config_dir) == -1)
+            if (util::create_dir_tree_recursive(ctx.config_dir) == -1 ||
+                util::create_dir_tree_recursive(ctx.log_dir) == -1)
             {
-                std::cerr << "ERROR: unable to create config directory.\n";
+                std::cerr << "ERROR: unable to create directories.\n";
                 return -1;
             }
         }
@@ -68,8 +69,12 @@ namespace conf
         {
             sa_config cfg = {};
 
-            cfg.version = "0.1";
+            cfg.version = "0.0.1";
+            cfg.log.max_file_count = 50;
+            cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
+            cfg.log.loggers.emplace("console");
+            cfg.log.loggers.emplace("file");
 
             //Save the default settings into the config file.
             if (write_config(cfg) != 0)
@@ -84,23 +89,23 @@ namespace conf
     /**
      * Updates the context with directory paths based on provided base directory.
      * This is called after parsing SA command line arg in order to populate the ctx.
-     * @param exepath Path of the execution binary.
+     * @param basedir Path to base directory.
      */
-    void set_dir_paths(std::string_view exepath)
+    void set_dir_paths(std::string basedir)
     {
-        if (exepath.empty())
+        if (basedir.empty())
         {
             // This code branch will never execute the way main is currently coded, but it might change in future
-            std::cerr << "a execution directory must be specified\n";
+            std::cerr << "Base directory must be specified\n";
             exit(1);
         }
 
         // Resolving the path through realpath will remove any trailing slash if present
         // Set config directory to the parent of the exec binary.
-        ctx.config_dir = dirname((char *)util::realpath(exepath).data());
-        ctx.config_dir.append("/cfg");
-        ctx.config_file = ctx.config_dir;
-        ctx.config_file.append("/sa.cfg");
+        basedir = dirname((char *)util::realpath(basedir).data());
+        ctx.config_dir = basedir + "/cfg";
+        ctx.config_file = ctx.config_dir + "/sa.cfg";
+        ctx.log_dir = basedir + "/log";
     }
 
     /**
@@ -109,8 +114,9 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[1] = {
-            ctx.config_file};
+        const std::string paths[2] = {
+            ctx.config_file,
+            ctx.log_dir};
 
         for (const std::string &path : paths)
         {
@@ -182,6 +188,12 @@ namespace conf
                 const jsoncons::ojson &log = d["log"];
                 cfg.log.log_level = log["log_level"].as<std::string>();
                 cfg.log.log_level_type = get_loglevel_type(cfg.log.log_level);
+
+                cfg.log.max_mbytes_per_file = log["max_mbytes_per_file"].as<size_t>();
+                cfg.log.max_file_count = log["max_file_count"].as<size_t>();
+                cfg.log.loggers.clear();
+                for (auto &v : log["loggers"].array_range())
+                    cfg.log.loggers.emplace(v.as<std::string>());
             }
             catch (const std::exception &e)
             {
@@ -209,6 +221,15 @@ namespace conf
         {
             jsoncons::ojson log_config;
             log_config.insert_or_assign("log_level", cfg.log.log_level);
+            log_config.insert_or_assign("max_mbytes_per_file", cfg.log.max_mbytes_per_file);
+            log_config.insert_or_assign("max_file_count", cfg.log.max_file_count);
+
+            jsoncons::ojson loggers(jsoncons::json_array_arg);
+            for (std::string_view logger : cfg.log.loggers)
+            {
+                loggers.push_back(logger);
+            }
+            log_config.insert_or_assign("loggers", loggers);
             d.insert_or_assign("log", log_config);
         }
 

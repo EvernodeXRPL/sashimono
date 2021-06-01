@@ -4,6 +4,7 @@
 #include "pchheader.hpp"
 #include "conf.hpp"
 #include "sqlite.hpp"
+#include "salog.hpp"
 
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given.
@@ -27,7 +28,7 @@ int parse_cmd(int argc, char **argv)
     std::cout << "Usage:\n";
     std::cout << "sagent version\n";
     std::cout << "sagent <command> (command = run | new | rekey)\n";
-    std::cout << "Example: hpcore run\n";
+    std::cout << "Example: sagent run\n";
 
     return -1;
 }
@@ -58,9 +59,11 @@ int main(int argc, char **argv)
         if (conf::init() != 0)
             return -1;
 
+        salog::init(); // Initialize logger for SA.
+
         if (conf::ctx.command == "run")
         {
-            std::cout << "Sashimono agent started. Version : " << conf::cfg.version << " Log level : " << conf::cfg.log.log_level << std::endl;
+            LOG_INFO << "Sashimono agent started. Version : " << conf::cfg.version << " Log level : " << conf::cfg.log.log_level;
 
             // Run the program.
 
@@ -69,10 +72,10 @@ int main(int argc, char **argv)
 
             if (sqlite::open_db(path, &db, true) == -1)
             {
-                std::cerr << "Error opening database\n";
+                LOG_ERROR << "Error opening database";
                 return -1;
             }
-            std::cout << "Database " << path << " opened successfully\n";
+            LOG_INFO << "Database " << path << " opened successfully";
 
             const std::vector<sqlite::table_column_info> column_info{
                 sqlite::table_column_info("VERSION", sqlite::COLUMN_DATA_TYPE::TEXT)};
@@ -85,23 +88,17 @@ int main(int argc, char **argv)
 
             if (sqlite::close_db(&db) == -1)
             {
-                std::cerr << "Error closing database\n";
+                LOG_ERROR << "Error closing database";
                 return -1;
             }
-
-            ////
-
-            std::cout << "Sashimono agent ended." << std::endl;
         }
         else if (conf::ctx.command == "version")
-        {
             // Print the version
-            std::cout << "Sashimono Agent " << conf::cfg.version << std::endl;
-        }
+            LOG_INFO << "Sashimono Agent " << conf::cfg.version;
 
         deinit();
     }
 
-    std::cout << "sashimono agent exited normally.\n";
+    LOG_INFO << "sashimono agent exited normally.";
     return 0;
 }

@@ -16,8 +16,11 @@ namespace conf
 
     struct log_config
     {
-        std::string log_level;       // Log severity level (dbg, inf, wrn, wrr)
-        LOG_SEVERITY log_level_type; // Log severity level enum (debug, info, warn, error)
+        std::string log_level;                   // Log severity level (dbg, inf, wrn, wrr)
+        LOG_SEVERITY log_level_type;             // Log severity level enum (debug, info, warn, error)
+        std::unordered_set<std::string> loggers; // List of enabled loggers (console, file)
+        size_t max_mbytes_per_file = 0;          // Max MB size of a single log file.
+        size_t max_file_count = 0;               // Max no. of log files to keep.
     };
 
     struct sa_config
@@ -29,9 +32,10 @@ namespace conf
     struct sa_context
     {
         std::string command; // The CLI command issued to launch Sashimono agent
-        
+
         std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
+        std::string log_dir;     // Log directory full path.
     };
 
     // Global context struct exposed to the application.
@@ -48,7 +52,7 @@ namespace conf
 
     int create();
 
-    void set_dir_paths(std::string_view exepath);
+    void set_dir_paths(std::string basedir);
 
     int validate_dir_paths();
 

@@ -13,5 +13,7 @@
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
+#include <plog/Log.h>
+#include <plog/Appenders/ColorConsoleAppender.h>
 
 #endif

@@ -20,6 +20,9 @@ sudo cp -r $cmake/bin/* /usr/local/bin/
 sudo cp -r $cmake/share/* /usr/local/share/
 rm $cmake.tar.gz && rm -r $cmake
 
+# Sqlite
+sudo apt-get install -y sqlite3 libsqlite3-dev
+
 # Update linker library cache.
 sudo ldconfig
 

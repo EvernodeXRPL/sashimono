@@ -5,6 +5,7 @@
 #include "conf.hpp"
 #include "sqlite.hpp"
 #include "salog.hpp"
+#include "comm/comm_handler.hpp"
 
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given.
@@ -14,13 +15,16 @@
  */
 int parse_cmd(int argc, char **argv)
 {
-    conf::ctx.command = argv[1];
-    if (argc == 2 && //We get working dir as an arg anyway. So we need to check for ==2 args.
-        (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version"))
+    if (argc > 1)
     {
-        // We populate the global contract ctx with the detected command.
-        conf::set_dir_paths(argv[0]);
-        return 0;
+        conf::ctx.command = argv[1];
+        if (argc == 2 && //We get working dir as an arg anyway. So we need to check for ==2 args.
+            (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version"))
+        {
+            // We populate the global contract ctx with the detected command.
+            conf::set_dir_paths(argv[0]);
+            return 0;
+        }
     }
 
     // If all extractions fail display help message.
@@ -38,11 +42,70 @@ int parse_cmd(int argc, char **argv)
  */
 void deinit()
 {
-    conf::deinit();
+    comm::deinit();
+}
+
+void sig_exit_handler(int signum)
+{
+    LOG_WARNING << "Interrupt signal (" << signum << ") received.";
+    deinit();
+    LOG_WARNING << "sagent exited due to signal.";
+    exit(signum);
+}
+
+void segfault_handler(int signum)
+{
+    exit(SIGABRT);
+}
+
+/**
+ * Global exception handler for std exceptions.
+ */
+void std_terminate() noexcept
+{
+    const std::exception_ptr exptr = std::current_exception();
+    if (exptr != 0)
+    {
+        try
+        {
+            std::rethrow_exception(exptr);
+        }
+        catch (std::exception &ex)
+        {
+            LOG_ERROR << "std error: " << ex.what();
+        }
+        catch (...)
+        {
+            LOG_ERROR << "std error: Terminated due to unknown exception";
+        }
+    }
+    else
+    {
+        LOG_ERROR << "std error: Terminated due to unknown reason";
+    }
+
+    exit(1);
 }
 
 int main(int argc, char **argv)
 {
+    // Register exception and segfault handlers.
+    std::set_terminate(&std_terminate);
+    signal(SIGSEGV, &segfault_handler);
+    signal(SIGABRT, &segfault_handler);
+
+    // Become a sub-reaper so we can gracefully reap hpws child processes via hpws.hpp.
+    // (Otherwise they will get reaped by OS init process and we'll end up with race conditions with gracefull kills)
+    prctl(PR_SET_CHILD_SUBREAPER, 1);
+
+    // Disable SIGPIPE to avoid crashing on broken pipe IO.
+    {
+        sigset_t mask;
+        sigemptyset(&mask);
+        sigaddset(&mask, SIGPIPE);
+        pthread_sigmask(SIG_BLOCK, &mask, NULL);
+    }
+
     // Extract the CLI args
     // This call will populate conf::ctx
     if (parse_cmd(argc, argv) != 0)
@@ -65,40 +128,26 @@ int main(int argc, char **argv)
         {
             LOG_INFO << "Sashimono agent started. Version : " << conf::cfg.version << " Log level : " << conf::cfg.log.log_level;
 
-            // Run the program.
-
-            sqlite3 *db = NULL;
-            const char *path = "db.sqlite";
-
-            if (sqlite::open_db(path, &db, true) == -1)
+            if (comm::init() == -1)
             {
-                LOG_ERROR << "Error opening database";
+                deinit();
                 return -1;
             }
-            LOG_INFO << "Database " << path << " opened successfully";
 
-            const std::vector<sqlite::table_column_info> column_info{
-                sqlite::table_column_info("VERSION", sqlite::COLUMN_DATA_TYPE::TEXT)};
+            // After initializing primary subsystems, register the exit handler.
+            signal(SIGINT, &sig_exit_handler);
+            signal(SIGTERM, &sig_exit_handler);
 
-            if (create_table(db, "SA_VERSION", column_info) == -1)
-                return -1;
+            // Waiting for the websocket sessions.
+            comm::wait();
 
-            if (sqlite::insert_row(db, "SA_VERSION", "VERSION", "\"0.0.0\"") == -1)
-                return -1;
+            deinit();
 
-            if (sqlite::close_db(&db) == -1)
-            {
-                LOG_ERROR << "Error closing database";
-                return -1;
-            }
+            LOG_INFO << "sashimono agent exited normally.";
         }
         else if (conf::ctx.command == "version")
-            // Print the version
             LOG_INFO << "Sashimono Agent " << conf::cfg.version;
 
-        deinit();
+        return 0;
     }
-
-    LOG_INFO << "sashimono agent exited normally.";
-    return 0;
 }

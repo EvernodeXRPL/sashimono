@@ -18,6 +18,10 @@ namespace util
 
     const std::string realpath(std::string_view path);
 
+    void fork_detach();
+
+    void mask_signal();
+
 } // namespace util
 
 #endif

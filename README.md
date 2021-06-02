@@ -1,20 +1,27 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# Sashimono Agent
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+## What's here?
+*In development*
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+A C++ version of sashimono agent
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Libraries
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Setting up Sashimono Agent environment
+Run the setup script located at the repo root (tested on Ubuntu 18.04).
+```
+./dev-setup.sh
+```
+
+## Build Sashimono Agent
+1. Run `cmake .` (You only have to do this once)
+1. Run `make` (Sashimono agent binary will be created as `./build/sagent`)
+
+## Code structure
+Code is divided into subsystems via namespaces.
+
+**conf::** Handles configuration. Loads and holds the central configuration object. Used by most of the subsystems.
+
+**util::** Contains shared data structures/helper functions used by multiple subsystems.
+
+**sqlite::** Contains sqlite database management related helper functions.

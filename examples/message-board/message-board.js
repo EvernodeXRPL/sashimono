@@ -22,7 +22,7 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
     ws.on('message', (msg) => {
-        console.log('Received: ', msg);
+        console.log('Received: ', Buffer.from(msg).toString());
     });
 });
 
@@ -71,7 +71,7 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',
-                                ownerPubKey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613'
+                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613'
                             }));
                             break;
                         case 'destroy':
@@ -79,18 +79,17 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'destroy',
-                                ownerPubKey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contractId
+                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                contract_id: contractId
                             }))
-
                             break;
                         case 'start':
                             contractId = await askForContractId();
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'start',
-                                ownerPubKey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contractId
+                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                contract_id: contractId
                             }))
                             break;
                         case 'stop':
@@ -98,8 +97,8 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'stop',
-                                ownerPubKey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contractId
+                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                contract_id: contractId
                             }))
                             break;
 

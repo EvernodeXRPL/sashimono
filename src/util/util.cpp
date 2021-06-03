@@ -128,4 +128,12 @@ namespace util
         pthread_sigmask(SIG_BLOCK, &mask, NULL);
     }
 
+    /**
+     * Sleeps the current thread for specified no. of milliseconds.
+     */
+    void sleep(const uint64_t milliseconds)
+    {
+        std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    }
+
 } // namespace util

@@ -44,6 +44,26 @@ rm 1.1.5.tar.gz && rm -r plog-1.1.5
 # Boost stacktrace
 sudo apt-get install -y libboost-stacktrace-dev
 
+# Reader-Writer queue
+wget https://github.com/cameron314/readerwriterqueue/archive/v1.0.3.tar.gz
+tar -zxvf v1.0.3.tar.gz
+pushd readerwriterqueue-1.0.3 > /dev/null 2>&1
+mkdir build
+pushd build > /dev/null 2>&1
+cmake ..
+sudo make install
+popd > /dev/null 2>&1
+popd > /dev/null 2>&1
+rm v1.0.3.tar.gz && rm -r readerwriterqueue-1.0.3
+
+# Concurrent queue
+wget https://github.com/cameron314/concurrentqueue/archive/1.0.2.tar.gz
+tar -zxvf 1.0.2.tar.gz
+pushd concurrentqueue-1.0.2 > /dev/null 2>&1
+sudo cp concurrentqueue.h /usr/local/include/
+popd > /dev/null 2>&1
+rm 1.0.2.tar.gz && rm -r concurrentqueue-1.0.2
+
 # Update linker library cache.
 sudo ldconfig
 

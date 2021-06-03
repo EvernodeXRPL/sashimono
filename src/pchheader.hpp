@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <boost/stacktrace.hpp>
 #include <chrono>
+#include <concurrentqueue.h>
 #include <csignal>
 #include <fcntl.h>
 #include <iostream>
@@ -20,5 +21,6 @@
 #include <thread>
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
+#include <readerwriterqueue/readerwriterqueue.h>
 
 #endif

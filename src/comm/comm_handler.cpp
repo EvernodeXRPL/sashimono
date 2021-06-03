@@ -1,18 +1,18 @@
 #include "comm_handler.hpp"
 #include "../util/util.hpp"
+#include "../conf.hpp"
 #include "hpws.hpp"
-#include "comm_session.hpp"
 
 namespace comm
 {
-    constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; //1MB;
-    std::optional<comm_session> session;
+    constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; // 1MB;
     bool init_success;
+
+    comm_ctx ctx;
 
     int init()
     {
-        if (connect(conf::cfg.server.ip_port) == -1)
-            return -1;
+        ctx.comm_handler_thread = std::thread(comm_handler_loop);
 
         init_success = true;
 
@@ -22,11 +22,17 @@ namespace comm
     void deinit()
     {
         if (init_success)
-            disconnect();
+        {
+            ctx.is_shutting_down = true;
+
+            if (ctx.comm_handler_thread.joinable())
+                ctx.comm_handler_thread.join();
+        }
     }
 
     /**
      * Make a connection and session to the given host.
+     * This only gets called whithin the comm handler thread.
      * @param ip_port Ip and port of the host.
      * @return 0 on success -1 on error.
     */
@@ -59,8 +65,8 @@ namespace comm
             else
             {
                 const std::string &host_address = std::get<std::string>(host_result);
-                session.emplace(host_address, std::move(client));
-                session->init();
+                ctx.session.emplace(host_address, std::move(client));
+                ctx.session->init();
             }
         }
         return 0;
@@ -68,21 +74,43 @@ namespace comm
 
     /**
      * Disconnect the session.
+     * This only gets called whithin the comm handler thread.
     */
     void disconnect()
     {
-        if (session.has_value())
+        if (ctx.session.has_value())
         {
-            session->close();
-            session.reset();
+            ctx.session->close();
+            ctx.session.reset();
         }
     }
 
+    void comm_handler_loop()
+    {
+        LOG_INFO << "Message processor started.";
+
+        util::mask_signal();
+
+        if (connect(conf::cfg.server.ip_port) == -1)
+            return;
+
+        while (!ctx.is_shutting_down)
+        {
+            // If no messages were processed in this cycle, wait for some time.
+            if (ctx.session->process_next_inbound_message() <= 0)
+                util::sleep(10);
+        }
+
+        disconnect();
+
+        LOG_INFO << "Message processor stopped.";
+    }
+
     /**
-     * Wait for the session.
+     * Wait for the comm handler thread.
      */
     void wait()
     {
-        session->wait();
+        ctx.comm_handler_thread.join();
     }
 } // namespace comm

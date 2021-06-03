@@ -29,17 +29,6 @@ namespace conf
     }
 
     /**
-     * Cleanup any resources.
-     */
-    void deinit()
-    {
-        if (init_success)
-        {
-            // Deinit here.
-        }
-    }
-
-    /**
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
@@ -70,6 +59,7 @@ namespace conf
             sa_config cfg = {};
 
             cfg.version = "0.0.1";
+            cfg.server.ip_port = {};
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
@@ -87,25 +77,28 @@ namespace conf
     }
 
     /**
-     * Updates the context with directory paths based on provided base directory.
+     * Updates the context with directory paths based on provided executable path.
      * This is called after parsing SA command line arg in order to populate the ctx.
-     * @param basedir Path to base directory.
+     * @param exepath Path to executable.
      */
-    void set_dir_paths(std::string basedir)
+    void set_dir_paths(std::string exepath)
     {
-        if (basedir.empty())
+        if (exepath.empty())
         {
             // This code branch will never execute the way main is currently coded, but it might change in future
-            std::cerr << "Base directory must be specified\n";
+            std::cerr << "Executeble path must be specified\n";
             exit(1);
         }
 
-        // Resolving the path through realpath will remove any trailing slash if present
-        // Set config directory to the parent of the exec binary.
-        basedir = dirname((char *)util::realpath(basedir).data());
-        ctx.config_dir = basedir + "/cfg";
+        // resolving the path through realpath will remove any trailing slash if present
+        exepath = util::realpath(exepath);
+
+        // Take the parent directory path.
+        ctx.exe_dir = dirname(exepath.data());
+        ctx.hpws_exe_path = ctx.exe_dir + "/" + "hpws";
+        ctx.config_dir = ctx.exe_dir + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
-        ctx.log_dir = basedir + "/log";
+        ctx.log_dir = ctx.exe_dir + "/log";
     }
 
     /**
@@ -114,15 +107,19 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[2] = {
+        const std::string paths[3] = {
             ctx.config_file,
-            ctx.log_dir};
+            ctx.log_dir,
+            ctx.hpws_exe_path};
 
         for (const std::string &path : paths)
         {
             if (!util::is_file_exists(path) && !util::is_dir_exists(path))
             {
-                std::cerr << path << " does not exist.\n";
+                if (path == ctx.hpws_exe_path)
+                    std::cerr << path << " binary does not exist.\n";
+                else
+                    std::cerr << path << " does not exist.\n";
                 return -1;
             }
         }
@@ -179,6 +176,31 @@ namespace conf
 
         std::string jpath;
 
+        // server
+        {
+            jpath = "server";
+
+            try
+            {
+                const jsoncons::ojson &server = d["server"];
+                
+                cfg.server.ip_port.host_address = server["host"].as<std::string>();
+                cfg.server.ip_port.port = server["port"].as<uint16_t>();
+
+                // Push the peer address and the port to peers set
+                if (cfg.server.ip_port.host_address.empty())
+                {
+                    std::cerr << "Configured server host_address is empty.\n";
+                    return -1;
+                }
+            }
+            catch (const std::exception &e)
+            {
+                print_missing_field_error(jpath, e);
+                return -1;
+            }
+        }
+
         // log
         {
             jpath = "log";
@@ -216,6 +238,16 @@ namespace conf
         // ojson is used instead of json to preserve insertion order.
         jsoncons::ojson d;
         d.insert_or_assign("version", cfg.version);
+
+        // Server configs.
+        {
+            jsoncons::ojson server_config;
+
+            server_config.insert_or_assign("host", cfg.server.ip_port.host_address);
+            server_config.insert_or_assign("port", cfg.server.ip_port.port);
+
+            d.insert_or_assign("server", server_config);
+        }
 
         // Log configs.
         {

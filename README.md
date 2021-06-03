@@ -22,6 +22,10 @@ Code is divided into subsystems via namespaces.
 
 **conf::** Handles configuration. Loads and holds the central configuration object. Used by most of the subsystems.
 
+**salog::** Handles logging. Creates and prints the logs according to the configured log section in the json config.
+
+**comm::** Handles generic web sockets communication functionality. Mainly acts as a wrapper for [hpws](https://github.com/RichardAH/hpws).
+
 **util::** Contains shared data structures/helper functions used by multiple subsystems.
 
 **sqlite::** Contains sqlite database management related helper functions.

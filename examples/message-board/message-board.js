@@ -3,6 +3,15 @@ const https = require('https');
 const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
+const { execSync } = require("child_process");
+
+// Generate tls keys if not found.
+if (!fs.existsSync('./tlskey.pem'))
+{
+    console.log("TLS key files not detected. Generating..");
+    execSync("openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout tlskey.pem -out tlscert.pem -subj \"/C=SA/ST=SA/L=SA/O=SA/CN=SA\"");
+    console.log("New tls key files generated.")
+}
 
 const server = https.createServer({
     cert: fs.readFileSync('./tlscert.pem'),
@@ -49,7 +58,7 @@ server.listen(8080, () => {
     console.log(`wss://localhost:${server.address().port}`)
     console.log("Ready to accept inputs.");
 
-    const input_pump = () => {
+    const inputPump = () => {
         rl.question('', async (inp) => {
 
             if (inp.length > 0) {
@@ -103,9 +112,9 @@ server.listen(8080, () => {
 
             }
 
-            input_pump();
+            inputPump();
         })
     }
-    input_pump();
+    inputPump();
 });
 

@@ -13,6 +13,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wreturn-type")
 
 add_executable(sagent
+    src/comm/comm_handler.cpp
+    src/comm/comm_session.cpp
     src/util/util.cpp
     src/conf.cpp
     src/salog.cpp
@@ -22,7 +24,12 @@ add_executable(sagent
 
 target_link_libraries(sagent
     sqlite3
+    pthread
     ${CMAKE_DL_LIBS} # Needed for stacktrace support
+)
+
+add_custom_command(TARGET sagent POST_BUILD
+    COMMAND cp ./dependencies/bin/hpws ./build/
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

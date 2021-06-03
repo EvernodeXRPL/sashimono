@@ -14,6 +14,32 @@ namespace conf
         ERROR
     };
 
+    struct host_ip_port
+    {
+        std::string host_address;
+        uint16_t port = 0;
+
+        bool operator==(const host_ip_port &other) const
+        {
+            return host_address == other.host_address && port == other.port;
+        }
+
+        bool operator!=(const host_ip_port &other) const
+        {
+            return !(host_address == other.host_address && port == other.port);
+        }
+
+        bool operator<(const host_ip_port &other) const
+        {
+            return (host_address == other.host_address) ? port < other.port : host_address < other.host_address;
+        }
+
+        const std::string to_string() const
+        {
+            return host_address + ":" + std::to_string(port);
+        }
+    };
+
     struct log_config
     {
         std::string log_level;                   // Log severity level (dbg, inf, wrn, wrr)
@@ -23,19 +49,27 @@ namespace conf
         size_t max_file_count = 0;               // Max no. of log files to keep.
     };
 
+    struct server_config
+    {
+        host_ip_port ip_port;
+    };
+
     struct sa_config
     {
         std::string version;
+        server_config server;
         log_config log;
     };
 
     struct sa_context
     {
-        std::string command; // The CLI command issued to launch Sashimono agent
+        std::string command;       // The CLI command issued to launch Sashimono agent
+        std::string exe_dir;       // Hot Pocket executable dir.
+        std::string hpws_exe_path; // hpws executable file path.
 
-        std::string config_dir;  // Config dir full path.
-        std::string config_file; // Full path to the config file.
-        std::string log_dir;     // Log directory full path.
+        std::string config_dir;    // Config dir full path.
+        std::string config_file;   // Full path to the config file.
+        std::string log_dir;       // Log directory full path.
     };
 
     // Global context struct exposed to the application.
@@ -48,11 +82,9 @@ namespace conf
 
     int init();
 
-    void deinit();
-
     int create();
 
-    void set_dir_paths(std::string basedir);
+    void set_dir_paths(std::string exepath);
 
     int validate_dir_paths();
 

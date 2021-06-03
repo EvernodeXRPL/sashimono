@@ -23,7 +23,7 @@ namespace comm
     private:
         SESSION_STATE state = SESSION_STATE::NONE;
         std::optional<hpws::client> hpws_client;
-        const std::string uniqueid;     // Verified session: Pubkey in hex format, Unverified session: IP address.
+        const std::string uniqueid;     // IP address.
         const std::string host_address; // Connection host address of the remote party.
         std::thread reader_thread;      // The thread responsible for reading messages from the read fd.
 

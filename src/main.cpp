@@ -55,6 +55,7 @@ void sig_exit_handler(int signum)
 
 void segfault_handler(int signum)
 {
+    LOG_ERROR << boost::stacktrace::stacktrace();
     exit(SIGABRT);
 }
 
@@ -83,6 +84,8 @@ void std_terminate() noexcept
     {
         LOG_ERROR << "std error: Terminated due to unknown reason";
     }
+
+    LOG_ERROR << boost::stacktrace::stacktrace();
 
     exit(1);
 }

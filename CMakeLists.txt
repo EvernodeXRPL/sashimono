@@ -23,6 +23,7 @@ add_executable(sagent
 )
 
 target_link_libraries(sagent
+    libboost_stacktrace_backtrace.a
     sqlite3
     pthread
     ${CMAKE_DL_LIBS} # Needed for stacktrace support

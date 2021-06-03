@@ -2,6 +2,7 @@
 #define _SA_PCHHEADER_
 
 #include <algorithm>
+#include <boost/stacktrace.hpp>
 #include <chrono>
 #include <csignal>
 #include <fcntl.h>

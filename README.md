@@ -6,6 +6,8 @@
 A C++ version of sashimono agent
 
 ## Libraries
+* jsoncons (for JSON and BSON) - https://github.com/danielaparker/jsoncons
+* Boost Stacktrace - https://www.boost.org
 
 ## Setting up Sashimono Agent environment
 Run the setup script located at the repo root (tested on Ubuntu 18.04).

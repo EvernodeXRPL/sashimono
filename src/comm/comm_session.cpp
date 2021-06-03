@@ -32,6 +32,9 @@ namespace comm
         return 0;
     }
 
+    /**
+     * Listening for receiving messages and process them.
+     */
     void comm_session::reader_loop()
     {
         util::mask_signal();
@@ -62,7 +65,7 @@ namespace comm
 
     /**
      * Close the connection and wrap up any session processing threads.
-     * This will be only called by the global comm_server thread.
+     * This will be only called by the global comm_handler.
      */
     void comm_session::close()
     {
@@ -81,7 +84,7 @@ namespace comm
     }
 
     /**
-     * Joins the listner thread.
+     * Joins the listener thread.
      */
     void comm_session::wait()
     {

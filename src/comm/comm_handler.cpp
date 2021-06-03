@@ -5,7 +5,7 @@
 
 namespace comm
 {
-    constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 5 * 1024 * 1024;
+    constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; //1MB;
     std::optional<comm_session> session;
     bool init_success;
 
@@ -13,7 +13,7 @@ namespace comm
     {
         if (connect(conf::cfg.server.ip_port) == -1)
             return -1;
-        
+
         init_success = true;
 
         return 0;
@@ -25,6 +25,11 @@ namespace comm
             disconnect();
     }
 
+    /**
+     * Make a connection and session to the given host.
+     * @param ip_port Ip and port of the host.
+     * @return 0 on success -1 on error.
+    */
     int connect(const conf::host_ip_port &ip_port)
     {
         std::string_view host = ip_port.host_address;
@@ -61,6 +66,9 @@ namespace comm
         return 0;
     }
 
+    /**
+     * Disconnect the session.
+    */
     void disconnect()
     {
         if (session.has_value())

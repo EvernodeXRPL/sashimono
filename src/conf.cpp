@@ -116,7 +116,9 @@ namespace conf
         {
             if (!util::is_file_exists(path) && !util::is_dir_exists(path))
             {
-                if (path == ctx.hpws_exe_path)
+                if (path == ctx.config_file)
+                    std::cerr << path << " does not exist. Initialize with <sagent new> command.\n";
+                else if (path == ctx.hpws_exe_path)
                     std::cerr << path << " binary does not exist.\n";
                 else
                     std::cerr << path << " does not exist.\n";

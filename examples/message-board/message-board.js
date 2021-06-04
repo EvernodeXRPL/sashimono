@@ -22,7 +22,7 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
     ws.on('message', (msg) => {
-        console.log('Received: ', Buffer.from(msg).toString());
+        console.log('Received: ', JSON.parse(Buffer.from(msg).toString()));
     });
 });
 

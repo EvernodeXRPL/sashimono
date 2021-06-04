@@ -33,9 +33,14 @@ namespace msg
         return json::extract_stop_message(msg, jdoc);
     }
 
-    void msg_parser::create_response(std::string &msg, std::string_view response_type, std::string_view content) const
+    void msg_parser::create_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content) const
     {
-        json::create_response(msg, response_type, content);
+        json::create_response(msg, response_type, reply_for, content);
+    }
+
+    void msg_parser::build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for) const
+    {
+        json::build_create_response(msg, info, reply_for);
     }
 
 } // namespace msg

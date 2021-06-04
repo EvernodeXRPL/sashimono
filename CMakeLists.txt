@@ -18,13 +18,16 @@ add_executable(sagent
     src/comm/comm_session.cpp
     src/util/util.cpp
     src/salog.cpp
+    src/crypto.cpp
     src/sqlite.cpp
-    src/main.cpp
+    src/hp_manager.cpp
     src/msg/msg_parser.cpp
     src/msg/json/msg_json.cpp
+    src/main.cpp
 )
 
 target_link_libraries(sagent
+    libsodium.a
     libboost_stacktrace_backtrace.a
     sqlite3
     pthread
@@ -33,6 +36,7 @@ target_link_libraries(sagent
 
 add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./dependencies/bin/hpws ./build/
+    COMMAND cp -r ./dependencies/default_contract ./build/
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

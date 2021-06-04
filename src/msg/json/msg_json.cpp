@@ -235,10 +235,14 @@ namespace msg::json
      * @param response_type Type of the response.
      * @param content Content inside the response.
      */
-    void create_response(std::string &msg, std::string_view response_type, std::string_view content)
+    void create_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content)
     {
         msg.reserve(1024);
         msg += "{\"";
+        msg += msg::FLD_REPLY_FOR;
+        msg += SEP_COLON;
+        msg += std::string(reply_for);
+        msg += SEP_COMMA;
         msg += msg::FLD_TYPE;
         msg += SEP_COLON;
         msg += response_type;
@@ -246,6 +250,55 @@ namespace msg::json
         msg += msg::FLD_CONTENT;
         msg += SEP_COLON;
         msg += content;
+        msg += "\"}";
+    }
+
+    /**
+     * Constructs a response json.
+     * @param msg Buffer to construct the generated json message string into.
+     *            Message format:
+     *            {
+     *              'type': '<message type>',
+     *              "content": "<any string>"
+     *            }
+     * @param response_type Type of the response.
+     * @param content Content inside the response.
+     */
+    void build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for)
+    {
+        msg.reserve(1024);
+        msg += "{\"";
+        msg += msg::FLD_REPLY_FOR;
+        msg += SEP_COLON;
+        msg += std::string(reply_for);
+        msg += SEP_COMMA;
+        msg += msg::FLD_TYPE;
+        msg += SEP_COLON;
+        msg += msg::MSGTYPE_CREATE_RES;
+        msg += SEP_COMMA;
+        msg += "name";
+        msg += SEP_COLON;
+        msg += info.name;
+        msg += SEP_COMMA;
+        msg += "ip";
+        msg += SEP_COLON;
+        msg += info.ip;
+        msg += SEP_COMMA;
+        msg += "pubkey";
+        msg += SEP_COLON;
+        msg += info.pubkey;
+        msg += SEP_COMMA;
+        msg += "contract_id";
+        msg += SEP_COLON;
+        msg += info.contract_id;
+        msg += SEP_COMMA;
+        msg += "peer_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.peer_port);
+        msg += SEP_COMMA;
+        msg += "pub_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.pub_port);
         msg += "\"}";
     }
 

@@ -3,6 +3,7 @@
 
 #include "../pchheader.hpp"
 #include "msg_common.hpp"
+#include "../hp_manager.hpp"
 
 namespace msg
 {
@@ -17,7 +18,8 @@ namespace msg
         int extract_destroy_message(destroy_msg &msg) const;
         int extract_start_message(start_msg &msg) const;
         int extract_stop_message(stop_msg &msg) const;
-        void create_response(std::string &msg, std::string_view response_type, std::string_view content) const;
+        void create_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content) const;
+        void build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for) const;
     };
 
 } // namespace msg

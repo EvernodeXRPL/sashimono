@@ -19,6 +19,8 @@ namespace sqlite
     constexpr const char *WHERE = " WHERE ";
     constexpr const char *AND = " AND ";
 
+    constexpr const char *INSTANCE_TABLE = "hp_instances";
+
     /**
      * Opens a connection to a given databse and give the db pointer.
      * @param db_name Database name to be connected.
@@ -252,6 +254,27 @@ namespace sqlite
         }
 
         *db = NULL;
+        return 0;
+    }
+
+    int initialize_hp_db(sqlite3 *db)
+    {
+        const std::vector<table_column_info> columns{
+            table_column_info("owner_pubkey", COLUMN_DATA_TYPE::TEXT),
+            table_column_info("time", COLUMN_DATA_TYPE::INT),
+            table_column_info("status", COLUMN_DATA_TYPE::TEXT),
+            table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
+            table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
+            table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
+            table_column_info("user_port", COLUMN_DATA_TYPE::INT),
+            table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
+            table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
+
+        if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
+            create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
+            create_index(db, INSTANCE_TABLE, "owner_pubkey", false) == -1) // one user can have multiple instances running.
+            return -1;
+
         return 0;
     }
 }

@@ -6,6 +6,8 @@
 #include "sqlite.hpp"
 #include "salog.hpp"
 #include "comm/comm_handler.hpp"
+#include "hp_manager.hpp"
+#include "crypto.hpp"
 
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given.
@@ -43,6 +45,7 @@ int parse_cmd(int argc, char **argv)
 void deinit()
 {
     comm::deinit();
+    hp::kill_all_containers();
 }
 
 void sig_exit_handler(int signum)
@@ -126,6 +129,9 @@ int main(int argc, char **argv)
             return -1;
 
         salog::init(); // Initialize logger for SA.
+
+        if (crypto::init() == -1)
+            return -1;
 
         if (conf::ctx.command == "run")
         {

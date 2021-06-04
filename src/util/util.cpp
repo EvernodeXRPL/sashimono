@@ -3,6 +3,39 @@
 
 namespace util
 {
+    const std::string to_hex(const std::string_view bin)
+    {
+        // Allocate the target string.
+        std::string encoded_string;
+        encoded_string.resize(bin.size() * 2);
+
+        // Get encoded string.
+        sodium_bin2hex(
+            encoded_string.data(),
+            encoded_string.length() + 1, // + 1 because sodium writes ending '\0' character as well.
+            reinterpret_cast<const unsigned char *>(bin.data()),
+            bin.size());
+        return encoded_string;
+    }
+
+    const std::string to_bin(const std::string_view hex)
+    {
+        std::string bin;
+        bin.resize(hex.size() / 2);
+
+        const char *hex_end;
+        size_t bin_len;
+        if (sodium_hex2bin(
+                reinterpret_cast<unsigned char *>(bin.data()), bin.size(),
+                hex.data(), hex.size(),
+                "", &bin_len, &hex_end))
+        {
+            return ""; // Empty indicates error.
+        }
+
+        return bin;
+    }
+
     /**
      * Check whether given directory exists. 
      * @param path Directory path.

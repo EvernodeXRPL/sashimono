@@ -1,5 +1,6 @@
 #include "comm_session.hpp"
 #include "../util/util.hpp"
+#include "../hp_manager.hpp"
 
 namespace comm
 {
@@ -30,7 +31,7 @@ namespace comm
 
             // Send an initial message to the host.
             std::string res;
-            msg_parser.create_response(res, msg::MSGTYPE_INIT, "Connection initiated.");
+            msg_parser.create_response(res, msg::MSGTYPE_INIT, {}, "Connection initiated.");
             send(res);
             LOG_DEBUG << "Session started: " << uniqueid;
         }
@@ -172,8 +173,13 @@ namespace comm
             if (msg_parser.extract_create_message(msg) == -1)
                 return -1;
             id = msg.id;
-            LOG_INFO << "---------------Create signal received--------------";
-            LOG_INFO << "---------------Pubkey: " << msg.pubkey << "--------------";
+            hp::instance_info info;
+            if (hp::create_new_instance(info, msg.pubkey) == -1)
+                return -1;
+
+            std::string res;
+            msg_parser.build_create_response(res, info, msg.id);
+            send(res);
         }
         else if (type == msg::MSGTYPE_DESTROY)
         {
@@ -181,8 +187,12 @@ namespace comm
             if (msg_parser.extract_destroy_message(msg))
                 return -1;
             id = msg.id;
-            LOG_INFO << "---------------Destroy signal received--------------";
-            LOG_INFO << "---------------Pubkey: " << msg.pubkey << ", ContractId: " << msg.contract_id << "--------------";
+            if (hp::remove_container(msg.contract_id) == -1)
+                return -1;
+
+            std::string res;
+            msg_parser.create_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
+            send(res);
         }
         else if (type == msg::MSGTYPE_START)
         {
@@ -209,7 +219,7 @@ namespace comm
         }
 
         std::string res;
-        msg_parser.create_response(res, type, "Acknowledgment for message " + id);
+        msg_parser.create_response(res, type, id, "Acknowledgment");
         send(res);
         return 0;
     }

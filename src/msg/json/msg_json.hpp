@@ -3,6 +3,7 @@
 
 #include "../../pchheader.hpp"
 #include "../msg_common.hpp"
+#include "../../hp_manager.hpp"
 
 /**
  * Parser helpers for json messages.
@@ -23,7 +24,9 @@ namespace msg::json
 
     int extract_stop_message(stop_msg &msg, const jsoncons::json &d);
 
-    void create_response(std::string &msg, std::string_view response_type, std::string_view content);
+    void create_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content);
+
+    void build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for);
 
 } // namespace msg::json
 

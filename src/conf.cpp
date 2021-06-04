@@ -95,7 +95,8 @@ namespace conf
 
         // Take the parent directory path.
         ctx.exe_dir = dirname(exepath.data());
-        ctx.hpws_exe_path = ctx.exe_dir + "/" + "hpws";
+        ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
+        ctx.default_contract_path = ctx.exe_dir + "/default_contract";
         ctx.config_dir = ctx.exe_dir + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
         ctx.log_dir = ctx.exe_dir + "/log";
@@ -176,6 +177,22 @@ namespace conf
             return -1;
         }
 
+        try
+        {
+            // Check whether the hp_instance_folder is specified.
+            cfg.hp_instance_folder = d["hp_instance_folder"].as<std::string>();
+            if (cfg.hp_instance_folder.empty())
+            {
+                std::cerr << "Hp instance folder path is missing.\n";
+                return -1;
+            }
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Required config field hp_instance_folder missing at " << ctx.config_file << std::endl;
+            return -1;
+        }
+
         std::string jpath;
 
         // server
@@ -185,7 +202,7 @@ namespace conf
             try
             {
                 const jsoncons::ojson &server = d["server"];
-                
+
                 cfg.server.ip_port.host_address = server["host"].as<std::string>();
                 cfg.server.ip_port.port = server["port"].as<uint16_t>();
 
@@ -244,6 +261,7 @@ namespace conf
         // ojson is used instead of json to preserve insertion order.
         jsoncons::ojson d;
         d.insert_or_assign("version", cfg.version);
+        d.insert_or_assign("hp_instance_folder", cfg.hp_instance_folder);
 
         // Server configs.
         {

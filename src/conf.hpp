@@ -57,19 +57,21 @@ namespace conf
     struct sa_config
     {
         std::string version;
+        std::string hp_instance_folder;
         server_config server;
         log_config log;
     };
 
     struct sa_context
     {
-        std::string command;       // The CLI command issued to launch Sashimono agent
-        std::string exe_dir;       // Hot Pocket executable dir.
-        std::string hpws_exe_path; // hpws executable file path.
+        std::string command;               // The CLI command issued to launch Sashimono agent
+        std::string exe_dir;               // Hot Pocket executable dir.
+        std::string hpws_exe_path;         // hpws executable file path.
+        std::string default_contract_path; // Path to default contract.
 
-        std::string config_dir;    // Config dir full path.
-        std::string config_file;   // Full path to the config file.
-        std::string log_dir;       // Log directory full path.
+        std::string config_dir;  // Config dir full path.
+        std::string config_file; // Full path to the config file.
+        std::string log_dir;     // Log directory full path.
     };
 
     // Global context struct exposed to the application.

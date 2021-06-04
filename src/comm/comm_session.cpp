@@ -93,7 +93,7 @@ namespace comm
         if (state == SESSION_STATE::CLOSED)
             return -1;
 
-        bool messages_sent = false;
+        bool messages_processed = false;
         std::string msg_to_process;
 
         // Process all messages in queue.
@@ -101,10 +101,10 @@ namespace comm
         {
             handle_message(msg_to_process);
             msg_to_process.clear();
-            messages_sent = true;
+            messages_processed = true;
         }
 
-        return messages_sent ? 1 : 0;
+        return messages_processed ? 1 : 0;
     }
 
     /**

@@ -22,7 +22,6 @@ namespace comm
     class comm_session
     {
     private:
-        SESSION_STATE state = SESSION_STATE::NONE;
         std::optional<hpws::client> hpws_client;
         msg::msg_parser msg_parser;     // Message parser.
         const std::string uniqueid;     // IP address.
@@ -36,15 +35,18 @@ namespace comm
         void reader_loop();
         int handle_message(std::string_view msg);
         int process_outbound_message(std::string_view message);
-        void process_outbound_msg_queue();
+        void outbound_msg_queue_processor();
+        void mark_for_closure();
 
     public:
+        SESSION_STATE state = SESSION_STATE::NONE;
         comm_session(
             std::string_view host_address, hpws::client &&hpws_client);
         int init();
         int send(std::string_view message);
-        int process_next_inbound_message();
+        int process_inbound_msg_queue();
         void close();
+        const std::string display_name() const;
     };
 
 } // namespace comm

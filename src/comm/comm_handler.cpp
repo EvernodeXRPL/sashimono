@@ -91,16 +91,33 @@ namespace comm
 
         util::mask_signal();
 
-        if (connect(conf::cfg.server.ip_port) == -1)
-            return;
-
         while (!ctx.is_shutting_down)
         {
-            // If no messages were processed in this cycle, wait for some time.
-            if (ctx.session->process_next_inbound_message() <= 0)
-                util::sleep(10);
+            // Process queued messaged only if there's a session.
+            if (ctx.session.has_value())
+            {
+                // If no messages were processed in this cycle, wait for some time.
+                if (ctx.session->process_inbound_msg_queue() <= 0)
+                    util::sleep(10);
+                
+                // If session is marked for closure since there's an issue, We disconnect the current session.
+                // And try to create a new session in the next round
+                if (ctx.session->state == SESSION_STATE::MUST_CLOSE)
+                {
+                    LOG_DEBUG << "Closing the session due to a failure: " << ctx.session->display_name();
+                    disconnect();
+                    util::sleep(1000);
+                }
+            }
+            else
+            {
+                // If host connection failed wait for some time.
+                if (connect(conf::cfg.server.ip_port) == -1)
+                    util::sleep(1000);
+            }
         }
 
+        // Disconnect the host at the termination.
         disconnect();
 
         LOG_INFO << "Message processor stopped.";

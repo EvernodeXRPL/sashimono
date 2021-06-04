@@ -10,7 +10,7 @@ namespace comm
         : uniqueid(host_address),
           host_address(host_address),
           hpws_client(std::move(hpws_client)),
-          msg_parser(std::move(msg::msg_parser())),
+          msg_parser(msg::msg_parser()),
           in_msg_queue(MAX_IN_MSG_QUEUE_SIZE)
     {
     }
@@ -25,7 +25,7 @@ namespace comm
         if (state == SESSION_STATE::NONE)
         {
             reader_thread = std::thread(&comm_session::reader_loop, this);
-            writer_thread = std::thread(&comm_session::process_outbound_msg_queue, this);
+            writer_thread = std::thread(&comm_session::outbound_msg_queue_processor, this);
             state = SESSION_STATE::ACTIVE;
 
             // Send an initial message to the host.
@@ -47,12 +47,16 @@ namespace comm
 
         while (state != SESSION_STATE::CLOSED && hpws_client)
         {
+            // If reading from the hpws_client failed we'll mark this session to closure.
+            bool should_disconnect = false;
+
             const std::variant<std::string_view, hpws::error> read_result = hpws_client->read();
             if (std::holds_alternative<hpws::error>(read_result))
             {
+                should_disconnect = true;
                 const hpws::error error = std::get<hpws::error>(read_result);
                 if (error.first != 1) // 1 indicates channel has closed.
-                    LOG_ERROR << "hpws client read failed:" << error.first << " " << error.second;
+                    LOG_DEBUG << "hpws client read failed:" << error.first << " " << error.second;
             }
             else
             {
@@ -63,33 +67,44 @@ namespace comm
                 // Signal the hpws client that we are ready for next message.
                 const std::optional<hpws::error> error = hpws_client->ack(data);
                 if (error.has_value())
-                    LOG_ERROR << "hpws client ack failed:" << error->first << " " << error->second;
+                {
+                    should_disconnect = true;
+                    LOG_DEBUG << "hpws client ack failed:" << error->first << " " << error->second;
+                }
+            }
+
+            if (should_disconnect)
+            {
+                // Here we mark the session as needing to close.
+                // The session will be properly "closed" and cleared from comm_handler.
+                // Then comm_handler will try to initiate a new session with the host.
+                mark_for_closure();
+                break;
             }
         }
     }
 
     /**
-     * Processes the next queued message (if any).
-     * @return 0 if no messages in queue. 1 if a message were processed. -1 error occured
+     * Processes the unprocessed queued inbound messages (if any).
+     * @return 0 if no messages in queue. 1 if messages were processed. -1 error occured
      */
-    int comm_session::process_next_inbound_message()
+    int comm_session::process_inbound_msg_queue()
     {
-        if (state != SESSION_STATE::ACTIVE)
-            return 0;
+        if (state == SESSION_STATE::CLOSED)
+            return -1;
 
-        int res = 0;
+        bool messages_sent = false;
+        std::string msg_to_process;
 
-        // Process queue top.
-        std::string msg;
-        if (in_msg_queue.try_dequeue(msg))
+        // Process all messages in queue.
+        while (in_msg_queue.try_dequeue(msg_to_process))
         {
-            if (handle_message(msg) == -1)
-                return -1;
-            else
-                res = 1;
+            handle_message(msg_to_process);
+            msg_to_process.clear();
+            messages_sent = true;
         }
 
-        return res;
+        return messages_sent ? 1 : 0;
     }
 
     /**
@@ -112,9 +127,9 @@ namespace comm
     }
 
     /**
-     * Process message sending in the queue in the outbound_queue_thread.
+     * Loop to keep processing outbound messages in the queue.
     */
-    void comm_session::process_outbound_msg_queue()
+    void comm_session::outbound_msg_queue_processor()
     {
         // Appling a signal mask to prevent receiving control signals from linux kernel.
         util::mask_signal();
@@ -216,6 +231,18 @@ namespace comm
     }
 
     /**
+     * Mark the session as needing to close.
+     * The session will be properly "closed" by comm_handler.
+     */
+    void comm_session::mark_for_closure()
+    {
+        if (state == SESSION_STATE::CLOSED)
+            return;
+
+        state = SESSION_STATE::MUST_CLOSE;
+    }
+
+    /**
      * Close the connection and wrap up any session processing threads.
      * This will be only called by the global comm_handler.
      */
@@ -237,6 +264,15 @@ namespace comm
             reader_thread.join();
 
         LOG_DEBUG << "Session closed: " << uniqueid;
+    }
+
+    /**
+     * Returns printable name for the session based on uniqueid (used for logging).
+     * @return The display name as a string.
+     */
+    const std::string comm_session::display_name() const
+    {
+        return uniqueid;
     }
 
 } // namespace comm

@@ -4,6 +4,7 @@
 #include "../pchheader.hpp"
 #include "../conf.hpp"
 #include "hpws.hpp"
+#include "../msg/msg_parser.hpp"
 
 namespace comm
 {
@@ -21,20 +22,31 @@ namespace comm
     class comm_session
     {
     private:
-        SESSION_STATE state = SESSION_STATE::NONE;
         std::optional<hpws::client> hpws_client;
-        const std::string uniqueid;     // Verified session: Pubkey in hex format, Unverified session: IP address.
+        msg::msg_parser msg_parser;     // Message parser.
+        const std::string uniqueid;     // IP address.
         const std::string host_address; // Connection host address of the remote party.
-        std::thread reader_thread;      // The thread responsible for reading messages from the read fd.
+
+        std::thread reader_thread;                               // The thread responsible for reading messages from the read fd.
+        std::thread writer_thread;                               // The thread responsible for writing messages to the write fd.
+        moodycamel::ReaderWriterQueue<std::string> in_msg_queue; // Holds incoming messages waiting to be processed.
+        moodycamel::ConcurrentQueue<std::string> out_msg_queue;  // Holds outgoing messages waiting to be processed.
 
         void reader_loop();
+        int handle_message(std::string_view msg);
+        int process_outbound_message(std::string_view message);
+        void outbound_msg_queue_processor();
+        void mark_for_closure();
 
     public:
+        SESSION_STATE state = SESSION_STATE::NONE;
         comm_session(
             std::string_view host_address, hpws::client &&hpws_client);
         int init();
+        int send(std::string_view message);
+        int process_inbound_msg_queue();
         void close();
-        void wait();
+        const std::string display_name() const;
     };
 
 } // namespace comm

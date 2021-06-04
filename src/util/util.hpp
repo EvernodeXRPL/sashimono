@@ -22,6 +22,8 @@ namespace util
 
     void mask_signal();
 
+    void sleep(const uint64_t milliseconds);
+
 } // namespace util
 
 #endif

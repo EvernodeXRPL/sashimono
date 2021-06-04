@@ -6,6 +6,10 @@
 A C++ version of sashimono agent
 
 ## Libraries
+* jsoncons (for JSON and BSON) - https://github.com/danielaparker/jsoncons
+* Boost Stacktrace - https://www.boost.org
+* Reader Writer Queue - https://github.com/cameron314/readerwriterqueue
+* Concurrent Queue - https://github.com/cameron314/concurrentqueue
 
 ## Setting up Sashimono Agent environment
 Run the setup script located at the repo root (tested on Ubuntu 18.04).
@@ -27,5 +31,7 @@ Code is divided into subsystems via namespaces.
 **comm::** Handles generic web sockets communication functionality. Mainly acts as a wrapper for [hpws](https://github.com/RichardAH/hpws).
 
 **util::** Contains shared data structures/helper functions used by multiple subsystems.
+
+**msg::** Extract message data from received raw messages.
 
 **sqlite::** Contains sqlite database management related helper functions.

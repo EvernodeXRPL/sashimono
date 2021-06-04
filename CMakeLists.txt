@@ -13,16 +13,19 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wreturn-type")
 
 add_executable(sagent
+    src/conf.cpp
     src/comm/comm_handler.cpp
     src/comm/comm_session.cpp
     src/util/util.cpp
-    src/conf.cpp
     src/salog.cpp
     src/sqlite.cpp
     src/main.cpp
+    src/msg/msg_parser.cpp
+    src/msg/json/msg_json.cpp
 )
 
 target_link_libraries(sagent
+    libboost_stacktrace_backtrace.a
     sqlite3
     pthread
     ${CMAKE_DL_LIBS} # Needed for stacktrace support

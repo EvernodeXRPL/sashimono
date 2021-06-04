@@ -116,7 +116,9 @@ namespace conf
         {
             if (!util::is_file_exists(path) && !util::is_dir_exists(path))
             {
-                if (path == ctx.hpws_exe_path)
+                if (path == ctx.config_file)
+                    std::cerr << path << " does not exist. Initialize with <sagent new> command.\n";
+                else if (path == ctx.hpws_exe_path)
                     std::cerr << path << " binary does not exist.\n";
                 else
                     std::cerr << path << " does not exist.\n";
@@ -187,10 +189,14 @@ namespace conf
                 cfg.server.ip_port.host_address = server["host"].as<std::string>();
                 cfg.server.ip_port.port = server["port"].as<uint16_t>();
 
-                // Push the peer address and the port to peers set
                 if (cfg.server.ip_port.host_address.empty())
                 {
                     std::cerr << "Configured server host_address is empty.\n";
+                    return -1;
+                }
+                else if (cfg.server.ip_port.port <= 0)
+                {
+                    std::cerr << "Configured server port invalid.\n";
                     return -1;
                 }
             }

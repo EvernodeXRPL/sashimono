@@ -187,7 +187,7 @@ namespace comm
             if (msg_parser.extract_destroy_message(msg))
                 return -1;
             id = msg.id;
-            if (hp::destroy_container(msg.contract_id) == -1)
+            if (hp::destroy_container(msg.container_name) == -1)
                 return -1;
 
             std::string res;
@@ -200,7 +200,7 @@ namespace comm
             if (msg_parser.extract_start_message(msg))
                 return -1;
             id = msg.id;
-            if (hp::start_container(msg.contract_id) == -1)
+            if (hp::start_container(msg.container_name) == -1)
                 return -1;
 
             std::string res;
@@ -213,7 +213,7 @@ namespace comm
             if (msg_parser.extract_stop_message(msg))
                 return -1;
             id = msg.id;
-            if (hp::stop_container(msg.contract_id) == -1)
+            if (hp::stop_container(msg.container_name) == -1)
                 return -1;
 
             std::string res;

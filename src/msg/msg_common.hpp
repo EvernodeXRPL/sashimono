@@ -17,7 +17,7 @@ namespace msg
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     struct start_msg
@@ -25,7 +25,7 @@ namespace msg
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     struct stop_msg
@@ -33,7 +33,7 @@ namespace msg
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     // Message field names
@@ -41,7 +41,7 @@ namespace msg
     constexpr const char *FLD_REPLY_FOR = "reply_for";
     constexpr const char *FLD_CONTENT = "content";
     constexpr const char *FLD_PUBKEY = "owner_pubkey";
-    constexpr const char *FLD_CONTRACT_ID = "contract_id";
+    constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_ID = "id";
 
     // Message types

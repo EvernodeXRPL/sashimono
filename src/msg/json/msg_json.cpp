@@ -127,7 +127,7 @@ namespace msg::json
      *          {
      *            "type": "destroy",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name id>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -136,19 +136,19 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
 
         return 0;
@@ -162,7 +162,7 @@ namespace msg::json
      *          {
      *            "type": "start",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name id>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -171,19 +171,19 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
 
         return 0;
@@ -197,7 +197,7 @@ namespace msg::json
      *          {
      *            "type": "stop",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name id>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -206,19 +206,19 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
 
         return 0;

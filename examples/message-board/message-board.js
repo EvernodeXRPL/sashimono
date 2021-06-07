@@ -46,10 +46,10 @@ const sendToAll = (msg) => {
     });
 }
 
-const askForContractId = () => {
+const askForContainerName = () => {
     return new Promise(resolve => {
-        rl.question('Contract Id? ', (contractId) => {
-            resolve(contractId);
+        rl.question('Container name? ', (containerName) => {
+            resolve(containerName);
         })
     })
 }
@@ -75,30 +75,30 @@ server.listen(8080, () => {
                             }));
                             break;
                         case 'destroy':
-                            contractId = await askForContractId();
+                            containerName = await askForContainerName();
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'destroy',
                                 owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contract_id: contractId
+                                container_name: containerName
                             }))
                             break;
                         case 'start':
-                            contractId = await askForContractId();
+                            containerName = await askForContainerName();
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'start',
                                 owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contract_id: contractId
+                                container_name: containerName
                             }))
                             break;
                         case 'stop':
-                            contractId = await askForContractId();
+                            containerName = await askForContainerName();
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'stop',
                                 owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
-                                contract_id: contractId
+                                container_name: containerName
                             }))
                             break;
 

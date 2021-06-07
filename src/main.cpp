@@ -8,6 +8,7 @@
 #include "comm/comm_handler.hpp"
 #include "hp_manager.hpp"
 #include "crypto.hpp"
+#include "hp_manager.hpp"
 
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given.
@@ -45,7 +46,7 @@ int parse_cmd(int argc, char **argv)
 void deinit()
 {
     comm::deinit();
-    hp::kill_all_containers();
+    hp::deinit();
 }
 
 void sig_exit_handler(int signum)
@@ -137,7 +138,7 @@ int main(int argc, char **argv)
         {
             LOG_INFO << "Sashimono agent started. Version : " << conf::cfg.version << " Log level : " << conf::cfg.log.log_level;
 
-            if (comm::init() == -1)
+            if (comm::init() == -1 || hp::init() == -1)
             {
                 deinit();
                 return -1;

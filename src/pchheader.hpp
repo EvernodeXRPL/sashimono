@@ -7,6 +7,7 @@
 #include <concurrentqueue.h>
 #include <csignal>
 #include <fcntl.h>
+#include <ftw.h>
 #include <iostream>
 #include <jsoncons/json.hpp>
 #include <libgen.h>

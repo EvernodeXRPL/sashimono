@@ -2,78 +2,189 @@
 #include "conf.hpp"
 #include "crypto.hpp"
 #include "util/util.hpp"
+#include "sqlite.hpp"
 
 namespace hp
 {
-    uint16_t pub_port_posfix = 1;
-    uint16_t peer_port_posfix = 1;
+    // Keep track of the ports of the most recent hp instance.
+    uint16_t last_user_port, last_peer_port;
 
     constexpr int FILE_PERMS = 0644;
 
+    sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
+
+    /**
+     * Initialize hp related environment.
+    */
+    int init()
+    {
+        const std::string db_path = conf::ctx.data_dir + "/hp_instances.sqlite";
+        if (sqlite::open_db(db_path, &db, true) == -1 ||
+            sqlite::initialize_hp_db(db) == -1)
+        {
+            LOG_ERROR << "Error preparing hp database in " << db_path;
+            return -1;
+        }
+        const int peer_port_db = sqlite::get_max_port(db, "peer_port");
+        last_peer_port = peer_port_db == 0 ? (conf::cfg.hp.init_peer_port -1) : peer_port_db;
+
+        const int user_port_db = sqlite::get_max_port(db, "user_port");
+        last_user_port = user_port_db == 0 ? (conf::cfg.hp.init_user_port -1) : user_port_db;
+        
+        return 0;
+    }
+
+    /**
+     * Do hp related cleanups.
+    */
+    void deinit()
+    {
+        if (db != NULL)
+            sqlite::close_db(&db);
+    }
+
+    /**
+     * Create a new instance of hotpocket. A new contract is created and then the docker images is run on that.
+     * @param info Structure holding the generated instance info.
+     * @param owner_pubkey Public key of the instance owner.
+     * @return 0 on success and -1 on error.
+    */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey)
     {
-        const uint16_t pub_port = 8080 + pub_port_posfix;
-        const uint16_t peer_port = 22860 + peer_port_posfix;
+        const uint16_t user_port = last_user_port + 1;
+        const uint16_t peer_port = last_peer_port + 1;
 
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
 
-        if (create_contract(info, name, peer_port, pub_port) != 0 || run_container(name, pub_port, peer_port) != 0) // Gives 3200 if docker failed.
+        if (create_contract(info, name, peer_port, user_port) != 0 ||
+            run_container(name, user_port, peer_port) != 0 || // Gives 3200 if docker failed.
+            sqlite::insert_hp_instance_row(db, owner_pubkey, info, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
             return -1;
         }
 
-        pub_port_posfix++;
-        peer_port_posfix++;
+        last_user_port++;
+        last_peer_port++;
 
         return 0;
     }
 
-    void kill_all_containers()
+    /**
+     * Runs a hotpocket docker image on the given contract and the ports.
+     * @param folder_name Contract directory folder name.
+     * @param user_port User port to be assigned.
+     * @param peer_port Peer port to be assigned.
+     * @return 0 on success execution or relavent error code on error.
+    */
+    int run_container(const std::string &folder_name, const uint16_t user_port, const uint16_t peer_port)
     {
-        // std::string command = "docker kill -s SIGINT $(docker ps -aqf \"name=sahp\")";
-        std::string command = "docker container rm -f $(docker ps -aqf \"name=-\")";
-        system(command.c_str());
-    }
-
-    int run_container(const std::string &folder_name, const uint16_t pub_port, const uint16_t peer_port)
-    {
-        // we don't remove the container after the container stops.
         const std::string command = "docker run -t -i -d --network=hpnet --stop-signal=SIGINT --name=" + folder_name + " \
                                             -p " +
-                                    std::to_string(pub_port) + ":" + std::to_string(pub_port) + " \
+                                    std::to_string(user_port) + ":" + std::to_string(user_port) + " \
                                             -p " +
                                     std::to_string(peer_port) + ":" + std::to_string(peer_port) + " \
                                             --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
                                             --mount type=bind,source=" +
-                                    conf::cfg.hp_instance_folder + "/" +
+                                    conf::cfg.hp.instance_folder + "/" +
                                     folder_name + ",target=/contract \
                                             hpcore:latest run /contract";
 
         return system(command.c_str());
     }
 
+    /**
+     * Stops the container with given name if exists.
+     * @param container_name Name of the container.
+     * @return 0 on success execution or relavent error code on error.
+    */
     int stop_container(const std::string &container_name)
     {
+        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::RUNNING]);
+        if (res == 0)
+        {
+            LOG_ERROR << "Given container not found. name: " << container_name;
+            return -1;
+        }
+        else if (res == 1)
+        {
+            LOG_ERROR << "Given container is not running. name: " << container_name;
+            return -1;
+        }
         const std::string command = "docker stop " + container_name;
-        return system(command.c_str());
+        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
+        {
+            LOG_ERROR << "Error when stopping container. name: " << container_name;
+            return -1;
+        }
+
+        return 0;
     }
 
+    /**
+     * Starts the container with given name if exists.
+     * @param container_name Name of the container.
+     * @return 0 on success execution or relavent error code on error.
+    */
     int start_container(const std::string &container_name)
     {
+        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::STOPPED]);
+        if (res == 0)
+        {
+            LOG_ERROR << "Given container not found. name: " << container_name;
+            return -1;
+        }
+        else if (res == 1)
+        {
+            LOG_ERROR << "Given container is not stopped. name: " << container_name;
+            return -1;
+        }
         const std::string command = "docker start " + container_name;
-        return system(command.c_str());
+        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        {
+            LOG_ERROR << "Error when starting container. name: " << container_name;
+            return -1;
+        }
+
+        return 0;
     }
 
-    int remove_container(const std::string &container_name)
+    /**
+     * Destroy the container with given name if exists.
+     * @param container_name Name of the container.
+     * @return 0 on success execution or relavent error code on error.
+    */
+    int destroy_container(const std::string &container_name)
     {
+        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::STOPPED]);
+        if (res == 0)
+        {
+            LOG_ERROR << "Given container not found. name: " << container_name;
+            return -1;
+        }
         const std::string command = "docker container rm -f " + container_name;
-        return system(command.c_str());
+        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + container_name;
+
+        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 || util::remove_directory_recursively(folder_path) == -1)
+        {
+            LOG_ERROR << errno << ": Error destroying container " << container_name;
+            return -1;
+        }
+        return 0;
     }
 
-    int create_contract(instance_info &info, const std::string &folder_name, const uint16_t peer_port, const uint16_t pub_port)
+    /**
+     * Creates a copy of default contract with the given name and the ports in the instance folder given in the config file.
+     * @param info Information of the created contract instance.
+     * @param folder_name Folder name for the contract directory.
+     * @param peer_port Peer port assigned to the hotpocket instance.
+     * @param user_port User port assigned to the hotpocket instance.
+     * @return -1 on error and 0 on success.
+     * 
+    */
+    int create_contract(instance_info &info, const std::string &folder_name, const uint16_t peer_port, const uint16_t user_port)
     {
-        const std::string folder_path = conf::cfg.hp_instance_folder + "/" + folder_name;
+        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + folder_name;
         const std::string command = "cp -r " + conf::ctx.default_contract_path + " " + folder_path;
         if (system(command.c_str()) != 0)
         {
@@ -124,7 +235,7 @@ namespace hp
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
         d["mesh"]["port"] = peer_port;
-        d["user"]["port"] = pub_port;
+        d["user"]["port"] = user_port;
 
         if (write_json_file(config_fd, d) == -1)
         {
@@ -138,7 +249,7 @@ namespace hp
         info.contract_id = contract_id;
         info.name = folder_name;
         info.pubkey = pubkey_hex;
-        info.pub_port = pub_port;
+        info.user_port = user_port;
         info.peer_port = peer_port;
         return 0;
     }

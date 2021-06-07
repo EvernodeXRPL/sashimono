@@ -187,7 +187,7 @@ namespace comm
             if (msg_parser.extract_destroy_message(msg))
                 return -1;
             id = msg.id;
-            if (hp::remove_container(msg.contract_id) == -1)
+            if (hp::destroy_container(msg.contract_id) == -1)
                 return -1;
 
             std::string res;
@@ -200,8 +200,12 @@ namespace comm
             if (msg_parser.extract_start_message(msg))
                 return -1;
             id = msg.id;
-            LOG_INFO << "---------------Start signal received--------------";
-            LOG_INFO << "---------------Pubkey: " << msg.pubkey << ", ContractId: " << msg.contract_id << "--------------";
+            if (hp::start_container(msg.contract_id) == -1)
+                return -1;
+
+            std::string res;
+            msg_parser.create_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
+            send(res);
         }
         else if (type == msg::MSGTYPE_STOP)
         {
@@ -209,8 +213,12 @@ namespace comm
             if (msg_parser.extract_stop_message(msg))
                 return -1;
             id = msg.id;
-            LOG_INFO << "---------------Stop signal received--------------";
-            LOG_INFO << "---------------Pubkey: " << msg.pubkey << ", ContractId: " << msg.contract_id << "--------------";
+            if (hp::stop_container(msg.contract_id) == -1)
+                return -1;
+
+            std::string res;
+            msg_parser.create_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
+            send(res);
         }
         else
         {

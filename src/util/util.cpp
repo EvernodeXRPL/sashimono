@@ -169,4 +169,28 @@ namespace util
         std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     }
 
+    /**
+    * Returns current time in UNIX epoch milliseconds.
+    */
+    uint64_t get_epoch_milliseconds()
+    {
+        return std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::milli>>(
+                   std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    }
+
+    /**
+     * Remove a directory recursively with it's content. FTW_DEPTH is provided so all of the files and subdirectories within
+     * The path will be processed. FTW_PHYS is provided so symbolic links won't be followed.
+     */
+    int remove_directory_recursively(std::string_view dir_path)
+    {
+        return nftw(
+            dir_path.data(), [](const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+            {
+                return remove(fpath);
+            },
+            1, FTW_DEPTH | FTW_PHYS);
+    }
+
 } // namespace util

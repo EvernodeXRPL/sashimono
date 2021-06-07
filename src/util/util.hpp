@@ -28,6 +28,10 @@ namespace util
 
     void sleep(const uint64_t milliseconds);
 
+    uint64_t get_epoch_milliseconds();
+
+    int remove_directory_recursively(std::string_view dir_path); 
+
 } // namespace util
 
 #endif

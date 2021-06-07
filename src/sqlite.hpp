@@ -2,6 +2,7 @@
 #define _SA_SQLITE_
 
 #include "pchheader.hpp"
+#include "hp_manager.hpp"
 
 namespace sqlite
 {
@@ -38,7 +39,7 @@ namespace sqlite
         }
     };
 
-    int open_db(std::string_view db_name, sqlite3 **db, const bool writable = false);
+    int open_db(std::string_view db_name, sqlite3 **db, const bool writable = false, const bool journal = true);
 
     int exec_sql(sqlite3 *db, std::string_view sql, int (*callback)(void *, int, char **, char **) = NULL, void *callback_first_arg = NULL);
 
@@ -60,6 +61,14 @@ namespace sqlite
 
     int close_db(sqlite3 **db);
 
+    int initialize_hp_db(sqlite3 *db);
 
+    int insert_hp_instance_row(sqlite3 *db, std::string_view owner_pubkey, const hp::instance_info &info, std::string_view status);
+
+    int is_container_exists_in_status(sqlite3 *db, std::string_view name, std::string_view status);
+
+    int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
+
+    int get_max_port(sqlite3 *db, std::string_view column_name);
 }
 #endif

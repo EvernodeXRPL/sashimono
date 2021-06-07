@@ -54,10 +54,17 @@ namespace conf
         host_ip_port ip_port;
     };
 
+    struct hp_config
+    {
+        std::string instance_folder;
+        uint16_t init_peer_port;
+        uint16_t init_user_port;
+    };
+
     struct sa_config
     {
         std::string version;
-        std::string hp_instance_folder;
+        hp_config hp;  
         server_config server;
         log_config log;
     };
@@ -72,6 +79,7 @@ namespace conf
         std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.
+        std::string data_dir;    // Data directory full path.
     };
 
     // Global context struct exposed to the application.

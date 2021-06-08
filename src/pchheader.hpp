@@ -7,6 +7,7 @@
 #include <concurrentqueue.h>
 #include <csignal>
 #include <fcntl.h>
+#include <ftw.h>
 #include <iostream>
 #include <jsoncons/json.hpp>
 #include <libgen.h>
@@ -15,6 +16,7 @@
 #include <sqlite3.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sodium.h>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>

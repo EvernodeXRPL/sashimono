@@ -20,6 +20,15 @@ sudo cp -r $cmake/bin/* /usr/local/bin/
 sudo cp -r $cmake/share/* /usr/local/share/
 rm $cmake.tar.gz && rm -r $cmake
 
+# Libsodium
+wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz
+tar -zxvf libsodium-1.0.18-stable.tar.gz
+pushd libsodium-stable > /dev/null 2>&1
+./configure && make
+sudo make install
+popd > /dev/null 2>&1
+rm libsodium-1.0.18-stable.tar.gz && rm -r libsodium-stable
+
 # jsoncons
 wget https://github.com/danielaparker/jsoncons/archive/v0.153.3.tar.gz
 tar -zxvf v0.153.3.tar.gz

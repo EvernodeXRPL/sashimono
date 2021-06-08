@@ -8,6 +8,10 @@
  */
 namespace util
 {
+    const std::string to_hex(const std::string_view bin);
+
+    const std::string to_bin(const std::string_view hex);
+
     bool is_dir_exists(std::string_view path);
 
     bool is_file_exists(std::string_view path);
@@ -23,6 +27,10 @@ namespace util
     void mask_signal();
 
     void sleep(const uint64_t milliseconds);
+
+    uint64_t get_epoch_milliseconds();
+
+    int remove_directory_recursively(std::string_view dir_path); 
 
 } // namespace util
 

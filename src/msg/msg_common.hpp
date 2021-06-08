@@ -11,13 +11,13 @@ namespace msg
         std::string type;
         std::string pubkey;
     };
-    
+
     struct destroy_msg
     {
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     struct start_msg
@@ -25,7 +25,7 @@ namespace msg
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     struct stop_msg
@@ -33,14 +33,15 @@ namespace msg
         std::string id;
         std::string type;
         std::string pubkey;
-        std::string contract_id;
+        std::string container_name;
     };
 
     // Message field names
     constexpr const char *FLD_TYPE = "type";
+    constexpr const char *FLD_REPLY_FOR = "reply_for";
     constexpr const char *FLD_CONTENT = "content";
     constexpr const char *FLD_PUBKEY = "owner_pubkey";
-    constexpr const char *FLD_CONTRACT_ID = "contract_id";
+    constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_ID = "id";
 
     // Message types
@@ -49,6 +50,12 @@ namespace msg
     constexpr const char *MSGTYPE_DESTROY = "destroy";
     constexpr const char *MSGTYPE_START = "start";
     constexpr const char *MSGTYPE_STOP = "stop";
+
+    // Message res types
+    constexpr const char *MSGTYPE_CREATE_RES = "create_res";
+    constexpr const char *MSGTYPE_DESTROY_RES = "destroy_res";
+    constexpr const char *MSGTYPE_START_RES = "start_res";
+    constexpr const char *MSGTYPE_STOP_RES = "stop_res";
 
 } // namespace msg
 

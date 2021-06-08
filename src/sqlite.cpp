@@ -1,5 +1,6 @@
 #include "sqlite.hpp"
 #include "salog.hpp"
+#include "util/util.hpp"
 
 namespace sqlite
 {
@@ -7,6 +8,7 @@ namespace sqlite
     constexpr const char *CREATE_TABLE = "CREATE TABLE IF NOT EXISTS ";
     constexpr const char *CREATE_INDEX = "CREATE INDEX ";
     constexpr const char *CREATE_UNIQUE_INDEX = "CREATE UNIQUE INDEX ";
+    constexpr const char *JOURNAL_MODE_OFF = "PRAGMA journal_mode=OFF";
     constexpr const char *BEGIN_TRANSACTION = "BEGIN TRANSACTION;";
     constexpr const char *COMMIT_TRANSACTION = "COMMIT;";
     constexpr const char *ROLLBACK_TRANSACTION = "ROLLBACK;";
@@ -19,14 +21,22 @@ namespace sqlite
     constexpr const char *WHERE = " WHERE ";
     constexpr const char *AND = " AND ";
 
+    constexpr const char *INSTANCE_TABLE = "instances";
+
+    constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
+                                                    "owner_pubkey, time, status, name, ip,"
+                                                    "peer_port, user_port, pubkey, contract_id"
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?)";
+
     /**
      * Opens a connection to a given databse and give the db pointer.
      * @param db_name Database name to be connected.
      * @param db Pointer to the db pointer which is to be connected and pointed.
      * @param writable Whether the database must be opened in a writable mode or not.
+     * @param journal Whether to enable db journaling or not.
      * @returns returns 0 on success, or -1 on error.
     */
-    int open_db(std::string_view db_name, sqlite3 **db, const bool writable)
+    int open_db(std::string_view db_name, sqlite3 **db, const bool writable, const bool journal)
     {
         int ret;
         const int flags = writable ? (SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE) : SQLITE_OPEN_READONLY;
@@ -36,6 +46,12 @@ namespace sqlite
             *db = NULL;
             return -1;
         }
+
+        // We can turn off journaling for the db if we don't need transacion support.
+        // Journaling mode can introduce lot of extra underyling file system operations which may cause
+        // lot of overhead if used on a low-performance filesystem like hpfs.
+        if (writable && !journal && exec_sql(*db, JOURNAL_MODE_OFF) == -1)
+            return -1;
 
         return 0;
     }
@@ -252,6 +268,167 @@ namespace sqlite
         }
 
         *db = NULL;
+        return 0;
+    }
+
+    /**
+     * Initialize hp_instances table. Table is only created if not existed. Indexes are added for name and owner_pubkey fields.
+     * @param db Database connection.
+     * @return -1 on error and 0 on success.
+    */
+    int initialize_hp_db(sqlite3 *db)
+    {
+        if (!is_table_exists(db, INSTANCE_TABLE))
+        {
+            const std::vector<table_column_info> columns{
+                table_column_info("owner_pubkey", COLUMN_DATA_TYPE::TEXT),
+                table_column_info("time", COLUMN_DATA_TYPE::INT),
+                table_column_info("status", COLUMN_DATA_TYPE::TEXT),
+                table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
+                table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
+                table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("user_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
+                table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
+
+            if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
+                create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
+                create_index(db, INSTANCE_TABLE, "owner_pubkey", false) == -1) // one user can have multiple instances running.
+                return -1;
+        }
+        return 0;
+    }
+
+    /**
+     * Inserts a hp instance record.
+     * @param db Pointer to the db.
+     * @param info HP instance information.
+     * @param status Current status of the instance.
+     * @returns returns 0 on success, or -1 on error.
+    */
+    int insert_hp_instance_row(sqlite3 *db, std::string_view owner_pubkey, const hp::instance_info &info, std::string_view status)
+    {
+        sqlite3_stmt *stmt;
+        if (sqlite3_prepare_v2(db, INSERT_INTO_HP_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, owner_pubkey.data(), owner_pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 2, util::get_epoch_milliseconds()) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 3, status.data(), status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 4, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 5, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 6, info.peer_port) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 7, info.user_port) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 8, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 9, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_DONE)
+        {
+            sqlite3_finalize(stmt);
+            return 0;
+        }
+
+        LOG_ERROR << "Error inserting hp instance record. " << sqlite3_errmsg(db);
+        return -1;
+    }
+
+    /**
+     * Checks whether the container exist in the database and checks against the given status.
+     * @param db Pointer to the db.
+     * @param container_name Name of the container to be checked.
+     * @param status Status to check the container status against.
+     * @returns 0 if not found, 1 if container exists but not in given status and 2 if container exist in given status.
+    */
+    int is_container_exists_in_status(sqlite3 *db, std::string_view container_name, std::string_view status)
+    {
+        std::string sql;
+        // Reserving the space for the query before construction.
+        sql.reserve(sizeof(SELECT_ALL) + sizeof(SQLITE_MASTER) + sizeof(WHERE) + sizeof(AND) + container_name.size() + 7);
+
+        sql.append(SELECT_ALL);
+        sql.append(INSTANCE_TABLE);
+        sql.append(WHERE);
+        sql.append("name='");
+        sql.append(container_name);
+        sql.append("'");
+
+        sqlite3_stmt *stmt;
+        int result = 0; // Not exist.
+
+        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
+            stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+        {
+            const std::string current_status(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
+            // Finalize and distroys the statement.
+            sqlite3_finalize(stmt);
+            if (current_status == status)
+                result = 2;
+            else
+                result = 1;
+
+            return result;
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+        return result;
+    }
+
+    /**
+     * Update the status of the given container to the new value.
+     * @param db Database connection.
+     * @param container_name Name of the container whose status should be updated.
+     * @param status The new status of the container.
+     * @return 0 on success and -1 on error. 
+    */
+    int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status)
+    {
+        std::string sql;
+        // Reserving the space for the query before construction.
+        sql.reserve(sizeof(INSTANCE_TABLE) + status.length() + sizeof(WHERE) + container_name.size() + 30);
+        sql.append("UPDATE ");
+        sql.append(INSTANCE_TABLE);
+        sql.append(" SET status = '");
+        sql.append(status);
+        sql.append("'");
+        sql.append(WHERE);
+        sql.append("name='");
+        sql.append(container_name);
+        sql.append("'");
+
+        return sqlite::exec_sql(db, sql);
+    }
+
+    /**
+     * Get the max port already used for the instances. Ports used for already destroyed instances are excluded.
+     * @param db Database connection.
+     * @param column_name Name of the column. Should be one of ['peer_port', 'user_port'].
+     * @return The port number. 0 is returned if no data found on database or on database error.
+    */
+    int get_max_port(sqlite3 *db, std::string_view column_name)
+    {
+        std::string sql;
+        // Reserving the space for the query before construction.
+        sql.reserve(sizeof(INSTANCE_TABLE) + column_name.length() + sizeof(WHERE) + sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) + 29);
+        sql.append("SELECT max(")
+            .append(column_name)
+            .append(") from ")
+            .append(INSTANCE_TABLE)
+            .append(WHERE)
+            .append("status !='")
+            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
+            .append("'");
+
+        sqlite3_stmt *stmt;
+
+        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
+            stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+        {
+            const int result = sqlite3_column_int64(stmt, 0);
+            // Finalize and distroys the statement.
+            sqlite3_finalize(stmt);
+            return result;
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
         return 0;
     }
 }

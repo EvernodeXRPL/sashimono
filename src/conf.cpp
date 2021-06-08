@@ -46,7 +46,8 @@ namespace conf
         {
             // Recursivly create contract directory. Return an error if unable to create
             if (util::create_dir_tree_recursive(ctx.config_dir) == -1 ||
-                util::create_dir_tree_recursive(ctx.log_dir) == -1)
+                util::create_dir_tree_recursive(ctx.log_dir) == -1 ||
+                util::create_dir_tree_recursive(ctx.data_dir) == -1)
             {
                 std::cerr << "ERROR: unable to create directories.\n";
                 return -1;
@@ -59,6 +60,8 @@ namespace conf
             sa_config cfg = {};
 
             cfg.version = "0.0.1";
+            cfg.hp.init_peer_port = 22861;
+            cfg.hp.init_user_port = 8081;
             cfg.server.ip_port = {};
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
@@ -95,10 +98,12 @@ namespace conf
 
         // Take the parent directory path.
         ctx.exe_dir = dirname(exepath.data());
-        ctx.hpws_exe_path = ctx.exe_dir + "/" + "hpws";
+        ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
+        ctx.default_contract_path = ctx.exe_dir + "/default_contract";
         ctx.config_dir = ctx.exe_dir + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
         ctx.log_dir = ctx.exe_dir + "/log";
+        ctx.data_dir = ctx.exe_dir + "/data";
     }
 
     /**
@@ -107,9 +112,10 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[3] = {
+        const std::string paths[4] = {
             ctx.config_file,
             ctx.log_dir,
+            ctx.data_dir,
             ctx.hpws_exe_path};
 
         for (const std::string &path : paths)
@@ -178,6 +184,41 @@ namespace conf
 
         std::string jpath;
 
+        {
+            jpath = "hp";
+
+            try
+            {
+                const jsoncons::ojson &hp = d["hp"];
+                // Check whether the instance_folder is specified.
+                cfg.hp.instance_folder = hp["instance_folder"].as<std::string>();
+                if (cfg.hp.instance_folder.empty())
+                {
+                    std::cerr << "Hp instance folder path is missing.\n";
+                    return -1;
+                }
+
+                cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
+                if (cfg.hp.init_peer_port <= 1024)
+                {
+                    std::cerr << "Configured init peer port invalid. Should be greater than 1024\n";
+                    return -1;
+                }
+
+                cfg.hp.init_user_port = hp["init_user_port"].as<uint16_t>();
+                if (cfg.hp.init_user_port <= 1024)
+                {
+                    std::cerr << "Configured init user port invalid. Should be greater than 1024\n";
+                    return -1;
+                }
+            }
+            catch (const std::exception &e)
+            {
+                print_missing_field_error(jpath, e);
+                return -1;
+            }
+        }
+
         // server
         {
             jpath = "server";
@@ -185,7 +226,7 @@ namespace conf
             try
             {
                 const jsoncons::ojson &server = d["server"];
-                
+
                 cfg.server.ip_port.host_address = server["host"].as<std::string>();
                 cfg.server.ip_port.port = server["port"].as<uint16_t>();
 
@@ -244,6 +285,16 @@ namespace conf
         // ojson is used instead of json to preserve insertion order.
         jsoncons::ojson d;
         d.insert_or_assign("version", cfg.version);
+
+        // Hp configs.
+        {
+            jsoncons::ojson hp_config;
+            hp_config.insert_or_assign("instance_folder", cfg.hp.instance_folder);
+            hp_config.insert_or_assign("init_peer_port", cfg.hp.init_peer_port);
+            hp_config.insert_or_assign("init_user_port", cfg.hp.init_user_port);
+
+            d.insert_or_assign("hp", hp_config);
+        }
 
         // Server configs.
         {

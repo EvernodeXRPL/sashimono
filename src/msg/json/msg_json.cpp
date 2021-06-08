@@ -127,7 +127,7 @@ namespace msg::json
      *          {
      *            "type": "destroy",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -136,21 +136,19 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
-        return 0;
-
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
     }
 
@@ -162,7 +160,7 @@ namespace msg::json
      *          {
      *            "type": "start",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -171,21 +169,19 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
-        return 0;
-
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
     }
 
@@ -197,7 +193,7 @@ namespace msg::json
      *          {
      *            "type": "stop",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "contract_id": "<contract id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -206,39 +202,42 @@ namespace msg::json
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
 
-        if (!d.contains(msg::FLD_CONTRACT_ID))
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
         {
-            LOG_ERROR << "Field contract_id is missing.";
+            LOG_ERROR << "Field container_name is missing.";
             return -1;
         }
 
-        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
         {
-            LOG_ERROR << "Invalid contract_id value.";
+            LOG_ERROR << "Invalid container_name value.";
             return -1;
         }
 
-        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
-        return 0;
-
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
     }
 
     /**
-     * Constructs a response json.
+     * Constructs a generic json response.
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
      *            {
+     *              'reply_for': '<reply_for>'
      *              'type': '<message type>',
      *              "content": "<any string>"
      *            }
      * @param response_type Type of the response.
      * @param content Content inside the response.
      */
-    void create_response(std::string &msg, std::string_view response_type, std::string_view content)
+    void build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content)
     {
         msg.reserve(1024);
         msg += "{\"";
+        msg += msg::FLD_REPLY_FOR;
+        msg += SEP_COLON;
+        msg += std::string(reply_for);
+        msg += SEP_COMMA;
         msg += msg::FLD_TYPE;
         msg += SEP_COLON;
         msg += response_type;
@@ -246,6 +245,61 @@ namespace msg::json
         msg += msg::FLD_CONTENT;
         msg += SEP_COLON;
         msg += content;
+        msg += "\"}";
+    }
+
+    /**
+     * Constructs a json response for create message.
+     * @param msg Buffer to construct the generated json message string into.
+     *            Message format:
+     *            {
+     *              'reply_for': '<reply_for>'
+     *              'type': '<message type>',
+     *              "name": "<container name>"
+     *              "ip": "<ip of the container>"
+     *              "pubkey": "<public key of the contract>"
+     *              "contract_id": "<contract id of the contract>"
+     *              "peer_port": "<peer port of the container>"
+     *              "user_port": "<user port of the container>"
+     *            }
+     * @param response_type Type of the response.
+     * @param content Content inside the response.
+     */
+    void build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for)
+    {
+        msg.reserve(1024);
+        msg += "{\"";
+        msg += msg::FLD_REPLY_FOR;
+        msg += SEP_COLON;
+        msg += std::string(reply_for);
+        msg += SEP_COMMA;
+        msg += msg::FLD_TYPE;
+        msg += SEP_COLON;
+        msg += msg::MSGTYPE_CREATE_RES;
+        msg += SEP_COMMA;
+        msg += "name";
+        msg += SEP_COLON;
+        msg += info.name;
+        msg += SEP_COMMA;
+        msg += "ip";
+        msg += SEP_COLON;
+        msg += info.ip;
+        msg += SEP_COMMA;
+        msg += "pubkey";
+        msg += SEP_COLON;
+        msg += info.pubkey;
+        msg += SEP_COMMA;
+        msg += "contract_id";
+        msg += SEP_COLON;
+        msg += info.contract_id;
+        msg += SEP_COMMA;
+        msg += "peer_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.peer_port);
+        msg += SEP_COMMA;
+        msg += "user_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.user_port);
         msg += "\"}";
     }
 

@@ -127,7 +127,7 @@ namespace msg::json
      *          {
      *            "type": "destroy",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -160,7 +160,7 @@ namespace msg::json
      *          {
      *            "type": "start",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -193,7 +193,7 @@ namespace msg::json
      *          {
      *            "type": "stop",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name id>", 
+     *            "container_name": "<container_name>", 
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -219,17 +219,18 @@ namespace msg::json
     }
 
     /**
-     * Constructs a response json.
+     * Constructs a generic json response.
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
      *            {
+     *              'reply_for': '<reply_for>'
      *              'type': '<message type>',
      *              "content": "<any string>"
      *            }
      * @param response_type Type of the response.
      * @param content Content inside the response.
      */
-    void create_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content)
+    void build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content)
     {
         msg.reserve(1024);
         msg += "{\"";
@@ -248,12 +249,18 @@ namespace msg::json
     }
 
     /**
-     * Constructs a response json.
+     * Constructs a json response for create message.
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
      *            {
+     *              'reply_for': '<reply_for>'
      *              'type': '<message type>',
-     *              "content": "<any string>"
+     *              "name": "<container name>"
+     *              "ip": "<ip of the container>"
+     *              "pubkey": "<public key of the contract>"
+     *              "contract_id": "<contract id of the contract>"
+     *              "peer_port": "<peer port of the container>"
+     *              "user_port": "<user port of the container>"
      *            }
      * @param response_type Type of the response.
      * @param content Content inside the response.

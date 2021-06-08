@@ -31,7 +31,7 @@ namespace comm
 
             // Send an initial message to the host.
             std::string res;
-            msg_parser.create_response(res, msg::MSGTYPE_INIT, {}, "Connection initiated.");
+            msg_parser.build_response(res, msg::MSGTYPE_INIT, {}, "Connection initiated.");
             send(res);
             LOG_DEBUG << "Session started: " << uniqueid;
         }
@@ -191,7 +191,7 @@ namespace comm
                 return -1;
 
             std::string res;
-            msg_parser.create_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
+            msg_parser.build_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
             send(res);
         }
         else if (type == msg::MSGTYPE_START)
@@ -204,7 +204,7 @@ namespace comm
                 return -1;
 
             std::string res;
-            msg_parser.create_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
+            msg_parser.build_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
             send(res);
         }
         else if (type == msg::MSGTYPE_STOP)
@@ -217,7 +217,7 @@ namespace comm
                 return -1;
 
             std::string res;
-            msg_parser.create_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
+            msg_parser.build_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
             send(res);
         }
         else
@@ -226,9 +226,6 @@ namespace comm
             return -1;
         }
 
-        std::string res;
-        msg_parser.create_response(res, type, id, "Acknowledgment");
-        send(res);
         return 0;
     }
 

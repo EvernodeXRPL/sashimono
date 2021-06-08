@@ -14,7 +14,9 @@ A C++ version of sashimono agent
 * Boost Stacktrace - https://www.boost.org
 
 ## Setting up Sashimono Agent environment
-Run the setup script located at the repo root (tested on Ubuntu 18.04).
+- Place a hotpocket contract named **default_contract** (Copies of this contract will be made when new instances are created) inside the **dependencies** directory. A new contract from hpcore with binary locations are set in the config will do it. In the future this will be placed by the installation process.
+
+- Run the setup script located at the repo root (tested on Ubuntu 18.04).
 ```
 ./dev-setup.sh
 ```

@@ -150,8 +150,6 @@ namespace msg::json
 
         msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
-
-        return 0;
     }
 
     /**
@@ -185,8 +183,6 @@ namespace msg::json
 
         msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
-
-        return 0;
     }
 
     /**
@@ -219,8 +215,6 @@ namespace msg::json
         }
 
         msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
-        return 0;
-
         return 0;
     }
 

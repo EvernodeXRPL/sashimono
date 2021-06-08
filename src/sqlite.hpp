@@ -69,6 +69,8 @@ namespace sqlite
 
     int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
 
-    int get_max_port(sqlite3 *db, std::string_view column_name);
+    void get_max_ports(sqlite3 *db, hp::ports &max_ports);
+
+    void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports);
 }
 #endif

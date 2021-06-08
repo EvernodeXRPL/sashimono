@@ -1,6 +1,7 @@
 #include "sqlite.hpp"
 #include "salog.hpp"
 #include "util/util.hpp"
+#include "conf.hpp"
 
 namespace sqlite
 {
@@ -20,8 +21,14 @@ namespace sqlite
     constexpr const char *SQLITE_MASTER = "sqlite_master";
     constexpr const char *WHERE = " WHERE ";
     constexpr const char *AND = " AND ";
+    constexpr const char *SELECT_DISTINCT = "SELECT DISTINCT ";
+    constexpr const char *SELECT = "SELECT ";
+    constexpr const char *FROM = " FROM ";
+    constexpr const char *NOT_IN = " NOT IN (";
 
     constexpr const char *INSTANCE_TABLE = "instances";
+    constexpr const char *PEER_PORT = "peer_port";
+    constexpr const char *USER_PORT = "user_port";
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, status, name, ip,"
@@ -286,8 +293,8 @@ namespace sqlite
                 table_column_info("status", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
                 table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
-                table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
-                table_column_info("user_port", COLUMN_DATA_TYPE::INT),
+                table_column_info(PEER_PORT, COLUMN_DATA_TYPE::INT),
+                table_column_info(USER_PORT, COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
 
@@ -315,8 +322,8 @@ namespace sqlite
             sqlite3_bind_text(stmt, 3, status.data(), status.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 4, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 5, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_int64(stmt, 6, info.peer_port) == SQLITE_OK &&
-            sqlite3_bind_int64(stmt, 7, info.user_port) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 6, info.assigned_ports.peer_port) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 7, info.assigned_ports.user_port) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 8, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 9, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
@@ -397,18 +404,19 @@ namespace sqlite
     }
 
     /**
-     * Get the max port already used for the instances. Ports used for already destroyed instances are excluded.
+     * Get the max peer and user ports assigned for instances excluding destroyed instances.
      * @param db Database connection.
-     * @param column_name Name of the column. Should be one of ['peer_port', 'user_port'].
-     * @return The port number. 0 is returned if no data found on database or on database error.
+     * @param max_ports Container holding max peer and user ports.
     */
-    int get_max_port(sqlite3 *db, std::string_view column_name)
+    void get_max_ports(sqlite3 *db, hp::ports &max_ports)
     {
         std::string sql;
         // Reserving the space for the query before construction.
-        sql.reserve(sizeof(INSTANCE_TABLE) + column_name.length() + sizeof(WHERE) + sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) + 29);
+        sql.reserve(sizeof(INSTANCE_TABLE) + sizeof(PEER_PORT) + sizeof(USER_PORT) + sizeof(WHERE) + sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) + 36);
         sql.append("SELECT max(")
-            .append(column_name)
+            .append(PEER_PORT)
+            .append("), max(")
+            .append(USER_PORT)
             .append(") from ")
             .append(INSTANCE_TABLE)
             .append(WHERE)
@@ -421,14 +429,68 @@ namespace sqlite
         if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
             stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
         {
-            const int result = sqlite3_column_int64(stmt, 0);
-            // Finalize and distroys the statement.
-            sqlite3_finalize(stmt);
-            return result;
+            const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
+            const uint16_t user_port = sqlite3_column_int64(stmt, 1);
+
+            max_ports = {peer_port, user_port};
+        }
+        // Initialize with default config values if either of the ports are zero.
+        if (max_ports.peer_port == 0 || max_ports.user_port == 0)
+        {
+            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1)};
         }
 
         // Finalize and distroys the statement.
         sqlite3_finalize(stmt);
-        return 0;
+    }
+
+    /**
+     * Populate the given vector with vacant ports of destroyed instances which are not already assigned.
+     * @param db Database connection.
+     * @param vacant_ports Ports vector to hold port pairs from database.
+    */
+    void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports)
+    {
+        std::string sql;
+        sql.reserve(sizeof(SELECT_DISTINCT) + sizeof(PEER_PORT) + 3 * sizeof(USER_PORT) + 2 * sizeof(FROM) +
+                    2 * sizeof(INSTANCE_TABLE) + 2 * sizeof(WHERE) + 2 * sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) +
+                    sizeof(AND) + sizeof(NOT_IN) + sizeof(SELECT) + 27);
+
+        sql.append(SELECT_DISTINCT)
+            .append(PEER_PORT)
+            .append(", ")
+            .append(USER_PORT)
+            .append(FROM)
+            .append(INSTANCE_TABLE)
+            .append(WHERE)
+            .append("status == '")
+            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
+            .append("'")
+            .append(AND)
+            .append(USER_PORT)
+            .append(NOT_IN)
+            .append(SELECT)
+            .append(USER_PORT)
+            .append(FROM)
+            .append(INSTANCE_TABLE)
+            .append(WHERE)
+            .append("status != '")
+            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
+            .append("')");
+
+        sqlite3_stmt *stmt;
+
+        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK)
+        {
+            while (stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+            {
+                const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
+                const uint16_t user_port = sqlite3_column_int64(stmt, 1);
+                vacant_ports.push_back({peer_port, user_port});
+            }
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
     }
 }

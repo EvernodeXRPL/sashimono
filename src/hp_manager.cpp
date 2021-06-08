@@ -7,11 +7,17 @@
 namespace hp
 {
     // Keep track of the ports of the most recent hp instance.
-    uint16_t last_user_port, last_peer_port;
+    ports last_assigned_ports;
+
+    // This is defaults to true because it initialize last assigned ports when a new instance is created if there is no vacant ports available.
+    bool last_port_assign_from_vacant = true;
 
     constexpr int FILE_PERMS = 0644;
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
+
+    // Vector keeping vacant ports from destroyed instances.
+    std::vector<ports> vacant_ports;
 
     /**
      * Initialize hp related environment.
@@ -25,12 +31,9 @@ namespace hp
             LOG_ERROR << "Error preparing hp database in " << db_path;
             return -1;
         }
-        const int peer_port_db = sqlite::get_max_port(db, "peer_port");
-        last_peer_port = peer_port_db == 0 ? (conf::cfg.hp.init_peer_port -1) : peer_port_db;
 
-        const int user_port_db = sqlite::get_max_port(db, "user_port");
-        last_user_port = user_port_db == 0 ? (conf::cfg.hp.init_user_port -1) : user_port_db;
-        
+        sqlite::get_vacant_ports(db, vacant_ports);
+
         return 0;
     }
 
@@ -51,21 +54,37 @@ namespace hp
     */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey)
     {
-        const uint16_t user_port = last_user_port + 1;
-        const uint16_t peer_port = last_peer_port + 1;
+        ports instance_ports;
+        if (!vacant_ports.empty())
+        {
+            // Assign a port pair from on of destroyed instances.
+            instance_ports = vacant_ports.back();
+            last_port_assign_from_vacant = true;
+        }
+        else
+        {
+            if (last_port_assign_from_vacant)
+            {
+                sqlite::get_max_ports(db, last_assigned_ports);
+                last_port_assign_from_vacant = false;
+            }
+            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
+        }
 
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
 
-        if (create_contract(info, name, peer_port, user_port) != 0 ||
-            run_container(name, user_port, peer_port) != 0 || // Gives 3200 if docker failed.
+        if (create_contract(info, name, instance_ports) != 0 ||
+            run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, owner_pubkey, info, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
             return -1;
         }
 
-        last_user_port++;
-        last_peer_port++;
+        if (last_port_assign_from_vacant)
+            vacant_ports.pop_back();
+        else
+            last_assigned_ports = instance_ports;
 
         return 0;
     }
@@ -73,17 +92,16 @@ namespace hp
     /**
      * Runs a hotpocket docker image on the given contract and the ports.
      * @param folder_name Contract directory folder name.
-     * @param user_port User port to be assigned.
-     * @param peer_port Peer port to be assigned.
+     * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int run_container(const std::string &folder_name, const uint16_t user_port, const uint16_t peer_port)
+    int run_container(const std::string &folder_name, const ports &assigned_ports)
     {
         const std::string command = "docker run -t -i -d --network=hpnet --stop-signal=SIGINT --name=" + folder_name + " \
                                             -p " +
-                                    std::to_string(user_port) + ":" + std::to_string(user_port) + " \
+                                    std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
                                             -p " +
-                                    std::to_string(peer_port) + ":" + std::to_string(peer_port) + " \
+                                    std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
                                             --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
                                             --mount type=bind,source=" +
                                     conf::cfg.hp.instance_folder + "/" +
@@ -165,11 +183,17 @@ namespace hp
         const std::string command = "docker container rm -f " + container_name;
         const std::string folder_path = conf::cfg.hp.instance_folder + "/" + container_name;
 
-        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 || util::remove_directory_recursively(folder_path) == -1)
+        if (system(command.c_str()) != 0 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
+            util::remove_directory_recursively(folder_path) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
         }
+        // Refresh the vacant port vector.
+        // [TODO] add the port pair of the destroyed node rather than taking the whole list from DB
+        vacant_ports.clear();
+        sqlite::get_vacant_ports(db, vacant_ports);
         return 0;
     }
 
@@ -177,12 +201,11 @@ namespace hp
      * Creates a copy of default contract with the given name and the ports in the instance folder given in the config file.
      * @param info Information of the created contract instance.
      * @param folder_name Folder name for the contract directory.
-     * @param peer_port Peer port assigned to the hotpocket instance.
-     * @param user_port User port assigned to the hotpocket instance.
+     * @param assigned_ports Assigned ports to the instance.
      * @return -1 on error and 0 on success.
      * 
     */
-    int create_contract(instance_info &info, const std::string &folder_name, const uint16_t peer_port, const uint16_t user_port)
+    int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports)
     {
         const std::string folder_path = conf::cfg.hp.instance_folder + "/" + folder_name;
         const std::string command = "cp -r " + conf::ctx.default_contract_path + " " + folder_path;
@@ -234,8 +257,8 @@ namespace hp
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
-        d["mesh"]["port"] = peer_port;
-        d["user"]["port"] = user_port;
+        d["mesh"]["port"] = assigned_ports.peer_port;
+        d["user"]["port"] = assigned_ports.user_port;
 
         if (write_json_file(config_fd, d) == -1)
         {
@@ -249,8 +272,7 @@ namespace hp
         info.contract_id = contract_id;
         info.name = folder_name;
         info.pubkey = pubkey_hex;
-        info.user_port = user_port;
-        info.peer_port = peer_port;
+        info.assigned_ports = assigned_ports;
         return 0;
     }
 

@@ -295,11 +295,11 @@ namespace msg::json
         msg += SEP_COMMA;
         msg += "peer_port";
         msg += SEP_COLON;
-        msg += std::to_string(info.peer_port);
+        msg += std::to_string(info.assigned_ports.peer_port);
         msg += SEP_COMMA;
         msg += "user_port";
         msg += SEP_COLON;
-        msg += std::to_string(info.user_port);
+        msg += std::to_string(info.assigned_ports.user_port);
         msg += "\"}";
     }
 

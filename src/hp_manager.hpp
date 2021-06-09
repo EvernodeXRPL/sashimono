@@ -19,6 +19,11 @@ namespace hp
     {
         uint16_t peer_port = 0;
         uint16_t user_port = 0;
+
+        bool operator==(const ports &other) const
+        {
+            return peer_port == other.peer_port && user_port == other.user_port;
+        }
     };
 
     struct instance_info

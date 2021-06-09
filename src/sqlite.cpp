@@ -17,23 +17,25 @@ namespace sqlite
     constexpr const char *PRIMARY_KEY = "PRIMARY KEY";
     constexpr const char *NOT_NULL = "NOT NULL";
     constexpr const char *VALUES = "VALUES";
-    constexpr const char *SELECT_ALL = "SELECT * FROM ";
-    constexpr const char *SQLITE_MASTER = "sqlite_master";
-    constexpr const char *WHERE = " WHERE ";
-    constexpr const char *AND = " AND ";
-    constexpr const char *SELECT_DISTINCT = "SELECT DISTINCT ";
-    constexpr const char *SELECT = "SELECT ";
-    constexpr const char *FROM = " FROM ";
-    constexpr const char *NOT_IN = " NOT IN (";
 
     constexpr const char *INSTANCE_TABLE = "instances";
-    constexpr const char *PEER_PORT = "peer_port";
-    constexpr const char *USER_PORT = "user_port";
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, status, name, ip,"
                                                     "peer_port, user_port, pubkey, contract_id"
                                                     ") VALUES(?,?,?,?,?,?,?,?,?)";
+
+    constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
+                                                     "instances WHERE status == ? AND user_port NOT IN"
+                                                     "(SELECT user_port FROM instances WHERE status != ?)";
+
+    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT max(peer_port), max(user_port) FROM instances WHERE status != ?";
+
+    constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
+
+    constexpr const char *IS_CONTAINER_EXISTS = "SELECT * FROM instances WHERE name = ?";
+
+    constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
     /**
      * Opens a connection to a given databse and give the db pointer.
@@ -230,23 +232,11 @@ namespace sqlite
     */
     bool is_table_exists(sqlite3 *db, std::string_view table_name)
     {
-        std::string sql;
-        // Reserving the space for the query before construction.
-        sql.reserve(sizeof(SELECT_ALL) + sizeof(SQLITE_MASTER) + sizeof(WHERE) + sizeof(AND) + table_name.size() + 19);
-
-        sql.append(SELECT_ALL);
-        sql.append(SQLITE_MASTER);
-        sql.append(WHERE);
-        sql.append("type='table'");
-        sql.append(AND);
-        sql.append("name='");
-        sql.append(table_name);
-        sql.append("'");
-
         sqlite3_stmt *stmt;
 
-        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
-            stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+        if (sqlite3_prepare_v2(db, IS_TABLE_EXISTS, -1, &stmt, 0) == SQLITE_OK &&
+            stmt != NULL && sqlite3_bind_text(stmt, 1, table_name.data(), table_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_ROW)
         {
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
@@ -293,8 +283,8 @@ namespace sqlite
                 table_column_info("status", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
                 table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
-                table_column_info(PEER_PORT, COLUMN_DATA_TYPE::INT),
-                table_column_info(USER_PORT, COLUMN_DATA_TYPE::INT),
+                table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("user_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
 
@@ -344,27 +334,17 @@ namespace sqlite
     */
     int is_container_exists(sqlite3 *db, std::string_view container_name, hp::instance_info &info)
     {
-        std::string sql;
-        // Reserving the space for the query before construction.
-        sql.reserve(sizeof(SELECT_ALL) + sizeof(SQLITE_MASTER) + sizeof(WHERE) + sizeof(AND) + container_name.size() + 7);
-
-        sql.append(SELECT_ALL);
-        sql.append(INSTANCE_TABLE);
-        sql.append(WHERE);
-        sql.append("name='");
-        sql.append(container_name);
-        sql.append("'");
-
         sqlite3_stmt *stmt;
 
-        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
-            stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+        if (sqlite3_prepare_v2(db, IS_CONTAINER_EXISTS, -1, &stmt, 0) == SQLITE_OK &&
+            stmt != NULL && sqlite3_bind_text(stmt, 1, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_ROW)
         {
             // Populate only the necessary fields.
             info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
             info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 5);
             info.assigned_ports.user_port = sqlite3_column_int64(stmt, 6);
-            
+
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
             return 1;
@@ -384,20 +364,17 @@ namespace sqlite
     */
     int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status)
     {
-        std::string sql;
-        // Reserving the space for the query before construction.
-        sql.reserve(sizeof(INSTANCE_TABLE) + status.length() + sizeof(WHERE) + container_name.size() + 30);
-        sql.append("UPDATE ");
-        sql.append(INSTANCE_TABLE);
-        sql.append(" SET status = '");
-        sql.append(status);
-        sql.append("'");
-        sql.append(WHERE);
-        sql.append("name='");
-        sql.append(container_name);
-        sql.append("'");
-
-        return sqlite::exec_sql(db, sql);
+        sqlite3_stmt *stmt;
+        if (sqlite3_prepare_v2(db, UPDATE_STATUS_IN_HP, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, status.data(), status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 2, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_DONE)
+        {
+            sqlite3_finalize(stmt);
+            return 0;
+        }
+        LOG_ERROR << "Error updating container status for " << container_name;
+        return -1;
     }
 
     /**
@@ -407,24 +384,11 @@ namespace sqlite
     */
     void get_max_ports(sqlite3 *db, hp::ports &max_ports)
     {
-        std::string sql;
-        // Reserving the space for the query before construction.
-        sql.reserve(sizeof(INSTANCE_TABLE) + sizeof(PEER_PORT) + sizeof(USER_PORT) + sizeof(WHERE) + sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) + 36);
-        sql.append("SELECT max(")
-            .append(PEER_PORT)
-            .append("), max(")
-            .append(USER_PORT)
-            .append(") from ")
-            .append(INSTANCE_TABLE)
-            .append(WHERE)
-            .append("status !='")
-            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
-            .append("'");
-
         sqlite3_stmt *stmt;
 
-        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
-            stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+        if (sqlite3_prepare_v2(db, GET_MAX_PORTS_FROM_HP, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, hp::CONTAINER_STATES[hp::STATES::DESTROYED], sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_ROW)
         {
             const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
             const uint16_t user_port = sqlite3_column_int64(stmt, 1);
@@ -448,36 +412,13 @@ namespace sqlite
     */
     void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports)
     {
-        std::string sql;
-        sql.reserve(sizeof(SELECT_DISTINCT) + sizeof(PEER_PORT) + 3 * sizeof(USER_PORT) + 2 * sizeof(FROM) +
-                    2 * sizeof(INSTANCE_TABLE) + 2 * sizeof(WHERE) + 2 * sizeof(hp::CONTAINER_STATES[hp::STATES::DESTROYED]) +
-                    sizeof(AND) + sizeof(NOT_IN) + sizeof(SELECT) + 27);
-
-        sql.append(SELECT_DISTINCT)
-            .append(PEER_PORT)
-            .append(", ")
-            .append(USER_PORT)
-            .append(FROM)
-            .append(INSTANCE_TABLE)
-            .append(WHERE)
-            .append("status == '")
-            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
-            .append("'")
-            .append(AND)
-            .append(USER_PORT)
-            .append(NOT_IN)
-            .append(SELECT)
-            .append(USER_PORT)
-            .append(FROM)
-            .append(INSTANCE_TABLE)
-            .append(WHERE)
-            .append("status != '")
-            .append(hp::CONTAINER_STATES[hp::STATES::DESTROYED])
-            .append("')");
 
         sqlite3_stmt *stmt;
+        std::string_view destroy_status(hp::CONTAINER_STATES[hp::STATES::DESTROYED]);
 
-        if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK)
+        if (sqlite3_prepare_v2(db, GET_VACANT_PORTS_FROM_HP, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, destroy_status.data(), destroy_status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 2, destroy_status.data(), destroy_status.length(), SQLITE_STATIC) == SQLITE_OK)
         {
             while (stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
             {

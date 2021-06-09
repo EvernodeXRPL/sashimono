@@ -32,6 +32,7 @@ namespace hp
             return -1;
         }
 
+        // Populate the vacant ports vector with vacant ports of destroyed containers.
         sqlite::get_vacant_ports(db, vacant_ports);
 
         return 0;
@@ -193,10 +194,9 @@ namespace hp
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
         }
-        // Refresh the vacant port vector.
-        // [TODO] add the port pair of the destroyed node rather than taking the whole list from DB
-        vacant_ports.clear();
-        sqlite::get_vacant_ports(db, vacant_ports);
+        // Add the port pair of the destroyed container to the vacant port vector.
+        if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
+            vacant_ports.push_back(info.assigned_ports);
         return 0;
     }
 

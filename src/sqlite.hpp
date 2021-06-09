@@ -63,9 +63,9 @@ namespace sqlite
 
     int initialize_hp_db(sqlite3 *db);
 
-    int insert_hp_instance_row(sqlite3 *db, std::string_view owner_pubkey, const hp::instance_info &info, std::string_view status);
+    int insert_hp_instance_row(sqlite3 *db, const hp::instance_info &info);
 
-    int is_container_exists_in_status(sqlite3 *db, std::string_view name, std::string_view status);
+    int is_container_exists(sqlite3 *db, std::string_view container_name, hp::instance_info &info);
 
     int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
 

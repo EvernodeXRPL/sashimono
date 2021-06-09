@@ -310,16 +310,15 @@ namespace sqlite
      * Inserts a hp instance record.
      * @param db Pointer to the db.
      * @param info HP instance information.
-     * @param status Current status of the instance.
      * @returns returns 0 on success, or -1 on error.
     */
-    int insert_hp_instance_row(sqlite3 *db, std::string_view owner_pubkey, const hp::instance_info &info, std::string_view status)
+    int insert_hp_instance_row(sqlite3 *db, const hp::instance_info &info)
     {
         sqlite3_stmt *stmt;
         if (sqlite3_prepare_v2(db, INSERT_INTO_HP_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
-            sqlite3_bind_text(stmt, 1, owner_pubkey.data(), owner_pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 1, info.owner_pubkey.data(), info.owner_pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 2, util::get_epoch_milliseconds()) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 3, status.data(), status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 3, info.status.data(), info.status.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 4, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 5, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 6, info.assigned_ports.peer_port) == SQLITE_OK &&
@@ -337,13 +336,13 @@ namespace sqlite
     }
 
     /**
-     * Checks whether the container exist in the database and checks against the given status.
+     * Checks whether the container exist in the database and populate the instance information.
      * @param db Pointer to the db.
      * @param container_name Name of the container to be checked.
-     * @param status Status to check the container status against.
-     * @returns 0 if not found, 1 if container exists but not in given status and 2 if container exist in given status.
+     * @param info HP instance information.
+     * @returns 0 if not found, 1 if container exists .
     */
-    int is_container_exists_in_status(sqlite3 *db, std::string_view container_name, std::string_view status)
+    int is_container_exists(sqlite3 *db, std::string_view container_name, hp::instance_info &info)
     {
         std::string sql;
         // Reserving the space for the query before construction.
@@ -357,25 +356,23 @@ namespace sqlite
         sql.append("'");
 
         sqlite3_stmt *stmt;
-        int result = 0; // Not exist.
 
         if (sqlite3_prepare_v2(db, sql.data(), -1, &stmt, 0) == SQLITE_OK &&
             stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
         {
-            const std::string current_status(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
+            // Populate only the necessary fields.
+            info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
+            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 5);
+            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 6);
+            
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
-            if (current_status == status)
-                result = 2;
-            else
-                result = 1;
-
-            return result;
+            return 1;
         }
 
         // Finalize and distroys the statement.
         sqlite3_finalize(stmt);
-        return result;
+        return 0; // Not found
     }
 
     /**

@@ -72,10 +72,10 @@ namespace hp
         }
 
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
-
+        info.owner_pubkey = owner_pubkey;
         if (create_contract(info, name, instance_ports) != 0 ||
             run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
-            sqlite::insert_hp_instance_row(db, owner_pubkey, info, CONTAINER_STATES[STATES::RUNNING]) == -1)
+            sqlite::insert_hp_instance_row(db, info) == -1)
         {
             LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
             return -1;
@@ -118,13 +118,14 @@ namespace hp
     */
     int stop_container(const std::string &container_name)
     {
-        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::RUNNING]);
+        instance_info info;
+        const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
-        else if (res == 1)
+        else if (info.status != CONTAINER_STATES[STATES::RUNNING])
         {
             LOG_ERROR << "Given container is not running. name: " << container_name;
             return -1;
@@ -146,13 +147,14 @@ namespace hp
     */
     int start_container(const std::string &container_name)
     {
-        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::STOPPED]);
+        instance_info info;
+        const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
-        else if (res == 1)
+        else if (info.status != CONTAINER_STATES[STATES::STOPPED])
         {
             LOG_ERROR << "Given container is not stopped. name: " << container_name;
             return -1;
@@ -174,7 +176,8 @@ namespace hp
     */
     int destroy_container(const std::string &container_name)
     {
-        const int res = sqlite::is_container_exists_in_status(db, container_name, CONTAINER_STATES[STATES::STOPPED]);
+        instance_info info;
+        const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
             LOG_ERROR << "Given container not found. name: " << container_name;
@@ -273,6 +276,7 @@ namespace hp
         info.name = folder_name;
         info.pubkey = pubkey_hex;
         info.assigned_ports = assigned_ports;
+        info.status = CONTAINER_STATES[STATES::RUNNING];
         return 0;
     }
 

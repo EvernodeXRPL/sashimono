@@ -23,11 +23,13 @@ namespace hp
 
     struct instance_info
     {
+        std::string owner_pubkey;
         std::string name;
         std::string ip;
         std::string pubkey;
         std::string contract_id;
         ports assigned_ports;
+        std::string status;
     };
 
 

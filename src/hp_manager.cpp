@@ -58,7 +58,7 @@ namespace hp
         ports instance_ports;
         if (!vacant_ports.empty())
         {
-            // Assign a port pair from on of destroyed instances.
+            // Assign a port pair from one of destroyed instances.
             instance_ports = vacant_ports.back();
             last_port_assign_from_vacant = true;
         }

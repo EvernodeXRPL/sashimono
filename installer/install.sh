@@ -7,9 +7,11 @@
 
 # Download and extract Docker rootless package.
 # This will extract the Docker rootless binaries at ~/bin/
-curl --silent -fsSL https://get.docker.com/rootless | bash > /dev/null
+curl --silent -fSL https://get.docker.com/rootless | bash > /dev/null
+
+sauser=$(whoami)
 
 # Add rootless docker env variables to .bashrc
-echo "export XDG_RUNTIME_DIR=~/.docker/run" >> ~/.bashrc
-echo "export PATH=~/bin:$PATH" >> ~/.bashrc
-echo "export DOCKER_HOST=unix:///~/.docker/run/docker.sock" >> ~/.bashrc
+echo "export XDG_RUNTIME_DIR=/home/$sauser/.docker/run" >> ~/.bashrc
+echo "export PATH=/home/$sauser/bin:$PATH" >> ~/.bashrc
+echo "export DOCKER_HOST=unix:///home/$sauser/.docker/run/docker.sock" >> ~/.bashrc

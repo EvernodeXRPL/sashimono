@@ -7,8 +7,7 @@
 
 # Download and extract Docker rootless package.
 # This will extract the Docker rootless binaries at ~/bin/
-sudo apt-get install -y curl
-curl -fsSL https://get.docker.com/rootless | sh
+curl -fsSL https://get.docker.com/rootless | bash > /dev/null
 
 # Add rootless docker env variables to .bashrc
 echo "export XDG_RUNTIME_DIR=~/.docker/run" >> ~/.bashrc

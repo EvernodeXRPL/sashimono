@@ -1,6 +1,10 @@
 #!/bin/bash
 # Sashimono agent and rootless docker isntallation script.
 
+# Safety check to avoid running this script directly because we need to be run
+# under sahimono dedicated user account.
+[ "$1" != "launcher" ] && echo "This script must be run via launcher script." && exit 1
+
 # Download and extract Docker rootless package.
 # This will extract the Docker rootless binaries at ~/bin/
 sudo apt-get install -y curl

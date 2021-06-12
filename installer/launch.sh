@@ -9,5 +9,5 @@ sauser=sahimono
 # Create sashimono user
 sudo useradd $sauser
 
-# Execute installation as sashimono user
-sudo -u $sauser bash -i -c install.sh
+# Execute installation script as sashimono user
+sudo -u $sauser bash -i -c install.sh launcher

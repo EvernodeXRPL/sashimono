@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sashimono agent and rootless docker isntallation script.
+# Sashimono agent and rootless docker installation script.
 
 # Safety check to avoid running this script directly because we need to be run
 # under sahimono dedicated user account.
@@ -7,7 +7,7 @@
 
 # Download and extract Docker rootless package.
 # This will extract the Docker rootless binaries at ~/bin/
-curl -fsSL https://get.docker.com/rootless | bash > /dev/null
+curl --silent -fsSL https://get.docker.com/rootless | bash > /dev/null
 
 # Add rootless docker env variables to .bashrc
 echo "export XDG_RUNTIME_DIR=~/.docker/run" >> ~/.bashrc

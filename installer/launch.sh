@@ -7,7 +7,7 @@ sauser=sashimono
 [ `id -u $sauser 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sauser' already exists." && exit 1
 
 # Create sashimono user with home dir.
-sudo useradd --create-home $sauser
+sudo useradd -m $sauser
 # Prevent log in.
 sudo usermod -L $sauser
 echo "Created '$sauser' user."

@@ -5,7 +5,7 @@ sashimono_user=sashimono
 docker_user=sashidocker
 setup_dir=$(pwd)/setupfiles
 sashimono_dir=/home/$sashimono_user/sashimono-agent
-docker_dir=/home/$docker_user
+docker_user_dir=/home/$docker_user
 
 # Check if users already exists.
 [ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1
@@ -25,16 +25,16 @@ echo "Created '$docker_user' user."
 [ ! $(command -v curl &> /dev/null) ] && sudo apt-get install -y curl
 
 # Download and extract Docker rootless package.
-# This will extract the Docker rootless binaries at $docker_dir/bin
+# This will extract the Docker rootless binaries at $docker_user_dir/bin
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /dev/null
 
 # Set user permissions.
-sudo cp $setup_dir/run-dockerd.sh $docker_dir/
-sudo chown $docker_user $docker_dir/run-dockerd.sh
+sudo cp $setup_dir/run-dockerd.sh $docker_user_dir/
+sudo chown $docker_user $docker_user_dir/run-dockerd.sh
 
 # Update service unit definition with physical values.
 sed -i 's?#run_as#?'"$docker_user"'?g' $setup_dir/sashimono-docker.service
-sed -i 's?#docker_dir#?'"$docker_dir"'?g' $setup_dir/sashimono-docker.service
+sed -i 's?#docker_user_dir#?'"$docker_user_dir"'?g' $setup_dir/sashimono-docker.service
 
 # Configure dockerd service startup.
 sudo cp $setup_dir/sashimono-docker.service /etc/systemd/system/

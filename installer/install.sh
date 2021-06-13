@@ -1,21 +1,43 @@
 #!/bin/sh
-# Sashimono agent and rootless docker installation script.
 
-# Safety checks to avoid running this script directly because we need to be run
-# under sashimono dedicated user account.
-[ -z "$1" ] && echo "This script must be run via launcher script. Missing setup dir arg." && exit 1
-[ -z "$2" ] && echo "Missing sashimono dir arg." && exit 1
-[ -z "$3" ] && echo "Missing docker dir arg." && exit 1
+# Users that sashimono agent and rootless docker will operate under.
+sashimono_user=sashimono
+docker_user=sashidocker
+setup_dir=$(pwd)/setupfiles
+sashimono_dir=/home/$sashimono_user/sashimono-agent
+docker_dir=/home/$docker_user
 
-setup_dir=$1
-sashimono_dir=$2
-docker_dir=$3
+# Check if users already exists.
+[ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1
+[ `id -u $docker_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$docker_user' already exists." && exit 1
 
-# Download and install Sashimono agent binaries.
-# TODO.
+# Create users.
+
+sudo useradd -m $sashimono_user
+sudo usermod -L $sashimono_user # Prevent log in. 
+echo "Created '$sashimono_user' user."
+
+sudo useradd -m $docker_user
+sudo usermod -L $docker_user # Prevent log in.
+echo "Created '$docker_user' user."
+
+# Install curl if not exists (required to download installation artifacts).
+[ ! command -v curl &> /dev/null ] && sudo apt-get install -y curl
 
 # Download and extract Docker rootless package.
-# This will extract the Docker rootless binaries at ~/docker/bin
-mkdir -p $docker_dir
-export DOCKER_BIN=$docker_dir/bin
-curl --silent -fSL https://get.docker.com/rootless | sh > /dev/null
+# This will extract the Docker rootless binaries at $docker_dir/bin
+curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /dev/null
+
+# Update service unit definition with physical values.
+sed -i 's?#run_as#?'"$docker_user"'?g' $setup_dir/sashimono-docker.service
+sed -i 's?#docker_dir#?'"$docker_dir"'?g' $setup_dir/sashimono-docker.service
+
+# Set user permissions.
+sudo cp $setup_dir/run-dockerd.sh $docker_dir/
+sudo chown $docker_user $docker_dir/run-dockerd.sh
+
+# Configure dockerd service startup.
+sudo cp $setup_dir/sashimono-docker.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start sashimono-docker
+sudo systemctl enable sashimono-docker

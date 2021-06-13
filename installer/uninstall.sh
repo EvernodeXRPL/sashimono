@@ -20,5 +20,6 @@ sudo userdel $sashimono_user
 sudo userdel $docker_user
 
 sudo rm -r /home/$sashimono_user
+sudo rm -r /home/$docker_user
 
 echo "Done."

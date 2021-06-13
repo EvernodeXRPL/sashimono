@@ -28,16 +28,14 @@ echo "Created '$docker_user' user."
 # This will extract the Docker rootless binaries at $docker_user_dir/bin
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /dev/null
 
-# Setup rootless dockerd env variables.
-echo "export XDG_RUNTIME_DIR=$docker_user_dir/.docker/run" >> $docker_user_dir/.bashrc
-echo "export PATH=$docker_user_dir/bin:$PATH" >> $docker_user_dir/.bashrc
-echo "export DOCKER_HOST=unix://$docker_user_dir/.docker/run/docker.sock" >> $docker_user_dir/.bashrc
-
 # Configure dockerd service unit.
 sudo echo "[Unit]
 Description=Sashimono rootless dockerd service
 [Service]
 User=$docker_user
+Environment=\"XDG_RUNTIME_DIR=$docker_user_dir/.docker/run\"
+Environment=\"PATH=$docker_user_dir/bin:\$PATH\"
+Environment=\"DOCKER_HOST=unix://$docker_user_dir/.docker/run/docker.sock\"
 WorkingDirectory=$docker_user_dir
 ExecStart=$docker_user_dir/bin/dockerd-rootless.sh
 [Install]

@@ -1,6 +1,6 @@
 #!/bin/sh
+# Sashimono installation script.
 
-# Users that sashimono agent and rootless docker will operate under.
 sashimono_user=sashimono
 sashimono_user_dir=/home/$sashimono_user
 sashimono_agent_dir=$sashimono_user_dir/sashimono-agent
@@ -17,12 +17,11 @@ dockerd_socket=unix://$dockerd_user_dir/.docker/run/docker.sock
 [ ! $(command -v curl &> /dev/null) ] && sudo apt-get install -y curl
 
 
-
 # --------------------------------------
 # Setup dockerd user and service.
 # --------------------------------------
-sudo useradd -m $dockerd_user
-sudo usermod -L $dockerd_user # Prevent log in.
+sudo useradd --shell /usr/sbin/nologin -m $dockerd_user
+sudo usermod --lock $dockerd_user
 echo "Created '$dockerd_user' user."
 
 # Download and extract Docker rootless package.
@@ -53,11 +52,11 @@ sudo systemctl enable $dockerd_service
 echo "Configured $dockerd_service service."
 
 
-# -------------------------------
+# --------------------------------------
 # Setup Sashimono user and agent.
-# -------------------------------
-sudo useradd -m $sashimono_user
-sudo usermod -L $sashimono_user # Prevent log in. 
+# --------------------------------------
+sudo useradd --shell /usr/sbin/nologin -m $sashimono_user
+sudo usermod --lock $sashimono_user
 echo "Created '$sashimono_user' user."
 
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.

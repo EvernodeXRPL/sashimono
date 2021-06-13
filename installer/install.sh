@@ -34,7 +34,7 @@ sudo chown $docker_user $docker_user_dir/run-dockerd.sh
 
 # Update service unit definition with physical values.
 sed -i 's?#run_as#?'"$docker_user"'?g' $setup_dir/sashimono-docker.service
-sed -i 's?#docker_user_dir#?'"$docker_user_dir"'?g' $setup_dir/sashimono-docker.service
+sed -i 's?#work_dir#?'"$docker_user_dir"'?g' $setup_dir/sashimono-docker.service
 
 # Configure dockerd service startup.
 sudo cp $setup_dir/sashimono-docker.service /etc/systemd/system/

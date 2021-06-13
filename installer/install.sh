@@ -28,6 +28,7 @@ echo "Created '$dockerd_user' user."
 # Download and extract Docker rootless package.
 # This will extract the Docker rootless binaries at $dockerd_user_dir/bin
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user sh > /dev/null
+echo "Installed rootless dockerd at $dockerd_user_dir/bin"
 
 # Setup rootless dockerd env variables.
 echo "export XDG_RUNTIME_DIR=$dockerd_user_dir/.docker/run
@@ -49,7 +50,7 @@ sudo systemctl daemon-reload
 sudo systemctl start $dockerd_service
 # Enable auto-start on bootup.
 sudo systemctl enable $dockerd_service
-
+echo "Configured $dockerd_service service."
 
 
 # -------------------------------
@@ -73,10 +74,14 @@ sudo cp $dockerd_user_dir/bin/docker $sashimono_agent_dir/
 # TODO: Copy sashimono agent binaries.
 # Set owner and group to be sashimono user.
 sudo chown --recursive $sashimono_user.$sashimono_user $sashimono_agent_dir
+echo "Configured $sashimono_agent_dir"
 
 # Configure docker client context.
-sudo -u $sashimono_user $sashimono_agent_dir/docker context create sashidockerctx --docker host=$dockerd_socket
-sudo -u $sashimono_user $sashimono_agent_dir/docker context use sashidockerctx
+sudo -u $sashimono_user $sashimono_agent_dir/docker context create sashidockerctx --docker host=$dockerd_socket >/dev/null
+sudo -u $sashimono_user $sashimono_agent_dir/docker context use sashidockerctx >/dev/null
+echo "Configured docker client context sashidockerctx"
 
 # Set PATH for convenience during interactive shell sessions.
-echo "export PATH=$sashimono_agent_dir:\$PATH" >>$dockerd_user_dir/.bashrc
+echo "export PATH=$sashimono_agent_dir:\$PATH" >>$sashimono_user_dir/.bashrc
+
+echo "Done."

@@ -2,7 +2,7 @@
 # Sashimono agent uninstall script.
 
 sashimono_user=sashimono
-docker_user=sashidocker
+docker_user=sashidockerd
 dockerd_service=sashimono-dockerd
 
 # Stop and uninstall our systemd services.

@@ -28,7 +28,14 @@ echo "Created '$docker_user' user."
 # This will extract the Docker rootless binaries at $docker_user_dir/bin
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /dev/null
 
-# Set user permissions.
+# Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.
+# Add sashimono user to docker user group.
+usermod -a -G $docker_user $sashimono_user
+# Create docker run directory and assign execute permission for group.
+sudo -u $docker_user sh -c "mkdir -p $docker_user_dir/.docker/run"
+sudo chmod g+x $docker_user_dir/.docker/run
+
+# Setup dockerd run script.
 sudo cp $setup_dir/run-dockerd.sh $docker_user_dir/
 sudo chown $docker_user $docker_user_dir/run-dockerd.sh
 

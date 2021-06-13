@@ -3,10 +3,14 @@
 
 sashimono_user=sashimono
 docker_user=sashidocker
+dockerd_service=sashimono-docker
 
 # Stop and uninstall our systemd services.
-sudo systemctl stop sashimono-docker.service
-sudo rm /etc/systemd/system/sashimono-docker.service
+sudo systemctl stop $dockerd_service
+systemctl disable $dockerd_service
+sudo rm /etc/systemd/system/$dockerd_service.service
+systemctl daemon-reload
+systemctl reset-failed
 
 # Kill all processes for users.
 pkill -SIGKILL -u $sashimono_user

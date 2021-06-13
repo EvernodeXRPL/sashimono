@@ -4,13 +4,14 @@
 sashimono_user=sashimono
 sashimono_user_dir=/home/$sashimono_user
 sashimono_agent_dir=$sashimono_user_dir/sashimono-agent
-docker_user=sashidocker
-docker_user_dir=/home/$docker_user
+dockerd_user=sashidockerd
+dockerd_user_dir=/home/$dockerd_user
 dockerd_service=sashimono-dockerd
+dockerd_socket=unix://$dockerd_user_dir/.docker/run/docker.sock
 
 # Check if users already exists.
 [ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1
-[ `id -u $docker_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$docker_user' already exists." && exit 1
+[ `id -u $dockerd_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$dockerd_user' already exists." && exit 1
 
 # Install curl if not exists (required to download installation artifacts).
 [ ! $(command -v curl &> /dev/null) ] && sudo apt-get install -y curl
@@ -18,29 +19,29 @@ dockerd_service=sashimono-dockerd
 
 
 # --------------------------------------
-# Setup docker user and dockerd service.
+# Setup dockerd user and service.
 # --------------------------------------
-sudo useradd -m $docker_user
-sudo usermod -L $docker_user # Prevent log in.
-echo "Created '$docker_user' user."
+sudo useradd -m $dockerd_user
+sudo usermod -L $dockerd_user # Prevent log in.
+echo "Created '$dockerd_user' user."
 
 # Download and extract Docker rootless package.
-# This will extract the Docker rootless binaries at $docker_user_dir/bin
-curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /dev/null
+# This will extract the Docker rootless binaries at $dockerd_user_dir/bin
+curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user sh > /dev/null
 
 # Setup rootless dockerd env variables.
-sudo -u $docker_user echo "export XDG_RUNTIME_DIR=$docker_user_dir/.docker/run
-export PATH=$docker_user_dir/bin:\$PATH
-export DOCKER_HOST=unix://$docker_user_dir/.docker/run/docker.sock" > $docker_user_dir/.dockerd-vars
+echo "export XDG_RUNTIME_DIR=$dockerd_user_dir/.docker/run
+export PATH=$dockerd_user_dir/bin:\$PATH
+export DOCKER_HOST=$dockerd_socket" | sudo -u $dockerd_user tee $dockerd_user_dir/.dockerd-vars >/dev/null
 
 # Configure dockerd service unit.
 sudo echo "[Unit]
 Description=Sashimono rootless dockerd service
 [Service]
-User=$docker_user
-Environment=\"BASH_ENV=$docker_user_dir/.dockerd-vars\"
-WorkingDirectory=$docker_user_dir
-ExecStart=bash -c $docker_user_dir/bin/dockerd-rootless.sh
+User=$dockerd_user
+Environment=\"BASH_ENV=$dockerd_user_dir/.dockerd-vars\"
+WorkingDirectory=$dockerd_user_dir
+ExecStart=bash -c $dockerd_user_dir/bin/dockerd-rootless.sh
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/$dockerd_service.service
 sudo systemctl daemon-reload
@@ -60,12 +61,22 @@ echo "Created '$sashimono_user' user."
 
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.
 # Add sashimono user to docker user group.
-sudo usermod -a -G $docker_user $sashimono_user
+sudo usermod -a -G $dockerd_user $sashimono_user
 # Create docker run directory and assign execute permission for group.
-sudo -u $docker_user sh -c "mkdir -p $docker_user_dir/.docker/run"
-sudo chmod g+x $docker_user_dir/.docker/run
+sudo -u $dockerd_user sh -c "mkdir -p $dockerd_user_dir/.docker/run"
+sudo chmod g+x $dockerd_user_dir/.docker/run
 
-# Setup docker client for sashimono user.
+# Setup sashimono agent directory.
 sudo mkdir -p $sashimono_agent_dir
-sudo cp $docker_user_dir/bin/docker $sashimono_agent_dir/
-sudo chown --recursive $sashimono_user $sashimono_agent_dir
+# Copy docker client for sashimono user.
+sudo cp $dockerd_user_dir/bin/docker $sashimono_agent_dir/
+# TODO: Copy sashimono agent binaries.
+# Set owner and group to be sashimono user.
+sudo chown --recursive $sashimono_user.$sashimono_user $sashimono_agent_dir
+
+# Configure docker client context.
+sudo -u $sashimono_user $sashimono_agent_dir/docker context create sashidockerctx --docker host=$dockerd_socket
+sudo -u $sashimono_user $sashimono_agent_dir/docker context use sashidockerctx
+
+# Set PATH for convenience during interactive shell sessions.
+echo "export PATH=$sashimono_agent_dir:\$PATH" >>$dockerd_user_dir/.bashrc

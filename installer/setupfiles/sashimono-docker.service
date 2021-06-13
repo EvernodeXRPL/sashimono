@@ -1,0 +1,11 @@
+[Unit]
+Description=Sashimono rootless dockerd service
+
+[Service]
+User=#run_as#
+Group=#run_as#
+WorkingDirectory=#docker_dir#
+ExecStart=#docker_dir#/run-dockerd.sh
+
+[Install]
+WantedBy=multi-user.target

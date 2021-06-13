@@ -1,12 +1,16 @@
-#!/bin/bash
+#!/bin/sh
 # Sashimono agent uninstall script.
 
-sauser=sashimono
+sashimono_user=sashimono
+docker_user=sashidocker
 
-# Kill all processes for user.
-pkill -SIGKILL -u $sauser
+# Kill all processes for users.
+pkill -SIGKILL -u $sashimono_user
+pkill -SIGKILL -u $docker_user
 
-sudo userdel $sauser
-rm -r /home/$sauser
+sudo userdel $sashimono_user
+sudo userdel $docker_user
+
+rm -r /home/$sashimono_user
 
 echo "Done."

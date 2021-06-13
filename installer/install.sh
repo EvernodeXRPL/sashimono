@@ -30,7 +30,7 @@ curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /
 
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.
 # Add sashimono user to docker user group.
-usermod -a -G $docker_user $sashimono_user
+sudo usermod -a -G $docker_user $sashimono_user
 # Create docker run directory and assign execute permission for group.
 sudo -u $docker_user sh -c "mkdir -p $docker_user_dir/.docker/run"
 sudo chmod g+x $docker_user_dir/.docker/run

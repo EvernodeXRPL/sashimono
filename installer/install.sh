@@ -30,7 +30,7 @@ curl --silent -fSL https://get.docker.com/rootless | sudo -u $docker_user sh > /
 
 # Setup rootless dockerd env variables.
 sudo -u $docker_user echo "export XDG_RUNTIME_DIR=$docker_user_dir/.docker/run
-export PATH=$docker_user_dir/bin:$PATH
+export PATH=$docker_user_dir/bin:\$PATH
 export DOCKER_HOST=unix://$docker_user_dir/.docker/run/docker.sock" > $docker_user_dir/.dockerd-vars
 
 # Configure dockerd service unit.
@@ -40,7 +40,7 @@ Description=Sashimono rootless dockerd service
 User=$docker_user
 Environment=\"BASH_ENV=$docker_user_dir/.dockerd-vars\"
 WorkingDirectory=$docker_user_dir
-ExecStart=$docker_user_dir/bin/dockerd-rootless.sh
+ExecStart=bash -c $docker_user_dir/bin/dockerd-rootless.sh
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/$dockerd_service.service
 sudo systemctl daemon-reload

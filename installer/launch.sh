@@ -28,10 +28,11 @@ echo "Installing as '$sashimono_user' user..."
 sudo -u $sashimono_user bash -i -c "./install.sh $setup_dir $sashimono_dir $docker_dir"
 
 # Update service unit definition with physical values.
-sed -i 's?#run_as#?'"$docker_user"'?g' sashimono-docker.service
-sed -i 's?#docker_dir#?'"$docker_dir"'?g' sashimono-docker.service
+sed -i 's?#run_as#?'"$docker_user"'?g' $setup_dir/sashimono-docker.service
+sed -i 's?#docker_dir#?'"$docker_dir"'?g' $setup_dir/sashimono-docker.service
 
 # Configure dockerd service startup.
+cp $setup_dir/run-dockerd.sh $docker_dir/
 sudo cp $setup_dir/sashimono-docker.service /etc/systemd/system/
 sudo systemctl start sashimono-docker
 sudo systemctl enable sashimono-docker

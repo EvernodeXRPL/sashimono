@@ -19,5 +19,3 @@ docker_dir=$3
 mkdir -p $docker_dir
 export DOCKER_BIN=$docker_dir/bin
 curl --silent -fSL https://get.docker.com/rootless | sh > /dev/null
-
-cp $setup_dir/run-dockerd.sh $docker_dir/

@@ -32,8 +32,8 @@ sed -i 's?#run_as#?'"$docker_user"'?g' $setup_dir/sashimono-docker.service
 sed -i 's?#docker_dir#?'"$docker_dir"'?g' $setup_dir/sashimono-docker.service
 
 # Configure dockerd service startup.
-cp $setup_dir/run-dockerd.sh $docker_dir/
+sudo cp $setup_dir/run-dockerd.sh $docker_dir/
 sudo cp $setup_dir/sashimono-docker.service /etc/systemd/system/
-systemctl daemon-reload
+sudo systemctl daemon-reload
 sudo systemctl start sashimono-docker
 sudo systemctl enable sashimono-docker

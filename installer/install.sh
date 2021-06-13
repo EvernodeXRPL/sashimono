@@ -65,4 +65,6 @@ sudo -u $docker_user sh -c "mkdir -p $docker_user_dir/.docker/run"
 sudo chmod g+x $docker_user_dir/.docker/run
 
 # Setup docker client for sashimono user.
+sudo mkdir -p $sashimono_agent_dir
 sudo cp $docker_user_dir/bin/docker $sashimono_agent_dir/
+sudo chown --recursive $sashimono_user $sashimono_agent_dir

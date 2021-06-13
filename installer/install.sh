@@ -6,7 +6,7 @@ sashimono_user_dir=/home/$sashimono_user
 sashimono_agent_dir=$sashimono_user_dir/sashimono-agent
 docker_user=sashidocker
 docker_user_dir=/home/$docker_user
-dockerd_service=$dockerd_serviced
+dockerd_service=sashimono-dockerd
 
 # Check if users already exists.
 [ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1

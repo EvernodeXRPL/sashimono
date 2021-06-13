@@ -3,7 +3,7 @@
 
 sashimono_user=sashimono
 docker_user=sashidocker
-dockerd_service=sashimono-docker
+dockerd_service=sashimono-dockerd
 
 # Stop and uninstall our systemd services.
 sudo systemctl stop $dockerd_service

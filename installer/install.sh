@@ -3,9 +3,9 @@
 
 # Safety checks to avoid running this script directly because we need to be run
 # under sashimono dedicated user account.
-[ "$1" == "" ] && echo "This script must be run via launcher script. Missing setup dir arg." && exit 1
-[ "$2" == "" ] && echo "Missing sashimono dir arg." && exit 1
-[ "$3" == "" ] && echo "Missing docker dir arg." && exit 1
+[ -z "$1" ] && echo "This script must be run via launcher script. Missing setup dir arg." && exit 1
+[ -z "$2" ] && echo "Missing sashimono dir arg." && exit 1
+[ -z "$3" ] && echo "Missing docker dir arg." && exit 1
 
 setup_dir=$1
 sashimono_dir=$2

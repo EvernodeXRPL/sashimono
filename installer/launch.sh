@@ -12,13 +12,18 @@ docker_dir=/home/$sashimono_user/docker
 [ `id -u $docker_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$docker_user' already exists." && exit 1
 
 # Create users (Only sashimono user gets a home dir).
-sudo useradd -m $sashimono_user
-sudo useradd $docker_user
 
-# Prevent log in.
-sudo usermod -L $sashimono_user
-sudo usermod -L $docker_user
-echo "Created '$sashimono_user' and '$docker_user' users."
+sudo useradd -m $sashimono_user
+sudo usermod -L $sashimono_user # Prevent log in. 
+echo "Created '$sashimono_user' user."
+
+sudo useradd $docker_user
+sudo usermod -L $docker_user # Prevent log in.
+# Provide required write permissions.
+mkdir -p $docker_dir/run
+chown $docker_user $docker_dir/run
+
+echo "Created '$docker_user' user."
 
 # Install curl if not exists (required to download installation artifacts).
 [ ! command -v curl &> /dev/null ] && sudo apt-get install -y curl

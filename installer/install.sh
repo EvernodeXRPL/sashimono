@@ -35,13 +35,14 @@ export PATH=$dockerd_user_dir/bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" | sudo -u $dockerd_user tee $dockerd_user_dir/.dockerd-vars >/dev/null
 
 # Configure dockerd service unit.
+# (Using --icc=false for docker daemon to prevent inter-container communication)
 sudo echo "[Unit]
 Description=Sashimono rootless dockerd service
 [Service]
 User=$dockerd_user
 Environment=\"BASH_ENV=$dockerd_user_dir/.dockerd-vars\"
 WorkingDirectory=$dockerd_user_dir
-ExecStart=bash -c $dockerd_user_dir/bin/dockerd-rootless.sh
+ExecStart=bash -c '$dockerd_user_dir/bin/dockerd-rootless.sh --icc=false'
 [Install]
 WantedBy=multi-user.target" > /etc/systemd/system/$dockerd_service.service
 sudo systemctl daemon-reload

@@ -8,6 +8,7 @@ dockerd_user=sashidockerd
 dockerd_user_dir=/home/$dockerd_user
 dockerd_socket_dir=$dockerd_user_dir/.docker/run
 dockerd_socket=unix://$dockerd_socket_dir/docker.sock
+mod_netfilter=br_netfilter
 
 # Check if users already exists.
 [ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1
@@ -31,7 +32,11 @@ dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
 # - Disable dockerd inter-container communication.
 # - Specify custom docker socket path. (So we can specify custom dir execute permission to user group)
 sudo -u $dockerd_user mkdir -p $dockerd_user_dir/.config/docker
-echo '{"icc":false,"hosts":['$dockerd_socket']}' | sudo -u $dockerd_user tee $dockerd_user_dir/.config/docker/daemon.json >/dev/null
+echo '{"icc":false,"hosts":["'$dockerd_socket'"]}' | sudo -u $dockerd_user tee $dockerd_user_dir/.config/docker/daemon.json >/dev/null
+
+# We need br_netfilter kernel module to make icc=false work. Otherwise dockerd won't start.
+echo "Checking for '$mod_netfilter' kernel module..."
+modprobe -n --first-time $mod_netfilter && modprobe $mod_netfilter && echo "Adding $mod_netfilter to /etc/modules" && printf "\n$mod_netfilter\n" >>/etc/modules
 
 # Download and install rootless dockerd.
 sudo -u $dockerd_user mkdir -p $dockerd_socket_dir

@@ -48,8 +48,8 @@ echo "Checking for '$mod_netfilter' kernel module..."
 modprobe -n --first-time $mod_netfilter && modprobe $mod_netfilter && echo "Adding $mod_netfilter to /etc/modules" && printf "\n$mod_netfilter\n" >>/etc/modules
 
 # Stop and start the dockerd service.
-sudo -u $dockerd_user systemctl --user stop docker.service
-sudo -u $dockerd_user systemctl --user start docker.service
+sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir systemctl --user stop docker.service
+sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir systemctl --user start docker.service
 echo "Restarted dockerd service with Sashimono configuration."
 
 # Setup env variables for dockerd user.

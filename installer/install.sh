@@ -38,6 +38,7 @@ echo "Installed rootless dockerd."
 
 # Setup env variables for dockerd user.
 echo "
+export XDG_RUNTIME_DIR=$dockerd_user_runtime_dir
 export PATH=$dockerd_user_dir/bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$dockerd_user_dir/.bashrc
 

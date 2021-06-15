@@ -8,7 +8,7 @@ dockerd_user_dir=/home/$dockerd_user
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd..."
 sudo -u $dockerd_user bash -i -c "$dockerd_user_dir/bin/dockerd-rootless-setuptool.sh uninstall"
-sudo -u $dockerd_user bash -i -c "$dockerd_user_dir/bin/rootlesskit rm -rf $dockerd_user_dir/.local/share/docker"
+sudo -u $dockerd_user $dockerd_user_dir/bin/rootlesskit rm -rf $dockerd_user_dir/.local/share/docker
 
 # Kill all processes for users.
 echo "Killing user processes..."

@@ -13,15 +13,15 @@ sudo -u $dockerd_user $dockerd_user_dir/bin/rootlesskit rm -rf $dockerd_user_dir
 
 # Kill all processes for users.
 echo "Killing user processes..."
-sudo loginctl disable-linger $dockerd_user
-sudo pkill -SIGKILL -u $dockerd_user
-sudo pkill -SIGKILL -u $sashimono_user
+loginctl disable-linger $dockerd_user
+pkill -SIGKILL -u $dockerd_user
+pkill -SIGKILL -u $sashimono_user
 
 echo "Deleting users..."
-sudo userdel $sashimono_user # Remove sashimono user first because it's in docker user's group.
-sudo userdel $dockerd_user
+userdel $sashimono_user # Remove sashimono user first because it's in docker user's group.
+userdel $dockerd_user
 
-sudo rm -r /home/$sashimono_user
-sudo rm -r /home/$dockerd_user
+rm -r /home/$sashimono_user
+rm -r /home/$dockerd_user
 
 echo "Done."

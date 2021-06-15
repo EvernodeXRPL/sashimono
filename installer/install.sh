@@ -15,22 +15,22 @@ mod_netfilter=br_netfilter
 [ `id -u $dockerd_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$dockerd_user' already exists." && exit 1
 
 # Install curl if not exists (required to download installation artifacts).
-[ ! $(command -v curl &> /dev/null) ] && sudo apt-get install -y curl
+[ ! $(command -v curl &> /dev/null) ] && apt-get install -y curl
 
 
 # --------------------------------------
 # Setup dockerd user and service.
 # --------------------------------------
-sudo useradd --shell /usr/sbin/nologin -m $dockerd_user
-sudo usermod --lock $dockerd_user
-sudo loginctl enable-linger $dockerd_user # Enable lingering to support rootless dockerd service installation.
+useradd --shell /usr/sbin/nologin -m $dockerd_user
+usermod --lock $dockerd_user
+loginctl enable-linger $dockerd_user # Enable lingering to support rootless dockerd service installation.
 echo "Created '$dockerd_user' user."
 
 dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
 
 # Download and install rootless dockerd.
 sudo -u $dockerd_user mkdir -p $dockerd_socket_dir
-sudo loginctl enable-linger $dockerd_user
+loginctl enable-linger $dockerd_user
 echo "Installing rootless dockerd..."
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir sh > /dev/null
 echo "Installed rootless dockerd."
@@ -62,23 +62,23 @@ export DOCKER_HOST=$dockerd_socket" >>$dockerd_user_dir/.bashrc
 # --------------------------------------
 # Setup Sashimono user and agent.
 # --------------------------------------
-sudo useradd --shell /usr/sbin/nologin -m $sashimono_user
-sudo usermod --lock $sashimono_user
+useradd --shell /usr/sbin/nologin -m $sashimono_user
+usermod --lock $sashimono_user
 echo "Created '$sashimono_user' user."
 
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.
 # Add sashimono user to docker user group.
-sudo usermod -a -G $dockerd_user $sashimono_user
+usermod -a -G $dockerd_user $sashimono_user
 # Assign group execute permission for docker socket dir.
-sudo chmod g+x $dockerd_socket_dir
+chmod g+x $dockerd_socket_dir
 
 # Setup sashimono agent directory.
-sudo mkdir -p $sashimono_agent_dir
+mkdir -p $sashimono_agent_dir
 # Copy docker client for sashimono user.
-sudo cp $dockerd_user_dir/bin/docker $sashimono_agent_dir/
+cp $dockerd_user_dir/bin/docker $sashimono_agent_dir/
 # TODO: Copy sashimono agent binaries.
 # Set owner and group to be sashimono user.
-sudo chown --recursive $sashimono_user.$sashimono_user $sashimono_agent_dir
+chown --recursive $sashimono_user.$sashimono_user $sashimono_agent_dir
 echo "Configured $sashimono_agent_dir"
 
 # Configure docker client context.

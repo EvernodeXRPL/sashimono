@@ -28,6 +28,15 @@ echo "Created '$dockerd_user' user."
 
 dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
 
+# Download and install rootless dockerd.
+sudo -u $dockerd_user mkdir -p $dockerd_socket_dir
+sudo loginctl enable-linger $dockerd_user
+echo "Installing rootless dockerd..."
+curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir sh > /dev/null
+echo "Installed rootless dockerd."
+
+# After installing rootless dockerd, we need to stop and restart the dockerd service with our own daemon config.
+
 # Create new daemon config.
 # - Disable dockerd inter-container communication.
 # - Specify custom docker socket path. (So we can specify custom dir execute permission to user group)
@@ -38,12 +47,10 @@ echo '{"icc":false,"hosts":["'$dockerd_socket'"]}' | sudo -u $dockerd_user tee $
 echo "Checking for '$mod_netfilter' kernel module..."
 modprobe -n --first-time $mod_netfilter && modprobe $mod_netfilter && echo "Adding $mod_netfilter to /etc/modules" && printf "\n$mod_netfilter\n" >>/etc/modules
 
-# Download and install rootless dockerd.
-sudo -u $dockerd_user mkdir -p $dockerd_socket_dir
-sudo loginctl enable-linger $dockerd_user
-echo "Installing rootless dockerd..."
-curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir sh > /dev/null
-echo "Installed rootless dockerd."
+# Stop and start the dockerd service.
+sudo -u $dockerd_user systemctl --user stop docker.service
+sudo -u $dockerd_user systemctl --user start docker.service
+echo "Restarted dockerd service with Sashimono configuration."
 
 # Setup env variables for dockerd user.
 echo "
@@ -77,7 +84,6 @@ echo "Configured $sashimono_agent_dir"
 # Configure docker client context.
 sudo -u $sashimono_user $sashimono_agent_dir/docker context create sashidockerctx --docker host=$dockerd_socket >/dev/null
 sudo -u $sashimono_user $sashimono_agent_dir/docker context use sashidockerctx >/dev/null
-echo "Configured docker client context sashidockerctx"
 
 # Set PATH for convenience during interactive shell sessions.
 echo "export PATH=$sashimono_agent_dir:\$PATH" >>$sashimono_user_dir/.bashrc

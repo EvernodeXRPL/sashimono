@@ -6,6 +6,8 @@ sashimono_user_dir=/home/$sashimono_user
 sashimono_agent_dir=$sashimono_user_dir/sashimono-agent
 dockerd_user=sashidockerd
 dockerd_user_dir=/home/$dockerd_user
+dockerd_socket_dir=$dockerd_user_dir/.docker/run
+dockerd_socket=unix://$dockerd_socket_dir/docker.sock
 
 # Check if users already exists.
 [ `id -u $sashimono_user 2>/dev/null || echo -1` -ge 0 ] && echo "User '$sashimono_user' already exists." && exit 1
@@ -24,13 +26,15 @@ sudo loginctl enable-linger $dockerd_user # Enable lingering to support rootless
 echo "Created '$dockerd_user' user."
 
 dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
-dockerd_socket=unix://$dockerd_user_runtime_dir/docker.sock
 
-# Create new daemon config to disable dockerd inter-container communication.
+# Create new daemon config.
+# - Disable dockerd inter-container communication.
+# - Specify custom docker socket path. (So we can specify custom dir execute permission to user group)
 sudo -u $dockerd_user mkdir -p $dockerd_user_dir/.config/docker
-echo '{"icc":false}' | sudo -u $dockerd_user tee $dockerd_user_dir/.config/docker/daemon.json >/dev/null
+echo '{"icc":false,"hosts":['$dockerd_socket']}' | sudo -u $dockerd_user tee $dockerd_user_dir/.config/docker/daemon.json >/dev/null
 
 # Download and install rootless dockerd.
+sudo -u $dockerd_user mkdir -p $dockerd_socket_dir
 sudo loginctl enable-linger $dockerd_user
 echo "Installing rootless dockerd..."
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir sh > /dev/null
@@ -53,8 +57,8 @@ echo "Created '$sashimono_user' user."
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.
 # Add sashimono user to docker user group.
 sudo usermod -a -G $dockerd_user $sashimono_user
-# Assign group execute permission for group dockerd runtime dir.
-sudo chmod g+x $dockerd_user_runtime_dir
+# Assign group execute permission for docker socket dir.
+sudo chmod g+x $dockerd_socket_dir
 
 # Setup sashimono agent directory.
 sudo mkdir -p $sashimono_agent_dir

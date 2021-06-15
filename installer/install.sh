@@ -24,17 +24,19 @@ sudo loginctl enable-linger $dockerd_user # Enable lingering to support rootless
 echo "Created '$dockerd_user' user."
 
 dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
-dockerd_socket=unix://$dockerd_user_runtime_dir/.docker/run/docker.sock
+dockerd_socket=unix://$dockerd_user_runtime_dir/docker.sock
 
 # Create new daemon config to disable dockerd inter-container communication.
+sudo -u $dockerd_user mkdir -p $dockerd_user_dir/.config/docker
 echo '{"icc":false}' | sudo -u $dockerd_user tee $dockerd_user_dir/.config/docker/daemon.json >/dev/null
 
 # Download and install rootless dockerd.
 sudo loginctl enable-linger $dockerd_user
+echo "Installing rootless dockerd..."
 curl --silent -fSL https://get.docker.com/rootless | sudo -u $dockerd_user XDG_RUNTIME_DIR=$dockerd_user_runtime_dir sh > /dev/null
 echo "Installed rootless dockerd."
 
-# Setup dockerd env variables for dockerd user for conveniance.
+# Setup env variables for dockerd user.
 echo "
 export PATH=$dockerd_user_dir/bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$dockerd_user_dir/.bashrc

@@ -8,7 +8,7 @@ namespace hp
 {
     // Keep track of the ports of the most recent hp instance.
     ports last_assigned_ports;
-    
+
     resources instance_resources;
 
     // This is defaults to true because it initialize last assigned ports when a new instance is created if there is no vacant ports available.
@@ -41,7 +41,9 @@ namespace hp
         // Populate the vacant ports vector with vacant ports of destroyed containers.
         sqlite::get_vacant_ports(db, vacant_ports);
 
-        hp_monitor_thread = std::thread(hp_monitor_loop);
+        // Monitor thread is temperory disabled until the implementation details are finalized.
+        // hp_monitor_thread = std::thread(hp_monitor_loop);
+
         // Calculate the resources per instance.
         instance_resources.cpu_micro_seconds = conf::cfg.system.max_cpu_micro_seconds / conf::cfg.system.max_instance_count;
         instance_resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
@@ -56,7 +58,8 @@ namespace hp
     void deinit()
     {
         is_shutting_down = true;
-        hp_monitor_thread.join();
+        if (hp_monitor_thread.joinable())
+            hp_monitor_thread.join();
 
         if (db != NULL)
             sqlite::close_db(&db);

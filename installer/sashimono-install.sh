@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Sashimono agent installation script.
 
 user=sashimono
@@ -15,22 +15,21 @@ user_dir=/home/$user
 # --------------------------------------
 useradd --shell /usr/sbin/nologin -m $user
 usermod --lock $user
-loginctl enable-linger $user # Enable lingering to support Sashimono service installation.
 chmod o-rwx $user_dir
 usermod -aG sudo $user
+loginctl enable-linger $user # Enable lingering to support Sashimono service installation.
 echo "Created '$user' user."
 
 # Run rest of the script as sashimono user.
 sudo -u $user bash<<_
-
 # Download and extract rootless dockerd setup package.
 
 tmp=$(mktemp -d)
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-20.10.7.tgz --output docker.tgz
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-rootless-extras-20.10.7.tgz --output rootless.tgz
 
-mkdir -p "~/dockerbin"
-cd "~/dockerbin"
+mkdir -p "$user_dir/dockerbin"
+cd "$user_dir/dockerbin"
 tar zxf "$tmp/docker.tgz" --strip-components=1
 tar zxf "$tmp/rootless.tgz" --strip-components=1
 _

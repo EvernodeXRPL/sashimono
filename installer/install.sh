@@ -24,6 +24,7 @@ mod_netfilter=br_netfilter
 useradd --shell /usr/sbin/nologin -m $dockerd_user
 usermod --lock $dockerd_user
 loginctl enable-linger $dockerd_user # Enable lingering to support rootless dockerd service installation.
+chmod o-rwx $dockerd_user_dir
 echo "Created '$dockerd_user' user."
 
 dockerd_user_runtime_dir=/run/user/$(id -u $dockerd_user)
@@ -64,6 +65,7 @@ export DOCKER_HOST=$dockerd_socket" >>$dockerd_user_dir/.bashrc
 # --------------------------------------
 useradd --shell /usr/sbin/nologin -m $sashimono_user
 usermod --lock $sashimono_user
+chmod o-rwx $sashimono_user_dir
 echo "Created '$sashimono_user' user."
 
 # Following two permissions are required for Sashimono to interact with the dockerd UNIX socket.

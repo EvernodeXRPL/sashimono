@@ -8,6 +8,8 @@ namespace hp
 {
     // Keep track of the ports of the most recent hp instance.
     ports last_assigned_ports;
+    
+    resources instance_resources;
 
     // This is defaults to true because it initialize last assigned ports when a new instance is created if there is no vacant ports available.
     bool last_port_assign_from_vacant = true;
@@ -35,6 +37,11 @@ namespace hp
         // Populate the vacant ports vector with vacant ports of destroyed containers.
         sqlite::get_vacant_ports(db, vacant_ports);
 
+        // Calculate the resources per instance.
+        instance_resources.cpu_micro_seconds = conf::cfg.system.max_cpu_micro_seconds / conf::cfg.system.max_instance_count;
+        instance_resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
+        instance_resources.storage_bytes = conf::cfg.system.max_storage_bytes / conf::cfg.system.max_instance_count;
+
         return 0;
     }
 
@@ -55,6 +62,8 @@ namespace hp
     */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey)
     {
+        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_micro_seconds << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
+
         ports instance_ports;
         if (!vacant_ports.empty())
         {

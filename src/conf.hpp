@@ -61,11 +61,20 @@ namespace conf
         uint16_t init_user_port;
     };
 
+    struct system_config
+    {
+        size_t max_cpu_micro_seconds = 0; // Max CPU time the agent process can consume.
+        size_t max_mem_bytes = 0;         // Max memory the agent process can allocate.
+        size_t max_storage_bytes = 0;     // Max physical storage the agent process can allocate.
+        size_t max_instance_count = 0;    // Max number of instances that can be created.
+    };
+
     struct sa_config
     {
         std::string version;
-        hp_config hp;  
+        hp_config hp;
         server_config server;
+        system_config system;
         log_config log;
     };
 

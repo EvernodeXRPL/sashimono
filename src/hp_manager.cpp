@@ -168,13 +168,14 @@ namespace hp
     */
     int run_container(const std::string &folder_name, const ports &assigned_ports)
     {
+        // We instruct the demon to restart the container automatically once the container exits except manually stopping.
         const std::string command = "docker run -t -i -d --network=hpnet --stop-signal=SIGINT --name=" + folder_name + " \
                                             -p " +
                                     std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
                                             -p " +
                                     std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
                                             --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-                                            --mount type=bind,source=" +
+                                            --restart unless-stopped --mount type=bind,source=" +
                                     conf::cfg.hp.instance_folder + "/" +
                                     folder_name + ",target=/contract \
                                             hpcore:latest run /contract";

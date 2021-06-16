@@ -34,5 +34,5 @@ export XDG_RUNTIME_DIR=$user_runtime_dir
 export PATH=$user_dir/bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$user_dir/.bashrc
 
-echo '{""userid":'$user_id',"username":"'$user'","docker_host": "'$dockerd_socket'"'
+echo '{""userid":'$user_id',"username":"'$user'","docker_host":"'$dockerd_socket'"'
 exit 0

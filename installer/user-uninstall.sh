@@ -10,7 +10,12 @@ user="sashi$1"
 user_dir=/home/$user
 
 # Check if users exists.
-[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] || echo '{"error":"user_not_found"}' && exit 0
+if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then
+        :
+else
+        echo '{"error":"user_not_found"}'
+        exit 0
+fi
 
 # Uninstall rootless dockerd.
 sudo -u $user bash -i -c "$user_dir/bin/dockerd-rootless-setuptool.sh uninstall"
@@ -26,7 +31,7 @@ fsmounts=$(cat /proc/mounts | cut -d ' ' -f 2 | grep "/home/$user")
 readarray -t mntarr <<<"$fsmounts"
 for mnt in "${mntarr[@]}"
 do
-   umount $mnt
+   [ -z "$mnt" ] || umount $mnt
 done
 
 # Force kill user processes.

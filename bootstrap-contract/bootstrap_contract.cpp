@@ -5,6 +5,12 @@ constexpr const char *SCRIPT_NAME = "script.sh";
 
 int main(int argc, char **argv)
 {
+    if (argc != 2)
+    {
+        std::cerr << "Owner pubkey not given.\n";
+        return -1;
+    }
+
     if (hp_init_contract() == -1)
         return 1;
 
@@ -17,6 +23,10 @@ int main(int argc, char **argv)
     for (int u = 0; u < ctx->users.count; u++)
     {
         const struct hp_user *user = &ctx->users.list[u];
+
+        // We allow only the owner of the instance to upload the vm_package.zip
+        if (strcmp(user->pubkey, argv[1]) != 0)
+            continue;
 
         // Iterate through all inputs from this user.
         for (int i = 0; i < user->inputs.count; i++)

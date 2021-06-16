@@ -46,7 +46,7 @@ namespace hp
     int stop_container(const std::string &container_name);
     int destroy_container(const std::string &container_name);
     void kill_all_containers();
-    int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports);
+    int create_contract(instance_info &info, const std::string &folder_name, std::string_view owner_pubkey, const ports &assigned_ports);
     int write_json_file(const int fd, const jsoncons::ojson &d);
 } // namespace hp
 #endif

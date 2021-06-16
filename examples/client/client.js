@@ -5,8 +5,19 @@ var path = require("path");
 const HotPocket = require('./lib/hp-client-lib');
 
 async function main() {
+    const workingDir = "datadir/";
 
-    const keys = await HotPocket.generateKeys();
+    /**
+     * We persist the public key since we are hardcoding the public key in the messaging board.
+    */
+    if (!fs.existsSync(workingDir))
+        fs.mkdirSync(workingDir);
+
+    const keyfile = workingDir + "sashimono-client.key";
+    const savedPrivateKey = fs.existsSync(keyfile) ? fs.readFileSync(keyfile, 'utf8') : null;
+    const keys = await HotPocket.generateKeys(savedPrivateKey);
+    fs.writeFileSync(keyfile, Buffer.from(keys.privateKey).toString("hex"));
+
 
     const pkhex = Buffer.from(keys.publicKey).toString('hex');
     console.log('My public key is: ' + pkhex);
@@ -48,7 +59,6 @@ async function main() {
         r.outputs.forEach(output => {
 
             const result = bson.deserialize(output);
-            console.log(result);
             if (result.type == "uploadResult") {
                 if (result.status == "ok")
                     console.log("File " + result.fileName + " uploaded successfully.");

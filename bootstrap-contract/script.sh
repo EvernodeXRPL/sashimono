@@ -119,6 +119,7 @@ new_patch=$(jq -M ". + {\
     version:$version,\
     bin_path:$bin_path,\
     bin_args:$bin_args,\
+    unl: $unl,\
     roundtime:$roundtime,\
     stage_slice:$stage_slice,\
     consensus: $consensus,\

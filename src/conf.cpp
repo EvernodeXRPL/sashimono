@@ -65,9 +65,9 @@ namespace conf
             cfg.server.ip_port = {};
 
             cfg.system.max_instance_count = 10;
-            cfg.system.max_mem_bytes = cfg.system.max_instance_count * 50 * 1024 * 1024;     // 50MB per instance, Minimum allowed by single docker image is 6MB
-            cfg.system.max_cpu_micro_seconds = cfg.system.max_instance_count * 1000000;      // CPU cfs period can not be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
-            cfg.system.max_storage_bytes = cfg.system.max_instance_count * 10 * 1024 * 1024; // 10MB per instance.
+            cfg.system.max_mem_bytes = cfg.system.max_instance_count * 50 * 1024 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB
+            cfg.system.max_cpu_micro_seconds = cfg.system.max_instance_count * 1000000;       // CPU cfs period can not be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
+            cfg.system.max_storage_bytes = cfg.system.max_instance_count * 100 * 1024 * 1024; // 100MB per instance.
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

@@ -2,6 +2,7 @@
 #define _SA_HP_MANAGER_
 
 #include "pchheader.hpp"
+#include "hpfs_manager.hpp"
 
 namespace hp
 {
@@ -36,6 +37,7 @@ namespace hp
         std::string contract_id;
         ports assigned_ports;
         std::string status;
+        hpfs::hpfs_pids hpfs_pids;
     };
 
     struct resources

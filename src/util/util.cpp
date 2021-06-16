@@ -193,4 +193,23 @@ namespace util
             1, FTW_DEPTH | FTW_PHYS);
     }
 
+    // Kill a process with a signal and if specified, wait until it stops running.
+    int kill_process(const pid_t pid, const bool wait, const int signal)
+    {
+        if (kill(pid, signal) == -1)
+        {
+            LOG_ERROR << errno << ": Error issuing signal to pid " << pid;
+            return -1;
+        }
+
+        const int wait_options = wait ? 0 : WNOHANG;
+        if (waitpid(pid, NULL, wait_options) == -1)
+        {
+            LOG_ERROR << errno << ": waitpid after kill (pid:" << pid << ") failed.";
+            return -1;
+        }
+
+        return 0;
+    }
+
 } // namespace util

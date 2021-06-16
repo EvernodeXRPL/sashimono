@@ -36,6 +36,8 @@ Code is divided into subsystems via namespaces.
 
 **hp::** Contains hotpocket instance management related helper functions.
 
+**hpfs::** Contains hpfs instance management related helper functions.
+
 **msg::** Extract message data from received raw messages.
 
 **salog::** Handles logging. Creates and prints the logs according to the configured log section in the json config.

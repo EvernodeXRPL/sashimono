@@ -8,8 +8,6 @@ namespace hp
 {
     // Keep track of the ports of the most recent hp instance.
     ports last_assigned_ports;
-    
-    resources instance_resources;
 
     resources instance_resources;
 
@@ -147,6 +145,7 @@ namespace hp
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         info.owner_pubkey = owner_pubkey;
         if (create_contract(info, name, instance_ports) != 0 ||
+            hpfs::start_fs_processes(name, conf::cfg.log.log_level, false, info.hpfs_pids) == -1 ||
             run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
@@ -179,7 +178,7 @@ namespace hp
                                             --mount type=bind,source=" +
                                     conf::cfg.hp.instance_folder + "/" +
                                     folder_name + ",target=/contract \
-                                            hpcore:latest run /contract";
+                                            hpcore:latest";
 
         return system(command.c_str());
     }
@@ -204,7 +203,10 @@ namespace hp
             return -1;
         }
         const std::string command = "docker stop " + container_name;
-        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
+        if (system(command.c_str()) != 0 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
+            hpfs::stop_fs_processes(info.hpfs_pids) == -1 ||
+            sqlite::update_hpfs_pids_in_container(db, container_name, {}) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -233,7 +235,10 @@ namespace hp
             return -1;
         }
 
-        if (docker_start(container_name) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        if (docker_start(container_name) != 0 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1 ||
+            hpfs::start_fs_processes(container_name, conf::cfg.log.log_level, false, info.hpfs_pids) == -1 ||
+            sqlite::update_hpfs_pids_in_container(db, container_name, info.hpfs_pids) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             return -1;
@@ -273,7 +278,9 @@ namespace hp
 
         if (system(command.c_str()) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            util::remove_directory_recursively(folder_path) == -1)
+            hpfs::stop_fs_processes(info.hpfs_pids) == -1 ||
+            util::remove_directory_recursively(folder_path) == -1 ||
+            sqlite::update_hpfs_pids_in_container(db, container_name, {}) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -346,6 +353,7 @@ namespace hp
         d["contract"]["unl"] = unl;
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
+        d["hpfs"]["external"] = true;
 
         if (write_json_file(config_fd, d) == -1)
         {

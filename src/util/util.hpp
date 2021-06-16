@@ -30,7 +30,9 @@ namespace util
 
     uint64_t get_epoch_milliseconds();
 
-    int remove_directory_recursively(std::string_view dir_path); 
+    int remove_directory_recursively(std::string_view dir_path);
+
+    int kill_process(const pid_t pid, const bool wait, const int signal = SIGINT);
 
 } // namespace util
 

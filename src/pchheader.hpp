@@ -16,6 +16,7 @@
 #include <sqlite3.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <sodium.h>
 #include <unistd.h>
 #include <unordered_set>

@@ -37,6 +37,12 @@ namespace hp
         std::string status;
     };
 
+    struct resources
+    {
+        size_t cpu_micro_seconds = 0; // CPU time an instance can consume.
+        size_t mem_bytes = 0;         // Memory an instance can allocate.
+        size_t storage_bytes = 0;     // Physical storage an instance can allocate.
+    };
 
     int init();
     void deinit();
@@ -48,5 +54,6 @@ namespace hp
     void kill_all_containers();
     int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports);
     int write_json_file(const int fd, const jsoncons::ojson &d);
+    int get_resources(resources &resources);
 } // namespace hp
 #endif

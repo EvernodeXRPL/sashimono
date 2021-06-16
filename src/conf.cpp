@@ -54,8 +54,8 @@ namespace conf
             }
         }
 
-        //Create config file with default settings.
-        //We populate the in-memory struct with default settings and then save it to the file.
+        // Create config file with default settings.
+        // We populate the in-memory struct with default settings and then save it to the file.
         {
             sa_config cfg = {};
 
@@ -63,13 +63,19 @@ namespace conf
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
             cfg.server.ip_port = {};
+
+            cfg.system.max_instance_count = 10;
+            cfg.system.max_mem_bytes = cfg.system.max_instance_count * 50 * 1024 * 1024;     // 50MB per instance, Minimum allowed by single docker image is 6MB
+            cfg.system.max_cpu_micro_seconds = cfg.system.max_instance_count * 1000000;      // CPU cfs period can not be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
+            cfg.system.max_storage_bytes = cfg.system.max_instance_count * 10 * 1024 * 1024; // 10MB per instance.
+
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
             cfg.log.loggers.emplace("console");
             cfg.log.loggers.emplace("file");
 
-            //Save the default settings into the config file.
+            // Save the default settings into the config file.
             if (write_config(cfg) != 0)
                 return -1;
         }
@@ -197,6 +203,11 @@ namespace conf
                     std::cerr << "Hp instance folder path is missing.\n";
                     return -1;
                 }
+                else if (!util::is_dir_exists(cfg.hp.instance_folder))
+                {
+                    std::cerr << "Hp instance folder does not exist.\n";
+                    return -1;
+                }
 
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
@@ -240,6 +251,26 @@ namespace conf
                     std::cerr << "Configured server port invalid.\n";
                     return -1;
                 }
+            }
+            catch (const std::exception &e)
+            {
+                print_missing_field_error(jpath, e);
+                return -1;
+            }
+        }
+
+        // system
+        {
+            jpath = "system";
+
+            try
+            {
+                const jsoncons::ojson &system = d["system"];
+
+                cfg.system.max_mem_bytes = system["max_mem_bytes"].as<uint64_t>();
+                cfg.system.max_cpu_micro_seconds = system["max_cpu_micro_seconds"].as<uint64_t>();
+                cfg.system.max_storage_bytes = system["max_storage_bytes"].as<uint64_t>();
+                cfg.system.max_instance_count = system["max_instance_count"].as<uint32_t>();
             }
             catch (const std::exception &e)
             {
@@ -304,6 +335,18 @@ namespace conf
             server_config.insert_or_assign("port", cfg.server.ip_port.port);
 
             d.insert_or_assign("server", server_config);
+        }
+
+        // System configs.
+        {
+            jsoncons::ojson system_config;
+
+            system_config.insert_or_assign("max_mem_bytes", cfg.system.max_mem_bytes);
+            system_config.insert_or_assign("max_cpu_micro_seconds", cfg.system.max_cpu_micro_seconds);
+            system_config.insert_or_assign("max_storage_bytes", cfg.system.max_storage_bytes);
+            system_config.insert_or_assign("max_instance_count", cfg.system.max_instance_count);
+
+            d.insert_or_assign("system", system_config);
         }
 
         // Log configs.

@@ -55,6 +55,12 @@ namespace hp
     */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey)
     {
+        resources resources;
+        if (get_resources(resources))
+            return -1;
+
+        LOG_WARNING << "Resources for instance - CPU: " << resources.cpu_micro_seconds << " MicroS, RAM: " << resources.mem_bytes << " Bytes, Storage: " << resources.storage_bytes << " Bytes.";
+
         ports instance_ports;
         if (!vacant_ports.empty())
         {
@@ -311,6 +317,15 @@ namespace hp
             LOG_ERROR << "Writing modified hp config file failed. ";
             return -1;
         }
+        return 0;
+    }
+
+    int get_resources(resources &resources)
+    {
+        resources.cpu_micro_seconds = conf::cfg.system.max_cpu_micro_seconds / conf::cfg.system.max_instance_count;
+        resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
+        resources.storage_bytes = conf::cfg.system.max_storage_bytes / conf::cfg.system.max_instance_count;
+
         return 0;
     }
 

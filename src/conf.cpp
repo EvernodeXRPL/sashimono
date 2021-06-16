@@ -267,10 +267,10 @@ namespace conf
             {
                 const jsoncons::ojson &system = d["system"];
 
-                cfg.system.max_mem_bytes = system["max_mem_bytes"].as<uint64_t>();
-                cfg.system.max_cpu_micro_seconds = system["max_cpu_micro_seconds"].as<uint64_t>();
-                cfg.system.max_storage_bytes = system["max_storage_bytes"].as<uint64_t>();
-                cfg.system.max_instance_count = system["max_instance_count"].as<uint32_t>();
+                cfg.system.max_mem_bytes = system["max_mem_bytes"].as<size_t>();
+                cfg.system.max_cpu_micro_seconds = system["max_cpu_micro_seconds"].as<size_t>();
+                cfg.system.max_storage_bytes = system["max_storage_bytes"].as<size_t>();
+                cfg.system.max_instance_count = system["max_instance_count"].as<size_t>();
             }
             catch (const std::exception &e)
             {

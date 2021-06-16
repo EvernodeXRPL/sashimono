@@ -54,6 +54,5 @@ namespace hp
     void kill_all_containers();
     int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports);
     int write_json_file(const int fd, const jsoncons::ojson &d);
-    int get_resources(resources &resources);
 } // namespace hp
 #endif

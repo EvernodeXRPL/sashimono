@@ -8,6 +8,7 @@
 
 user="sashi$1"
 user_dir=/home/$user
+dockerbin=/home/sashimono/dockerbin
 
 # Check if users already exists.
 [ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo '{"error":"user_exists"}' && exit 0
@@ -24,15 +25,20 @@ user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-# Download and install rootless dockerd.
-loginctl enable-linger $user
-curl --silent -fSL https://get.docker.com/rootless | sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir sh > /dev/null
+# Run rest of the script as instance user.
+sudo -u $user bash<<_
+
+# Install rootless dockerd.
+export XDG_RUNTIME_DIR=$user_runtime_dir 
+export PATH=$dockerbin:\$PATH
+$dockerbin/dockerd-rootless-setuptool.sh install
 
 # Setup env variables for the user.
 echo "
 export XDG_RUNTIME_DIR=$user_runtime_dir
 export PATH=$user_dir/bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$user_dir/.bashrc
+_
 
 echo '{""userid":'$user_id',"username":"'$user'","docker_host":"'$dockerd_socket'"'
 exit 0

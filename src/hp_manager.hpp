@@ -38,6 +38,12 @@ namespace hp
         std::string status;
     };
 
+    struct resources
+    {
+        size_t cpu_micro_seconds = 0; // CPU time an instance can consume.
+        size_t mem_bytes = 0;         // Memory an instance can allocate.
+        size_t storage_bytes = 0;     // Physical storage an instance can allocate.
+    };
 
     int init();
     void deinit();

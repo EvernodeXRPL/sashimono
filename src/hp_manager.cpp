@@ -9,6 +9,8 @@ namespace hp
     // Keep track of the ports of the most recent hp instance.
     ports last_assigned_ports;
 
+    resources instance_resources;
+
     // This is defaults to true because it initialize last assigned ports when a new instance is created if there is no vacant ports available.
     bool last_port_assign_from_vacant = true;
 
@@ -18,6 +20,10 @@ namespace hp
 
     // Vector keeping vacant ports from destroyed instances.
     std::vector<ports> vacant_ports;
+
+    // This thread will monitor the status of the created instances.
+    std::thread hp_monitor_thread;
+    bool is_shutting_down = false;
 
     /**
      * Initialize hp related environment.
@@ -35,6 +41,14 @@ namespace hp
         // Populate the vacant ports vector with vacant ports of destroyed containers.
         sqlite::get_vacant_ports(db, vacant_ports);
 
+        // Monitor thread is temperory disabled until the implementation details are finalized.
+        // hp_monitor_thread = std::thread(hp_monitor_loop);
+
+        // Calculate the resources per instance.
+        instance_resources.cpu_micro_seconds = conf::cfg.system.max_cpu_micro_seconds / conf::cfg.system.max_instance_count;
+        instance_resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
+        instance_resources.storage_bytes = conf::cfg.system.max_storage_bytes / conf::cfg.system.max_instance_count;
+
         return 0;
     }
 
@@ -43,8 +57,62 @@ namespace hp
     */
     void deinit()
     {
+        is_shutting_down = true;
+        if (hp_monitor_thread.joinable())
+            hp_monitor_thread.join();
+
         if (db != NULL)
             sqlite::close_db(&db);
+    }
+
+    /**
+     * Monitoring created container status. If any containers are crashed, then they are respawned.
+     * If the respawn fails, the current_status field is updated to 'exited' in the database.
+    */
+    void hp_monitor_loop()
+    {
+        LOG_INFO << "HP instance monitor started.";
+        std::vector<std::string> running_instance_names;
+
+        util::mask_signal();
+
+        int counter = 0;
+
+        while (!is_shutting_down)
+        {
+            // Check containers every 1 minute. One minute sleep is not added because if we do so, app will wait until the full
+            // time until the app closes in a SIGINT.
+            if (counter == 0 || counter == 600)
+            {
+                sqlite::get_running_instance_names(db, running_instance_names);
+                for (const auto &name : running_instance_names)
+                {
+                    std::string status;
+                    const int res = check_instance_status(name, status);
+                    if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
+                    {
+                        if (docker_start(name) == -1)
+                        {
+                            // We only change the current status variable from the monitor loop.
+                            // We try to start this container in next iteration as well untill the desired state is achieved.
+                            if (sqlite::update_current_status_in_container(db, name, CONTAINER_STATES[STATES::EXITED]) == 0)
+                                LOG_INFO << "Re-spinning " + name + " failed. Current status updated to 'exited' in DB.";
+                        }
+                        else
+                        {
+                            // Make the current field NULL because the instance is healthy now.
+                            if (sqlite::update_current_status_in_container(db, name, {}) == 0)
+                                LOG_INFO << "Re-spinning " + name + " successful.";
+                        }
+                    }
+                }
+                counter = 0;
+            }
+            counter++;
+            util::sleep(100);
+        }
+
+        LOG_INFO << "HP instance monitor stopped.";
     }
 
     /**
@@ -55,6 +123,8 @@ namespace hp
     */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey)
     {
+        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_micro_seconds << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
+
         ports instance_ports;
         if (!vacant_ports.empty())
         {
@@ -160,14 +230,26 @@ namespace hp
             LOG_ERROR << "Given container is not stopped. name: " << container_name;
             return -1;
         }
-        const std::string command = "docker start " + container_name;
-        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+
+        if (docker_start(container_name) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             return -1;
         }
 
         return 0;
+    }
+
+    /**
+     * Execute docker start <container_name> command.
+     * @param container_name Name of the container.
+     * @return 0 on successful execution and -1 on error.
+    */
+    int docker_start(const std::string &container_name)
+    {
+        const std::string command = "docker start " + container_name;
+        const int res = system(command.c_str());
+        return res == 0 ? 0 : -1;
     }
 
     /**
@@ -312,6 +394,36 @@ namespace hp
             return -1;
         }
         return 0;
+    }
+
+    /**
+     * Check the status of the given container using docker inspect command.
+     * @param name Name of the container.
+     * @param status The variable that holds the status of the container.
+     * @return 0 on success and -1 on error.
+    */
+    int check_instance_status(std::string_view name, std::string &status)
+    {
+        std::string command("docker inspect --format='{{json .State.Status}}' ");
+        command.append(name);
+        FILE *fpipe = popen(command.c_str(), "r");
+
+        if (fpipe == NULL)
+        {
+            LOG_ERROR << "Error on popen for command " << command;
+            return -1;
+        }
+        char buffer[20];
+
+        fgets(buffer, 20, fpipe);
+
+        status = buffer;
+        status = status.substr(1, status.length() - 3);
+
+        if (pclose(fpipe) == 0)
+            return 0;
+        else
+            return -1;
     }
 
 } // namespace hp

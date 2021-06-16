@@ -5,13 +5,14 @@
 
 namespace hp
 {
-    constexpr const char *CONTAINER_STATES[]{"RUNNING", "STOPPED", "DESTROYED"};
+    constexpr const char *CONTAINER_STATES[]{"running", "stopped", "destroyed", "exited"};
 
     enum STATES
     {
         RUNNING,
         STOPPED,
-        DESTROYED
+        DESTROYED,
+        EXITED
     };
 
     // Stores port pair assigned to a container.
@@ -37,16 +38,25 @@ namespace hp
         std::string status;
     };
 
+    struct resources
+    {
+        size_t cpu_micro_seconds = 0; // CPU time an instance can consume.
+        size_t mem_bytes = 0;         // Memory an instance can allocate.
+        size_t storage_bytes = 0;     // Physical storage an instance can allocate.
+    };
 
     int init();
     void deinit();
+    void hp_monitor_loop();
     int create_new_instance(instance_info &info, std::string_view owner_pubkey);
     int run_container(const std::string &folder_name, const ports &assigned_ports);
     int start_container(const std::string &container_name);
+    int docker_start(const std::string &container_name);
     int stop_container(const std::string &container_name);
     int destroy_container(const std::string &container_name);
     void kill_all_containers();
     int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports);
     int write_json_file(const int fd, const jsoncons::ojson &d);
+    int check_instance_status(std::string_view name, std::string &status);
 } // namespace hp
 #endif

@@ -59,7 +59,7 @@ namespace hp
         if (get_resources(resources))
             return -1;
 
-        LOG_WARNING << "Resources for instance - CPU: " << resources.cpu_micro_seconds << " MicroS, RAM: " << resources.mem_bytes << " Bytes, Storage: " << resources.storage_bytes << " Bytes.";
+        LOG_INFO << "Resources for instance - CPU: " << resources.cpu_micro_seconds << " MicroS, RAM: " << resources.mem_bytes << " Bytes, Storage: " << resources.storage_bytes << " Bytes.";
 
         ports instance_ports;
         if (!vacant_ports.empty())

@@ -1,16 +1,16 @@
-#!/bin/sh
+#!/bin/bash
 # Sashimono instance user installation script.
 
-# $1 - 32-character lowercase user GUID
-[ -z "$1" ] && echo '{"error":"no_guid"}' && exit 0
-[ ${#1} -ne 32 ] && echo '{"error":"invalid_len"}' && exit 0
-[[ "$1" =~ [^a-z0-9] ]] && echo '{"error":"invalid_format"}' && exit 0
+# $1 - A number with 25 or less digits.
+[ -z "$1" ] && echo '{"error":"no_id"}' && exit 0
+[ ${#1} -gt 25 ] && echo '{"error":"invalid_len"}' && exit 0
+[[ "$1" =~ [^0-9] ]] && echo '{"error":"invalid_format"}' && exit 0
 
 user="sashi$1"
 user_dir=/home/$user
 
 # Check if users already exists.
-[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo '{"error":"no_user_id"}' && exit 0
+[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo '{"error":"user_exists"}' && exit 0
 
 # --------------------------------------
 # Setup user and dockerd service.

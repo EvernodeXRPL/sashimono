@@ -337,7 +337,7 @@ namespace hp
         const std::string contract_id = crypto::generate_uuid();
         const std::string pubkey_hex = util::to_hex(pubkey);
 
-        // Defaults
+        // Default hp.cfg configs.
         d["node"]["history_config"]["max_primary_shards"] = 2;
         d["node"]["history_config"]["max_raw_shards"] = 2;
         d["hpfs"]["log"]["log_level"] = "err";

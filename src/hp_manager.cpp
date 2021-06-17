@@ -169,13 +169,14 @@ namespace hp
     */
     int run_container(const std::string &folder_name, const ports &assigned_ports)
     {
+        // We instruct the demon to restart the container automatically once the container exits except manually stopping.
         const std::string command = "docker run -t -i -d --network=hpnet --stop-signal=SIGINT --name=" + folder_name + " \
                                             -p " +
                                     std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
                                             -p " +
                                     std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
                                             --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-                                            --mount type=bind,source=" +
+                                            --restart unless-stopped --mount type=bind,source=" +
                                     conf::cfg.hp.instance_folder + "/" +
                                     folder_name + ",target=/contract \
                                             hpcore:latest";
@@ -344,6 +345,15 @@ namespace hp
 
         const std::string contract_id = crypto::generate_uuid();
         const std::string pubkey_hex = util::to_hex(pubkey);
+
+        // Default hp.cfg configs.
+        d["node"]["history_config"]["max_primary_shards"] = 2;
+        d["node"]["history_config"]["max_raw_shards"] = 2;
+        d["hpfs"]["log"]["log_level"] = "err";
+        d["log"]["log_level"] = "inf";
+        d["log"]["max_mbytes_per_file"] = 5;
+        d["log"]["max_file_count"] = 10;
+
 
         d["node"]["public_key"] = pubkey_hex;
         d["node"]["private_key"] = util::to_hex(seckey);

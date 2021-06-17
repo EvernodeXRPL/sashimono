@@ -1,23 +1,25 @@
 #!/bin/bash
-# Sashimono instance user installation script.
+# Sashimono contract instance user installation script.
+# This is intended to be called by Sashimono agent.
 
 # $1 - A number with 25 or less digits.
-[ -z "$1" ] && echo "ARGS,RESULT_ERR" && exit 1
-[ ${#1} -gt 25 ] && echo "ARGS,RESULT_ERR" && exit 1
-[[ "$1" =~ [^0-9] ]] && echo "ARGS,RESULT_ERR" && exit 1
+uid=$1
+[ -z "$uid" ] && echo "ARGS,INST_ERR" && exit 1
+[ ${#uid} -gt 25 ] && echo "ARGS,INST_ERR" && exit 1
+[[ "$uid" =~ [^0-9] ]] && echo "ARGS,INST_ERR" && exit 1
 
-user="sashi$1"
+user="sashi$uid"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-dockerbin
 
 # Check if users already exists.
-[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,RESULT_ERR" && exit 1
+[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
 
 function rollback() {
-    echo "Rolling back user installation."
-    sleep 1
-    $(pwd)/user-uninstall.sh $1
+    echo "Rolling back user installation. $1"
+    $(pwd)/user-uninstall.sh $uid
     echo "Rolled back the installation."
+    echo "$1,INST_ERR" && exit 1
 }
 
 # Setup user and dockerd service.
@@ -38,13 +40,22 @@ export PATH=$docker_bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$user_dir/.bashrc
 echo "Updated user .bashrc."
 
+# Wait until user systemd is functionning.
+user_systemd=""
+for (( i=0; i<30; i++ ))
+do
+    sleep 0.1
+    user_systemd=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-system-running)
+    [ "$user_systemd" == "running" ] && break
+done
+[ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"
+
 echo "Installing rootless dockerd for user."
-sleep 2 # Wait some time for the user profile environment to be functional.
 sudo -u $user bash -i -c "$docker_bin/dockerd-rootless-setuptool.sh install"
 
 svcstat=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-active docker.service)
-[ "$svcstat" != "active" ] && rollback $1 && echo "NO_SERVICE,RESULT_ERR" && exit 1
+[ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd."
-echo "$user_id,$user,$dockerd_socket,RESULT_SUC"
+echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

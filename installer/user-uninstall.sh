@@ -1,12 +1,14 @@
 #!/bin/bash
-# Sashimono instance user uninstall script.
+# Sashimono contract instance user uninstall script.
+# This is intended to be called by Sashimono agent or via the user-install script for rollback.
 
 # $1 - A number with 25 or less digits.
-[ -z "$1" ] && echo "ARGS,RESULT_ERR" && exit 1
-[ ${#1} -gt 25 ] && echo "ARGS,RESULT_ERR" && exit 1
-[[ "$1" =~ [^0-9] ]] && echo "ARGS,RESULT_ERR" && exit 1
+uid=$1
+[ -z "$uid" ] && echo "ARGS,UNINST_ERR" && exit 1
+[ ${#1} -gt 25 ] && echo "ARGS,UNINST_ERR" && exit 1
+[[ "$uid" =~ [^0-9] ]] && echo "ARGS,UNINST_ERR" && exit 1
 
-user="sashi$1"
+user="sashi$uid"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-dockerbin
 
@@ -14,7 +16,7 @@ docker_bin=/usr/bin/sashimono-dockerbin
 if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then
         :
 else
-        echo "NO_USER,RESULT_ERR"
+        echo "NO_USER,UNINST_ERR"
         exit 1
 fi
 
@@ -55,7 +57,7 @@ echo "Deleting user."
 userdel $user
 rm -r /home/$user
 
-[ -d /home/$user ] && echo "NOT_CLEAN,RESULT_ERR" && exit 1
+[ -d /home/$user ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 
-echo "RESULT_SUC"
+echo "UNINST_SUC"
 exit 0

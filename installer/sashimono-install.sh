@@ -3,7 +3,7 @@
 # This must be executed with root privileges.
 
 sashimono_bin=/usr/bin/sashimono-agent
-docker_bin=/usr/bin/sashimono-dockerbin
+docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 echo "Installing Sashimono..."
 

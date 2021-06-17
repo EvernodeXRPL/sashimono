@@ -10,7 +10,7 @@ uid=$1
 
 user="sashi$uid"
 user_dir=/home/$user
-docker_bin=/usr/bin/sashimono-dockerbin
+docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 # Check if users already exists.
 [ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1

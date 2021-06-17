@@ -45,7 +45,7 @@ user_systemd=""
 for (( i=0; i<30; i++ ))
 do
     sleep 0.1
-    user_systemd=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-system-running)
+    user_systemd=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-system-running 2>/dev/null)
     [ "$user_systemd" == "running" ] && break
 done
 [ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"

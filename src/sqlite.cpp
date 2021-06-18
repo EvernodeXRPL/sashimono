@@ -22,8 +22,8 @@ namespace sqlite
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, status, name, ip,"
-                                                    "peer_port, user_port, pubkey, contract_id, contract_fs_pid, ledger_fs_pid"
-                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?)";
+                                                    "peer_port, user_port, pubkey, contract_id"
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?)";
 
     constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
                                                      "instances WHERE status == ? AND user_port NOT IN"
@@ -34,8 +34,6 @@ namespace sqlite
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 
     constexpr const char *UPDATE_CURRENT_STATUS_IN_HP = "UPDATE instances SET current_status = ? WHERE name = ?";
-
-    constexpr const char *UPDATE_HPFS_PIDS_IN_HP = "UPDATE instances SET contract_fs_pid = ?, ledger_fs_pid = ? WHERE name = ?";
 
     constexpr const char *IS_CONTAINER_EXISTS = "SELECT * FROM instances WHERE name = ?";
 
@@ -293,9 +291,7 @@ namespace sqlite
                 table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("user_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
-                table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT),
-                table_column_info("contract_fs_pid", COLUMN_DATA_TYPE::INT),
-                table_column_info("ledger_fs_pid", COLUMN_DATA_TYPE::INT)};
+                table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
 
             if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
                 create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
@@ -324,8 +320,6 @@ namespace sqlite
             sqlite3_bind_int64(stmt, 7, info.assigned_ports.user_port) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 8, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 9, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_int(stmt, 10, info.hpfs_pids.contract) == SQLITE_OK &&
-            sqlite3_bind_int(stmt, 11, info.hpfs_pids.ledger) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
         {
             sqlite3_finalize(stmt);
@@ -355,7 +349,6 @@ namespace sqlite
             info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
             info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 6);
             info.assigned_ports.user_port = sqlite3_column_int64(stmt, 7);
-            info.hpfs_pids = {sqlite3_column_int(stmt, 10), sqlite3_column_int(stmt, 11)};
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
@@ -408,29 +401,6 @@ namespace sqlite
             return 0;
         }
         LOG_ERROR << "Error updating container current status for " << container_name;
-        return -1;
-    }
-
-    /**
-     * Update the status of the given container to the new value.
-     * @param db Database connection.
-     * @param container_name Name of the container whose status should be updated.
-     * @param status The new status of the container.
-     * @return 0 on success and -1 on error. 
-    */
-    int update_hpfs_pids_in_container(sqlite3 *db, std::string_view container_name, const hpfs::hpfs_pids &pids)
-    {
-        sqlite3_stmt *stmt;
-        if (sqlite3_prepare_v2(db, UPDATE_HPFS_PIDS_IN_HP, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
-            sqlite3_bind_int(stmt, 1, pids.contract) == SQLITE_OK &&
-            sqlite3_bind_int(stmt, 2, pids.ledger) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 3, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_step(stmt) == SQLITE_DONE)
-        {
-            sqlite3_finalize(stmt);
-            return 0;
-        }
-        LOG_ERROR << "Error updating container hpfs pids for " << container_name;
         return -1;
     }
 

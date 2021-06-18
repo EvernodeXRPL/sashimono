@@ -72,8 +72,6 @@ namespace sqlite
 
     int update_current_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
 
-    int update_hpfs_pids_in_container(sqlite3 *db, std::string_view container_name, const hpfs::hpfs_pids &pids);
-
     void get_max_ports(sqlite3 *db, hp::ports &max_ports);
 
     void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports);

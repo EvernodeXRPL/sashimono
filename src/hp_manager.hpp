@@ -37,7 +37,6 @@ namespace hp
         std::string contract_id;
         ports assigned_ports;
         std::string status;
-        hpfs::hpfs_pids hpfs_pids;
     };
 
     struct resources
@@ -60,5 +59,6 @@ namespace hp
     int create_contract(instance_info &info, const std::string &folder_name, std::string_view owner_pubkey, const ports &assigned_ports);
     int write_json_file(const int fd, const jsoncons::ojson &d);
     int check_instance_status(std::string_view name, std::string &status);
+    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool is_full_history);
 } // namespace hp
 #endif

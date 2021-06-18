@@ -143,8 +143,11 @@ namespace hp
         }
 
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
-
+        std::string hpfs_log_level;
+        bool is_full_history;
         if (create_contract(info, name, owner_pubkey, instance_ports) != 0 ||
+            read_contract_cfg_values(name, hpfs_log_level, is_full_history) == -1 ||
+            hpfs::start_fs_processes(name, hpfs_log_level, is_full_history) == -1 ||
             run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
@@ -169,16 +172,15 @@ namespace hp
     int run_container(const std::string &folder_name, const ports &assigned_ports)
     {
         // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-        const std::string command = "docker run -t -i -d --network=hpnet --stop-signal=SIGINT --name=" + folder_name + " \
+        const std::string command = "docker run -t -i -d --stop-signal=SIGINT --name=" + folder_name + " \
                                             -p " +
                                     std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
                                             -p " +
                                     std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
-                                            --device /dev/fuse --cap-add SYS_ADMIN --security-opt apparmor:unconfined \
-                                            --restart unless-stopped --mount type=bind,source=" +
-                                    conf::cfg.hp.instance_folder + "/" +
-                                    folder_name + ",target=/contract \
-                                            hpcore:latest";
+                                            --restart unless-stopped \
+                                            --mount type=bind,source=" +
+                                    conf::cfg.hp.instance_folder + "/" + folder_name + ",target=/contract \
+                                            hpcore:latest run /contract";
 
         return system(command.c_str());
     }
@@ -204,9 +206,7 @@ namespace hp
         }
         const std::string command = "docker stop " + container_name;
         if (system(command.c_str()) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
-            hpfs::stop_fs_processes(info.hpfs_pids) == -1 ||
-            sqlite::update_hpfs_pids_in_container(db, container_name, {}) == -1)
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -235,10 +235,12 @@ namespace hp
             return -1;
         }
 
+        std::string hpfs_log_level;
+        bool is_full_history;
         if (docker_start(container_name) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1 ||
-            hpfs::start_fs_processes(container_name, conf::cfg.log.log_level, false, info.hpfs_pids) == -1 ||
-            sqlite::update_hpfs_pids_in_container(db, container_name, info.hpfs_pids) == -1)
+            read_contract_cfg_values(container_name, hpfs_log_level, is_full_history) == -1 ||
+            hpfs::start_fs_processes(container_name, hpfs_log_level, is_full_history) == -1 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             return -1;
@@ -278,9 +280,7 @@ namespace hp
 
         if (system(command.c_str()) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            hpfs::stop_fs_processes(info.hpfs_pids) == -1 ||
-            util::remove_directory_recursively(folder_path) == -1 ||
-            sqlite::update_hpfs_pids_in_container(db, container_name, {}) == -1)
+            util::remove_directory_recursively(folder_path) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -349,11 +349,10 @@ namespace hp
         // Default hp.cfg configs.
         d["node"]["history_config"]["max_primary_shards"] = 2;
         d["node"]["history_config"]["max_raw_shards"] = 2;
-        d["hpfs"]["log"]["log_level"] = "err";
+        d["hpfs"]["log"]["log_level"] = "dbg";
         d["log"]["log_level"] = "inf";
         d["log"]["max_mbytes_per_file"] = 5;
         d["log"]["max_file_count"] = 10;
-
 
         d["node"]["public_key"] = pubkey_hex;
         d["node"]["private_key"] = util::to_hex(seckey);
@@ -446,6 +445,85 @@ namespace hp
             return 0;
         else
             return -1;
+    }
+
+    /**
+     * Read only required contract config values
+     * @param contract_name Name of the contract.
+     * @param log_level Log level to be read.
+     * @param is_full_history Contract history mode.
+     * @return 0 on success. -1 on failure.
+     */
+    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool is_full_history)
+    {
+        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + contract_name.data();
+
+        // Read the config file into json document object.
+        const std::string config_file_path = folder_path + "/cfg/hp.cfg";
+        const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
+        if (config_fd == -1)
+        {
+            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
+            return -1;
+        }
+
+        std::string buf;
+        if (util::read_from_fd(config_fd, buf) == -1)
+        {
+            LOG_ERROR << "Error reading from the config file. " << errno;
+            close(config_fd);
+            return -1;
+        }
+
+        jsoncons::ojson d;
+        try
+        {
+            d = jsoncons::ojson::parse(buf, jsoncons::strict_json_parsing());
+        }
+        catch (const std::exception &e)
+        {
+            LOG_ERROR << "Invalid contract config file format. " << e.what();
+            return -1;
+        }
+        buf.clear();
+
+        try
+        {
+            const jsoncons::ojson &hpfs_log = d["hpfs"]["log"];
+            log_level = hpfs_log["log_level"].as<std::string>();
+        }
+        catch (const std::exception &e)
+        {
+            LOG_ERROR << "Invalid contract config hpfs log. " << e.what();
+            return -1;
+        }
+
+        const std::unordered_set<std::string> valid_loglevels({"dbg", "inf", "wrn", "err"});
+        if (valid_loglevels.count(log_level) != 1)
+        {
+            LOG_ERROR << "Invalid hpfs loglevel configured. Valid values: dbg|inf|wrn|err";
+            return -1;
+        }
+
+        try
+        {
+            if (d["node"]["history"] == "full")
+                is_full_history = true;
+            else if (d["node"]["history"] == "custom")
+                is_full_history = false;
+            else
+            {
+                LOG_ERROR << "Invalid history mode. 'full' or 'custom' expected.";
+                return -1;
+            }
+        }
+        catch (const std::exception &e)
+        {
+            LOG_ERROR << "Invalid contract config history mode. " << e.what();
+            return -1;
+        }
+
+        return 0;
     }
 
 } // namespace hp

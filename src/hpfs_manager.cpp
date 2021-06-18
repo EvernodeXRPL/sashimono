@@ -8,6 +8,8 @@ namespace hpfs
     constexpr uint16_t HPFS_PROCESS_INIT_TIMEOUT = 2000;
     constexpr uint16_t HPFS_INIT_CHECK_INTERVAL = 20;
 
+    constexpr const char *FS_START = "%s fs %s %s merge=%s trace=%s";
+
     /**
      * Starts the hpfs process for the instance.
      * @param fs_dir File system directory
@@ -69,21 +71,18 @@ namespace hpfs
             // hpfs process.
             util::fork_detach();
 
-            std::string trace_arg = "trace=";
-            trace_arg.append(log_level);
+            const int len = 24 + conf::ctx.hpfs_exe_path.length() + fs_dir.length() + mount_dir.length() + log_level.length();
+            char command[len];
+            sprintf(command, FS_START, conf::ctx.hpfs_exe_path.data(), fs_dir.data(), mount_dir.data(), merge ? "true" : "false", log_level.data());
 
-            // Fill process args.
-            char *execv_args[] = {
-                conf::ctx.hpfs_exe_path.data(),
-                (char *)"fs",
-                (char *)fs_dir.data(),
-                (char *)mount_dir.data(),
-                (char *)(merge ? "merge=true" : "merge=false"),
-                (char *)trace_arg.data(),
-                NULL};
+            // Remove hpfs terminal outputs from the terminal, These will be printed in the trace log of particular hpfs mount.
+            int fd = open("/dev/null", O_WRONLY);
+            dup2(fd, STDOUT_FILENO);
+            dup2(fd, STDERR_FILENO);
+            close(fd);
 
-            const int ret = execv(execv_args[0], execv_args);
-            std::cerr << errno << ": hpfs process execv failed at mount " << mount_dir << ".\n";
+            system(command);
+            std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";
             exit(1);
         }
         else
@@ -104,37 +103,21 @@ namespace hpfs
      * @return -1 on error and 0 on success and pids will be populated.
      * 
     */
-    int start_fs_processes(std::string_view contract_dir, std::string_view log_level, const bool is_full_history, hpfs_pids &pids)
+    int start_fs_processes(std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
     {
         const std::string contract_fs_path = conf::cfg.hp.instance_folder + "/" + (const char *)contract_dir.data() + "/contract_fs";
-        const std::string ledger_fs_path = conf::cfg.hp.instance_folder + "/" + (const char *)contract_dir.data() + "/ledger_fs";
-
-        int contract_fs_pid = start_hpfs_process(contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history);
-        int ledger_fs_pid = start_hpfs_process(ledger_fs_path, ledger_fs_path + "/mnt", log_level, true);
-
-        if (contract_fs_pid == -1 || ledger_fs_pid == -1)
+        if (start_hpfs_process(contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
         {
-            LOG_ERROR << errno << " : Error occured while starting contract fs processes - " << contract_dir;
-            if (contract_fs_pid > 0)
-                util::kill_process(contract_fs_pid, true);
-            if (ledger_fs_pid > 0)
-                util::kill_process(ledger_fs_pid, true);
+            LOG_ERROR << errno << " : Error occured while starting contract_fs processes - " << contract_dir;
             return -1;
         }
 
-        pids = {contract_fs_pid, ledger_fs_pid};
-        return 0;
-    }
-
-    /**
-     * Stop given hpfs processes.
-     * @param pids pids of the hpfs instances to be stopped.
-     * @return -1 on error and 0 on success.
-    */
-    int stop_fs_processes(const hpfs_pids &pids)
-    {
-        if ((pids.contract > 0 && util::kill_process(pids.contract, true) == -1) || (pids.ledger > 0 && util::kill_process(pids.ledger, true) == -1))    
+        const std::string ledger_fs_path = conf::cfg.hp.instance_folder + "/" + (const char *)contract_dir.data() + "/ledger_fs";
+        if (start_hpfs_process(ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
+        {
+            LOG_ERROR << errno << " : Error occured while starting ledger_fs processes - " << contract_dir;
             return -1;
+        }
 
         return 0;
     }

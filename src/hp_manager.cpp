@@ -348,8 +348,8 @@ namespace hp
         // Default hp.cfg configs.
         d["node"]["history_config"]["max_primary_shards"] = 2;
         d["node"]["history_config"]["max_raw_shards"] = 2;
-        d["hpfs"]["log"]["log_level"] = "dbg";
-        d["log"]["log_level"] = "err";
+        d["hpfs"]["log"]["log_level"] = "err";
+        d["log"]["log_level"] = "inf";
         d["log"]["max_mbytes_per_file"] = 5;
         d["log"]["max_file_count"] = 10;
 

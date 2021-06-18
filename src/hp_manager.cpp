@@ -177,9 +177,9 @@ namespace hp
                                     std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
                                             -p " +
                                     std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
-                                            --restart unless-stopped \
-                                            --mount type=bind,source=" +
-                                    conf::cfg.hp.instance_folder + "/" + folder_name + ",target=/contract \
+                                            --restart unless-stopped --mount type=bind,source=" +
+                                    conf::cfg.hp.instance_folder + "/" +
+                                    folder_name + ",target=/contract \
                                             hpcore:latest run /contract";
 
         return system(command.c_str());
@@ -205,8 +205,7 @@ namespace hp
             return -1;
         }
         const std::string command = "docker stop " + container_name;
-        if (system(command.c_str()) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
+        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -350,7 +349,7 @@ namespace hp
         d["node"]["history_config"]["max_primary_shards"] = 2;
         d["node"]["history_config"]["max_raw_shards"] = 2;
         d["hpfs"]["log"]["log_level"] = "dbg";
-        d["log"]["log_level"] = "inf";
+        d["log"]["log_level"] = "err";
         d["log"]["max_mbytes_per_file"] = 5;
         d["log"]["max_file_count"] = 10;
 

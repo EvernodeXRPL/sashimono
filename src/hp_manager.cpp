@@ -453,7 +453,7 @@ namespace hp
      * @param is_full_history Contract history mode.
      * @return 0 on success. -1 on failure.
      */
-    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool is_full_history)
+    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool &is_full_history)
     {
         const std::string folder_path = conf::cfg.hp.instance_folder + "/" + contract_name.data();
 
@@ -488,8 +488,7 @@ namespace hp
 
         try
         {
-            const jsoncons::ojson &hpfs_log = d["hpfs"]["log"];
-            log_level = hpfs_log["log_level"].as<std::string>();
+            log_level = d["hpfs"]["log"]["log_level"].as<std::string>();
         }
         catch (const std::exception &e)
         {

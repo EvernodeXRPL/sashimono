@@ -75,7 +75,7 @@ namespace hpfs
             char command[len];
             sprintf(command, FS_START, conf::ctx.hpfs_exe_path.data(), fs_dir.data(), mount_dir.data(), merge ? "true" : "false", log_level.data());
 
-            // Detach hpfs sagent terminal outputs from the terminal, These will be printed in the trace log of particular hpfs mount.
+            // Detach hpfs terminal outputs from the sagent terminal, These will be printed in the trace log of particular hpfs mount.
             int fd = open("/dev/null", O_WRONLY);
             dup2(fd, STDOUT_FILENO);
             dup2(fd, STDERR_FILENO);

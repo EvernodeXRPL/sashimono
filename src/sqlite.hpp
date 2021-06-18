@@ -3,7 +3,6 @@
 
 #include "pchheader.hpp"
 #include "hp_manager.hpp"
-#include "hpfs_manager.hpp"
 
 namespace sqlite
 {

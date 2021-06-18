@@ -4,6 +4,8 @@ const bson = require('bson');
 var path = require("path");
 const HotPocket = require('./lib/hp-client-lib');
 
+const BUNDLE_NAME = "bundle.zip";
+
 async function main() {
     const workingDir = "datadir/";
 
@@ -80,24 +82,29 @@ async function main() {
             if (inp.startsWith("upload ")) {
 
                 const filePath = inp.substr(7);
-                const fileName = path.basename(filePath)
-                if (fs.existsSync(filePath)) {
-                    const fileContent = fs.readFileSync(filePath);
-                    const sizeKB = Math.round(fileContent.length / 1024);
-                    console.log("Uploading file " + fileName + " (" + sizeKB + " KB)");
-
-                    const input = await hpc.submitContractInput(bson.serialize({
-                        type: "upload",
-                        fileName: fileName,
-                        content: fileContent
-                    }));
-
-                    const submission = await input.submissionStatus;
-                    if (submission.status != "accepted")
-                        console.log("Upload failed. reason: " + submission.reason);
+                const fileName = path.basename(filePath);
+                if (fileName !== BUNDLE_NAME) {
+                    console.error(`Uploding file name should be ${BUNDLE_NAME}`);
                 }
-                else
-                    console.log("File not found");
+                else {
+                    if (fs.existsSync(filePath)) {
+                        const fileContent = fs.readFileSync(filePath);
+                        const sizeKB = Math.round(fileContent.length / 1024);
+                        console.log("Uploading file " + fileName + " (" + sizeKB + " KB)");
+
+                        const input = await hpc.submitContractInput(bson.serialize({
+                            type: "upload",
+                            fileName: fileName,
+                            content: fileContent
+                        }));
+
+                        const submission = await input.submissionStatus;
+                        if (submission.status != "accepted")
+                            console.log("Upload failed. reason: " + submission.reason);
+                    }
+                    else
+                        console.log("File not found");
+                }
             }
             else {
                 console.log("Invalid command. [upload <local path>] expected.")

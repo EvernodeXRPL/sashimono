@@ -2,6 +2,12 @@
 
 // This script will be renamed by this contract as post_exec.sh
 constexpr const char *SCRIPT_NAME = "script.sh";
+constexpr const char *BUNDLE_NAME = "bundle.zip";
+#define HP_DEINIT                    \
+    {                                \
+        hp_deinit_user_input_mmap(); \
+        hp_deinit_contract();        \
+    }
 
 int main(int argc, char **argv)
 {
@@ -24,7 +30,7 @@ int main(int argc, char **argv)
     {
         const struct hp_user *user = &ctx->users.list[u];
 
-        // We allow only the owner of the instance to upload the vm_package.zip
+        // We allow only the owner of the instance to upload the bundle.zip
         if (strcmp(user->pubkey, argv[1]) != 0)
             continue;
 
@@ -41,6 +47,12 @@ int main(int argc, char **argv)
             {
                 const jsoncons::ojson d = jsoncons::bson::decode_bson<jsoncons::ojson>(buffer);
                 const std::string_view file_name = d["fileName"].as<std::string_view>();
+                if (file_name != BUNDLE_NAME)
+                {
+                    std::cerr << "Uploaded file doesn't match with bundle name: " << BUNDLE_NAME << "\n";
+                    HP_DEINIT;
+                    return -1;
+                }
                 const jsoncons::byte_string_view data = d["content"].as_byte_string_view();
                 const int archive_fd = open(file_name.data(), O_CREAT | O_TRUNC | O_RDWR, 0644);
 
@@ -49,6 +61,7 @@ int main(int argc, char **argv)
                 {
                     std::cerr << "Error saving given file.\n";
                     close(archive_fd);
+                    HP_DEINIT;
                     return -1;
                 }
                 close(archive_fd);
@@ -62,18 +75,23 @@ int main(int argc, char **argv)
                 if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)
                 {
                     std::cerr << "Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;
+                    HP_DEINIT;
                     return -1;
                 }
+                // We have found our contract package input. No need to iterate furthur.
+                break;
             }
             catch (const std::exception &e)
             {
                 std::cerr << e.what() << '\n';
+                HP_DEINIT;
                 return -1;
             }
         }
+        // We don't need to further itereate through user list. We have found our authenticated user to reach this place.
+        break;
     }
-    hp_deinit_user_input_mmap();
-    hp_deinit_contract();
+    HP_DEINIT;
     return 0;
 }
 

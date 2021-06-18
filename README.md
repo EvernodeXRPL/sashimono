@@ -25,6 +25,10 @@ A C++ version of sashimono agent
 1. Run `cmake .` (You only have to do this once)
 1. Run `make` (Sashimono agent binary will be created as `./build/sagent`)
 
+## Sashimono Client
+- Replace the sashimono-client.key file created inside dataDir in the first run by the key file found on this [link](https://geveoau.sharepoint.com/:u:/g/EX5U8SxYyM5Anyq2rAcMXtkBEOO_XWT7hCo30SGIsDAyLg?e=LycwQx). This is because we have hardcoded the pubkey in message board. This will generate the same pubkey we have hardcoded.
+- A sample **bundle.zip** bundle can be found [here](https://geveoau.sharepoint.com/:u:/g/EdurCbuttzdCnuQCyIb0SKEBWq4j9LKdgAIjJvt3zwueew?e=lPYfMG).
+
 ## Code structure
 Code is divided into subsystems via namespaces.
 

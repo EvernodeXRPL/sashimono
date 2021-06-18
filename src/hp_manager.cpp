@@ -143,9 +143,8 @@ namespace hp
         }
 
         const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
-        info.owner_pubkey = owner_pubkey;
-        if (create_contract(info, name, instance_ports) != 0 ||
-            hpfs::start_fs_processes(name, conf::cfg.log.log_level, false, info.hpfs_pids) == -1 ||
+
+        if (create_contract(info, name, owner_pubkey, instance_ports) != 0 ||
             run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
@@ -296,11 +295,12 @@ namespace hp
      * Creates a copy of default contract with the given name and the ports in the instance folder given in the config file.
      * @param info Information of the created contract instance.
      * @param folder_name Folder name for the contract directory.
+     * @param owner_pubkey Public key of the owner of the instance.
      * @param assigned_ports Assigned ports to the instance.
      * @return -1 on error and 0 on success.
      * 
     */
-    int create_contract(instance_info &info, const std::string &folder_name, const ports &assigned_ports)
+    int create_contract(instance_info &info, const std::string &folder_name, std::string_view owner_pubkey, const ports &assigned_ports)
     {
         const std::string folder_path = conf::cfg.hp.instance_folder + "/" + folder_name;
         const std::string command = "cp -r " + conf::ctx.default_contract_path + " " + folder_path;
@@ -361,6 +361,7 @@ namespace hp
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
+        d["contract"]["bin_args"] = owner_pubkey;
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
         d["hpfs"]["external"] = true;
@@ -373,6 +374,7 @@ namespace hp
         }
         close(config_fd);
 
+        info.owner_pubkey = owner_pubkey;
         info.ip = "localhost";
         info.contract_id = contract_id;
         info.name = folder_name;

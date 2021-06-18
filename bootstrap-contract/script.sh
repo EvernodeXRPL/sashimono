@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Invoked seqence number: $1"
-echo "Invoded lcl: $2"
+echo "Invoked lcl: $2"
 archive_name="bundle.zip"
 boostrap_bin="bootstrap_contract"
 install_script="install.sh"

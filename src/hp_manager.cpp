@@ -236,9 +236,9 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
-        if (docker_start(container_name) != 0 ||
-            read_contract_cfg_values(container_name, hpfs_log_level, is_full_history) == -1 ||
+        if (read_contract_cfg_values(container_name, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_fs_processes(container_name, hpfs_log_level, is_full_history) == -1 ||
+            docker_start(container_name) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;

@@ -459,7 +459,7 @@ namespace hp
 
         // Read the config file into json document object.
         const std::string config_file_path = folder_path + "/cfg/hp.cfg";
-        const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
+        const int config_fd = open(config_file_path.data(), O_RDONLY);
         if (config_fd == -1)
         {
             LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;

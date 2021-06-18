@@ -71,7 +71,7 @@ namespace hpfs
             // hpfs process.
             util::fork_detach();
 
-            const int len = 24 + conf::ctx.hpfs_exe_path.length() + fs_dir.length() + mount_dir.length() + log_level.length();
+            const int len = 25 + conf::ctx.hpfs_exe_path.length() + fs_dir.length() + mount_dir.length() + log_level.length();
             char command[len];
             sprintf(command, FS_START, conf::ctx.hpfs_exe_path.data(), fs_dir.data(), mount_dir.data(), merge ? "true" : "false", log_level.data());
 

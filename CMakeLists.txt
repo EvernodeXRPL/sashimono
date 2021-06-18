@@ -37,6 +37,7 @@ target_link_libraries(sagent
 add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./dependencies/bin/hpws ./build/
     COMMAND cp -r ./dependencies/default_contract ./build/
+    COMMAND cp ./bootstrap-contract/script.sh ./build/default_contract/contract_fs/seed/state/script.sh
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

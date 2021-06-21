@@ -47,7 +47,7 @@ done
 [ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"
 
 echo "Installing rootless dockerd for user."
-sudo -u $user bash -i -c "$docker_bin/dockerd-rootless-setuptool.sh install"
+sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/dockerd-rootless-setuptool.sh install
 
 svcstat=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-active docker.service)
 [ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"

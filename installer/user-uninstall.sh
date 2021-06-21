@@ -8,6 +8,8 @@ prefix="sashi"
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
 user_dir=/home/$user
+user_id=$(id -u $user)
+user_runtime_dir="/run/user/$user_id"
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 # Check if users exists.
@@ -22,9 +24,9 @@ echo "Uninstalling user '$user'."
 
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
-sudo -u $user bash -i -c "$docker_bin/dockerd-rootless-setuptool.sh uninstall"
+sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/dockerd-rootless-setuptool.sh uninstall
 echo "Removing rootless docker data."
-sudo -u $user $docker_bin/rootlesskit rm -rf $user_dir/.local/share/docker
+sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/rootlesskit rm -rf $user_dir/.local/share/docker
 
 # Gracefully terminate user processes.
 echo "Terminating user processes."

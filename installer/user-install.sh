@@ -2,13 +2,9 @@
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
 
-# $1 - A number with 25 or less digits.
-uid=$1
-[ -z "$uid" ] && echo "ARGS,INST_ERR" && exit 1
-[ ${#uid} -gt 25 ] && echo "ARGS,INST_ERR" && exit 1
-[[ "$uid" =~ [^0-9] ]] && echo "ARGS,INST_ERR" && exit 1
-
-user="sashi$uid"
+prefix="sashi"
+suffix=$(date +%s%N) # Epoch nanoseconds
+user="$prefix$suffix"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
@@ -17,7 +13,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 function rollback() {
     echo "Rolling back user installation. $1"
-    $(pwd)/user-uninstall.sh $uid
+    $(pwd)/user-uninstall.sh $user
     echo "Rolled back the installation."
     echo "$1,INST_ERR" && exit 1
 }
@@ -40,7 +36,7 @@ export PATH=$docker_bin:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>$user_dir/.bashrc
 echo "Updated user .bashrc."
 
-# Wait until user systemd is functionning.
+# Wait until user systemd is functioning.
 user_systemd=""
 for (( i=0; i<30; i++ ))
 do
@@ -51,7 +47,7 @@ done
 [ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"
 
 echo "Installing rootless dockerd for user."
-sudo -u $user bash -i -c "$docker_bin/dockerd-rootless-setuptool.sh install"
+sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/dockerd-rootless-setuptool.sh install
 
 svcstat=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-active docker.service)
 [ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"

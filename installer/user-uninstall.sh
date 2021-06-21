@@ -2,13 +2,11 @@
 # Sashimono contract instance user uninstall script.
 # This is intended to be called by Sashimono agent or via the user-install script for rollback.
 
-# $1 - A number with 25 or less digits.
-uid=$1
-[ -z "$uid" ] && echo "ARGS,UNINST_ERR" && exit 1
-[ ${#1} -gt 25 ] && echo "ARGS,UNINST_ERR" && exit 1
-[[ "$uid" =~ [^0-9] ]] && echo "ARGS,UNINST_ERR" && exit 1
+user=$1
+# Check whether this is a valid sashimono username.
+prefix="sashi"
+[ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
-user="sashi$uid"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
@@ -19,6 +17,8 @@ else
         echo "NO_USER,UNINST_ERR"
         exit 1
 fi
+
+echo "Uninstalling user '$user'."
 
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
@@ -53,7 +53,7 @@ if [ "$procs" != "0" ]; then
 
 fi
 
-echo "Deleting user."
+echo "Deleting user '$user'"
 userdel $user
 rm -r /home/$user
 

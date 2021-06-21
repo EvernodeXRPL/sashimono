@@ -240,16 +240,16 @@ namespace util
     }
 
     /**
-     * Converts given string to a uint_64. A wrapper function for std::stoull. 
+     * Converts given string to a int. A wrapper function for std::stoi. 
      * @param str String variable.
      * @param result Variable to store the answer from the conversion.
      * @return Returns 0 in a successful conversion and -1 on error.
     */
-    int stoull(const std::string &str, uint64_t &result)
+    int stoi(const std::string &str, int &result)
     {
         try
         {
-            result = std::stoull(str);
+            result = std::stoi(str);
         }
         catch (const std::exception &e)
         {

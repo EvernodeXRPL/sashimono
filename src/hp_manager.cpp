@@ -29,13 +29,14 @@ namespace hp
     constexpr const char *CONTAINER_POSTFIX = "-hpcontainer";
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
-                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract ravinsp/hotpocket:ubt.20.04-njs.14 run /contract";
+                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract ravinsp/hotpocket:ubt.20.04 run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
     constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
-    constexpr const char *OWN_DIR = "chown -R %s:%s %s";
+    constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
+    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s"; // Enable execute permission before running in case bash script does not have the permission.
 
     /**
      * Initialize hp related environment.
@@ -154,39 +155,24 @@ namespace hp
             instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
         }
 
-        const std::string command = "sudo sh " + conf::ctx.user_install_sh;
-        FILE *fpipe = popen(command.c_str(), "r");
-
-        if (fpipe == NULL)
-        {
-            LOG_ERROR << "Error on popen for command " << std::string(command);
-            return -1;
-        }
-        std::string output;
-        output.resize(1024);
-
-        fgets(output.data(), 20, fpipe);
         std::vector<std::string> params;
-        util::split_string(params, output, "\n");
-        output = params.at(params.size() - 1);
-        util::split_string(params, output, ",");
+        if (execute_bash_file(conf::ctx.user_install_sh, params) == -1)
+            return -1;
 
-        uint64_t user_id = 0;
+        int user_id;
         std::string username;
         std::string socket;
-        const std::string status = params.at(params.size() - 1);
-        if (status == "INST_SUC") // If success.
+        if (strncmp(params.at(params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
         {
-            if (util::stoull(params.at(0), user_id) == -1)
+            if (util::stoi(params.at(0), user_id) == -1)
             {
                 LOG_ERROR << "Create user error: Invalid user id.";
                 return -1;
             }
-            user_id = stoi(params.at(0));
             username = params.at(1);
             socket = params.at(2);
         }
-        else if (status == "INST_ERR") // If error.
+        else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
         {
             std::string error = params.at(0);
             LOG_ERROR << "User creation error : " << error;
@@ -195,14 +181,9 @@ namespace hp
         else
         {
             std::string error = params.at(0);
-            LOG_ERROR << "Unknown user creation error";
+            LOG_ERROR << "Unknown user creation error : " << error;
             return -1;
         }
-
-        if (pclose(fpipe) == 0)
-            return 0;
-        else
-            return -1;
 
         // TODO: user home can be obtained by eval echo "~$USER"
         const std::string contract_dir = util::get_user_contract_dir(username);
@@ -241,7 +222,7 @@ namespace hp
         const std::string user_id_str = std::to_string(user_id);
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 262 + user_id_str.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 297 + user_id_str.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
         sprintf(command, DOCKER_RUN, user_id_str.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
@@ -362,8 +343,7 @@ namespace hp
         sprintf(command, DOCKER_REMOVE, user_id_str.data(), container_name.data());
         const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (system(command) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            util::remove_directory_recursively(contract_dir) == -1)
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -371,6 +351,35 @@ namespace hp
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
+
+        // Need to kill hpfs processes before uninstalling the user.
+
+        // Remove all the users after destroying.
+        std::vector<std::string> params;
+        if (execute_bash_file(conf::ctx.user_uninstall_sh, params) == -1)
+            return -1;
+
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
+        {
+            if (util::remove_directory_recursively(contract_dir) == -1)
+            {
+                LOG_ERROR << errno << ": Error while clearing user directories";
+                return -1;
+            }
+        }
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
+        {
+            std::string error = params.at(0);
+            LOG_ERROR << "User creation error : " << error;
+            return -1;
+        }
+        else
+        {
+            std::string error = params.at(0);
+            LOG_ERROR << "Unknown user creation error : " << error;
+            return -1;
+        }
+
         return 0;
     }
 
@@ -461,8 +470,8 @@ namespace hp
 
         len = 12 + (username.length() * 2) + contract_dir.length();
         char own_command[len];
-        sprintf(own_command, OWN_DIR, username.data(), username.data(), contract_dir.data());
-        if (system(cp_command) != 0)
+        sprintf(own_command, CHOWN_DIR, username.data(), username.data(), contract_dir.data());
+        if (system(own_command) != 0)
         {
             LOG_ERROR << "Changing contract ownership failed " << contract_dir;
             return -1;
@@ -620,6 +629,44 @@ namespace hp
             return -1;
         }
 
+        return 0;
+    }
+
+    /**
+     * Executes the given bash file and populates final comma seperated output into a vector.
+     * @param file_name Name of the bash script.
+     * @param output_params Final output of the bash script.
+    */
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params)
+    {
+        const int len = 22 + (file_name.length() * 2);
+        char command[len];
+        sprintf(command, RUN_SH, file_name.data(), file_name.data());
+
+        FILE *fpipe = popen(command, "r");
+        if (fpipe == NULL)
+        {
+            LOG_ERROR << "Error on popen for command " << std::string(command);
+            return -1;
+        }
+
+        char buffer[100];
+        std::string output;
+        // Only take the last cout string It contains the output of the execution.
+        try
+        {
+            while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+                output = buffer;
+        }
+        catch (...)
+        {
+            pclose(fpipe);
+            LOG_ERROR << "Error on fgets for command " << std::string(command);
+            return -1;
+        }
+        pclose(fpipe);
+
+        util::split_string(output_params, output, ",");
         return 0;
     }
 

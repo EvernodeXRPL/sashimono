@@ -36,7 +36,7 @@ namespace util
 
     void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter);
 
-    int stoull(const std::string &str, uint64_t &result);
+    int stoi(const std::string &str, int &result);
 
     const std::string get_user_contract_dir(const std::string &username);
 

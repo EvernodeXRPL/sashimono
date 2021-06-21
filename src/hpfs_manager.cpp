@@ -88,6 +88,7 @@ namespace hpfs
                 (char *)trace_arg.data(),
                 NULL};
             
+            setgid(user_id);
             setuid(user_id);
             const int ret = execv(execv_args[0], execv_args);
             std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";

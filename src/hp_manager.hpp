@@ -30,8 +30,6 @@ namespace hp
 
     struct instance_info
     {
-        std::string user_id;
-        std::string username;
         std::string owner_pubkey;
         std::string container_name;
         std::string contract_dir;

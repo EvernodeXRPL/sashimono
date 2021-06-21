@@ -38,6 +38,8 @@ namespace util
 
     int stoull(const std::string &str, uint64_t &result);
 
+    const std::string get_user_contract_dir(const std::string &username);
+
 } // namespace util
 
 #endif

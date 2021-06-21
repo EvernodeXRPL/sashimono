@@ -35,7 +35,7 @@ namespace sqlite
 
     constexpr const char *UPDATE_CURRENT_STATUS_IN_HP = "UPDATE instances SET current_status = ? WHERE name = ?";
 
-    constexpr const char *IS_CONTAINER_EXISTS = "SELECT status, peer_port, user_port FROM instances WHERE name = ?";
+    constexpr const char *IS_CONTAINER_EXISTS = "SELECT user_id, username, status, peer_port, user_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
@@ -352,9 +352,11 @@ namespace sqlite
             sqlite3_step(stmt) == SQLITE_ROW)
         {
             // Populate only the necessary fields.
-            info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
-            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 1);
-            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
+            info.user_id = sqlite3_column_int64(stmt, 0);
+            info.username = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
+            info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
+            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
+            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 4);
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);

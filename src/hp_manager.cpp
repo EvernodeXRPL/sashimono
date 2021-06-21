@@ -205,7 +205,7 @@ namespace hp
             return -1;
 
         // TODO: user home can be obtained by eval echo "~$USER"
-        const std::string contract_dir = "/home/" + username + "/contract";
+        const std::string contract_dir = util::get_user_contract_dir(username);
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
 
         std::string hpfs_log_level;
@@ -258,11 +258,10 @@ namespace hp
 
     /**
      * Stops the container with given name if exists.
-     * @param user_id ID of the instance user.
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int stop_container(const int user_id, std::string_view container_name)
+    int stop_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -277,7 +276,7 @@ namespace hp
             return -1;
         }
 
-        const std::string user_id_str = std::to_string(user_id);
+        const std::string user_id_str = std::to_string(info.user_id);
         const int len = 54 + user_id_str.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_STOP, user_id_str.data(), container_name.data());
@@ -293,12 +292,10 @@ namespace hp
 
     /**
      * Starts the container with given name if exists.
-     * @param user_id ID of the instance user.
      * @param container_name Name of the container.
-     * @param contract_dir Directory of the contract.
      * @return 0 on success execution or relavent error code on error.
     */
-    int start_container(const int user_id, std::string_view container_name, std::string_view contract_dir)
+    int start_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -315,9 +312,10 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
+        const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(user_id, contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            docker_start(user_id, container_name) != 0 ||
+            hpfs::start_fs_processes(info.user_id, contract_dir, hpfs_log_level, is_full_history) == -1 ||
+            docker_start(info.user_id, container_name) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
@@ -345,12 +343,10 @@ namespace hp
 
     /**
      * Destroy the container with given name if exists.
-     * @param user_id ID of the instance user.
      * @param container_name Name of the container.
-     * @param contract_dir Directory of the contract.
      * @return 0 on success execution or relavent error code on error.
     */
-    int destroy_container(const int user_id, std::string_view container_name, std::string_view contract_dir)
+    int destroy_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -360,11 +356,11 @@ namespace hp
             return -1;
         }
 
-        const std::string user_id_str = std::to_string(user_id);
+        const std::string user_id_str = std::to_string(info.user_id);
         const int len = 56 + user_id_str.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_REMOVE, user_id_str.data(), container_name.data());
-
+        const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
             util::remove_directory_recursively(contract_dir) == -1)

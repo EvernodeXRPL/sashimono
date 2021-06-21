@@ -174,8 +174,6 @@ namespace comm
                 return -1;
             id = msg.id;
             hp::instance_info info;
-            info.user_id = 1000;
-            info.username = "savinda";
             if (hp::create_new_instance(info, msg.pubkey) == -1)
                 return -1;
 
@@ -183,45 +181,45 @@ namespace comm
             msg_parser.build_create_response(res, info, msg.id);
             send(res);
         }
-        // else if (type == msg::MSGTYPE_DESTROY)
-        // {
-        //     msg::destroy_msg msg;
-        //     if (msg_parser.extract_destroy_message(msg))
-        //         return -1;
-        //     id = msg.id;
-        //     if (hp::destroy_container(msg.container_name) == -1)
-        //         return -1;
+        else if (type == msg::MSGTYPE_DESTROY)
+        {
+            msg::destroy_msg msg;
+            if (msg_parser.extract_destroy_message(msg))
+                return -1;
+            id = msg.id;
+            if (hp::destroy_container(msg.container_name) == -1)
+                return -1;
 
-        //     std::string res;
-        //     msg_parser.build_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
-        //     send(res);
-        // }
-        // else if (type == msg::MSGTYPE_START)
-        // {
-        //     msg::start_msg msg;
-        //     if (msg_parser.extract_start_message(msg))
-        //         return -1;
-        //     id = msg.id;
-        //     if (hp::start_container(msg.container_name) == -1)
-        //         return -1;
+            std::string res;
+            msg_parser.build_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
+            send(res);
+        }
+        else if (type == msg::MSGTYPE_START)
+        {
+            msg::start_msg msg;
+            if (msg_parser.extract_start_message(msg))
+                return -1;
+            id = msg.id;
+            if (hp::start_container(msg.container_name) == -1)
+                return -1;
 
-        //     std::string res;
-        //     msg_parser.build_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
-        //     send(res);
-        // }
-        // else if (type == msg::MSGTYPE_STOP)
-        // {
-        //     msg::stop_msg msg;
-        //     if (msg_parser.extract_stop_message(msg))
-        //         return -1;
-        //     id = msg.id;
-        //     if (hp::stop_container(msg.container_name) == -1)
-        //         return -1;
+            std::string res;
+            msg_parser.build_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
+            send(res);
+        }
+        else if (type == msg::MSGTYPE_STOP)
+        {
+            msg::stop_msg msg;
+            if (msg_parser.extract_stop_message(msg))
+                return -1;
+            id = msg.id;
+            if (hp::stop_container(msg.container_name) == -1)
+                return -1;
 
-        //     std::string res;
-        //     msg_parser.build_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
-        //     send(res);
-        // }
+            std::string res;
+            msg_parser.build_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
+            send(res);
+        }
         else
         {
             LOG_ERROR << "Received invalid message type.";

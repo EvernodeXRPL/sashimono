@@ -54,10 +54,10 @@ namespace hp
     void hp_monitor_loop();
     int create_new_instance(instance_info &info, std::string_view owner_pubkey);
     int run_container(const int user_id, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
-    int start_container(const int user_id, std::string_view container_name, std::string_view contract_dir);
+    int start_container(std::string_view container_name);
     int docker_start(const int user_id, std::string_view container_name);
-    int stop_container(const int user_id, std::string_view container_name);
-    int destroy_container(const int user_id, std::string_view container_name, std::string_view contract_dir);
+    int stop_container(std::string_view container_name);
+    int destroy_container(std::string_view container_name);
     void kill_all_containers();
     int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info);
     int write_json_file(const int fd, const jsoncons::ojson &d);

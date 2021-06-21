@@ -259,4 +259,14 @@ namespace util
         return 0;
     }
 
+    /**
+     * Construct the user contract directory path when username is given.
+     * @param username Username of the user.
+     * @return Contract directory path.
+    */
+    const std::string get_user_contract_dir(const std::string &username)
+    {
+        return "/home/" + username + "/contract";
+    }
+
 } // namespace util

@@ -105,6 +105,7 @@ namespace conf
         // Take the parent directory path.
         ctx.exe_dir = dirname(exepath.data());
         ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
+        ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.default_contract_path = ctx.exe_dir + "/default_contract";
         ctx.config_dir = ctx.exe_dir + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
@@ -118,11 +119,12 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[4] = {
+        const std::string paths[5] = {
             ctx.config_file,
             ctx.log_dir,
             ctx.data_dir,
-            ctx.hpws_exe_path};
+            ctx.hpws_exe_path,
+            ctx.default_contract_path};
 
         for (const std::string &path : paths)
         {

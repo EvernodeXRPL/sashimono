@@ -37,6 +37,8 @@ namespace hp
         std::string contract_id;
         ports assigned_ports;
         std::string status;
+        int user_id;
+        std::string username;
     };
 
     struct resources

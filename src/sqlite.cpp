@@ -21,9 +21,9 @@ namespace sqlite
     constexpr const char *INSTANCE_TABLE = "instances";
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
-                                                    "owner_pubkey, time, status, name, ip,"
+                                                    "owner_pubkey, time, user_id, username, status, name, ip,"
                                                     "peer_port, user_port, pubkey, contract_id"
-                                                    ") VALUES(?,?,?,?,?,?,?,?,?)";
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?)";
 
     constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
                                                      "instances WHERE status == ? AND user_port NOT IN"
@@ -35,7 +35,7 @@ namespace sqlite
 
     constexpr const char *UPDATE_CURRENT_STATUS_IN_HP = "UPDATE instances SET current_status = ? WHERE name = ?";
 
-    constexpr const char *IS_CONTAINER_EXISTS = "SELECT * FROM instances WHERE name = ?";
+    constexpr const char *IS_CONTAINER_EXISTS = "SELECT status, peer_port, user_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
@@ -284,6 +284,8 @@ namespace sqlite
             const std::vector<table_column_info> columns{
                 table_column_info("owner_pubkey", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("time", COLUMN_DATA_TYPE::INT),
+                table_column_info("user_id", COLUMN_DATA_TYPE::INT),
+                table_column_info("username", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("status", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("current_status", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
@@ -313,13 +315,15 @@ namespace sqlite
         if (sqlite3_prepare_v2(db, INSERT_INTO_HP_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
             sqlite3_bind_text(stmt, 1, info.owner_pubkey.data(), info.owner_pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 2, util::get_epoch_milliseconds()) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 3, info.status.data(), info.status.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 4, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 5, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_int64(stmt, 6, info.assigned_ports.peer_port) == SQLITE_OK &&
-            sqlite3_bind_int64(stmt, 7, info.assigned_ports.user_port) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 8, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 9, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 3, info.user_id) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 4, info.username.data(), info.username.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 5, info.status.data(), info.status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 6, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 7, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 8, info.assigned_ports.peer_port) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 9, info.assigned_ports.user_port) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 10, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 11, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
         {
             sqlite3_finalize(stmt);
@@ -346,9 +350,9 @@ namespace sqlite
             sqlite3_step(stmt) == SQLITE_ROW)
         {
             // Populate only the necessary fields.
-            info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
-            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 6);
-            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 7);
+            info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
+            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 1);
+            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);

@@ -174,6 +174,8 @@ namespace comm
                 return -1;
             id = msg.id;
             hp::instance_info info;
+            info.user_id = 1000;
+            info.username = "savinda";
             if (hp::create_new_instance(info, msg.pubkey) == -1)
                 return -1;
 

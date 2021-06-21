@@ -10,61 +10,63 @@ namespace hpfs
 
     /**
      * Starts the hpfs process for the instance.
+     * @param user_id ID of the instance user.
      * @param fs_dir File system directory
      * @param mount_dir Mount directory.
      * @param log_level Log level for the hpfs.
      * @param merge Whether changes are needed to be merged.
      * @return -1 on error, pid of the spawned hpfs process if success.
      */
-    int start_hpfs_process(std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge)
+    int start_hpfs_process(const int user_id, std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge)
     {
         const pid_t pid = fork();
-        if (pid > 0)
-        {
-            // Sashimono process.
+        // if (pid > 0)
+        // {
+        //     // Sashimono process.
 
-            LOG_DEBUG << "Starting hpfs process at " << mount_dir << ".";
+        //     LOG_DEBUG << "Starting hpfs process at " << mount_dir << ".";
 
-            // Wait until hpfs is initialized properly.
-            const uint16_t max_retries = HPFS_PROCESS_INIT_TIMEOUT / HPFS_INIT_CHECK_INTERVAL;
-            bool hpfs_initialized = false;
-            uint16_t retry_count = 0;
-            do
-            {
-                util::sleep(HPFS_INIT_CHECK_INTERVAL);
+        //     // Wait until hpfs is initialized properly.
+        //     const uint16_t max_retries = HPFS_PROCESS_INIT_TIMEOUT / HPFS_INIT_CHECK_INTERVAL;
+        //     bool hpfs_initialized = false;
+        //     uint16_t retry_count = 0;
+        //     do
+        //     {
+        //         util::sleep(HPFS_INIT_CHECK_INTERVAL);
 
-                // Check if hpfs process is still running.
-                // Sending signal 0 to test whether process exist.
-                if (util::kill_process(pid, false, 0) == -1)
-                {
-                    LOG_ERROR << "hpfs process " << pid << " has stopped.";
-                    break;
-                }
+        //         // Check if hpfs process is still running.
+        //         // Sending signal 0 to test whether process exist.
+        //         if (util::kill_process(pid, false, 0) == -1)
+        //         {
+        //             LOG_ERROR << "hpfs process " << pid << " has stopped.";
+        //             break;
+        //         }
 
-                // We check for the specific inode no. of the mounted root dir. That means hpfs FUSE interface is up.
-                struct stat st;
-                if (stat(mount_dir.data(), &st) == -1)
-                {
-                    LOG_ERROR << errno << ": Error in checking hpfs status at mount " << mount_dir << ".";
-                    break;
-                }
+        //         // We check for the specific inode no. of the mounted root dir. That means hpfs FUSE interface is up.
+        //         struct stat st;
+        //         if (stat(mount_dir.data(), &st) == -1)
+        //         {
+        //             LOG_ERROR << errno << ": Error in checking hpfs status at mount " << mount_dir << ".";
+        //             break;
+        //         }
 
-                hpfs_initialized = (st.st_ino == ROOT_INO);
-                // Keep retrying until root inode no. matches or timeout occurs.
+        //         hpfs_initialized = (st.st_ino == ROOT_INO);
+        //         // Keep retrying until root inode no. matches or timeout occurs.
 
-            } while (!hpfs_initialized && ++retry_count <= max_retries);
+        //     } while (!hpfs_initialized && ++retry_count <= max_retries);
 
-            // Kill the process if hpfs couldn't be initialized properly.
-            if (!hpfs_initialized)
-            {
-                LOG_ERROR << "Couldn't initialize hpfs process at mount " << mount_dir << ".";
-                util::kill_process(pid, true);
-                return -1;
-            }
+        //     // Kill the process if hpfs couldn't be initialized properly.
+        //     if (!hpfs_initialized)
+        //     {
+        //         LOG_ERROR << "Couldn't initialize hpfs process at mount " << mount_dir << ".";
+        //         util::kill_process(pid, true);
+        //         return -1;
+        //     }
 
-            LOG_DEBUG << "hpfs process started. pid:" << pid;
-        }
-        else if (pid == 0)
+        //     LOG_DEBUG << "hpfs process started. pid:" << pid;
+        // }
+        // else
+        if (pid == 0)
         {
             // hpfs process.
             util::fork_detach();
@@ -85,22 +87,24 @@ namespace hpfs
                 (char *)(merge ? "merge=true" : "merge=false"),
                 (char *)trace_arg.data(),
                 NULL};
-
+            
+            setuid(user_id);
             const int ret = execv(execv_args[0], execv_args);
             std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";
             exit(1);
         }
-        else
-        {
-            LOG_ERROR << errno << ": fork() failed when starting hpfs process at mount " << mount_dir << ".";
-            return -1;
-        }
+        // else
+        // {
+        //     LOG_ERROR << errno << ": fork() failed when starting hpfs process at mount " << mount_dir << ".";
+        //     return -1;
+        // }
 
         return pid;
     }
 
     /**
      * Creates hpfs processes for the instance.
+     * @param user_id ID of the instance user.
      * @param contract_dir Contract directory.
      * @param log_level Log level for hpfs.
      * @param is_full_history Whether hpfs instances are for full history node.
@@ -108,17 +112,19 @@ namespace hpfs
      * @return -1 on error and 0 on success and pids will be populated.
      * 
     */
-    int start_fs_processes(std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
+   int start_fs_processes(const int user_id, std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
     {
-        const std::string contract_fs_path = conf::cfg.hp.instance_folder + "/" + (const char *)contract_dir.data() + "/contract_fs";
-        if (start_hpfs_process(contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
+        std::string contract_fs_path(contract_dir);
+        contract_fs_path.append("/contract_fs");
+        if (start_hpfs_process(user_id, contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting contract_fs processes - " << contract_dir;
             return -1;
         }
 
-        const std::string ledger_fs_path = conf::cfg.hp.instance_folder + "/" + (const char *)contract_dir.data() + "/ledger_fs";
-        if (start_hpfs_process(ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
+        std::string ledger_fs_path(contract_dir);
+        ledger_fs_path.append("/ledger_fs");
+        if (start_hpfs_process(user_id, ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting ledger_fs processes - " << contract_dir;
             return -1;

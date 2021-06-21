@@ -30,8 +30,11 @@ namespace hp
 
     struct instance_info
     {
+        std::string user_id;
+        std::string username;
         std::string owner_pubkey;
-        std::string name;
+        std::string container_name;
+        std::string contract_dir;
         std::string ip;
         std::string pubkey;
         std::string contract_id;
@@ -52,15 +55,15 @@ namespace hp
     void deinit();
     void hp_monitor_loop();
     int create_new_instance(instance_info &info, std::string_view owner_pubkey);
-    int run_container(const std::string &folder_name, const ports &assigned_ports);
-    int start_container(const std::string &container_name);
-    int docker_start(const std::string &container_name);
-    int stop_container(const std::string &container_name);
-    int destroy_container(const std::string &container_name);
+    int run_container(const int user_id, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
+    int start_container(const int user_id, std::string_view container_name, std::string_view contract_dir);
+    int docker_start(const int user_id, std::string_view container_name);
+    int stop_container(const int user_id, std::string_view container_name);
+    int destroy_container(const int user_id, std::string_view container_name, std::string_view contract_dir);
     void kill_all_containers();
-    int create_contract(instance_info &info, const std::string &folder_name, std::string_view owner_pubkey, const ports &assigned_ports);
+    int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info);
     int write_json_file(const int fd, const jsoncons::ojson &d);
-    int check_instance_status(std::string_view name, std::string &status);
-    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool &is_full_history);
+    int check_instance_status(const int user_id, std::string_view container_name, std::string &status);
+    int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history);
 } // namespace hp
 #endif

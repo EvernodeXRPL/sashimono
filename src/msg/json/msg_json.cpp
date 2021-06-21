@@ -279,7 +279,7 @@ namespace msg::json
         msg += SEP_COMMA;
         msg += "name";
         msg += SEP_COLON;
-        msg += info.name;
+        msg += info.container_name;
         msg += SEP_COMMA;
         msg += "ip";
         msg += SEP_COLON;

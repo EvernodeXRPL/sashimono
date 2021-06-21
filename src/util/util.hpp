@@ -34,6 +34,10 @@ namespace util
 
     int kill_process(const pid_t pid, const bool wait, const int signal = SIGINT);
 
+    void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter);
+
+    int stoull(const std::string &str, uint64_t &result);
+
 } // namespace util
 
 #endif

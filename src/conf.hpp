@@ -56,7 +56,6 @@ namespace conf
 
     struct hp_config
     {
-        std::string instance_folder;
         uint16_t init_peer_port;
         uint16_t init_user_port;
     };
@@ -86,6 +85,9 @@ namespace conf
         std::string hpfs_exe_path;         // hpfs executable file path.
         std::string default_contract_path; // Path to default contract.
 
+        std::string user_install_sh;
+        std::string user_uninstall_sh;
+        
         std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.

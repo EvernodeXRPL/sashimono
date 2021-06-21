@@ -212,4 +212,51 @@ namespace util
         return 0;
     }
 
+    /**
+     * Split string by given delimeter.
+     * @param collection Splitted strings params.
+     * @param delimeter Delimeter to split string.
+    */
+    void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter)
+    {
+        if (str.empty())
+            return;
+
+        size_t start = 0;
+        size_t end = str.find(delimeter);
+
+        while (end != std::string::npos)
+        {
+            // Do not add empty strings.
+            if (start != end)
+                collection.push_back(std::string(str.substr(start, end - start)));
+            start = end + delimeter.length();
+            end = str.find(delimeter, start);
+        }
+
+        // If there are any leftover from the source string add the remaining.
+        if (start < str.size())
+            collection.push_back(std::string(str.substr(start)));
+    }
+
+    /**
+     * Converts given string to a uint_64. A wrapper function for std::stoull. 
+     * @param str String variable.
+     * @param result Variable to store the answer from the conversion.
+     * @return Returns 0 in a successful conversion and -1 on error.
+    */
+    int stoull(const std::string &str, uint64_t &result)
+    {
+        try
+        {
+            result = std::stoull(str);
+        }
+        catch (const std::exception &e)
+        {
+            // Return -1 if any exceptions are captured.
+            return -1;
+        }
+        return 0;
+    }
+
 } // namespace util

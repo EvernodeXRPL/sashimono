@@ -39,6 +39,8 @@ namespace sqlite
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
+    constexpr const char *GET_RUNNING_INSTANCE_UID_NAME_LIST = "SELECT user_id,name FROM instances WHERE status = ?";
+
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
     /**
@@ -318,7 +320,7 @@ namespace sqlite
             sqlite3_bind_int64(stmt, 3, info.user_id) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 4, info.username.data(), info.username.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 5, info.status.data(), info.status.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 6, info.name.data(), info.name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 6, info.container_name.data(), info.container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 7, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 8, info.assigned_ports.peer_port) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 9, info.assigned_ports.user_port) == SQLITE_OK &&
@@ -482,6 +484,33 @@ namespace sqlite
             {
                 const std::string name(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
                 running_instance_names.push_back(name);
+            }
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+    }
+
+    /**
+     * Populate the given vector with names of running hp instances.
+     * @param db Database connection.
+     * @param running_instances Vector to hold user id and name of instances.
+    */
+    void get_running_instance_uid_name_list(sqlite3 *db, std::vector<std::pair<const int, const std::string>> &running_instances)
+    {
+        running_instances.clear();
+
+        sqlite3_stmt *stmt;
+        std::string_view running_status(hp::CONTAINER_STATES[hp::STATES::RUNNING]);
+
+        if (sqlite3_prepare_v2(db, GET_RUNNING_INSTANCE_NAMES, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, running_status.data(), running_status.length(), SQLITE_STATIC) == SQLITE_OK)
+        {
+            while (stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
+            {
+                const int user_id = sqlite3_column_int(stmt, 0);
+                const std::string name(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
+                running_instances.push_back({user_id, name});
             }
         }
 

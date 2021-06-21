@@ -106,6 +106,8 @@ namespace conf
         ctx.exe_dir = dirname(exepath.data());
         ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
+        ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
+        ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
         ctx.default_contract_path = ctx.exe_dir + "/default_contract";
         ctx.config_dir = ctx.exe_dir + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
@@ -119,12 +121,14 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[5] = {
+        const std::string paths[7] = {
             ctx.config_file,
             ctx.log_dir,
             ctx.data_dir,
             ctx.hpws_exe_path,
-            ctx.default_contract_path};
+            ctx.default_contract_path,
+            ctx.user_install_sh,
+            ctx.user_uninstall_sh};
 
         for (const std::string &path : paths)
         {
@@ -198,19 +202,7 @@ namespace conf
             try
             {
                 const jsoncons::ojson &hp = d["hp"];
-                // Check whether the instance_folder is specified.
-                cfg.hp.instance_folder = hp["instance_folder"].as<std::string>();
-                if (cfg.hp.instance_folder.empty())
-                {
-                    std::cerr << "Hp instance folder path is missing.\n";
-                    return -1;
-                }
-                else if (!util::is_dir_exists(cfg.hp.instance_folder))
-                {
-                    std::cerr << "Hp instance folder does not exist.\n";
-                    return -1;
-                }
-
+                
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
                 {
@@ -322,7 +314,6 @@ namespace conf
         // Hp configs.
         {
             jsoncons::ojson hp_config;
-            hp_config.insert_or_assign("instance_folder", cfg.hp.instance_folder);
             hp_config.insert_or_assign("init_peer_port", cfg.hp.init_peer_port);
             hp_config.insert_or_assign("init_user_port", cfg.hp.init_user_port);
 

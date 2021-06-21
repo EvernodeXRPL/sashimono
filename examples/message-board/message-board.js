@@ -71,7 +71,7 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',
-                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613'
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
                             }));
                             break;
                         case 'destroy':
@@ -79,7 +79,7 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'destroy',
-                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                 container_name: containerName
                             }))
                             break;
@@ -88,7 +88,7 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'start',
-                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                 container_name: containerName
                             }))
                             break;
@@ -97,7 +97,7 @@ server.listen(8080, () => {
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'stop',
-                                owner_pubkey: 'ed7a4b931bdc5dd79b77a8b6ac293d998c123db42bb3ec2613',
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                 container_name: containerName
                             }))
                             break;

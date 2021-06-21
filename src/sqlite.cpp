@@ -347,8 +347,8 @@ namespace sqlite
         {
             // Populate only the necessary fields.
             info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2)));
-            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 5);
-            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 6);
+            info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 6);
+            info.assigned_ports.user_port = sqlite3_column_int64(stmt, 7);
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);

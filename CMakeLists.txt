@@ -21,6 +21,7 @@ add_executable(sagent
     src/crypto.cpp
     src/sqlite.cpp
     src/hp_manager.cpp
+    src/hpfs_manager.cpp
     src/msg/msg_parser.cpp
     src/msg/json/msg_json.cpp
     src/main.cpp
@@ -36,7 +37,9 @@ target_link_libraries(sagent
 
 add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./dependencies/bin/hpws ./build/
+    COMMAND cp ./dependencies/bin/hpfs ./build/
     COMMAND cp -r ./dependencies/default_contract ./build/
+    COMMAND cp ./bootstrap-contract/script.sh ./build/default_contract/contract_fs/seed/state/script.sh
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

@@ -5,7 +5,7 @@ sashimono_bin=/usr/bin/sashimono-agent
 
 # Uninstall all contract instance users
 prefix="sashi"
-users=$(cut -d: -f1 /etc/passwd | grep "^$prefix")
+users=$(cut -d: -f1 /etc/passwd | grep "^$prefix" | sort)
 readarray -t userarr <<<"$users"
 validusers=()
 for user in "${userarr[@]}"
@@ -28,7 +28,8 @@ if [ $ucount -gt 0 ]; then
         echo "Deleting $ucount contract instances..."
         for user in "${validusers[@]}"
         do
-           $(pwd)/user-uninstall.sh $user
+           output=$($(pwd)/user-uninstall.sh $user | tee /dev/stderr)
+           [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
         done
     else
         echo "Uninstall cancelled."
@@ -40,3 +41,4 @@ echo "Deleting binaries..."
 rm -r $sashimono_bin
 
 echo "Done."
+exit 0

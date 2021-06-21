@@ -8,8 +8,6 @@ namespace hpfs
     constexpr uint16_t HPFS_PROCESS_INIT_TIMEOUT = 2000;
     constexpr uint16_t HPFS_INIT_CHECK_INTERVAL = 20;
 
-    constexpr const char *FS_START = "%s fs %s %s merge=%s trace=%s";
-
     /**
      * Starts the hpfs process for the instance.
      * @param fs_dir File system directory
@@ -71,17 +69,24 @@ namespace hpfs
             // hpfs process.
             util::fork_detach();
 
-            const int len = 25 + conf::ctx.hpfs_exe_path.length() + fs_dir.length() + mount_dir.length() + log_level.length();
-            char command[len];
-            sprintf(command, FS_START, conf::ctx.hpfs_exe_path.data(), fs_dir.data(), mount_dir.data(), merge ? "true" : "false", log_level.data());
-
             // Detach hpfs terminal outputs from the sagent terminal, These will be printed in the trace log of particular hpfs mount.
             int fd = open("/dev/null", O_WRONLY);
             dup2(fd, STDOUT_FILENO);
             dup2(fd, STDERR_FILENO);
             close(fd);
 
-            system(command);
+            std::string trace_arg = "trace=";
+            trace_arg.append(log_level);
+            char *execv_args[] = {
+                conf::ctx.hpfs_exe_path.data(),
+                (char *)"fs",
+                (char *)fs_dir.data(),
+                (char *)mount_dir.data(),
+                (char *)(merge ? "merge=true" : "merge=false"),
+                (char *)trace_arg.data(),
+                NULL};
+
+            const int ret = execv(execv_args[0], execv_args);
             std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";
             exit(1);
         }

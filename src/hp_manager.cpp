@@ -174,13 +174,13 @@ namespace hp
         }
         else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
         {
-            std::string error = params.at(0);
+            const std::string error = params.at(0);
             LOG_ERROR << "User creation error : " << error;
             return -1;
         }
         else
         {
-            std::string error = params.at(0);
+            const std::string error = params.at(0);
             LOG_ERROR << "Unknown user creation error : " << error;
             return -1;
         }
@@ -259,9 +259,10 @@ namespace hp
         char command[len];
         sprintf(command, DOCKER_STOP, info.username.data(), container_name.data());
 
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
-            hpfs::stop_fs_processes(info.username) == -1)
+            hpfs::stop_fs_processes(info.username, contract_dir) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -338,9 +339,11 @@ namespace hp
         const int len = 100 + info.username.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
+
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            hpfs::stop_fs_processes(info.username) == -1)
+            hpfs::stop_fs_processes(info.username, contract_dir) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;

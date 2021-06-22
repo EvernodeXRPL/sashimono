@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <sqlite3.h>
+#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>

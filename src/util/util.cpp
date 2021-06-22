@@ -264,9 +264,9 @@ namespace util
      * @param username Username of the user.
      * @return Contract directory path.
     */
-    const std::string get_user_contract_dir(const std::string &username)
+    const std::string get_user_contract_dir(const std::string &username, std::string_view container_name)
     {
-        return "/home/" + username + "/contract";
+        return "/home/" + username + "/" + container_name.data();
     }
 
     int get_system_user_info(std::string_view username, user_info &user_info)
@@ -275,7 +275,7 @@ namespace util
 
         if (pwd == NULL)
         {
-            LOG_ERROR << errno << ": Error int getpwnam " << username;
+            LOG_ERROR << errno << ": Error in getpwnam " << username;
             return -1;
         }
 

@@ -62,6 +62,6 @@ namespace hp
     int write_json_file(const int fd, const jsoncons::ojson &d);
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status);
     int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history);
-    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params);
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param = {});
 } // namespace hp
 #endif

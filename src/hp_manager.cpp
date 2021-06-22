@@ -36,7 +36,7 @@ namespace hp
     constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
-    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s"; // Enable execute permission before running in case bash script does not have the permission.
+    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
 
     /**
      * Initialize hp related environment.
@@ -186,8 +186,8 @@ namespace hp
         }
 
         // TODO: user home can be obtained by eval echo "~$USER"
-        const std::string contract_dir = util::get_user_contract_dir(username);
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
+        const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
         std::string hpfs_log_level;
         bool is_full_history;
@@ -292,7 +292,7 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
-        const std::string contract_dir = util::get_user_contract_dir(info.username);
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1 ||
             docker_start(info.username, container_name) != 0 ||
@@ -307,7 +307,7 @@ namespace hp
 
     /**
      * Execute docker start <container_name> command.
-     * @param uasername Username of the instance user.
+     * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
     */
@@ -338,7 +338,6 @@ namespace hp
         const int len = 100 + info.username.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
-        const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
             hpfs::stop_fs_processes(info.username) == -1)
@@ -352,21 +351,23 @@ namespace hp
 
         // Remove all the users after destroying.
         std::vector<std::string> params;
-        if (execute_bash_file(conf::ctx.user_uninstall_sh, params) == -1)
+        if (execute_bash_file(conf::ctx.user_uninstall_sh, params, info.username) == -1)
             return -1;
 
+        // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
         {
-            if (util::remove_directory_recursively(contract_dir) == -1)
-            {
-                LOG_ERROR << errno << ": Error while clearing user directories";
-                return -1;
-            }
+            // if (util::remove_directory_recursively(contract_dir) == -1)
+            // {
+            //     LOG_ERROR << errno << ": Error while clearing user directories";
+            //     return -1;
+            // }
+            return 0;
         }
         if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
         {
             std::string error = params.at(0);
-            LOG_ERROR << "User creation error : " << error;
+            LOG_ERROR << "User removing error : " << error;
             return -1;
         }
         else
@@ -473,6 +474,7 @@ namespace hp
             return -1;
         }
 
+        info.owner_pubkey = owner_pubkey;
         info.username = username;
         info.contract_dir = contract_dir;
         info.ip = "localhost";
@@ -631,12 +633,13 @@ namespace hp
      * Executes the given bash file and populates final comma seperated output into a vector.
      * @param file_name Name of the bash script.
      * @param output_params Final output of the bash script.
+     * @param input_param Input parameter to the bash script (Optional).
     */
-    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params)
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param)
     {
-        const int len = 22 + (file_name.length() * 2);
+        const int len = 23 + (file_name.length() * 2) + input_param.length();
         char command[len];
-        sprintf(command, RUN_SH, file_name.data(), file_name.data());
+        sprintf(command, RUN_SH, file_name.data(), file_name.data(), input_param.empty() ? "\0" : input_param.data());
 
         FILE *fpipe = popen(command, "r");
         if (fpipe == NULL)

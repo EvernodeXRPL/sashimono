@@ -28,12 +28,12 @@ namespace hp
     // This postfix is used for the container name. Ex: sashi1-hpcontainer.
     constexpr const char *CONTAINER_POSTFIX = "-hpcontainer";
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-    constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
+    constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract ravinsp/hotpocket:ubt.20.04 run /contract";
-    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
-    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
-    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
-    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/%s/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
+    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
+    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
+    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
+    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
     constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s"; // Enable execute permission before running in case bash script does not have the permission.
@@ -85,7 +85,7 @@ namespace hp
     void hp_monitor_loop()
     {
         LOG_INFO << "HP instance monitor started.";
-        std::vector<std::pair<const int, const std::string>> running_instances;
+        std::vector<std::pair<const std::string, const std::string>> running_instances;
 
         util::mask_signal();
 
@@ -97,14 +97,14 @@ namespace hp
             // time until the app closes in a SIGINT.
             if (counter == 0 || counter == 600)
             {
-                sqlite::get_running_instance_uid_name_list(db, running_instances);
-                for (const auto &[uid, name] : running_instances)
+                sqlite::get_running_instance_user_and_name_list(db, running_instances);
+                for (const auto &[username, name] : running_instances)
                 {
                     std::string status;
-                    const int res = check_instance_status(uid, name, status);
+                    const int res = check_instance_status(username, name, status);
                     if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
                     {
-                        if (docker_start(uid, name) == -1)
+                        if (docker_start(username, name) == -1)
                         {
                             // We only change the current status variable from the monitor loop.
                             // We try to start this container in next iteration as well untill the desired state is achieved.
@@ -193,8 +193,8 @@ namespace hp
         bool is_full_history;
         if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) != 0 ||
             read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(user_id, contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            run_container(user_id, container_name, contract_dir, instance_ports, info) != 0 || // Gives 3200 if docker failed.
+            hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1 ||
+            run_container(username, container_name, contract_dir, instance_ports, info) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
             LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
@@ -211,27 +211,25 @@ namespace hp
 
     /**
      * Runs a hotpocket docker image on the given contract and the ports.
-     * @param user_id ID of the instance user.
+     * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @param contract_dir Directory for the contract.
      * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int run_container(const int user_id, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
+    int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
-        const std::string user_id_str = std::to_string(user_id);
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 297 + user_id_str.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 297 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
-        sprintf(command, DOCKER_RUN, user_id_str.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        sprintf(command, DOCKER_RUN, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
             return -1;
         }
 
-        info.user_id = user_id;
         info.container_name = container_name;
         info.contract_dir = contract_dir;
         return 0;
@@ -257,12 +255,13 @@ namespace hp
             return -1;
         }
 
-        const std::string user_id_str = std::to_string(info.user_id);
-        const int len = 54 + user_id_str.length() + container_name.length();
+        const int len = 99 + info.username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STOP, user_id_str.data(), container_name.data());
+        sprintf(command, DOCKER_STOP, info.username.data(), container_name.data());
 
-        if (system(command) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
+        if (system(command) != 0 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -295,8 +294,8 @@ namespace hp
         bool is_full_history;
         const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(info.user_id, contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            docker_start(info.user_id, container_name) != 0 ||
+            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1 ||
+            docker_start(info.username, container_name) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
@@ -308,16 +307,15 @@ namespace hp
 
     /**
      * Execute docker start <container_name> command.
-     * @param user_id ID of the instance user.
+     * @param uasername Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
     */
-    int docker_start(const int user_id, std::string_view container_name)
+    int docker_start(std::string_view username, std::string_view container_name)
     {
-        const std::string user_id_str = std::to_string(user_id);
-        const int len = 56 + user_id_str.length() + container_name.length();
+        const int len = 100 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_START, user_id_str.data(), container_name.data());
+        sprintf(command, DOCKER_START, username.data(), container_name.data());
         const int res = system(command);
         return res == 0 ? 0 : -1;
     }
@@ -337,13 +335,13 @@ namespace hp
             return -1;
         }
 
-        const std::string user_id_str = std::to_string(info.user_id);
-        const int len = 56 + user_id_str.length() + container_name.length();
+        const int len = 100 + info.username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_REMOVE, user_id_str.data(), container_name.data());
+        sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
         const std::string contract_dir = util::get_user_contract_dir(info.username);
         if (system(command) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -351,8 +349,6 @@ namespace hp
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
-
-        // Need to kill hpfs processes before uninstalling the user.
 
         // Remove all the users after destroying.
         std::vector<std::string> params;
@@ -523,17 +519,16 @@ namespace hp
 
     /**
      * Check the status of the given container using docker inspect command.
-     * @param user_id ID of the instance user.
+     * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @param status The variable that holds the status of the container.
      * @return 0 on success and -1 on error.
     */
-    int check_instance_status(const int user_id, std::string_view container_name, std::string &status)
+    int check_instance_status(std::string_view username, std::string_view container_name, std::string &status)
     {
-        const std::string user_id_str = std::to_string(user_id);
-        const int len = 92 + user_id_str.length() + container_name.length();
+        const int len = 136 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STATUS, user_id_str.data(), container_name.data());
+        sprintf(command, DOCKER_STATUS, username.data(), container_name.data());
 
         FILE *fpipe = popen(command, "r");
 

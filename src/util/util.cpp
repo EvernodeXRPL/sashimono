@@ -269,4 +269,21 @@ namespace util
         return "/home/" + username + "/contract";
     }
 
+    int get_system_user_info(std::string_view username, user_info &user_info)
+    {
+        struct passwd *pwd = getpwnam(username.data());
+
+        if (pwd == NULL)
+        {
+            LOG_ERROR << errno << ": Error int getpwnam " << username;
+            return -1;
+        }
+
+        user_info.username = username;
+        user_info.user_id = pwd->pw_uid;
+        user_info.group_id = pwd->pw_gid;
+        user_info.home_dir = pwd->pw_dir;
+        return 0;
+    }
+
 } // namespace util

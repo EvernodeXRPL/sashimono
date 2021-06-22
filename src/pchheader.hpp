@@ -16,6 +16,7 @@
 #include <sqlite3.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <sodium.h>
 #include <unistd.h>
@@ -24,6 +25,7 @@
 #include <thread>
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
+#include <pwd.h>
 #include <readerwriterqueue/readerwriterqueue.h>
 
 #endif

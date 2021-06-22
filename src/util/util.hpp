@@ -8,6 +8,14 @@
  */
 namespace util
 {
+    struct user_info
+    {
+        std::string username;
+        int user_id;
+        int group_id;
+        std::string home_dir;
+    };
+
     const std::string to_hex(const std::string_view bin);
 
     const std::string to_bin(const std::string_view hex);
@@ -39,6 +47,8 @@ namespace util
     int stoi(const std::string &str, int &result);
 
     const std::string get_user_contract_dir(const std::string &username);
+
+    int get_system_user_info(std::string_view username, user_info &user_info);
 
 } // namespace util
 

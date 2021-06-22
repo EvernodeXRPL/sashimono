@@ -8,17 +8,23 @@ namespace hpfs
     constexpr uint16_t HPFS_PROCESS_INIT_TIMEOUT = 2000;
     constexpr uint16_t HPFS_INIT_CHECK_INTERVAL = 20;
 
+    constexpr const char *KILL_HPFS = "sudo -H -u %s kill -9 $(pidof hpfs)";
+
     /**
      * Starts the hpfs process for the instance.
-     * @param user_id ID of the instance user.
+     * @param username Username of the instance user.
      * @param fs_dir File system directory
      * @param mount_dir Mount directory.
      * @param log_level Log level for the hpfs.
      * @param merge Whether changes are needed to be merged.
      * @return -1 on error, pid of the spawned hpfs process if success.
      */
-    int start_hpfs_process(const int user_id, std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge)
+    int start_hpfs_process(std::string_view username, std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge)
     {
+        util::user_info user;
+        if (util::get_system_user_info(username, user) == -1)
+            return -1;
+
         const pid_t pid = fork();
         // if (pid > 0)
         // {
@@ -87,9 +93,9 @@ namespace hpfs
                 (char *)(merge ? "merge=true" : "merge=false"),
                 (char *)trace_arg.data(),
                 NULL};
-            
-            setgid(user_id);
-            setuid(user_id);
+
+            setgid(user.group_id);
+            setuid(user.user_id);
             const int ret = execv(execv_args[0], execv_args);
             std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";
             exit(1);
@@ -105,19 +111,18 @@ namespace hpfs
 
     /**
      * Creates hpfs processes for the instance.
-     * @param user_id ID of the instance user.
+     * @param username Username of the instance user.
      * @param contract_dir Contract directory.
      * @param log_level Log level for hpfs.
      * @param is_full_history Whether hpfs instances are for full history node.
-     * @param pids pids of the hpfs instances.
-     * @return -1 on error and 0 on success and pids will be populated.
+     * @return -1 on error and 0 on success.
      * 
     */
-   int start_fs_processes(const int user_id, std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
+    int start_fs_processes(std::string_view username, std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
     {
         std::string contract_fs_path(contract_dir);
         contract_fs_path.append("/contract_fs");
-        if (start_hpfs_process(user_id, contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
+        if (start_hpfs_process(username, contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting contract_fs processes - " << contract_dir;
             return -1;
@@ -125,9 +130,29 @@ namespace hpfs
 
         std::string ledger_fs_path(contract_dir);
         ledger_fs_path.append("/ledger_fs");
-        if (start_hpfs_process(user_id, ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
+        if (start_hpfs_process(username, ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting ledger_fs processes - " << contract_dir;
+            return -1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Stop hpfs processes of the instance.
+     * @param username Username of the instance user.
+     * @return -1 on error and 0 on success and pids will be populated.
+     * 
+    */
+    int stop_fs_processes(std::string_view username)
+    {
+        const int len = 34 + username.length();
+        char command[len];
+        sprintf(command, KILL_HPFS, username.data());
+        if (system(command) != 0)
+        {
+            LOG_ERROR << "Error when stopping hpfs processes. username: " << username;
             return -1;
         }
 

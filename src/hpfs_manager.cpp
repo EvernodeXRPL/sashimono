@@ -4,10 +4,6 @@
 
 namespace hpfs
 {
-    constexpr ino_t ROOT_INO = 1;
-    constexpr uint16_t HPFS_PROCESS_INIT_TIMEOUT = 2000;
-    constexpr uint16_t HPFS_INIT_CHECK_INTERVAL = 20;
-
     constexpr const char *KILL_HPFS = "sudo -H -u %s kill -9 $(pidof hpfs)";
 
     /**
@@ -17,7 +13,14 @@ namespace hpfs
     int stop_hpfs_process(std::string_view mount_dir)
     {
         // Umount the mount directory forcefully, need to be tested with MNT_DETACH flag.
-        return umount2(mount_dir.data(), MNT_FORCE);
+        if (umount2(mount_dir.data(), MNT_DETACH) == -1)
+        {
+            LOG_DEBUG << errno << ": Error unmounting hpfs process. mount:" << mount_dir;
+            return 0;
+        }
+
+        LOG_DEBUG << "hpfs process stopped. mount:" << mount_dir;
+        return 0;
     }
 
     /**
@@ -36,8 +39,15 @@ namespace hpfs
             return -1;
 
         const pid_t pid = fork();
+
+        // This check for hpfs FUSE interface is commented out since hpfs fuse fs is running under the instance user.
+        // So the mount won't be accessible by the root, so stat sys call cannot be used.
         // if (pid > 0)
         // {
+        //     const ino_t ROOT_INO = 1;
+        //     const uint16_t HPFS_PROCESS_INIT_TIMEOUT = 2000;
+        //     const uint16_t HPFS_INIT_CHECK_INTERVAL = 20;
+
         //     // Sashimono process.
 
         //     LOG_DEBUG << "Starting hpfs process at " << mount_dir << ".";
@@ -81,7 +91,7 @@ namespace hpfs
 
         //     LOG_DEBUG << "hpfs process started. pid:" << pid;
         // }
-        // else
+
         if (pid == 0)
         {
             // hpfs process.
@@ -110,12 +120,13 @@ namespace hpfs
             std::cerr << errno << ": hpfs process start failed at mount " << mount_dir << ".\n";
             exit(1);
         }
-        // else
-        // {
-        //     LOG_ERROR << errno << ": fork() failed when starting hpfs process at mount " << mount_dir << ".";
-        //     return -1;
-        // }
+        else if (pid < 0)
+        {
+            LOG_ERROR << errno << ": fork() failed when starting hpfs process at mount " << mount_dir << ".";
+            return -1;
+        }
 
+        LOG_DEBUG << "hpfs process started. mount:" << mount_dir << ",pid : " << pid;
         return pid;
     }
 
@@ -140,7 +151,7 @@ namespace hpfs
 
         fs_path = contract_dir + "/ledger_fs";
         mnt_path = fs_path + "/mnt";
-        if (start_hpfs_process(username, fs_path, mnt_path + "/mnt", log_level, true) <= 0)
+        if (start_hpfs_process(username, fs_path, mnt_path, log_level, true) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting ledger_fs processes - " << contract_dir;
             return -1;
@@ -160,26 +171,20 @@ namespace hpfs
     {
         std::string mnt_path = contract_dir + "/contract_fs/mnt";
         if (stop_hpfs_process(mnt_path) == -1)
-        {
-            LOG_ERROR << errno << " : Error occured while umounting contract_fs - " << contract_dir;
             return -1;
-        }
 
         mnt_path = contract_dir + "/ledger_fs/mnt";
         if (stop_hpfs_process(mnt_path) == -1)
-        {
-            LOG_ERROR << errno << " : Error occured while umounting ledger_fs - " << contract_dir;
             return -1;
-        }
 
-        const int len = 34 + username.length();
-        char command[len];
-        sprintf(command, KILL_HPFS, username.data());
-        if (system(command) != 0)
-        {
-            LOG_ERROR << "Error when killing hpfs processes. username: " << username;
-            return -1;
-        }
+        // const int len = 34 + username.length();
+        // char command[len];
+        // sprintf(command, KILL_HPFS, username.data());
+        // if (system(command) != 0)
+        // {
+        //     LOG_ERROR << "Error when killing hpfs processes. username: " << username;
+        //     return -1;
+        // }
 
         return 0;
     }

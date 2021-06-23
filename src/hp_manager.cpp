@@ -194,11 +194,18 @@ namespace hp
         bool is_full_history;
         if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) != 0 ||
             read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            run_container(username, container_name, contract_dir, instance_ports, info) != 0 || // Gives 3200 if docker failed.
+            hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
+        {
+            LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            return -1;
+        }
+
+        if (run_container(username, container_name, contract_dir, instance_ports, info) != 0 || // Gives 3200 if docker failed.
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
+            LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
+            // Stop started hpfs processes if running instance failed.
+            hpfs::stop_fs_processes(username, contract_dir);
             return -1;
         }
 
@@ -296,11 +303,18 @@ namespace hp
         bool is_full_history;
         const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            docker_start(info.username, container_name) != 0 ||
+            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
+        {
+            LOG_ERROR << "Error when setting up container. name: " << container_name;
+            return -1;
+        }
+
+        if (docker_start(info.username, container_name) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started hpfs processes if starting instance failed.
+            hpfs::stop_fs_processes(info.username, contract_dir);
             return -1;
         }
 

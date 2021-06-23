@@ -29,12 +29,13 @@ namespace hp
     constexpr const char *CONTAINER_POSTFIX = "-hpcontainer";
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
-                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract ravinsp/hotpocket:ubt.20.04 run /contract";
+                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
     constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
+    constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
     constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
 
@@ -221,7 +222,7 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 297 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
         sprintf(command, DOCKER_RUN, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
@@ -392,17 +393,28 @@ namespace hp
     */
     int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info)
     {
-        int len = 8 + conf::ctx.default_contract_path.length() + contract_dir.length();
+        // Creating a temporary directory to do the config manipulations before moved to the contract dir.
+        // Folders inside /tmp directory will be cleaned after a reboot. So this will self cleanup folders
+        // that might be remaining due to another error in the workflow.
+        char templ[17] = "/tmp/sashiXXXXXX";
+        char * temp_foldername = mkdtemp(templ);
+        if (temp_foldername == NULL)
+        {
+            LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
+            return -1;
+        }
+        const std::string source_path = conf::ctx.default_contract_path + "/*";
+        int len = 25 + source_path.length();
         char cp_command[len];
-        sprintf(cp_command, COPY_DIR, conf::ctx.default_contract_path.data(), contract_dir.data());
+        sprintf(cp_command, COPY_DIR, source_path.data(), temp_foldername);
         if (system(cp_command) != 0)
         {
-            LOG_ERROR << "Default contract copying failed to " << contract_dir;
+            LOG_ERROR << "Default contract copying failed to " << temp_foldername;
             return -1;
         }
 
         // Read the config file into json document object.
-        std::string config_file_path(contract_dir);
+        std::string config_file_path(temp_foldername);
         config_file_path.append("/cfg/hp.cfg");
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
         if (config_fd == -1)
@@ -452,6 +464,7 @@ namespace hp
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
+        d["contract"]["bin_path"] = "bootstrap_contract";
         d["contract"]["bin_args"] = owner_pubkey;
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
@@ -465,6 +478,17 @@ namespace hp
         }
         close(config_fd);
 
+        // Move the contract to contract dir
+        len = 22 + contract_dir.length();
+        char mv_command[len];
+        sprintf(mv_command, MOVE_DIR, temp_foldername, contract_dir.data());
+        if (system(mv_command) != 0)
+        {
+            LOG_ERROR << "Default contract moving failed to " << contract_dir;
+            return -1;
+        }
+
+        // Transfer ownership to the instance user.
         len = 12 + (username.length() * 2) + contract_dir.length();
         char own_command[len];
         sprintf(own_command, CHOWN_DIR, username.data(), username.data(), contract_dir.data());

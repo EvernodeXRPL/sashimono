@@ -19,6 +19,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sodium.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>

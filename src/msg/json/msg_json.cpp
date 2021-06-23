@@ -256,6 +256,7 @@ namespace msg::json
      *              'reply_for': '<reply_for>'
      *              'type': '<message type>',
      *              "name": "<container name>"
+     *              "username": "<instance user name>""
      *              "ip": "<ip of the container>"
      *              "pubkey": "<public key of the contract>"
      *              "contract_id": "<contract id of the contract>"
@@ -280,6 +281,10 @@ namespace msg::json
         msg += "name";
         msg += SEP_COLON;
         msg += info.container_name;
+        msg += SEP_COMMA;
+        msg += "username";
+        msg += SEP_COLON;
+        msg += info.username;
         msg += SEP_COMMA;
         msg += "ip";
         msg += SEP_COLON;

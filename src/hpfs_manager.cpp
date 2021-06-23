@@ -4,24 +4,7 @@
 
 namespace hpfs
 {
-    constexpr const char *KILL_HPFS = "sudo -H -u %s kill -9 $(pidof hpfs)";
-
-    /**
-     * Stop the hpfs process of the instance.
-     * @param mount_dir Mount directory.
-     */
-    int stop_hpfs_process(std::string_view mount_dir)
-    {
-        // Umount the mount directory forcefully, need to be tested with MNT_DETACH flag.
-        if (umount2(mount_dir.data(), MNT_DETACH) == -1)
-        {
-            LOG_DEBUG << errno << ": Error unmounting hpfs process. mount:" << mount_dir;
-            return 0;
-        }
-
-        LOG_DEBUG << "hpfs process stopped. mount:" << mount_dir;
-        return 0;
-    }
+    constexpr const char *KILL_HPFS = "pkill -SIGINT -f hpfs -u %s";
 
     /**
      * Starts the hpfs process for the instance.
@@ -163,28 +146,19 @@ namespace hpfs
     /**
      * Stop hpfs processes of the instance.
      * @param username Username of the instance user.
-     * @param contract_dir Contract directory.
      * @return -1 on error and 0 on success and pids will be populated.
      * 
     */
-    int stop_fs_processes(std::string_view username, const std::string &contract_dir)
+    int stop_fs_processes(std::string_view username)
     {
-        std::string mnt_path = contract_dir + "/contract_fs/mnt";
-        if (stop_hpfs_process(mnt_path) == -1)
+        const int len = 33 + username.length();
+        char command[len];
+        sprintf(command, KILL_HPFS, username.data());
+        if (system(command) != 0)
+        {
+            LOG_ERROR << "Error when killing hpfs processes. username: " << username;
             return -1;
-
-        mnt_path = contract_dir + "/ledger_fs/mnt";
-        if (stop_hpfs_process(mnt_path) == -1)
-            return -1;
-
-        // const int len = 34 + username.length();
-        // char command[len];
-        // sprintf(command, KILL_HPFS, username.data());
-        // if (system(command) != 0)
-        // {
-        //     LOG_ERROR << "Error when killing hpfs processes. username: " << username;
-        //     return -1;
-        // }
+        }
 
         return 0;
     }

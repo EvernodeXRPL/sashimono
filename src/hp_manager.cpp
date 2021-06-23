@@ -205,7 +205,7 @@ namespace hp
         {
             LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
             // Stop started hpfs processes if running instance failed.
-            hpfs::stop_fs_processes(username, contract_dir);
+            hpfs::stop_fs_processes(username);
             return -1;
         }
 
@@ -270,7 +270,7 @@ namespace hp
         const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
-            hpfs::stop_fs_processes(info.username, contract_dir) == -1)
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -314,7 +314,7 @@ namespace hp
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started hpfs processes if starting instance failed.
-            hpfs::stop_fs_processes(info.username, contract_dir);
+            hpfs::stop_fs_processes(info.username);
             return -1;
         }
 
@@ -358,7 +358,7 @@ namespace hp
         const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            hpfs::stop_fs_processes(info.username, contract_dir) == -1)
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;

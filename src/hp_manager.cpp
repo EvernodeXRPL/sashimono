@@ -25,8 +25,6 @@ namespace hp
     std::thread hp_monitor_thread;
     bool is_shutting_down = false;
 
-    // This postfix is used for the container name. Ex: sashi1-hpcontainer.
-    constexpr const char *CONTAINER_POSTFIX = "-hpcontainer";
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
@@ -166,7 +164,7 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
-        if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) != 0 ||
+        if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) == -1 ||
             read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {
@@ -240,12 +238,7 @@ namespace hp
             return -1;
         }
 
-        const int len = 99 + info.username.length() + container_name.length();
-        char command[len];
-        sprintf(command, DOCKER_STOP, info.username.data(), container_name.data());
-
-        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
-        if (system(command) != 0 ||
+        if (docker_stop(info.username, container_name) == -1 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
             hpfs::stop_fs_processes(info.username) == -1)
         {
@@ -286,11 +279,19 @@ namespace hp
             return -1;
         }
 
-        if (docker_start(info.username, container_name) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        if (docker_start(info.username, container_name) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started hpfs processes if starting instance failed.
+            hpfs::stop_fs_processes(info.username);
+            return -1;
+        }
+
+        if (sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        {
+            LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started docker and hpfs processes if database update fails.
+            docker_stop(info.username, container_name);
             hpfs::stop_fs_processes(info.username);
             return -1;
         }
@@ -309,8 +310,22 @@ namespace hp
         const int len = 100 + username.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_START, username.data(), container_name.data());
-        const int res = system(command);
-        return res == 0 ? 0 : -1;
+        return system(command) == 0 ? 0 : -1;
+    }
+
+    /**
+     * Execute docker stop <container_name> command.
+     * @param username Username of the instance user.
+     * @param container_name Name of the container.
+     * @return 0 on successful execution and -1 on error.
+    */
+    int docker_stop(std::string_view username, std::string_view container_name)
+    {
+
+        const int len = 99 + username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_STOP, username.data(), container_name.data());
+        return system(command) == 0 ? 0 : -1;
     }
 
     /**
@@ -367,7 +382,7 @@ namespace hp
         // Folders inside /tmp directory will be cleaned after a reboot. So this will self cleanup folders
         // that might be remaining due to another error in the workflow.
         char templ[17] = "/tmp/sashiXXXXXX";
-        char * temp_foldername = mkdtemp(templ);
+        char *temp_foldername = mkdtemp(templ);
         if (temp_foldername == NULL)
         {
             LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
@@ -644,18 +659,11 @@ namespace hp
 
         char buffer[100];
         std::string output;
+
         // Only take the last cout string It contains the output of the execution.
-        try
-        {
-            while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
-                output = buffer;
-        }
-        catch (...)
-        {
-            pclose(fpipe);
-            LOG_ERROR << "Error on fgets for command " << std::string(command);
-            return -1;
-        }
+        while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+            output = buffer;
+
         pclose(fpipe);
 
         util::split_string(output_params, output, ",");

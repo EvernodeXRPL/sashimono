@@ -55,6 +55,7 @@ namespace hp
     int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
     int start_container(std::string_view container_name);
     int docker_start(std::string_view username, std::string_view container_name);
+    int docker_stop(std::string_view username, std::string_view container_name);
     int stop_container(std::string_view container_name);
     int destroy_container(std::string_view container_name);
     void kill_all_containers();

@@ -4,7 +4,7 @@
 
 namespace hpfs
 {
-    constexpr const char *KILL_HPFS = "pkill -SIGINT -f hpfs -u %s";
+    constexpr const char *PGREP_HPFS = "pgrep -f hpfs -u %s";
 
     /**
      * Starts the hpfs process for the instance.
@@ -146,17 +146,39 @@ namespace hpfs
     /**
      * Stop hpfs processes of the instance.
      * @param username Username of the instance user.
-     * @return -1 on error and 0 on success and pids will be populated.
+     * @return -1 on error and 0 on success.
      * 
     */
     int stop_fs_processes(std::string_view username)
     {
-        const int len = 33 + username.length();
+        const int len = 19 + username.length();
         char command[len];
-        sprintf(command, KILL_HPFS, username.data());
-        if (system(command) != 0)
+        sprintf(command, PGREP_HPFS, username.data());
+
+        FILE *fpipe = popen(command, "r");
+        if (fpipe == NULL)
         {
-            LOG_ERROR << "Error when killing hpfs processes. username: " << username;
+            LOG_ERROR << "Error on popen for command: " << std::string(command);
+            return -1;
+        }
+
+        char buffer[50];
+        int pid;
+
+        while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+        {
+            if(util::stoi(buffer, pid) == -1)
+            {
+                LOG_ERROR << "Error converting " << buffer << " to a valid pid.";
+                pclose(fpipe);
+                return -1;
+            }
+            util::kill_process(pid, true);
+        }
+
+        if (pclose(fpipe) != 0)
+        {
+            LOG_ERROR << errno << ": Error getting pids of hpfs for user: " << username;
             return -1;
         }
 

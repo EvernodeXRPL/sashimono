@@ -282,10 +282,10 @@ namespace msg::json
         msg += SEP_COLON;
         msg += info.container_name;
         msg += SEP_COMMA;
-        msg += "username";
-        msg += SEP_COLON;
-        msg += info.username;
-        msg += SEP_COMMA;
+        // msg += "username"; // Uncomment if username is required for debugging.
+        // msg += SEP_COLON;
+        // msg += info.username;
+        // msg += SEP_COMMA;
         msg += "ip";
         msg += SEP_COLON;
         msg += info.ip;

@@ -174,7 +174,7 @@ namespace hp
             return -1;
         }
 
-        if (run_container(username, container_name, contract_dir, instance_ports, info) != 0 || // Gives 3200 if docker failed.
+        if (run_container(username, container_name, contract_dir, instance_ports, info) == -1 ||
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
             LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
@@ -347,7 +347,6 @@ namespace hp
         char command[len];
         sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
 
-        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
             hpfs::stop_fs_processes(info.username) == -1)

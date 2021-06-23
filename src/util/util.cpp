@@ -271,7 +271,7 @@ namespace util
 
     int get_system_user_info(std::string_view username, user_info &user_info)
     {
-        struct passwd *pwd = getpwnam(username.data());
+        const struct passwd *pwd = getpwnam(username.data());
 
         if (pwd == NULL)
         {

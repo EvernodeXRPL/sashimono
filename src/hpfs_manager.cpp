@@ -11,6 +11,16 @@ namespace hpfs
     constexpr const char *KILL_HPFS = "sudo -H -u %s kill -9 $(pidof hpfs)";
 
     /**
+     * Stop the hpfs process of the instance.
+     * @param mount_dir Mount directory.
+     */
+    int stop_hpfs_process(std::string_view mount_dir)
+    {
+        // Umount the mount directory forcefully, need to be tested with MNT_DETACH flag.
+        return umount2(mount_dir.data(), MNT_FORCE);
+    }
+
+    /**
      * Starts the hpfs process for the instance.
      * @param username Username of the instance user.
      * @param fs_dir File system directory
@@ -118,19 +128,19 @@ namespace hpfs
      * @return -1 on error and 0 on success.
      * 
     */
-    int start_fs_processes(std::string_view username, std::string_view contract_dir, std::string_view log_level, const bool is_full_history)
+    int start_fs_processes(std::string_view username, const std::string &contract_dir, std::string_view log_level, const bool is_full_history)
     {
-        std::string contract_fs_path(contract_dir);
-        contract_fs_path.append("/contract_fs");
-        if (start_hpfs_process(username, contract_fs_path, contract_fs_path + "/mnt", log_level, !is_full_history) <= 0)
+        std::string fs_path = contract_dir + "/contract_fs";
+        std::string mnt_path = fs_path + "/mnt";
+        if (start_hpfs_process(username, fs_path, mnt_path, log_level, !is_full_history) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting contract_fs processes - " << contract_dir;
             return -1;
         }
 
-        std::string ledger_fs_path(contract_dir);
-        ledger_fs_path.append("/ledger_fs");
-        if (start_hpfs_process(username, ledger_fs_path, ledger_fs_path + "/mnt", log_level, true) <= 0)
+        fs_path = contract_dir + "/ledger_fs";
+        mnt_path = fs_path + "/mnt";
+        if (start_hpfs_process(username, fs_path, mnt_path + "/mnt", log_level, true) <= 0)
         {
             LOG_ERROR << errno << " : Error occured while starting ledger_fs processes - " << contract_dir;
             return -1;
@@ -142,17 +152,32 @@ namespace hpfs
     /**
      * Stop hpfs processes of the instance.
      * @param username Username of the instance user.
+     * @param contract_dir Contract directory.
      * @return -1 on error and 0 on success and pids will be populated.
      * 
     */
-    int stop_fs_processes(std::string_view username)
+    int stop_fs_processes(std::string_view username, const std::string &contract_dir)
     {
+        std::string mnt_path = contract_dir + "/contract_fs/mnt";
+        if (stop_hpfs_process(mnt_path) == -1)
+        {
+            LOG_ERROR << errno << " : Error occured while umounting contract_fs - " << contract_dir;
+            return -1;
+        }
+
+        mnt_path = contract_dir + "/ledger_fs/mnt";
+        if (stop_hpfs_process(mnt_path) == -1)
+        {
+            LOG_ERROR << errno << " : Error occured while umounting ledger_fs - " << contract_dir;
+            return -1;
+        }
+
         const int len = 34 + username.length();
         char command[len];
         sprintf(command, KILL_HPFS, username.data());
         if (system(command) != 0)
         {
-            LOG_ERROR << "Error when stopping hpfs processes. username: " << username;
+            LOG_ERROR << "Error when killing hpfs processes. username: " << username;
             return -1;
         }
 

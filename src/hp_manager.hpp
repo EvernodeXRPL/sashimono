@@ -63,5 +63,7 @@ namespace hp
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status);
     int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history);
     int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param = {});
+    int install_user(int &user_id, std::string &username);
+    int uninstall_user(std::string_view username);
 } // namespace hp
 #endif

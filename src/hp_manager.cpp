@@ -156,37 +156,11 @@ namespace hp
             instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
         }
 
-        std::vector<std::string> params;
-        if (execute_bash_file(conf::ctx.user_install_sh, params) == -1)
-            return -1;
-
         int user_id;
         std::string username;
-        std::string socket;
-        if (strncmp(params.at(params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
-        {
-            if (util::stoi(params.at(0), user_id) == -1)
-            {
-                LOG_ERROR << "Create user error: Invalid user id.";
-                return -1;
-            }
-            username = params.at(1);
-            socket = params.at(2);
-        }
-        else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
-        {
-            const std::string error = params.at(0);
-            LOG_ERROR << "User creation error : " << error;
+        if (install_user(user_id, username) == -1)
             return -1;
-        }
-        else
-        {
-            const std::string error = params.at(0);
-            LOG_ERROR << "Unknown user creation error : " << error;
-            return -1;
-        }
 
-        // TODO: user home can be obtained by eval echo "~$USER"
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
@@ -197,6 +171,8 @@ namespace hp
             hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {
             LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            // Remove user if instance creation failed.
+            uninstall_user(username);
             return -1;
         }
 
@@ -204,8 +180,9 @@ namespace hp
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
             LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
-            // Stop started hpfs processes if running instance failed.
+            // Stop started hpfs processes and remove user if running instance failed.
             hpfs::stop_fs_processes(username);
+            uninstall_user(username);
             return -1;
         }
 
@@ -367,33 +344,9 @@ namespace hp
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
 
-        // Remove all the users after destroying.
-        std::vector<std::string> params;
-        if (execute_bash_file(conf::ctx.user_uninstall_sh, params, info.username) == -1)
+        // Remove user after destroying.
+        if (uninstall_user(info.username) == -1)
             return -1;
-
-        // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
-        if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
-        {
-            // if (util::remove_directory_recursively(contract_dir) == -1)
-            // {
-            //     LOG_ERROR << errno << ": Error while clearing user directories";
-            //     return -1;
-            // }
-            return 0;
-        }
-        if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
-        {
-            std::string error = params.at(0);
-            LOG_ERROR << "User removing error : " << error;
-            return -1;
-        }
-        else
-        {
-            std::string error = params.at(0);
-            LOG_ERROR << "Unknown user creation error : " << error;
-            return -1;
-        }
 
         return 0;
     }
@@ -707,6 +660,72 @@ namespace hp
 
         util::split_string(output_params, output, ",");
         return 0;
+    }
+
+    /**
+     * Create new user and install dependencies and populate id and username.
+     * @param user_id Uid of the created user to be populated.
+     * @param username Username of the created user to be populated.
+    */
+    int install_user(int &user_id, std::string &username)
+    {
+        std::vector<std::string> params;
+        if (execute_bash_file(conf::ctx.user_install_sh, params) == -1)
+            return -1;
+
+        if (strncmp(params.at(params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
+        {
+            if (util::stoi(params.at(0), user_id) == -1)
+            {
+                LOG_ERROR << "Create user error: Invalid user id.";
+                return -1;
+            }
+            username = params.at(1);
+            LOG_DEBUG << "Created new user : " << username << ", uid : " << user_id;
+            return 0;
+        }
+        else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "User creation error : " << error;
+            return -1;
+        }
+        else
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "Unknown user creation error : " << error;
+            return -1;
+        }
+    }
+
+    /**
+     * Delete the given user and remove dependencies.
+     * @param username Username of the user to be deleted.
+    */
+    int uninstall_user(std::string_view username)
+    {
+        std::vector<std::string> params;
+        if (execute_bash_file(conf::ctx.user_uninstall_sh, params, username) == -1)
+            return -1;
+
+        // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
+        {
+            LOG_DEBUG << "Deleted the user : " << username;
+            return 0;
+        }
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "User removing error : " << error;
+            return -1;
+        }
+        else
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "Unknown user removing error : " << error;
+            return -1;
+        }
     }
 
 } // namespace hp

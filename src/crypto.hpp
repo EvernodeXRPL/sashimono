@@ -20,5 +20,7 @@ namespace crypto
     void generate_signing_keys(std::string &pubkey, std::string &seckey);
 
     const std::string generate_uuid();
+
+    const bool verify_uuid(const std::string &uuid);
 }
 #endif

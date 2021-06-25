@@ -46,10 +46,10 @@ const sendToAll = (msg) => {
     });
 }
 
-const askForContainerName = () => {
+const askForInput = (label) => {
     return new Promise(resolve => {
-        rl.question('Container name? ', (containerName) => {
-            resolve(containerName);
+        rl.question(`${label}? `, (input) => {
+            resolve(input);
         })
     })
 }
@@ -68,14 +68,16 @@ server.listen(8080, () => {
                 else {
                     switch (inp) {
                         case 'create':
+                            contractId = await askForInput('Contract ID');
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',
-                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
+                                contract_id: contractId
                             }));
                             break;
                         case 'destroy':
-                            containerName = await askForContainerName();
+                            containerName = await askForInput('Container Name');
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'destroy',
@@ -84,7 +86,7 @@ server.listen(8080, () => {
                             }))
                             break;
                         case 'start':
-                            containerName = await askForContainerName();
+                            containerName = await askForInput('Container Name');
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'start',
@@ -93,7 +95,7 @@ server.listen(8080, () => {
                             }))
                             break;
                         case 'stop':
-                            containerName = await askForContainerName();
+                            containerName = await askForInput('Container Name');
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'stop',

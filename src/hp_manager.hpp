@@ -51,7 +51,7 @@ namespace hp
     int init();
     void deinit();
     void hp_monitor_loop();
-    int create_new_instance(instance_info &info, std::string_view owner_pubkey);
+    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id);
     int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
     int start_container(std::string_view container_name);
     int docker_start(std::string_view username, std::string_view container_name);
@@ -59,7 +59,8 @@ namespace hp
     int stop_container(std::string_view container_name);
     int destroy_container(std::string_view container_name);
     void kill_all_containers();
-    int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info);
+    int create_contract(std::string_view username, std::string_view owner_pubkey, std::string_view contract_id,
+                        std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
     int write_json_file(const int fd, const jsoncons::ojson &d);
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status);
     int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history);

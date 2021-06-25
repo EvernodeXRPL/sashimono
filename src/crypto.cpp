@@ -60,4 +60,13 @@ namespace crypto
         const std::string hex = util::to_hex(rand_bytes);
         return hex.substr(0, 8) + "-" + hex.substr(8, 4) + "-" + hex.substr(12, 4) + "-" + hex.substr(16, 4) + "-" + hex.substr(20);
     }
+
+    const bool verify_uuid(const std::string &uuid)
+    {
+        if (uuid.empty() || uuid.length() != 36)
+            return false;
+
+        const std::regex pattern("^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-4[0-9A-Fa-f]{3}-[89ABab][0-9A-Fa-f]{3}-[0-9A-Fa-f]{12}$");
+        return std::regex_match(uuid, pattern);        
+    }
 }

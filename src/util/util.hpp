@@ -50,6 +50,8 @@ namespace util
 
     int get_system_user_info(std::string_view username, user_info &user_info);
 
+    void find_and_replace(std::string &str, std::string_view find, std::string_view replace);
+
 } // namespace util
 
 #endif

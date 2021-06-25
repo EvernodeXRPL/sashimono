@@ -187,9 +187,7 @@ namespace util
     {
         return nftw(
             dir_path.data(), [](const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
-            {
-                return remove(fpath);
-            },
+            { return remove(fpath); },
             1, FTW_DEPTH | FTW_PHYS);
     }
 
@@ -269,6 +267,12 @@ namespace util
         return "/home/" + username + "/" + container_name.data();
     }
 
+    /**
+     * Get system user info by given user name.
+     * @param username Username of the user.
+     * @param user_info User info struct to be populated.
+     * @return -1 of error, 0 on success.
+    */
     int get_system_user_info(std::string_view username, user_info &user_info)
     {
         const struct passwd *pwd = getpwnam(username.data());
@@ -284,6 +288,22 @@ namespace util
         user_info.group_id = pwd->pw_gid;
         user_info.home_dir = pwd->pw_dir;
         return 0;
+    }
+
+    /**
+     * Find and replace given substring inside a string.
+     * @param str String to be modified.
+     * @param find Substring to be searched.
+     * @param replace Substring to be replaced.
+    */
+    void find_and_replace(std::string &str, std::string_view find, std::string_view replace)
+    {
+        size_t pos = str.find(find);
+        while (pos != std::string::npos)
+        {
+            str.replace(pos, find.length(), replace);
+            pos = str.find(find);
+        }
     }
 
 } // namespace util

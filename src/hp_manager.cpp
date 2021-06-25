@@ -656,15 +656,23 @@ namespace hp
             return -1;
         }
 
-        char buffer[100];
+        char buffer[200];
         std::string output;
 
         // Only take the last cout string It contains the output of the execution.
         while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+        {
             output = buffer;
+            // Replace ending new line character at the end of the log line.
+            if (!output.empty())
+            {
+                if (output.back() == '\n')
+                    output.pop_back();
+                LOG_DEBUG << output;
+            }
+        }
 
         pclose(fpipe);
-
         util::split_string(output_params, output, ",");
         return 0;
     }

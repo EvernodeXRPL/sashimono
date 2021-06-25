@@ -187,9 +187,7 @@ namespace util
     {
         return nftw(
             dir_path.data(), [](const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
-            {
-                return remove(fpath);
-            },
+            { return remove(fpath); },
             1, FTW_DEPTH | FTW_PHYS);
     }
 
@@ -210,6 +208,102 @@ namespace util
         }
 
         return 0;
+    }
+
+    /**
+     * Split string by given delimeter.
+     * @param collection Splitted strings params.
+     * @param delimeter Delimeter to split string.
+    */
+    void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter)
+    {
+        if (str.empty())
+            return;
+
+        size_t start = 0;
+        size_t end = str.find(delimeter);
+
+        while (end != std::string::npos)
+        {
+            // Do not add empty strings.
+            if (start != end)
+                collection.push_back(std::string(str.substr(start, end - start)));
+            start = end + delimeter.length();
+            end = str.find(delimeter, start);
+        }
+
+        // If there are any leftover from the source string add the remaining.
+        if (start < str.size())
+            collection.push_back(std::string(str.substr(start)));
+    }
+
+    /**
+     * Converts given string to a int. A wrapper function for std::stoi. 
+     * @param str String variable.
+     * @param result Variable to store the answer from the conversion.
+     * @return Returns 0 in a successful conversion and -1 on error.
+    */
+    int stoi(const std::string &str, int &result)
+    {
+        try
+        {
+            result = std::stoi(str);
+        }
+        catch (const std::exception &e)
+        {
+            // Return -1 if any exceptions are captured.
+            return -1;
+        }
+        return 0;
+    }
+
+    /**
+     * Construct the user contract directory path when username is given.
+     * @param username Username of the user.
+     * @return Contract directory path.
+    */
+    const std::string get_user_contract_dir(const std::string &username, std::string_view container_name)
+    {
+        return "/home/" + username + "/" + container_name.data();
+    }
+
+    /**
+     * Get system user info by given user name.
+     * @param username Username of the user.
+     * @param user_info User info struct to be populated.
+     * @return -1 of error, 0 on success.
+    */
+    int get_system_user_info(std::string_view username, user_info &user_info)
+    {
+        const struct passwd *pwd = getpwnam(username.data());
+
+        if (pwd == NULL)
+        {
+            LOG_ERROR << errno << ": Error in getpwnam " << username;
+            return -1;
+        }
+
+        user_info.username = username;
+        user_info.user_id = pwd->pw_uid;
+        user_info.group_id = pwd->pw_gid;
+        user_info.home_dir = pwd->pw_dir;
+        return 0;
+    }
+
+    /**
+     * Find and replace given substring inside a string.
+     * @param str String to be modified.
+     * @param find Substring to be searched.
+     * @param replace Substring to be replaced.
+    */
+    void find_and_replace(std::string &str, std::string_view find, std::string_view replace)
+    {
+        size_t pos = str.find(find);
+        while (pos != std::string::npos)
+        {
+            str.replace(pos, find.length(), replace);
+            pos = str.find(find);
+        }
     }
 
 } // namespace util

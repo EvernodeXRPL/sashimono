@@ -5,7 +5,8 @@
 
 namespace hpfs
 {
-    int start_hpfs_process(std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge = true);
-    int start_fs_processes(std::string_view contract_dir, std::string_view log_level, const bool is_full_history);
+    int start_hpfs_process(std::string_view username, std::string_view fs_dir, std::string_view mount_dir, std::string_view log_level, const bool merge);
+    int start_fs_processes(std::string_view username, const std::string &contract_dir, std::string_view log_level, const bool is_full_history);
+    int stop_fs_processes(std::string_view username);
 } // namespace hpfs
 #endif

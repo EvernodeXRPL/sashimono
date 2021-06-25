@@ -8,6 +8,14 @@
  */
 namespace util
 {
+    struct user_info
+    {
+        std::string username;
+        int user_id;
+        int group_id;
+        std::string home_dir;
+    };
+
     const std::string to_hex(const std::string_view bin);
 
     const std::string to_bin(const std::string_view hex);
@@ -33,6 +41,16 @@ namespace util
     int remove_directory_recursively(std::string_view dir_path);
 
     int kill_process(const pid_t pid, const bool wait, const int signal = SIGINT);
+
+    void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter);
+
+    int stoi(const std::string &str, int &result);
+
+    const std::string get_user_contract_dir(const std::string &username, std::string_view container_name);
+
+    int get_system_user_info(std::string_view username, user_info &user_info);
+
+    void find_and_replace(std::string &str, std::string_view find, std::string_view replace);
 
 } // namespace util
 

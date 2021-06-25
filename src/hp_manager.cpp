@@ -25,6 +25,18 @@ namespace hp
     std::thread hp_monitor_thread;
     bool is_shutting_down = false;
 
+    // We instruct the demon to restart the container automatically once the container exits except manually stopping.
+    constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
+                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
+    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
+    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
+    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
+    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
+    constexpr const char *COPY_DIR = "cp -r %s %s";
+    constexpr const char *MOVE_DIR = "mv %s %s";
+    constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
+    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
+
     /**
      * Initialize hp related environment.
     */
@@ -72,7 +84,7 @@ namespace hp
     void hp_monitor_loop()
     {
         LOG_INFO << "HP instance monitor started.";
-        std::vector<std::string> running_instance_names;
+        std::vector<std::pair<const std::string, const std::string>> running_instances;
 
         util::mask_signal();
 
@@ -84,14 +96,14 @@ namespace hp
             // time until the app closes in a SIGINT.
             if (counter == 0 || counter == 600)
             {
-                sqlite::get_running_instance_names(db, running_instance_names);
-                for (const auto &name : running_instance_names)
+                sqlite::get_running_instance_user_and_name_list(db, running_instances);
+                for (const auto &[username, name] : running_instances)
                 {
                     std::string status;
-                    const int res = check_instance_status(name, status);
+                    const int res = check_instance_status(username, name, status);
                     if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
                     {
-                        if (docker_start(name) == -1)
+                        if (docker_start(username, name) == -1)
                         {
                             // We only change the current status variable from the monitor loop.
                             // We try to start this container in next iteration as well untill the desired state is achieved.
@@ -142,16 +154,33 @@ namespace hp
             instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
         }
 
-        const std::string name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
+        int user_id;
+        std::string username;
+        if (install_user(user_id, username) == -1)
+            return -1;
+
+        const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
+        const std::string contract_dir = util::get_user_contract_dir(username, container_name);
+
         std::string hpfs_log_level;
         bool is_full_history;
-        if (create_contract(info, name, owner_pubkey, instance_ports) != 0 ||
-            read_contract_cfg_values(name, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(name, hpfs_log_level, is_full_history) == -1 ||
-            run_container(name, instance_ports) != 0 || // Gives 3200 if docker failed.
+        if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) == -1 ||
+            read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
+            hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
+        {
+            LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            // Remove user if instance creation failed.
+            uninstall_user(username);
+            return -1;
+        }
+
+        if (run_container(username, container_name, contract_dir, instance_ports, info) == -1 ||
             sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            LOG_ERROR << errno << ": Error creating and running new hp instance for " << owner_pubkey;
+            LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
+            // Stop started hpfs processes and remove user if running instance failed.
+            hpfs::stop_fs_processes(username);
+            uninstall_user(username);
             return -1;
         }
 
@@ -165,24 +194,28 @@ namespace hp
 
     /**
      * Runs a hotpocket docker image on the given contract and the ports.
-     * @param folder_name Contract directory folder name.
+     * @param username Username of the instance user.
+     * @param container_name Name of the container.
+     * @param contract_dir Directory for the contract.
      * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int run_container(const std::string &folder_name, const ports &assigned_ports)
+    int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
-        // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-        const std::string command = "docker run -t -i -d --stop-signal=SIGINT --name=" + folder_name + " \
-                                            -p " +
-                                    std::to_string(assigned_ports.user_port) + ":" + std::to_string(assigned_ports.user_port) + " \
-                                            -p " +
-                                    std::to_string(assigned_ports.peer_port) + ":" + std::to_string(assigned_ports.peer_port) + " \
-                                            --restart unless-stopped --mount type=bind,source=" +
-                                    conf::cfg.hp.instance_folder + "/" +
-                                    folder_name + ",target=/contract \
-                                            hpcore:latest run /contract";
+        const std::string user_port = std::to_string(assigned_ports.user_port);
+        const std::string peer_port = std::to_string(assigned_ports.peer_port);
+        const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        char command[len];
+        sprintf(command, DOCKER_RUN, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        if (system(command) != 0)
+        {
+            LOG_ERROR << "Error when running container. name: " << container_name;
+            return -1;
+        }
 
-        return system(command.c_str());
+        info.container_name = container_name;
+        info.contract_dir = contract_dir;
+        return 0;
     }
 
     /**
@@ -190,7 +223,7 @@ namespace hp
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int stop_container(const std::string &container_name)
+    int stop_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -204,8 +237,10 @@ namespace hp
             LOG_ERROR << "Given container is not running. name: " << container_name;
             return -1;
         }
-        const std::string command = "docker stop " + container_name;
-        if (system(command.c_str()) != 0 || sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1)
+
+        if (docker_stop(info.username, container_name) == -1 ||
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -219,7 +254,7 @@ namespace hp
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int start_container(const std::string &container_name)
+    int start_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -236,12 +271,28 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
-        if (read_contract_cfg_values(container_name, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(container_name, hpfs_log_level, is_full_history) == -1 ||
-            docker_start(container_name) != 0 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
+        if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
+            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
+        {
+            LOG_ERROR << "Error when setting up container. name: " << container_name;
+            return -1;
+        }
+
+        if (docker_start(info.username, container_name) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started hpfs processes if starting instance failed.
+            hpfs::stop_fs_processes(info.username);
+            return -1;
+        }
+
+        if (sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        {
+            LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started docker and hpfs processes if database update fails.
+            docker_stop(info.username, container_name);
+            hpfs::stop_fs_processes(info.username);
             return -1;
         }
 
@@ -250,14 +301,31 @@ namespace hp
 
     /**
      * Execute docker start <container_name> command.
+     * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
     */
-    int docker_start(const std::string &container_name)
+    int docker_start(std::string_view username, std::string_view container_name)
     {
-        const std::string command = "docker start " + container_name;
-        const int res = system(command.c_str());
-        return res == 0 ? 0 : -1;
+        const int len = 100 + username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_START, username.data(), container_name.data());
+        return system(command) == 0 ? 0 : -1;
+    }
+
+    /**
+     * Execute docker stop <container_name> command.
+     * @param username Username of the instance user.
+     * @param container_name Name of the container.
+     * @return 0 on successful execution and -1 on error.
+    */
+    int docker_stop(std::string_view username, std::string_view container_name)
+    {
+
+        const int len = 99 + username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_STOP, username.data(), container_name.data());
+        return system(command) == 0 ? 0 : -1;
     }
 
     /**
@@ -265,7 +333,7 @@ namespace hp
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int destroy_container(const std::string &container_name)
+    int destroy_container(std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -274,12 +342,14 @@ namespace hp
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
-        const std::string command = "docker container rm -f " + container_name;
-        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + container_name;
 
-        if (system(command.c_str()) != 0 ||
+        const int len = 100 + info.username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
+
+        if (system(command) != 0 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            util::remove_directory_recursively(folder_path) == -1)
+            hpfs::stop_fs_processes(info.username) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -287,30 +357,49 @@ namespace hp
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
+
+        // Remove user after destroying.
+        if (uninstall_user(info.username) == -1)
+            return -1;
+
         return 0;
     }
 
     /**
      * Creates a copy of default contract with the given name and the ports in the instance folder given in the config file.
-     * @param info Information of the created contract instance.
-     * @param folder_name Folder name for the contract directory.
+     * @param username Name of the instance user.
+     * @param contract_dir Directory of the contract.
      * @param owner_pubkey Public key of the owner of the instance.
      * @param assigned_ports Assigned ports to the instance.
+     * @param info Information of the created contract instance.
      * @return -1 on error and 0 on success.
      * 
     */
-    int create_contract(instance_info &info, const std::string &folder_name, std::string_view owner_pubkey, const ports &assigned_ports)
+    int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info)
     {
-        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + folder_name;
-        const std::string command = "cp -r " + conf::ctx.default_contract_path + " " + folder_path;
-        if (system(command.c_str()) != 0)
+        // Creating a temporary directory to do the config manipulations before moved to the contract dir.
+        // Folders inside /tmp directory will be cleaned after a reboot. So this will self cleanup folders
+        // that might be remaining due to another error in the workflow.
+        char templ[17] = "/tmp/sashiXXXXXX";
+        char *temp_foldername = mkdtemp(templ);
+        if (temp_foldername == NULL)
         {
-            LOG_ERROR << "Default contract copying failed to " << folder_path;
+            LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
+            return -1;
+        }
+        const std::string source_path = conf::ctx.default_contract_path + "/*";
+        int len = 25 + source_path.length();
+        char cp_command[len];
+        sprintf(cp_command, COPY_DIR, source_path.data(), temp_foldername);
+        if (system(cp_command) != 0)
+        {
+            LOG_ERROR << "Default contract copying failed to " << temp_foldername;
             return -1;
         }
 
         // Read the config file into json document object.
-        const std::string config_file_path = folder_path + "/cfg/hp.cfg";
+        std::string config_file_path(temp_foldername);
+        config_file_path.append("/cfg/hp.cfg");
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
         if (config_fd == -1)
         {
@@ -359,6 +448,7 @@ namespace hp
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
+        d["contract"]["bin_path"] = "bootstrap_contract";
         d["contract"]["bin_args"] = owner_pubkey;
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
@@ -372,10 +462,31 @@ namespace hp
         }
         close(config_fd);
 
+        // Move the contract to contract dir
+        len = 22 + contract_dir.length();
+        char mv_command[len];
+        sprintf(mv_command, MOVE_DIR, temp_foldername, contract_dir.data());
+        if (system(mv_command) != 0)
+        {
+            LOG_ERROR << "Default contract moving failed to " << contract_dir;
+            return -1;
+        }
+
+        // Transfer ownership to the instance user.
+        len = 12 + (username.length() * 2) + contract_dir.length();
+        char own_command[len];
+        sprintf(own_command, CHOWN_DIR, username.data(), username.data(), contract_dir.data());
+        if (system(own_command) != 0)
+        {
+            LOG_ERROR << "Changing contract ownership failed " << contract_dir;
+            return -1;
+        }
+
         info.owner_pubkey = owner_pubkey;
+        info.username = username;
+        info.contract_dir = contract_dir;
         info.ip = "localhost";
         info.contract_id = contract_id;
-        info.name = folder_name;
         info.pubkey = pubkey_hex;
         info.assigned_ports = assigned_ports;
         info.status = CONTAINER_STATES[STATES::RUNNING];
@@ -418,19 +529,22 @@ namespace hp
 
     /**
      * Check the status of the given container using docker inspect command.
-     * @param name Name of the container.
+     * @param username Username of the instance user.
+     * @param container_name Name of the container.
      * @param status The variable that holds the status of the container.
      * @return 0 on success and -1 on error.
     */
-    int check_instance_status(std::string_view name, std::string &status)
+    int check_instance_status(std::string_view username, std::string_view container_name, std::string &status)
     {
-        std::string command("docker inspect --format='{{json .State.Status}}' ");
-        command.append(name);
-        FILE *fpipe = popen(command.c_str(), "r");
+        const int len = 136 + username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_STATUS, username.data(), container_name.data());
+
+        FILE *fpipe = popen(command, "r");
 
         if (fpipe == NULL)
         {
-            LOG_ERROR << "Error on popen for command " << command;
+            LOG_ERROR << "Error on popen for command " << std::string(command);
             return -1;
         }
         char buffer[20];
@@ -448,17 +562,16 @@ namespace hp
 
     /**
      * Read only required contract config values
-     * @param contract_name Name of the contract.
+     * @param contract_dir Directory of the contract.
      * @param log_level Log level to be read.
      * @param is_full_history Contract history mode.
      * @return 0 on success. -1 on failure.
      */
-    int read_contract_cfg_values(std::string_view contract_name, std::string &log_level, bool &is_full_history)
+    int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history)
     {
-        const std::string folder_path = conf::cfg.hp.instance_folder + "/" + contract_name.data();
-
         // Read the config file into json document object.
-        const std::string config_file_path = folder_path + "/cfg/hp.cfg";
+        std::string config_file_path(contract_dir);
+        config_file_path.append("/cfg/hp.cfg");
         const int config_fd = open(config_file_path.data(), O_RDONLY);
         if (config_fd == -1)
         {
@@ -522,6 +635,112 @@ namespace hp
         }
 
         return 0;
+    }
+
+    /**
+     * Executes the given bash file and populates final comma seperated output into a vector.
+     * @param file_name Name of the bash script.
+     * @param output_params Final output of the bash script.
+     * @param input_param Input parameter to the bash script (Optional).
+    */
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param)
+    {
+        const int len = 23 + (file_name.length() * 2) + input_param.length();
+        char command[len];
+        sprintf(command, RUN_SH, file_name.data(), file_name.data(), input_param.empty() ? "\0" : input_param.data());
+
+        FILE *fpipe = popen(command, "r");
+        if (fpipe == NULL)
+        {
+            LOG_ERROR << "Error on popen for command " << std::string(command);
+            return -1;
+        }
+
+        char buffer[200];
+        std::string output;
+
+        // Only take the last cout string It contains the output of the execution.
+        while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+        {
+            output = buffer;
+            // Replace ending new line character at the end of the log line.
+            if (!output.empty())
+            {
+                if (output.back() == '\n')
+                    output.pop_back();
+                LOG_DEBUG << output;
+            }
+        }
+
+        pclose(fpipe);
+        util::split_string(output_params, output, ",");
+        return 0;
+    }
+
+    /**
+     * Create new user and install dependencies and populate id and username.
+     * @param user_id Uid of the created user to be populated.
+     * @param username Username of the created user to be populated.
+    */
+    int install_user(int &user_id, std::string &username)
+    {
+        std::vector<std::string> params;
+        if (execute_bash_file(conf::ctx.user_install_sh, params) == -1)
+            return -1;
+
+        if (strncmp(params.at(params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
+        {
+            if (util::stoi(params.at(0), user_id) == -1)
+            {
+                LOG_ERROR << "Create user error: Invalid user id.";
+                return -1;
+            }
+            username = params.at(1);
+            LOG_DEBUG << "Created new user : " << username << ", uid : " << user_id;
+            return 0;
+        }
+        else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "User creation error : " << error;
+            return -1;
+        }
+        else
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "Unknown user creation error : " << error;
+            return -1;
+        }
+    }
+
+    /**
+     * Delete the given user and remove dependencies.
+     * @param username Username of the user to be deleted.
+    */
+    int uninstall_user(std::string_view username)
+    {
+        std::vector<std::string> params;
+        if (execute_bash_file(conf::ctx.user_uninstall_sh, params, username) == -1)
+            return -1;
+
+        // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
+        {
+            LOG_DEBUG << "Deleted the user : " << username;
+            return 0;
+        }
+        if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "User removing error : " << error;
+            return -1;
+        }
+        else
+        {
+            const std::string error = params.at(0);
+            LOG_ERROR << "Unknown user removing error : " << error;
+            return -1;
+        }
     }
 
 } // namespace hp

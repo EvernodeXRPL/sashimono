@@ -14,16 +14,20 @@
 #include <string>
 #include <string_view>
 #include <sqlite3.h>
+#include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 #include <sodium.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
 #include <thread>
 #include <plog/Log.h>
 #include <plog/Appenders/ColorConsoleAppender.h>
+#include <pwd.h>
 #include <readerwriterqueue/readerwriterqueue.h>
 
 #endif

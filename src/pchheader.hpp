@@ -29,5 +29,6 @@
 #include <plog/Appenders/ColorConsoleAppender.h>
 #include <pwd.h>
 #include <readerwriterqueue/readerwriterqueue.h>
+#include <regex>
 
 #endif

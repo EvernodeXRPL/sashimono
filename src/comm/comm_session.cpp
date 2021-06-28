@@ -174,7 +174,7 @@ namespace comm
                 return -1;
             id = msg.id;
             hp::instance_info info;
-            if (hp::create_new_instance(info, msg.pubkey) == -1)
+            if (hp::create_new_instance(info, msg.pubkey, msg.contract_id) == -1)
                 return -1;
 
             std::string res;

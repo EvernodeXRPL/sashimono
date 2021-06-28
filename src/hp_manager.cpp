@@ -131,11 +131,19 @@ namespace hp
      * Create a new instance of hotpocket. A new contract is created and then the docker images is run on that.
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
+     * @param contract_id Contract id to be configured.
      * @return 0 on success and -1 on error.
     */
-    int create_new_instance(instance_info &info, std::string_view owner_pubkey)
+    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id)
     {
         LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_micro_seconds << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
+
+        // First check whether contract_id is valid uuid.
+        if (!crypto::verify_uuid(contract_id))
+        {
+            LOG_ERROR << "Provided contract id is not a valid uuid.";
+            return -1;
+        }
 
         ports instance_ports;
         if (!vacant_ports.empty())
@@ -164,7 +172,7 @@ namespace hp
 
         std::string hpfs_log_level;
         bool is_full_history;
-        if (create_contract(username, contract_dir, owner_pubkey, instance_ports, info) == -1 ||
+        if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
             read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {
@@ -368,14 +376,16 @@ namespace hp
     /**
      * Creates a copy of default contract with the given name and the ports in the instance folder given in the config file.
      * @param username Name of the instance user.
-     * @param contract_dir Directory of the contract.
      * @param owner_pubkey Public key of the owner of the instance.
+     * @param contract_id Contract id to be configured.
+     * @param contract_dir Directory of the contract.
      * @param assigned_ports Assigned ports to the instance.
      * @param info Information of the created contract instance.
      * @return -1 on error and 0 on success.
      * 
     */
-    int create_contract(std::string_view username, std::string_view contract_dir, std::string_view owner_pubkey, const ports &assigned_ports, instance_info &info)
+    int create_contract(std::string_view username, std::string_view owner_pubkey, std::string_view contract_id,
+                        std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
         // Creating a temporary directory to do the config manipulations before moved to the contract dir.
         // Folders inside /tmp directory will be cleaned after a reboot. So this will self cleanup folders
@@ -431,7 +441,6 @@ namespace hp
         std::string pubkey, seckey;
         crypto::generate_signing_keys(pubkey, seckey);
 
-        const std::string contract_id = crypto::generate_uuid();
         const std::string pubkey_hex = util::to_hex(pubkey);
 
         // Default hp.cfg configs.

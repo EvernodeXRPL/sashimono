@@ -109,6 +109,7 @@ namespace msg::json
      *          {
      *            "type": "create",
      *            "owner_pubkey": "<pubkey of the owner>"
+     *            "contract_id": "<contract id>"
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -116,6 +117,20 @@ namespace msg::json
     {
         if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
             return -1;
+
+        if (!d.contains(msg::FLD_CONTRACT_ID))
+        {
+            LOG_ERROR << "Field contract_id is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
+        {
+            LOG_ERROR << "Invalid contract_id value.";
+            return -1;
+        }
+
+        msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
         return 0;
     }
 

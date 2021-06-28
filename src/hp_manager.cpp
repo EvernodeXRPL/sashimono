@@ -566,7 +566,7 @@ namespace hp
         info.owner_pubkey = owner_pubkey;
         info.username = username;
         info.contract_dir = contract_dir;
-        info.ip = "localhost";
+        info.ip = conf::cfg.hp.host_address;
         info.contract_id = contract_id;
         info.pubkey = pubkey_hex;
         info.assigned_ports = assigned_ports;
@@ -662,12 +662,16 @@ namespace hp
      */
     int write_json_values(jsoncons::ojson &d, const instance_config &config)
     {
+        jsoncons::ojson unl(jsoncons::json_array_arg);
         for (auto &pubkey : config.unl)
-            d["contract"]["unl"].push_back(util::to_hex(pubkey));
+            unl.push_back(util::to_hex(pubkey));
+        d["contract"]["unl"] = unl;
 
+        jsoncons::ojson peers(jsoncons::json_array_arg);
         for (auto &peer : config.peers)
-            d["mesh"]["known_peers"].push_back(peer.host_address + ":" + std::to_string(peer.port));
-
+            peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
+        d["mesh"]["known_peers"] = peers;
+        
         return 0;
     }
 

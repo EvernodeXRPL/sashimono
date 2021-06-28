@@ -202,6 +202,14 @@ namespace conf
             try
             {
                 const jsoncons::ojson &hp = d["hp"];
+
+                cfg.hp.host_address = hp["host_address"].as<std::string>();
+
+                if (cfg.hp.host_address.empty())
+                {
+                    std::cerr << "Configured hp host_address is empty.\n";
+                    return -1;
+                }
                 
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
@@ -314,6 +322,7 @@ namespace conf
         // Hp configs.
         {
             jsoncons::ojson hp_config;
+            hp_config.insert_or_assign("host_address", cfg.hp.host_address);
             hp_config.insert_or_assign("init_peer_port", cfg.hp.init_peer_port);
             hp_config.insert_or_assign("init_user_port", cfg.hp.init_user_port);
 

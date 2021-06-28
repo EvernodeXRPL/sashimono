@@ -141,7 +141,7 @@ namespace hp
         // First check whether contract_id is valid uuid.
         if (!crypto::verify_uuid(contract_id))
         {
-            LOG_ERROR << "Provided contract id is not a uuid";
+            LOG_ERROR << "Provided contract id is not a valid uuid.";
             return -1;
         }
 

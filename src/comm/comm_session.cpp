@@ -181,6 +181,20 @@ namespace comm
             msg_parser.build_create_response(res, info, msg.id);
             send(res);
         }
+        else if (type == msg::MSGTYPE_INITIATE)
+        {
+            msg::initiate_msg msg;
+            if (msg_parser.extract_initiate_message(msg) == -1)
+                return -1;
+            id = msg.id;
+            hp::instance_info info;
+            if (hp::initiate_instance(msg.container_name, {msg.peers, msg.unl}) == -1)
+                return -1;
+
+            std::string res;
+            msg_parser.build_response(res, msg::MSGTYPE_INITIATE_RES, msg.id, "Initiated");
+            send(res);
+        }
         else if (type == msg::MSGTYPE_DESTROY)
         {
             msg::destroy_msg msg;

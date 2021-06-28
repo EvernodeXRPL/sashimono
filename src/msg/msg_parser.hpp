@@ -15,6 +15,7 @@ namespace msg
         int parse(std::string_view message);
         int extract_type(std::string &extracted_type) const;
         int extract_create_message(create_msg &msg) const;
+        int extract_initiate_message(initiate_msg &msg) const;
         int extract_destroy_message(destroy_msg &msg) const;
         int extract_start_message(start_msg &msg) const;
         int extract_stop_message(stop_msg &msg) const;

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <jsoncons/json.hpp>
 #include <libgen.h>
+#include <set>
 #include <string>
 #include <string_view>
 #include <sqlite3.h>

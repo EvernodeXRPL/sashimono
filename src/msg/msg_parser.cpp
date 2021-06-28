@@ -17,6 +17,11 @@ namespace msg
     {
         return json::extract_create_message(msg, jdoc);
     }
+
+    int msg_parser::extract_initiate_message(initiate_msg &msg) const
+    {
+        return json::extract_initiate_message(msg, jdoc);
+    }
         
     int msg_parser::extract_destroy_message(destroy_msg &msg) const
     {

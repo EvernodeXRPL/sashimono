@@ -1,4 +1,5 @@
 #include "msg_json.hpp"
+#include "../../util/util.hpp"
 
 namespace msg::json
 {
@@ -131,6 +132,106 @@ namespace msg::json
         }
 
         msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
+        return 0;
+    }
+
+    /**
+     * Extracts initiate message from msg.
+     * @param msg Populated msg object.
+     * @param d The json document holding the read request message.
+     *          Accepted signed input container format:
+     *          {
+     *            "type": "initiate",
+     *            "owner_pubkey": "<pubkey of the owner>",
+     *            "container_name": "<container name>",
+     *            "peers": [<'ip:port' peer list>],
+     *            "unl": [<hex unl pubkey list>]
+     *          }
+     * @return 0 on successful extraction. -1 for failure.
+     */
+    int extract_initiate_message(initiate_msg &msg, const jsoncons::json &d)
+    {
+        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+            return -1;
+
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
+        {
+            LOG_ERROR << "Field contract_name is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
+        {
+            LOG_ERROR << "Invalid container_name value.";
+            return -1;
+        }
+
+        if (d.contains(msg::FLD_PEERS))
+        {
+            if (!d[msg::FLD_PEERS].is_array())
+            {
+                LOG_ERROR << "Invalid peers value.";
+                return -1;
+            }
+            
+            for (auto &val : d[msg::FLD_PEERS].array_range())
+            {
+                
+                if (!val.is<std::string>())
+                {
+                    LOG_ERROR << "Invalid peer value.";
+                    return -1;
+                }
+
+                std::vector<std::string> values;
+                const std::string peer = val.as<std::string>();
+                util::split_string(values, peer, ":");
+                if (values.size() != 2)
+                {
+                    LOG_ERROR << "Invalid peer value: " << peer;
+                    return -1;
+                }
+                
+                uint16_t port;
+                if (util::stoul(values.at(1), port) == -1)
+                {
+                    LOG_ERROR << "Invalid peer port value: " << peer;
+                    return -1;
+                }
+
+                msg.peers.emplace(conf::host_ip_port{values.at(0), port});
+            }
+        }
+
+        if (d.contains(msg::FLD_UNL))
+        {
+            if (!d[msg::FLD_UNL].is_array())
+            {
+                LOG_ERROR << "Invalid unl value.";
+                return -1;
+            }
+            
+            for (auto &val : d[msg::FLD_UNL].array_range())
+            {
+                if (!val.is<std::string>())
+                {
+                    LOG_ERROR << "Invalid unl pubkey value.";
+                    return -1;
+                }
+
+                const std::string unl_pubkey = val.as<std::string>();
+                const std::string unl_pubkey_bin = util::to_bin(unl_pubkey);
+                if (unl_pubkey_bin.empty())
+                {
+                    LOG_ERROR << "Invalid unl pubkey value: " << unl_pubkey;
+                    return -1;
+                }
+
+                msg.unl.emplace(unl_pubkey_bin);
+            }
+        }
+
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         return 0;
     }
 

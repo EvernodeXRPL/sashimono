@@ -2,6 +2,7 @@
 #define _HP_MSG_MSG_COMMON_
 
 #include "../pchheader.hpp"
+#include "../conf.hpp"
 
 namespace msg
 {
@@ -11,6 +12,16 @@ namespace msg
         std::string type;
         std::string pubkey;
         std::string contract_id;
+    };
+
+    struct initiate_msg
+    {
+        std::string id;
+        std::string type;
+        std::string pubkey;
+        std::string container_name;
+        std::set<conf::host_ip_port> peers;
+        std::set<std::string> unl;
     };
 
     struct destroy_msg
@@ -45,16 +56,20 @@ namespace msg
     constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_CONTRACT_ID = "contract_id";
     constexpr const char *FLD_ID = "id";
+    constexpr const char *FLD_PEERS = "peers";
+    constexpr const char *FLD_UNL = "unl";
 
     // Message types
     constexpr const char *MSGTYPE_INIT = "init";
     constexpr const char *MSGTYPE_CREATE = "create";
+    constexpr const char *MSGTYPE_INITIATE = "initiate";
     constexpr const char *MSGTYPE_DESTROY = "destroy";
     constexpr const char *MSGTYPE_START = "start";
     constexpr const char *MSGTYPE_STOP = "stop";
 
     // Message res types
     constexpr const char *MSGTYPE_CREATE_RES = "create_res";
+    constexpr const char *MSGTYPE_INITIATE_RES = "initiate_res";
     constexpr const char *MSGTYPE_DESTROY_RES = "destroy_res";
     constexpr const char *MSGTYPE_START_RES = "start_res";
     constexpr const char *MSGTYPE_STOP_RES = "stop_res";

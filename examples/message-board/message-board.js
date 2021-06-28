@@ -6,8 +6,7 @@ const { v4: uuidv4 } = require('uuid');
 const { execSync } = require("child_process");
 
 // Generate tls keys if not found.
-if (!fs.existsSync('./tlskey.pem'))
-{
+if (!fs.existsSync('./tlskey.pem')) {
     console.log("TLS key files not detected. Generating..");
     execSync("openssl req -newkey rsa:2048 -new -nodes -x509 -days 3650 -keyout tlskey.pem -out tlscert.pem -subj \"/C=SA/ST=SA/L=SA/O=SA/CN=SA\"");
     console.log("New tls key files generated.")
@@ -76,6 +75,19 @@ server.listen(8080, () => {
                                 contract_id: contractId
                             }));
                             break;
+                        case 'initiate':
+                            containerName = await askForInput('Container Name');
+                            peers = await askForInput('Comma seperated Peer List <host1:port1>,<host1:port1>,...');
+                            unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
+                            sendToAll(JSON.stringify({
+                                id: uuidv4(),
+                                type: 'initiate',
+                                owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
+                                container_name: containerName,
+                                peers: peers.split(','),
+                                unl: unl.split(',')
+                            }));
+                            break;
                         case 'destroy':
                             containerName = await askForInput('Container Name');
                             sendToAll(JSON.stringify({
@@ -105,7 +117,7 @@ server.listen(8080, () => {
                             break;
 
                         default:
-                            console.log('Invalid command. Only valid [create, destroy, start and stop]');
+                            console.log('Invalid command. Only valid [create, initiate, destroy, start and stop]');
                             break;
                     }
 

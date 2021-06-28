@@ -258,6 +258,26 @@ namespace util
     }
 
     /**
+     * Converts given string to a uint_16. A wrapper function for std::stoul. 
+     * @param str String variable.
+     * @param result Variable to store the answer from the conversion.
+     * @return Returns 0 in a successful conversion and -1 on error.
+    */
+    int stoul(const std::string &str, uint16_t &result)
+    {
+        try
+        {
+            result = std::stoul(str);
+        }
+        catch (const std::exception &e)
+        {
+            // Return -1 if any exceptions are captured.
+            return -1;
+        }
+        return 0;
+    }
+
+    /**
      * Construct the user contract directory path when username is given.
      * @param username Username of the user.
      * @return Contract directory path.
@@ -304,6 +324,69 @@ namespace util
             str.replace(pos, find.length(), replace);
             pos = str.find(find);
         }
+    }
+
+    /**
+     * Writes the given json doc to a file.
+     * @param fd File descriptor to the open file.
+     * @param d A valid JSON document.
+     * @return 0 on success. -1 on failure.
+     */
+    int write_json_file(const int fd, const jsoncons::ojson &d)
+    {
+        std::string json;
+        // Convert json object to a string.
+        try
+        {
+            jsoncons::json_options options;
+            options.object_array_line_splits(jsoncons::line_split_kind::multi_line);
+            options.spaces_around_comma(jsoncons::spaces_option::no_spaces);
+            std::ostringstream os;
+            os << jsoncons::pretty_print(d, options);
+            json = os.str();
+            os.clear();
+        }
+        catch (const std::exception &e)
+        {
+            LOG_ERROR << "Converting modified hp config json to string failed. ";
+            return -1;
+        }
+
+        if (ftruncate(fd, 0) == -1 || write(fd, json.data(), json.size()) == -1)
+        {
+            LOG_ERROR << "Writing modified hp config file failed. ";
+            return -1;
+        }
+        return 0;
+    }
+
+    /**
+     * Reads the given file to a json doc.
+     * @param fd File descriptor to the open file.
+     * @param d JSON document to be populated.
+     * @return 0 on success. -1 on failure.
+     */
+    int read_json_file(const int fd, jsoncons::ojson &d)
+    {
+        std::string buf;
+        if (util::read_from_fd(fd, buf) == -1)
+        {
+            std::cerr << "Error reading from the config file. " << errno << '\n';
+            return -1;
+        }
+
+        try
+        {
+            d = jsoncons::ojson::parse(buf, jsoncons::strict_json_parsing());
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "Invalid config file format. " << e.what() << '\n';
+            return -1;
+        }
+        buf.clear();
+
+        return 0;
     }
 
 } // namespace util

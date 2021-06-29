@@ -14,6 +14,7 @@ namespace hp
     bool last_port_assign_from_vacant = true;
 
     constexpr int FILE_PERMS = 0644;
+    constexpr int MAX_UNIQUE_NAME_RETRIES = 10; // Max retries before abandoning container uniqueness check.
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
 
@@ -144,6 +145,21 @@ namespace hp
             return -1;
         }
 
+        std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
+        int retries = 0;
+        // If the generated uuid is already assigned to a container, we try generating a
+        // unique uuid with max tries limited under a threshold.
+        while (sqlite::is_container_exists(db, container_name, info) == 1)
+        {
+            if (retries >= MAX_UNIQUE_NAME_RETRIES)
+            {
+                LOG_ERROR << "Could not find a unique container name. Threshold of " << MAX_UNIQUE_NAME_RETRIES << " exceeded";
+                return -1;
+            }
+            container_name = crypto::generate_uuid();
+            retries++;
+        }
+
         ports instance_ports;
         if (!vacant_ports.empty())
         {
@@ -166,7 +182,6 @@ namespace hp
         if (install_user(user_id, username) == -1)
             return -1;
 
-        const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||

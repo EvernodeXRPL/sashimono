@@ -59,7 +59,7 @@ int main(int argc, char **argv)
                 if (open(file_name.data(), O_CREAT | O_TRUNC | O_RDWR, 0644) == -1 ||
                     write(archive_fd, data.begin(), data.size()) == -1)
                 {
-                    std::cerr << "Error saving given file.\n";
+                    std::cerr << errno << ": Error saving given file.\n";
                     close(archive_fd);
                     HP_DEINIT;
                     return -1;
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
                 const mode_t permission_mode = strtol(mode, 0, 8); // Char to octal conversion.
                 if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)
                 {
-                    std::cerr << "Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;
+                    std::cerr << errno << ": Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;
                     HP_DEINIT;
                     return -1;
                 }

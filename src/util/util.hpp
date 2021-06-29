@@ -46,11 +46,17 @@ namespace util
 
     int stoi(const std::string &str, int &result);
 
+    int stoul(const std::string &str, uint16_t &result);
+
     const std::string get_user_contract_dir(const std::string &username, std::string_view container_name);
 
     int get_system_user_info(std::string_view username, user_info &user_info);
 
     void find_and_replace(std::string &str, std::string_view find, std::string_view replace);
+
+    int write_json_file(const int fd, const jsoncons::ojson &d);
+
+    int read_json_file(const int fd, jsoncons::ojson &d);
 
 } // namespace util
 

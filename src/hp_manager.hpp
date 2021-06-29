@@ -3,13 +3,17 @@
 
 #include "pchheader.hpp"
 #include "hpfs_manager.hpp"
+#include "conf.hpp"
+#include "conf.hpp"
+#include "msg/msg_common.hpp"
 
 namespace hp
 {
-    constexpr const char *CONTAINER_STATES[]{"running", "stopped", "destroyed", "exited"};
+    constexpr const char *CONTAINER_STATES[]{"created", "running", "stopped", "destroyed", "exited"};
 
     enum STATES
     {
+        CREATED,
         RUNNING,
         STOPPED,
         DESTROYED,
@@ -49,23 +53,42 @@ namespace hp
     };
 
     int init();
+
     void deinit();
+
     void hp_monitor_loop();
+
     int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id);
-    int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
+
+    int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg);
+
+    int create_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
+
     int start_container(std::string_view container_name);
+
     int docker_start(std::string_view username, std::string_view container_name);
+
     int docker_stop(std::string_view username, std::string_view container_name);
+
+    int docker_remove(std::string_view username, std::string_view container_name);
+
     int stop_container(std::string_view container_name);
+
     int destroy_container(std::string_view container_name);
-    void kill_all_containers();
+
     int create_contract(std::string_view username, std::string_view owner_pubkey, std::string_view contract_id,
                         std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
-    int write_json_file(const int fd, const jsoncons::ojson &d);
+
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status);
-    int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history);
+
+    int read_json_values(const jsoncons::ojson &d, std::string &hpfs_log_level, bool &is_full_history);
+
+    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg);
+
     int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param = {});
+
     int install_user(int &user_id, std::string &username);
+
     int uninstall_user(std::string_view username);
 } // namespace hp
 #endif

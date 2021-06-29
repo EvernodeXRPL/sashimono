@@ -56,6 +56,7 @@ namespace conf
 
     struct hp_config
     {
+        std::string host_address;
         uint16_t init_peer_port;
         uint16_t init_user_port;
     };

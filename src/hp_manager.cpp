@@ -1,5 +1,4 @@
 #include "hp_manager.hpp"
-#include "conf.hpp"
 #include "crypto.hpp"
 #include "util/util.hpp"
 #include "sqlite.hpp"
@@ -26,7 +25,7 @@ namespace hp
     bool is_shutting_down = false;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-    constexpr const char *DOCKER_RUN = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker run -t -i -d --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
+    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
@@ -128,7 +127,7 @@ namespace hp
     }
 
     /**
-     * Create a new instance of hotpocket. A new contract is created and then the docker images is run on that.
+     * Create a new instance of hotpocket. A new contract is created with docker image.
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
@@ -170,11 +169,8 @@ namespace hp
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
-        std::string hpfs_log_level;
-        bool is_full_history;
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
-            read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(username, contract_dir, hpfs_log_level, is_full_history) == -1)
+            create_container(username, container_name, contract_dir, instance_ports, info) == -1)
         {
             LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
@@ -182,12 +178,11 @@ namespace hp
             return -1;
         }
 
-        if (run_container(username, container_name, contract_dir, instance_ports, info) == -1 ||
-            sqlite::insert_hp_instance_row(db, info) == -1)
+        if (sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            LOG_ERROR << errno << ": Error running new hp instance for " << owner_pubkey;
-            // Stop started hpfs processes and remove user if running instance failed.
-            hpfs::stop_fs_processes(username);
+            LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            // Remove container and uninstall user if database update failed.
+            docker_remove(username, container_name);
             uninstall_user(username);
             return -1;
         }
@@ -201,20 +196,87 @@ namespace hp
     }
 
     /**
-     * Runs a hotpocket docker image on the given contract and the ports.
+     * Initiate the instance. The config will be updated and container will be started.
+     * @param container_name Name of the container.
+     * @param config_msg Config values for the hp instance.
+     * @return 0 on success and -1 on error.
+    */
+    int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg)
+    {
+        instance_info info;
+        const int res = sqlite::is_container_exists(db, container_name, info);
+        if (res == 0)
+        {
+            LOG_ERROR << "Given container not found. name: " << container_name;
+            return -1;
+        }
+        else if (info.status != CONTAINER_STATES[STATES::CREATED])
+        {
+            LOG_ERROR << "Given container is already initiated. name: " << container_name;
+            return -1;
+        }
+
+        // Read the config file into json document object.
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
+        std::string config_file_path(contract_dir);
+        config_file_path.append("/cfg/hp.cfg");
+        const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
+        if (config_fd == -1)
+        {
+            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
+            return -1;
+        }
+
+        jsoncons::ojson d;
+        std::string hpfs_log_level;
+        bool is_full_history;
+        if (util::read_json_file(config_fd, d) == -1 ||
+            write_json_values(d, config_msg) == -1 ||
+            read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
+            util::write_json_file(config_fd, d) == -1 ||
+            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
+        {
+            LOG_ERROR << "Error when setting up container. name: " << container_name;
+            close(config_fd);
+            return -1;
+        }
+        close(config_fd);
+
+        if (docker_start(info.username, container_name) == -1)
+        {
+            LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started hpfs processes if starting instance failed.
+            hpfs::stop_fs_processes(info.username);
+            return -1;
+        }
+
+        if (sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
+        {
+            LOG_ERROR << "Error when starting container. name: " << container_name;
+            // Stop started docker and hpfs processes if database update fails.
+            docker_stop(info.username, container_name);
+            hpfs::stop_fs_processes(info.username);
+            return -1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Creates a hotpocket docker image on the given contract and the ports.
      * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @param contract_dir Directory for the contract.
      * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int run_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
+    int create_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
         const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
-        sprintf(command, DOCKER_RUN, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        sprintf(command, DOCKER_CREATE, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
@@ -277,15 +339,29 @@ namespace hp
             return -1;
         }
 
+        // Read the config file into json document object.
+        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
+        std::string config_file_path(contract_dir);
+        config_file_path.append("/cfg/hp.cfg");
+        const int config_fd = open(config_file_path.data(), O_RDONLY);
+        if (config_fd == -1)
+        {
+            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
+            return -1;
+        }
+
+        jsoncons::ojson d;
         std::string hpfs_log_level;
         bool is_full_history;
-        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
-        if (read_contract_cfg_values(contract_dir, hpfs_log_level, is_full_history) == -1 ||
+        if (util::read_json_file(config_fd, d) == -1 ||
+            read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {
             LOG_ERROR << "Error when setting up container. name: " << container_name;
+            close(config_fd);
             return -1;
         }
+        close(config_fd);
 
         if (docker_start(info.username, container_name) == -1)
         {
@@ -329,10 +405,23 @@ namespace hp
     */
     int docker_stop(std::string_view username, std::string_view container_name)
     {
-
         const int len = 99 + username.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_STOP, username.data(), container_name.data());
+        return system(command) == 0 ? 0 : -1;
+    }
+
+    /**
+     * Execute docker rm <container_name> command.
+     * @param username Username of the instance user.
+     * @param container_name Name of the container.
+     * @return 0 on successful execution and -1 on error.
+    */
+    int docker_remove(std::string_view username, std::string_view container_name)
+    {
+        const int len = 100 + username.length() + container_name.length();
+        char command[len];
+        sprintf(command, DOCKER_REMOVE, username.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -351,11 +440,7 @@ namespace hp
             return -1;
         }
 
-        const int len = 100 + info.username.length() + container_name.length();
-        char command[len];
-        sprintf(command, DOCKER_REMOVE, info.username.data(), container_name.data());
-
-        if (system(command) != 0 ||
+        if (docker_remove(info.username, container_name) == -1 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
             hpfs::stop_fs_processes(info.username) == -1)
         {
@@ -391,8 +476,8 @@ namespace hp
         // Folders inside /tmp directory will be cleaned after a reboot. So this will self cleanup folders
         // that might be remaining due to another error in the workflow.
         char templ[17] = "/tmp/sashiXXXXXX";
-        char *temp_foldername = mkdtemp(templ);
-        if (temp_foldername == NULL)
+        const char *temp_dirpath = mkdtemp(templ);
+        if (temp_dirpath == NULL)
         {
             LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
             return -1;
@@ -400,43 +485,30 @@ namespace hp
         const std::string source_path = conf::ctx.default_contract_path + "/*";
         int len = 25 + source_path.length();
         char cp_command[len];
-        sprintf(cp_command, COPY_DIR, source_path.data(), temp_foldername);
+        sprintf(cp_command, COPY_DIR, source_path.data(), temp_dirpath);
         if (system(cp_command) != 0)
         {
-            LOG_ERROR << "Default contract copying failed to " << temp_foldername;
+            LOG_ERROR << "Default contract copying failed to " << temp_dirpath;
             return -1;
         }
 
         // Read the config file into json document object.
-        std::string config_file_path(temp_foldername);
+        std::string config_file_path(temp_dirpath);
         config_file_path.append("/cfg/hp.cfg");
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
+
         if (config_fd == -1)
         {
             LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
             return -1;
         }
 
-        std::string buf;
-        if (util::read_from_fd(config_fd, buf) == -1)
-        {
-            std::cerr << "Error reading from the config file. " << errno << '\n';
-            close(config_fd);
-            return -1;
-        }
-
         jsoncons::ojson d;
-        try
+        if (util::read_json_file(config_fd, d) == -1)
         {
-            d = jsoncons::ojson::parse(buf, jsoncons::strict_json_parsing());
-        }
-        catch (const std::exception &e)
-        {
-            std::cerr << "Invalid config file format. " << e.what() << '\n';
             close(config_fd);
             return -1;
         }
-        buf.clear();
 
         std::string pubkey, seckey;
         crypto::generate_signing_keys(pubkey, seckey);
@@ -463,7 +535,7 @@ namespace hp
         d["user"]["port"] = assigned_ports.user_port;
         d["hpfs"]["external"] = true;
 
-        if (write_json_file(config_fd, d) == -1)
+        if (util::write_json_file(config_fd, d) == -1)
         {
             LOG_ERROR << "Writing modified hp config failed.";
             close(config_fd);
@@ -474,7 +546,7 @@ namespace hp
         // Move the contract to contract dir
         len = 22 + contract_dir.length();
         char mv_command[len];
-        sprintf(mv_command, MOVE_DIR, temp_foldername, contract_dir.data());
+        sprintf(mv_command, MOVE_DIR, temp_dirpath, contract_dir.data());
         if (system(mv_command) != 0)
         {
             LOG_ERROR << "Default contract moving failed to " << contract_dir;
@@ -494,45 +566,11 @@ namespace hp
         info.owner_pubkey = owner_pubkey;
         info.username = username;
         info.contract_dir = contract_dir;
-        info.ip = "localhost";
+        info.ip = conf::cfg.hp.host_address;
         info.contract_id = contract_id;
         info.pubkey = pubkey_hex;
         info.assigned_ports = assigned_ports;
-        info.status = CONTAINER_STATES[STATES::RUNNING];
-        return 0;
-    }
-
-    /**
-     * Writes the given json doc to a file.
-     * @param fd File descriptor to the open file.
-     * @param d A valid JSON document.
-     * @return 0 on success. -1 on failure.
-     */
-    int write_json_file(const int fd, const jsoncons::ojson &d)
-    {
-        std::string json;
-        // Convert json object to a string.
-        try
-        {
-            jsoncons::json_options options;
-            options.object_array_line_splits(jsoncons::line_split_kind::multi_line);
-            options.spaces_around_comma(jsoncons::spaces_option::no_spaces);
-            std::ostringstream os;
-            os << jsoncons::pretty_print(d, options);
-            json = os.str();
-            os.clear();
-        }
-        catch (const std::exception &e)
-        {
-            LOG_ERROR << "Converting modified hp config json to string failed. ";
-            return -1;
-        }
-
-        if (ftruncate(fd, 0) == -1 || write(fd, json.data(), json.size()) == -1)
-        {
-            LOG_ERROR << "Writing modified hp config file failed. ";
-            return -1;
-        }
+        info.status = CONTAINER_STATES[STATES::CREATED];
         return 0;
     }
 
@@ -571,46 +609,16 @@ namespace hp
 
     /**
      * Read only required contract config values
-     * @param contract_dir Directory of the contract.
-     * @param log_level Log level to be read.
+     * @param d Json file to be read.
+     * @param hpfs_log_level Hpfs log level.
      * @param is_full_history Contract history mode.
      * @return 0 on success. -1 on failure.
      */
-    int read_contract_cfg_values(std::string_view contract_dir, std::string &log_level, bool &is_full_history)
+    int read_json_values(const jsoncons::ojson &d, std::string &hpfs_log_level, bool &is_full_history)
     {
-        // Read the config file into json document object.
-        std::string config_file_path(contract_dir);
-        config_file_path.append("/cfg/hp.cfg");
-        const int config_fd = open(config_file_path.data(), O_RDONLY);
-        if (config_fd == -1)
-        {
-            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
-            return -1;
-        }
-
-        std::string buf;
-        if (util::read_from_fd(config_fd, buf) == -1)
-        {
-            LOG_ERROR << "Error reading from the config file. " << errno;
-            close(config_fd);
-            return -1;
-        }
-
-        jsoncons::ojson d;
         try
         {
-            d = jsoncons::ojson::parse(buf, jsoncons::strict_json_parsing());
-        }
-        catch (const std::exception &e)
-        {
-            LOG_ERROR << "Invalid contract config file format. " << e.what();
-            return -1;
-        }
-        buf.clear();
-
-        try
-        {
-            log_level = d["hpfs"]["log"]["log_level"].as<std::string>();
+            hpfs_log_level = d["hpfs"]["log"]["log_level"].as<std::string>();
         }
         catch (const std::exception &e)
         {
@@ -619,7 +627,7 @@ namespace hp
         }
 
         const std::unordered_set<std::string> valid_loglevels({"dbg", "inf", "wrn", "err"});
-        if (valid_loglevels.count(log_level) != 1)
+        if (valid_loglevels.count(hpfs_log_level) != 1)
         {
             LOG_ERROR << "Invalid hpfs loglevel configured. Valid values: dbg|inf|wrn|err";
             return -1;
@@ -640,6 +648,65 @@ namespace hp
         catch (const std::exception &e)
         {
             LOG_ERROR << "Invalid contract config history mode. " << e.what();
+            return -1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Write contract config values (only updated if provided config values are not empty) into the json file.
+     * @param d Json file to be populated.
+     * @param config_msg Config values to be updated.
+     * @return 0 on success. -1 on failure.
+     */
+    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg)
+    {
+        if (!config_msg.unl.empty())
+        {
+            jsoncons::ojson unl(jsoncons::json_array_arg);
+            for (auto &pubkey : config_msg.unl)
+                unl.push_back(util::to_hex(pubkey));
+            d["contract"]["unl"] = unl;
+        }
+
+        if (!config_msg.peers.empty())
+        {
+            jsoncons::ojson peers(jsoncons::json_array_arg);
+            for (auto &peer : config_msg.peers)
+                peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
+            d["mesh"]["known_peers"] = peers;
+        }
+
+        if (!config_msg.role.empty())
+        {
+            if (config_msg.role != "observer" && config_msg.role != "validator")
+            {
+                LOG_ERROR << "Invalid role value observer|validator";
+                return -1;
+            }
+            d["node"]["role"] = config_msg.role;
+        }
+
+        if (!config_msg.history.empty())
+        {
+            if (config_msg.history != "full" && config_msg.history != "custom")
+            {
+                LOG_ERROR << "Invalid history value full|custom";
+                return -1;
+            }
+            d["node"]["history"] = config_msg.history;
+        }
+
+        if (config_msg.max_primary_shards.has_value())
+            d["node"]["history_config"]["max_primary_shards"] = config_msg.max_primary_shards.value();
+
+        if (config_msg.max_raw_shards.has_value())
+            d["node"]["history_config"]["max_raw_shards"] = config_msg.max_raw_shards.value();
+
+        if (d["node"]["history"].as<std::string>() == "custom" && d["node"]["history_config"]["max_primary_shards"].as<uint64_t>() == 0)
+        {
+            LOG_ERROR << "'max_primary_shards' cannot be zero in history=custom mode.";
             return -1;
         }
 

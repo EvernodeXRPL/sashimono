@@ -8,14 +8,19 @@ namespace msg
         return json::parse_message(jdoc, message);
     }
 
-    int msg_parser::extract_type(std::string &extracted_type) const
+    int msg_parser::extract_type_and_id(std::string &extracted_type, std::string &extracted_id) const
     {
-        return json::extract_type(extracted_type, jdoc);
+        return json::extract_type_and_id(extracted_type, extracted_id, jdoc);
     }
 
     int msg_parser::extract_create_message(create_msg &msg) const
     {
         return json::extract_create_message(msg, jdoc);
+    }
+
+    int msg_parser::extract_initiate_message(initiate_msg &msg) const
+    {
+        return json::extract_initiate_message(msg, jdoc);
     }
         
     int msg_parser::extract_destroy_message(destroy_msg &msg) const
@@ -33,14 +38,14 @@ namespace msg
         return json::extract_stop_message(msg, jdoc);
     }
 
-    void msg_parser::build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content) const
+    void msg_parser::build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content, const bool json_content) const
     {
-        json::build_response(msg, response_type, reply_for, content);
+        json::build_response(msg, response_type, reply_for, content, json_content);
     }
 
-    void msg_parser::build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for) const
+    void msg_parser::build_create_response(std::string &msg, const hp::instance_info &info) const
     {
-        json::build_create_response(msg, info, reply_for);
+        json::build_create_response(msg, info);
     }
 
 } // namespace msg

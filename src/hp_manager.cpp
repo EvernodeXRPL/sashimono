@@ -231,8 +231,8 @@ namespace hp
         std::string hpfs_log_level;
         bool is_full_history;
         if (util::read_json_file(config_fd, d) == -1 ||
-            read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             write_json_values(d, config_msg) == -1 ||
+            read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
             hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {

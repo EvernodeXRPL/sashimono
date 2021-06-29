@@ -147,6 +147,8 @@ namespace hp
 
         std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         int retries = 0;
+        // If the generated uuid is already assigned to a container, we try generating a
+        // unique uuid with max tries limited under a threshold.
         while (sqlite::is_container_exists(db, container_name, info) == 1)
         {
             if (retries >= MAX_UNIQUE_NAME_RETRIES)

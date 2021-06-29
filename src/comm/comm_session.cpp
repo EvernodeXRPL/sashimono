@@ -2,6 +2,14 @@
 #include "../util/util.hpp"
 #include "../hp_manager.hpp"
 
+#define __HANDLE_RESPONSE(id, type, content, ret)                                           \
+    {                                                                                       \
+        std::string res;                                                                    \
+        msg_parser.build_response(res, type, id, content, type == msg::MSGTYPE_CREATE_RES); \
+        send(res);                                                                          \
+        return ret;                                                                         \
+    }
+
 namespace comm
 {
     constexpr uint16_t MAX_IN_MSG_QUEUE_SIZE = 64; // Maximum in message queue size, The size passed is rounded to next number in binary sequence 1(1),11(3),111(7),1111(15),11111(31)....
@@ -162,83 +170,70 @@ namespace comm
     */
     int comm_session::handle_message(std::string_view msg)
     {
-        std::string type;
-        std::string id;
-        if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
-            return -1;
+        std::string id, type;
+        if (msg_parser.parse(msg) == -1 || msg_parser.extract_type_and_id(type, id) == -1)
+            __HANDLE_RESPONSE("", "error", "Invalid message.", -1);
 
         if (type == msg::MSGTYPE_CREATE)
         {
             msg::create_msg msg;
             if (msg_parser.extract_create_message(msg) == -1)
-                return -1;
-            id = msg.id;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "Invalid message.", -1);
+
             hp::instance_info info;
             if (hp::create_new_instance(info, msg.pubkey, msg.contract_id) == -1)
-                return -1;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "Error creating instance.", -1);
 
-            std::string res;
-            msg_parser.build_create_response(res, info, msg.id);
-            send(res);
+            std::string create_res;
+            msg_parser.build_create_response(create_res, info);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, create_res, 0);
         }
         else if (type == msg::MSGTYPE_INITIATE)
         {
             msg::initiate_msg msg;
             if (msg_parser.extract_initiate_message(msg) == -1)
-                return -1;
-            id = msg.id;
-            hp::instance_info info;
-            if (hp::initiate_instance(msg.container_name, {msg.peers, msg.unl}) == -1)
-                return -1;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "Invalid message.", -1);
 
-            std::string res;
-            msg_parser.build_response(res, msg::MSGTYPE_INITIATE_RES, msg.id, "Initiated");
-            send(res);
+            if (hp::initiate_instance(msg.container_name, msg) == -1)
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "Error initiating instance.", -1);
+
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "Initiated", 0);
         }
         else if (type == msg::MSGTYPE_DESTROY)
         {
             msg::destroy_msg msg;
             if (msg_parser.extract_destroy_message(msg))
-                return -1;
-            id = msg.id;
-            if (hp::destroy_container(msg.container_name) == -1)
-                return -1;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "Invalid message.", -1);
 
-            std::string res;
-            msg_parser.build_response(res, msg::MSGTYPE_DESTROY_RES, msg.id, "Destroyed");
-            send(res);
+            if (hp::destroy_container(msg.container_name) == -1)
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "Error destroying instance.", -1);
+
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "Destroyed", 0);
         }
         else if (type == msg::MSGTYPE_START)
         {
             msg::start_msg msg;
             if (msg_parser.extract_start_message(msg))
-                return -1;
-            id = msg.id;
-            if (hp::start_container(msg.container_name) == -1)
-                return -1;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "Invalid message.", -1);
 
-            std::string res;
-            msg_parser.build_response(res, msg::MSGTYPE_START_RES, msg.id, "Started");
-            send(res);
+            if (hp::start_container(msg.container_name) == -1)
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "Error starting instance.", -1);
+
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "Started", 0);
         }
         else if (type == msg::MSGTYPE_STOP)
         {
             msg::stop_msg msg;
             if (msg_parser.extract_stop_message(msg))
-                return -1;
-            id = msg.id;
-            if (hp::stop_container(msg.container_name) == -1)
-                return -1;
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "Invalid message.", -1);
 
-            std::string res;
-            msg_parser.build_response(res, msg::MSGTYPE_STOP_RES, msg.id, "Stopped");
-            send(res);
+            if (hp::stop_container(msg.container_name) == -1)
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "Error stopping instance.", -1);
+
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "Stopped", 0);
         }
         else
-        {
-            LOG_ERROR << "Received invalid message type.";
-            return -1;
-        }
+            __HANDLE_RESPONSE(id, "error", "Invalid message type.", -1);
 
         return 0;
     }

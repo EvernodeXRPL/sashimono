@@ -44,11 +44,36 @@ namespace msg::json
     }
 
     /**
-     * Extracts the message 'type' value from the json document.
+     * Extracts the message 'type' and 'id' values from the json document.
      */
-    int extract_type(std::string &extracted_type, const jsoncons::json &d)
+    int extract_type_and_id(std::string &extracted_type, std::string &extracted_id, const jsoncons::json &d)
     {
+        if (!d.contains(msg::FLD_TYPE))
+        {
+            LOG_ERROR << "Field type is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_TYPE].is<std::string>())
+        {
+            LOG_ERROR << "Invalid type value.";
+            return -1;
+        }
         extracted_type = d[msg::FLD_TYPE].as<std::string>();
+
+        if (!d.contains(msg::FLD_ID))
+        {
+            LOG_ERROR << "Field id is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_ID].is<std::string>())
+        {
+            LOG_ERROR << "Invalid id value.";
+            return -1;
+        }
+        extracted_id = d[msg::FLD_ID].as<std::string>();
+
         return 0;
     }
 
@@ -70,20 +95,8 @@ namespace msg::json
      */
     int extract_commons(std::string &type, std::string &id, std::string &pubkey, const jsoncons::json &d)
     {
-        if (extract_type(type, d) == -1)
+        if (extract_type_and_id(type, id, d) == -1)
             return -1;
-
-        if (!d.contains(msg::FLD_ID))
-        {
-            LOG_ERROR << "Field id is missing.";
-            return -1;
-        }
-
-        if (!d[msg::FLD_ID].is<std::string>())
-        {
-            LOG_ERROR << "Invalid id value.";
-            return -1;
-        }
 
         if (!d.contains(msg::FLD_PUBKEY))
         {
@@ -97,7 +110,6 @@ namespace msg::json
             return -1;
         }
 
-        id = d[msg::FLD_ID].as<std::string>();
         pubkey = d[msg::FLD_PUBKEY].as<std::string>();
         return 0;
     }
@@ -145,7 +157,11 @@ namespace msg::json
      *            "owner_pubkey": "<pubkey of the owner>",
      *            "container_name": "<container name>",
      *            "peers": [<'ip:port' peer list>],
-     *            "unl": [<hex unl pubkey list>]
+     *            "unl": [<hex unl pubkey list>],
+     *            "role": <role>,
+     *            "history": <history mode>,
+     *            "max_primary_shards": <number of max primary shards>,
+     *            "max_raw_shards": <number of max raw shards>
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -166,72 +182,120 @@ namespace msg::json
             return -1;
         }
 
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
+
         if (d.contains(msg::FLD_PEERS))
         {
-            if (!d[msg::FLD_PEERS].is_array())
+            if (!d[msg::FLD_PEERS].empty() && !d[msg::FLD_PEERS].is_array())
             {
                 LOG_ERROR << "Invalid peers value.";
                 return -1;
             }
-            
-            for (auto &val : d[msg::FLD_PEERS].array_range())
+            else if (!d[msg::FLD_PEERS].empty() && d[msg::FLD_PEERS].size() > 0)
             {
-                
-                if (!val.is<std::string>())
+                std::vector<std::string> splitted;
+                for (auto &val : d[msg::FLD_PEERS].array_range())
                 {
-                    LOG_ERROR << "Invalid peer value.";
-                    return -1;
-                }
+                    if (!val.is<std::string>())
+                    {
+                        LOG_ERROR << "Invalid peer value.";
+                        return -1;
+                    }
 
-                std::vector<std::string> values;
-                const std::string peer = val.as<std::string>();
-                util::split_string(values, peer, ":");
-                if (values.size() != 2)
-                {
-                    LOG_ERROR << "Invalid peer value: " << peer;
-                    return -1;
-                }
-                
-                uint16_t port;
-                if (util::stoul(values.at(1), port) == -1)
-                {
-                    LOG_ERROR << "Invalid peer port value: " << peer;
-                    return -1;
-                }
+                    const std::string peer = val.as<std::string>();
+                    util::split_string(splitted, peer, ":");
+                    if (splitted.size() != 2)
+                    {
+                        LOG_ERROR << "Invalid peer value: " << peer;
+                        return -1;
+                    }
 
-                msg.peers.emplace(conf::host_ip_port{values.at(0), port});
+                    uint16_t port;
+                    if (util::stoul(splitted.back(), port) == -1)
+                    {
+                        LOG_ERROR << "Invalid peer port value: " << peer;
+                        return -1;
+                    }
+
+                    msg.peers.emplace(conf::host_ip_port{splitted.front(), port});
+                    splitted.clear();
+                }
             }
         }
 
         if (d.contains(msg::FLD_UNL))
         {
-            if (!d[msg::FLD_UNL].is_array())
+            if (!d[msg::FLD_UNL].empty() && !d[msg::FLD_UNL].is_array())
             {
                 LOG_ERROR << "Invalid unl value.";
                 return -1;
             }
-            
-            for (auto &val : d[msg::FLD_UNL].array_range())
+            else if (!d[msg::FLD_UNL].empty() && d[msg::FLD_UNL].size() > 0)
             {
-                if (!val.is<std::string>())
+                for (auto &val : d[msg::FLD_UNL].array_range())
                 {
-                    LOG_ERROR << "Invalid unl pubkey value.";
-                    return -1;
-                }
+                    if (!val.is<std::string>())
+                    {
+                        LOG_ERROR << "Invalid unl pubkey value.";
+                        return -1;
+                    }
 
-                const std::string unl_pubkey = val.as<std::string>();
-                const std::string unl_pubkey_bin = util::to_bin(unl_pubkey);
-                if (unl_pubkey_bin.empty())
-                {
-                    LOG_ERROR << "Invalid unl pubkey value: " << unl_pubkey;
-                    return -1;
-                }
+                    const std::string unl_pubkey = val.as<std::string>();
+                    const std::string unl_pubkey_bin = util::to_bin(unl_pubkey);
+                    if (unl_pubkey_bin.empty())
+                    {
+                        LOG_ERROR << "Invalid unl pubkey value: " << unl_pubkey;
+                        return -1;
+                    }
 
-                msg.unl.emplace(unl_pubkey_bin);
+                    msg.unl.emplace(unl_pubkey_bin);
+                }
             }
         }
 
-        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
+        if (d.contains(msg::FLD_ROLE))
+        {
+            if (!d[msg::FLD_ROLE].is<std::string>())
+            {
+                LOG_ERROR << "Invalid role value.";
+                return -1;
+            }
+
+            msg.role = d[msg::FLD_ROLE].as<std::string>();
+        }
+
+        if (d.contains(msg::FLD_HISTORY))
+        {
+            if (!d[msg::FLD_HISTORY].is<std::string>())
+            {
+                LOG_ERROR << "Invalid history value.";
+                return -1;
+            }
+
+            msg.history = d[msg::FLD_HISTORY].as<std::string>();
+        }
+
+        if (d.contains(msg::FLD_MAX_P_SHARDS))
+        {
+            if (!d[msg::FLD_MAX_P_SHARDS].empty() && !d[msg::FLD_MAX_P_SHARDS].is<uint64_t>())
+            {
+                LOG_ERROR << "Invalid max_primary_shards value.";
+                return -1;
+            }
+            else if (!d[msg::FLD_MAX_P_SHARDS].empty())
+                msg.max_primary_shards = d[msg::FLD_MAX_P_SHARDS].as<uint64_t>();
+        }
+
+        if (d.contains(msg::FLD_MAX_R_SHARDS))
+        {
+            if (!d[msg::FLD_MAX_R_SHARDS].empty() && !d[msg::FLD_MAX_R_SHARDS].is<uint64_t>())
+            {
+                LOG_ERROR << "Invalid max_raw_shards value.";
+                return -1;
+            }
+            else if (!d[msg::FLD_MAX_R_SHARDS].empty())
+                msg.max_raw_shards = d[msg::FLD_MAX_R_SHARDS].as<uint64_t>();
+        }
         return 0;
     }
 
@@ -345,8 +409,9 @@ namespace msg::json
      *            }
      * @param response_type Type of the response.
      * @param content Content inside the response.
+     * @param json_content Whether content is a json string.
      */
-    void build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content)
+    void build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content, const bool json_content)
     {
         msg.reserve(1024);
         msg += "{\"";
@@ -359,9 +424,9 @@ namespace msg::json
         msg += response_type;
         msg += SEP_COMMA;
         msg += msg::FLD_CONTENT;
-        msg += SEP_COLON;
+        msg += (json_content ? SEP_COLON_NOQUOTE : SEP_COLON);
         msg += content;
-        msg += "\"}";
+        msg += (json_content ? "}" : "\"}");
     }
 
     /**
@@ -369,8 +434,6 @@ namespace msg::json
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
      *            {
-     *              'reply_for': '<reply_for>'
-     *              'type': '<message type>',
      *              "name": "<container name>"
      *              "username": "<instance user name>""
      *              "ip": "<ip of the container>"
@@ -382,18 +445,10 @@ namespace msg::json
      * @param response_type Type of the response.
      * @param content Content inside the response.
      */
-    void build_create_response(std::string &msg, const hp::instance_info &info, std::string_view reply_for)
+    void build_create_response(std::string &msg, const hp::instance_info &info)
     {
         msg.reserve(1024);
         msg += "{\"";
-        msg += msg::FLD_REPLY_FOR;
-        msg += SEP_COLON;
-        msg += std::string(reply_for);
-        msg += SEP_COMMA;
-        msg += msg::FLD_TYPE;
-        msg += SEP_COLON;
-        msg += msg::MSGTYPE_CREATE_RES;
-        msg += SEP_COMMA;
         msg += "name";
         msg += SEP_COLON;
         msg += info.container_name;

@@ -258,7 +258,7 @@ namespace util
     }
 
     /**
-     * Converts given string to a uint_16. A wrapper function for std::stoul. 
+     * Converts given string to a uint16_t. A wrapper function for std::stoul. 
      * @param str String variable.
      * @param result Variable to store the answer from the conversion.
      * @return Returns 0 in a successful conversion and -1 on error.

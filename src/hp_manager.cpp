@@ -127,7 +127,7 @@ namespace hp
     }
 
     /**
-     * Create a new instance of hotpocket. A new contract is created with a new docker images.
+     * Create a new instance of hotpocket. A new contract is created with docker image.
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
@@ -198,10 +198,10 @@ namespace hp
     /**
      * Initiate the instance. The config will be updated and container will be started.
      * @param container_name Name of the container.
-     * @param config Config values for the hp instance.
+     * @param config_msg Config values for the hp instance.
      * @return 0 on success and -1 on error.
     */
-    int initiate_instance(std::string_view container_name, const instance_config &config)
+    int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
@@ -220,7 +220,7 @@ namespace hp
         const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         std::string config_file_path(contract_dir);
         config_file_path.append("/cfg/hp.cfg");
-        const int config_fd = open(config_file_path.data(), O_RDWR);
+        const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
         if (config_fd == -1)
         {
             LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
@@ -232,7 +232,7 @@ namespace hp
         bool is_full_history;
         if (util::read_json_file(config_fd, d) == -1 ||
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
-            write_json_values(d, config) == -1 ||
+            write_json_values(d, config_msg) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
             hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
         {
@@ -610,7 +610,7 @@ namespace hp
     /**
      * Read only required contract config values
      * @param d Json file to be read.
-     * @param hpfs_log_level Log level to be read.
+     * @param hpfs_log_level Hpfs log level.
      * @param is_full_history Contract history mode.
      * @return 0 on success. -1 on failure.
      */
@@ -655,23 +655,61 @@ namespace hp
     }
 
     /**
-     * Write only updated contract config values
+     * Write contract config values (only updated if provided config values are not empty) into the json file.
      * @param d Json file to be populated.
-     * @param config Config values to be updated.
+     * @param config_msg Config values to be updated.
      * @return 0 on success. -1 on failure.
      */
-    int write_json_values(jsoncons::ojson &d, const instance_config &config)
+    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg)
     {
-        jsoncons::ojson unl(jsoncons::json_array_arg);
-        for (auto &pubkey : config.unl)
-            unl.push_back(util::to_hex(pubkey));
-        d["contract"]["unl"] = unl;
+        if (!config_msg.unl.empty())
+        {
+            jsoncons::ojson unl(jsoncons::json_array_arg);
+            for (auto &pubkey : config_msg.unl)
+                unl.push_back(util::to_hex(pubkey));
+            d["contract"]["unl"] = unl;
+        }
 
-        jsoncons::ojson peers(jsoncons::json_array_arg);
-        for (auto &peer : config.peers)
-            peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
-        d["mesh"]["known_peers"] = peers;
-        
+        if (!config_msg.peers.empty())
+        {
+            jsoncons::ojson peers(jsoncons::json_array_arg);
+            for (auto &peer : config_msg.peers)
+                peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
+            d["mesh"]["known_peers"] = peers;
+        }
+
+        if (!config_msg.role.empty())
+        {
+            if (config_msg.role != "observer" && config_msg.role != "validator")
+            {
+                LOG_ERROR << "Invalid role value observer|validator";
+                return -1;
+            }
+            d["node"]["role"] = config_msg.role;
+        }
+
+        if (!config_msg.history.empty())
+        {
+            if (config_msg.history != "full" && config_msg.history != "custom")
+            {
+                LOG_ERROR << "Invalid history value full|custom";
+                return -1;
+            }
+            d["node"]["history"] = config_msg.history;
+        }
+
+        if (config_msg.max_primary_shards.has_value())
+            d["node"]["history_config"]["max_primary_shards"] = config_msg.max_primary_shards.value();
+
+        if (config_msg.max_raw_shards.has_value())
+            d["node"]["history_config"]["max_raw_shards"] = config_msg.max_raw_shards.value();
+
+        if (d["node"]["history"].as<std::string>() == "custom" && d["node"]["history_config"]["max_primary_shards"].as<uint64_t>() == 0)
+        {
+            LOG_ERROR << "'max_primary_shards' cannot be zero in history=custom mode.";
+            return -1;
+        }
+
         return 0;
     }
 

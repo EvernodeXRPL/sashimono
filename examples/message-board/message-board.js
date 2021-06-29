@@ -77,7 +77,26 @@ server.listen(8080, () => {
                             break;
                         case 'initiate':
                             containerName = await askForInput('Container Name');
-                            peers = await askForInput('Comma seperated Peer List <host1:port1>,<host1:port1>,...');
+                            role = await askForInput('Role <validator> or <observer>');
+                            if (role && role != 'validator' && role != 'observer') {
+                                console.error('Invalid role. (Should be "validator" or "observer").')
+                                break;
+                            }
+                            history = await askForInput('History <mode{full|custom},max_primary_shards{number},max_raw_shards{number}>');
+                            split = [];
+                            if (history)
+                            {
+                                split = history.split(',');
+                                if (split.length == 0 || split.length == 0 > 3) {
+                                    console.error('Invalid history.')
+                                    break;
+                                }
+                                else if (split[0] != 'full' && split[0] != 'custom') {
+                                    console.error('Invalid history. (Should be "full" or "custom").')
+                                    break;
+                                }
+                            }
+                            peers = await askForInput('Comma seperated Peer List <host1:port1>,<host2:port2>,...');
                             unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
@@ -85,7 +104,11 @@ server.listen(8080, () => {
                                 owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                 container_name: containerName,
                                 peers: peers.split(','),
-                                unl: unl.split(',')
+                                unl: unl.split(','),
+                                role: role,
+                                history: split.length > 0 ? split[0] : '',
+                                max_primary_shards: split.length > 1 ? parseInt(split[1]) : '',
+                                max_raw_shards: split.length > 2 ? parseInt(split[2]) : ''
                             }));
                             break;
                         case 'destroy':
@@ -117,7 +140,7 @@ server.listen(8080, () => {
                             break;
 
                         default:
-                            console.log('Invalid command. Only valid [create, initiate, destroy, start and stop]');
+                            console.error('Invalid command. Only valid [create, initiate, destroy, start and stop]');
                             break;
                     }
 

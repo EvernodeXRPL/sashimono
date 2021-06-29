@@ -4,6 +4,8 @@
 #include "pchheader.hpp"
 #include "hpfs_manager.hpp"
 #include "conf.hpp"
+#include "conf.hpp"
+#include "msg/msg_common.hpp"
 
 namespace hp
 {
@@ -43,12 +45,6 @@ namespace hp
         std::string username;
     };
 
-    struct instance_config
-    {
-        std::set<conf::host_ip_port> peers;
-        std::set<std::string> unl;
-    };
-
     struct resources
     {
         size_t cpu_micro_seconds = 0; // CPU time an instance can consume.
@@ -64,7 +60,7 @@ namespace hp
 
     int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id);
 
-    int initiate_instance(std::string_view container_name, const instance_config &config);
+    int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg);
 
     int create_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
 
@@ -87,7 +83,7 @@ namespace hp
 
     int read_json_values(const jsoncons::ojson &d, std::string &hpfs_log_level, bool &is_full_history);
 
-    int write_json_values(jsoncons::ojson &d, const instance_config &config);
+    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg);
 
     int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param = {});
 

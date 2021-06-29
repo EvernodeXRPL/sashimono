@@ -14,6 +14,8 @@ namespace msg
         std::string contract_id;
     };
 
+    // Keep numerical config valus as optional so when updating the config if the value is empty
+    // We do nothing otherwise we take the value and update the config.
     struct initiate_msg
     {
         std::string id;
@@ -22,6 +24,10 @@ namespace msg
         std::string container_name;
         std::set<conf::host_ip_port> peers;
         std::set<std::string> unl;
+        std::string role;
+        std::string history;
+        std::optional<uint64_t> max_primary_shards;
+        std::optional<uint64_t> max_raw_shards;
     };
 
     struct destroy_msg
@@ -58,6 +64,10 @@ namespace msg
     constexpr const char *FLD_ID = "id";
     constexpr const char *FLD_PEERS = "peers";
     constexpr const char *FLD_UNL = "unl";
+    constexpr const char *FLD_ROLE = "role";
+    constexpr const char *FLD_HISTORY = "history";
+    constexpr const char *FLD_MAX_P_SHARDS = "max_primary_shards";
+    constexpr const char *FLD_MAX_R_SHARDS = "max_raw_shards";
 
     // Message types
     constexpr const char *MSGTYPE_INIT = "init";

@@ -23,7 +23,7 @@ unzip -o $archive_name >>/dev/null
 
 # Verify necessary files in the archive.
 if [ ! -f "$install_script" ]; then
-    echo "Required $install_script or $contract_config not found. Exiting.."
+    echo "Required $install_script not found. Exiting.."
     exit 1
 fi
 

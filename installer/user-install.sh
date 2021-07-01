@@ -41,27 +41,19 @@ user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-# Setup user resources
+# Setup user resources.
 
-echo "
-group $user-group {
-    cpu {
-        cpu.cfs_quota_us = $cpu;
-    }
-    memory {
-        memory.limit_in_bytes = $memory;
-        memory.memsw.limit_in_bytes = $memory;
-    }
-}" >>/etc/cgconfig.conf
-
+# These will be added as single lines, so the line can be esily remove on user uninstall.
+echo "group $user-group {cpu{cpu.cfs_quota_us = $cpu;}memory{memory.limit_in_bytes = $memory;memory.memsw.limit_in_bytes = $memory;}}" >> /etc/cgconfig.conf
 echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf
 
-# Restart the services
+# Restart the services.
+# Even though cgconfigparser_service is started it'll be in inactive state.
 systemctl restart $cgconfigparser_service
-cg_par_cat=$(systemctl --user is-active $cgconfigparser_service)
-[ "$cg_par_cat" != "active" ] && rollback "NO_CGPARSVC"
+cg_par_cat=$(systemctl is-active $cgconfigparser_service)
+[ "$cg_par_cat" != "inactive" ] && rollback "NO_CGPARSVC"
 systemctl restart $cgrulesgend_service
-cg_rules_cat=$(systemctl --user is-active $cgrulesgend_service)
+cg_rules_cat=$(systemctl is-active $cgrulesgend_service)
 [ "$cg_rules_cat" != "active" ] && rollback "NO_CGRULSVC"
 
 # Adding disk quota to the new user.

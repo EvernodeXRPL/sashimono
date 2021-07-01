@@ -12,6 +12,9 @@ user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
+cgconfigparser_service=sashi-cgconfigparser
+cgrulesgend_service=sashi-cgrulesgend
+
 # Check if users exists.
 if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then
         :
@@ -60,6 +63,15 @@ userdel $user
 rm -r /home/$user
 
 [ -d /home/$user ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
+
+echo "Removing resources"
+# Delete config values.
+sed "/group $user-group/d" /etc/cgconfig.conf > /etc/cgconfig.conf
+sed "/$user-group/d" /etc/cgrules.conf > /etc/cgrules.conf
+
+# Restart the services.
+systemctl restart $cgconfigparser_service
+systemctl restart $cgrulesgend_service
 
 echo "UNINST_SUC"
 exit 0

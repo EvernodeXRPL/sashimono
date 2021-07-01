@@ -41,6 +41,13 @@ if [ ! -f /etc/cgrules.conf ]; then
     : >/etc/cgrules.conf
 fi
 
+function rollback() {
+    echo "Rolling back sashimono installation."
+    $(pwd)/sashimono-uninstall.sh $user
+    echo "Rolled back the installation."
+    exit 1
+}
+
 # Create cgroup the services.
 echo "[Unit]
 Description=cgroup config parser
@@ -76,16 +83,16 @@ echo "Configured $cgrulesgend_service service."
 
 systemctl daemon-reload
 
+# Even though cgconfigparser_service is started it'll be in inactive state.
 systemctl enable $cgconfigparser_service
 systemctl start $cgconfigparser_service
-cg_par_cat=$(systemctl --user is-active $cgconfigparser_service)
-[ "$cg_par_cat" != "active" ] && echo "Starting $cgconfigparser_service service failed." && exit 1
+cg_par_cat=$(systemctl is-active $cgconfigparser_service)
+[ "$cg_par_cat" != "inactive" ] && echo "Starting $cgconfigparser_service service failed." && rollback
 
 systemctl enable $cgrulesgend_service
 systemctl start $cgrulesgend_service
-cg_rules_cat=$(systemctl --user is-active $cgrulesgend_service)
-[ "$cg_rules_cat" != "active" ] && echo "Starting $cgrulesgend_service service failed." && exit 1
-
+cg_rules_cat=$(systemctl is-active $cgrulesgend_service)
+[ "$cg_rules_cat" != "active" ] && echo "Starting $cgrulesgend_service service failed." && rollback
 
 echo "Started $cgconfigparser_service and $cgrulesgend_service services"
 
@@ -119,7 +126,7 @@ if [ ! -f /aquota.user ]; then
 fi
 
 # Check whether installation dir is still empty.
-[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && exit 1
+[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && rollback
 
 echo "Done."
 exit 0

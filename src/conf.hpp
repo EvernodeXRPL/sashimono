@@ -63,10 +63,10 @@ namespace conf
 
     struct system_config
     {
-        size_t max_cpu_micro_seconds = 0; // Max CPU time the agent process can consume.
-        size_t max_mem_bytes = 0;         // Max memory the agent process can allocate.
-        size_t max_storage_bytes = 0;     // Max physical storage the agent process can allocate.
-        size_t max_instance_count = 0;    // Max number of instances that can be created.
+        size_t max_cpu_us = 0;         // Max CPU time the agent process can consume.
+        size_t max_mem_bytes = 0;      // Max memory the agent process can allocate.
+        size_t max_storage_bytes = 0;  // Max physical storage the agent process can allocate.
+        size_t max_instance_count = 0; // Max number of instances that can be created.
     };
 
     struct sa_config
@@ -88,7 +88,7 @@ namespace conf
 
         std::string user_install_sh;
         std::string user_uninstall_sh;
-        
+
         std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.

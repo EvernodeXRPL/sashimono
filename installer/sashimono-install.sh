@@ -5,6 +5,9 @@
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
+cgconfigparser_service=sashi-cgconfigparser
+cgrulesgend_service=sashi-cgrulesgend
+
 echo "Installing Sashimono..."
 
 # Create bin dirs first so it automatically checks for privileged access.
@@ -18,6 +21,72 @@ if ! command -v curl &> /dev/null
 then
     apt-get install -y curl
 fi
+
+# Install cucgroup-tools if not exists (required to setup resource control groups).
+if [! command -v /usr/sbin/cgconfigparser &> /dev/null] || [! command -v /usr/sbin/cgrulesengd &> /dev/null]
+then
+    apt-get install -y cgroup-tools
+fi
+
+# Copy cgred.conf from examples if not exists to setup control groups.
+if [ ! -f /etc/cgred.conf ]; then
+    cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
+fi
+
+# Create new cgconfig.conf if not exists to setup control groups.
+if [ ! -f /etc/cgconfig.conf ]; then
+    >/etc/cgconfig.conf
+fi
+
+# Create new cgrules.conf if not exists to setup control groups.
+if [ ! -f /etc/cgrules.conf ]; then
+    >/etc/cgrules.conf
+fi
+
+# Create cgroup the services.
+echo "[Unit]
+Description=cgroup config parser
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/sbin/cgconfigparser -l /etc/cgconfig.conf
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/$cgconfigparser_service.service
+
+echo "Configured $cgconfigparser_service service."
+
+echo "[Unit]
+Description=cgroup rules generator
+After=network.target $cgconfigparser_service.service
+
+[Service]
+User=root
+Group=root
+Type=forking
+EnvironmentFile=-/etc/cgred.conf
+ExecStart=/usr/sbin/cgrulesengd
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target" > /etc/systemd/system/$cgrulesgend_service.service
+
+echo "Configured $cgrulesgend_service service."
+
+systemctl daemon-reload
+
+systemctl enable $cgconfigparser_service
+systemctl start $cgconfigparser_service
+
+systemctl enable $cgrulesgend_service
+systemctl start $cgrulesgend_service
+
+echo "Started $cgconfigparser_service and $cgrulesgend_service services"
+
+echo "Successfully setup cgroup"
 
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.

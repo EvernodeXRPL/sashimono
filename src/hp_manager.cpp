@@ -56,7 +56,7 @@ namespace hp
         // hp_monitor_thread = std::thread(hp_monitor_loop);
 
         // Calculate the resources per instance.
-        instance_resources.cpu_micro_seconds = conf::cfg.system.max_cpu_micro_seconds / conf::cfg.system.max_instance_count;
+        instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
         instance_resources.storage_bytes = conf::cfg.system.max_storage_bytes / conf::cfg.system.max_instance_count;
 
@@ -135,7 +135,20 @@ namespace hp
     */
     int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id)
     {
-        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_micro_seconds << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
+        // If the max alloved instance count is already allocated. We won't allow more.
+        const int allocated_count = sqlite::get_allocated_instance_count(db);
+        if (allocated_count == -1)
+        {
+            LOG_ERROR << "Error getting allocated instance count from db.";
+            return -1;
+        }
+        else if (allocated_count >= conf::cfg.system.max_instance_count)
+        {
+            LOG_ERROR << "Max instance count is reached.";
+            return -1;
+        }
+
+        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_us << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
 
         // First check whether contract_id is valid uuid.
         if (!crypto::verify_uuid(contract_id))
@@ -163,7 +176,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_bytes) == -1)
             return -1;
 
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
@@ -717,13 +730,20 @@ namespace hp
      * Executes the given bash file and populates final comma seperated output into a vector.
      * @param file_name Name of the bash script.
      * @param output_params Final output of the bash script.
-     * @param input_param Input parameter to the bash script (Optional).
+     * @param input_params Input parameters to the bash script (Optional).
     */
-    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, std::string_view input_param)
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params)
     {
-        const int len = 23 + (file_name.length() * 2) + input_param.length();
+        std::string params = "";
+        for (auto itr = input_params.begin(); itr != input_params.end(); itr++)
+        {
+            params.append(*itr);
+            if (std::next(itr) != input_params.end())
+                params.append(" ");;
+        }
+        const int len = 23 + (file_name.length() * 2) + params.length();
         char command[len];
-        sprintf(command, RUN_SH, file_name.data(), file_name.data(), input_param.empty() ? "\0" : input_param.data());
+        sprintf(command, RUN_SH, file_name.data(), file_name.data(), params.empty() ? "\0" : params.data());
 
         FILE *fpipe = popen(command, "r");
         if (fpipe == NULL)
@@ -758,32 +778,33 @@ namespace hp
      * @param user_id Uid of the created user to be populated.
      * @param username Username of the created user to be populated.
     */
-    int install_user(int &user_id, std::string &username)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_bytes)
     {
-        std::vector<std::string> params;
-        if (execute_bash_file(conf::ctx.user_install_sh, params) == -1)
+        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_bytes)};
+        std::vector<std::string> output_params;
+        if (execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;
 
-        if (strncmp(params.at(params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
+        if (strncmp(output_params.at(output_params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
         {
-            if (util::stoi(params.at(0), user_id) == -1)
+            if (util::stoi(output_params.at(0), user_id) == -1)
             {
                 LOG_ERROR << "Create user error: Invalid user id.";
                 return -1;
             }
-            username = params.at(1);
+            username = output_params.at(1);
             LOG_DEBUG << "Created new user : " << username << ", uid : " << user_id;
             return 0;
         }
-        else if (strncmp(params.at(params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
+        else if (strncmp(output_params.at(output_params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
         {
-            const std::string error = params.at(0);
+            const std::string error = output_params.at(0);
             LOG_ERROR << "User creation error : " << error;
             return -1;
         }
         else
         {
-            const std::string error = params.at(0);
+            const std::string error = output_params.at(0);
             LOG_ERROR << "Unknown user creation error : " << error;
             return -1;
         }
@@ -795,25 +816,26 @@ namespace hp
     */
     int uninstall_user(std::string_view username)
     {
-        std::vector<std::string> params;
-        if (execute_bash_file(conf::ctx.user_uninstall_sh, params, username) == -1)
+        const std::vector<std::string_view> input_params = {username};
+        std::vector<std::string> output_params;
+        if (execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)
             return -1;
 
         // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
-        if (strncmp(params.at(params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
+        if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
         {
             LOG_DEBUG << "Deleted the user : " << username;
             return 0;
         }
-        if (strncmp(params.at(params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
+        if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
         {
-            const std::string error = params.at(0);
+            const std::string error = output_params.at(0);
             LOG_ERROR << "User removing error : " << error;
             return -1;
         }
         else
         {
-            const std::string error = params.at(0);
+            const std::string error = output_params.at(0);
             LOG_ERROR << "Unknown user removing error : " << error;
             return -1;
         }

@@ -3,6 +3,8 @@
 
 namespace util
 {
+    constexpr mode_t DIR_PERMS = 0755;
+
     const std::string to_hex(const std::string_view bin)
     {
         // Allocate the target string.
@@ -83,7 +85,7 @@ namespace util
             free(path2);
 
             // Create this dir.
-            if (!error_thrown && mkdir(path.data(), S_IRWXU | S_IRWXG | S_IROTH) == -1)
+            if (!error_thrown && mkdir(path.data(), DIR_PERMS) == -1)
             {
                 std::cerr << errno << ": Error in recursive dir creation. " << path << std::endl;
                 error_thrown = true;

@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../hp_manager.hpp"
 
-#define __HANDLE_RESPONSE(id, type, content, ret)                                           \
-    {                                                                                       \
-        std::string res;                                                                    \
-        msg_parser.build_response(res, type, id, content, type == msg::MSGTYPE_CREATE_RES); \
-        send(res);                                                                          \
-        return ret;                                                                         \
+#define __HANDLE_RESPONSE(id, type, content, ret)                                                       \
+    {                                                                                                   \
+        std::string res;                                                                                \
+        msg_parser.build_response(res, type, id, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
+        send(res);                                                                                      \
+        return ret;                                                                                     \
     }
 
 namespace comm

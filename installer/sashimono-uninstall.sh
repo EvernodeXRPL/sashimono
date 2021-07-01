@@ -3,6 +3,23 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 
+cgconfigparser_service=sashi-cgconfigparser
+cgrulesgend_service=sashi-cgrulesgend
+
+# Remove the cgroup services
+systemctl stop $cgconfigparser_service
+systemctl disable $cgconfigparser_service
+rm /etc/systemd/system/$cgconfigparser_service.service
+
+systemctl stop $cgrulesgend_service
+systemctl disable $cgrulesgend_service
+rm /etc/systemd/system/$cgrulesgend_service.service
+
+systemctl daemon-reload
+systemctl reset-failed
+
+echo "Removed $cgconfigparser_service and $cgrulesgend_service services"
+
 # Uninstall all contract instance users
 prefix="sashi"
 users=$(cut -d: -f1 /etc/passwd | grep "^$prefix" | sort)

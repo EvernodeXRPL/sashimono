@@ -2,11 +2,22 @@
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
 
+# Check for user cpu and memory quotas.
+cpu=$1
+memory=$2
+if [ -z $cpu ] || [ -z $memory ]; then
+    echo "Expected: user-install <cpu quota micro seconds> <memory quota bytes>"
+    echo "INVALID_PARAMS,INST_ERR" && exit 1
+fi
+
 prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
+
+cgconfigparser_service=sashi-cgconfigparser
+cgrulesgend_service=sashi-cgrulesgend
 
 # Check if users already exists.
 [ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -28,6 +39,27 @@ echo "Created '$user' user."
 user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
+
+# Setup user resources
+
+echo "
+group $user-group {
+    cpu {
+        cpu.cfs_quota_us = $cpu;
+    }
+    memory {
+        memory.limit_in_bytes = $memory;
+        memory.memsw.limit_in_bytes = $memory;
+    }
+}" >>/etc/cgconfig.conf
+
+echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf
+
+# Restart the services
+systemctl restart $cgconfigparser_service
+systemctl restart $cgrulesgend_service
+
+echo "Configured the resources"
 
 # Setup env variables for the user.
 echo "

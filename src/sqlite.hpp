@@ -78,5 +78,7 @@ namespace sqlite
     void get_running_instance_names(sqlite3 *db, std::vector<std::string> &running_instance_names);
 
     void get_running_instance_user_and_name_list(sqlite3 *db, std::vector<std::pair<const std::string, const std::string>> &running_instances);
+
+    int get_allocated_instance_count(sqlite3 *db);
 }
 #endif

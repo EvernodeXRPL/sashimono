@@ -37,6 +37,8 @@ namespace sqlite
 
     constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port FROM instances WHERE name = ?";
 
+    constexpr const char *GET_ALOCATED_INSTANCE_COUNT = "SELECT COUNT(name) FROM instances WHERE status != ?";
+    
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
     constexpr const char *GET_RUNNING_INSTANCE_USER_AND_NAME_LIST = "SELECT username,name FROM instances WHERE status = ?";
@@ -515,5 +517,30 @@ namespace sqlite
 
         // Finalize and distroys the statement.
         sqlite3_finalize(stmt);
+    }
+
+    /**
+     * Get count of running instances
+     * @param db Database connection.
+     * @return Count on success -1 on error.
+    */
+    int get_allocated_instance_count(sqlite3 *db)
+    {
+        sqlite3_stmt *stmt;
+        std::string_view destroyed_status(hp::CONTAINER_STATES[hp::STATES::DESTROYED]);
+
+        if (sqlite3_prepare_v2(db, GET_ALOCATED_INSTANCE_COUNT, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, destroyed_status.data(), destroyed_status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_ROW)
+        {
+            const uint64_t count = sqlite3_column_int64(stmt, 0);
+            // Finalize and distroys the statement.
+            sqlite3_finalize(stmt);
+            return count;
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+        return -1;
     }
 }

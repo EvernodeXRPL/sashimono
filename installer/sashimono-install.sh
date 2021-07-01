@@ -104,6 +104,17 @@ tar zxf $tmp/rootless.tgz --strip-components=1
 
 rm -r $tmp
 
+# Adding quota limitation capability
+# Check and turn on user quota if not enabled.
+if [ ! -f /aquota.user ]; then
+    # quota package is not installed.
+    if ! command -v quota &>/dev/null; then
+        apt-get install -y quota >/dev/null 2>&1
+    fi
+    sudo quotacheck -ugm / 
+    sudo quotaon -v /
+fi
+
 # Check whether installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && exit 1
 

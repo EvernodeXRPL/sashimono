@@ -332,7 +332,7 @@ namespace sqlite
             return 0;
         }
 
-        LOG_ERROR << "Error inserting hp instance record. " << sqlite3_errmsg(db);
+        LOG_ERROR << errno << ": Error inserting hp instance record. " << sqlite3_errmsg(db);
         return -1;
     }
 

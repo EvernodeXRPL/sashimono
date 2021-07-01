@@ -185,15 +185,19 @@ namespace hp
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
             create_container(username, container_name, contract_dir, instance_ports, info) == -1)
         {
-            LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
             uninstall_user(username);
             return -1;
         }
 
-        if (sqlite::insert_hp_instance_row(db, info) == -1)
+        // Adding disk quota limits.
+        const std::string limit = std::to_string(instance_resources.storage_bytes / 1024); // Limit is in KB.
+        const std::string command = "sudo setquota -u -F vfsv0 " + username + " " + limit + " " + limit + " 0 0 /";
+        if (system(command.c_str()) != 0 ||
+            sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            LOG_ERROR << errno << ": Error creating hp instance for " << owner_pubkey;
+            LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
             docker_remove(username, container_name);
             uninstall_user(username);

@@ -78,9 +78,14 @@ systemctl daemon-reload
 
 systemctl enable $cgconfigparser_service
 systemctl start $cgconfigparser_service
+cg_par_cat=$(systemctl --user is-active $cgconfigparser_service)
+[ "$cg_par_cat" != "active" ] && echo "Starting $cgconfigparser_service service failed." && exit 1
 
 systemctl enable $cgrulesgend_service
 systemctl start $cgrulesgend_service
+cg_rules_cat=$(systemctl --user is-active $cgrulesgend_service)
+[ "$cg_rules_cat" != "active" ] && echo "Starting $cgrulesgend_service service failed." && exit 1
+
 
 echo "Started $cgconfigparser_service and $cgrulesgend_service services"
 

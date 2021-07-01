@@ -58,7 +58,11 @@ echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf
 
 # Restart the services
 systemctl restart $cgconfigparser_service
+cg_par_cat=$(systemctl --user is-active $cgconfigparser_service)
+[ "$cg_par_cat" != "active" ] && rollback "NO_CGPARSVC"
 systemctl restart $cgrulesgend_service
+cg_rules_cat=$(systemctl --user is-active $cgrulesgend_service)
+[ "$cg_rules_cat" != "active" ] && rollback "NO_CGRULSVC"
 
 # Adding disk quota to the new user.
 sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /

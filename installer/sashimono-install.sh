@@ -17,14 +17,12 @@ mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
 
 # Install curl if not exists (required to download installation artifacts).
-if ! command -v curl &> /dev/null
-then
+if ! command -v curl &>/dev/null; then
     apt-get install -y curl
 fi
 
 # Install cucgroup-tools if not exists (required to setup resource control groups).
-if [! command -v /usr/sbin/cgconfigparser &> /dev/null] || [! command -v /usr/sbin/cgrulesengd &> /dev/null]
-then
+if ! command -v /usr/sbin/cgconfigparser &>/dev/null || ! command -v /usr/sbin/cgrulesengd &>/dev/null; then
     apt-get install -y cgroup-tools
 fi
 
@@ -35,12 +33,12 @@ fi
 
 # Create new cgconfig.conf if not exists to setup control groups.
 if [ ! -f /etc/cgconfig.conf ]; then
-    >/etc/cgconfig.conf
+    : >/etc/cgconfig.conf
 fi
 
 # Create new cgrules.conf if not exists to setup control groups.
 if [ ! -f /etc/cgrules.conf ]; then
-    >/etc/cgrules.conf
+    : >/etc/cgrules.conf
 fi
 
 # Create cgroup the services.
@@ -55,7 +53,7 @@ ExecStart=/usr/sbin/cgconfigparser -l /etc/cgconfig.conf
 Type=oneshot
 
 [Install]
-WantedBy=multi-user.target" > /etc/systemd/system/$cgconfigparser_service.service
+WantedBy=multi-user.target" >/etc/systemd/system/$cgconfigparser_service.service
 
 echo "Configured $cgconfigparser_service service."
 
@@ -72,7 +70,7 @@ ExecStart=/usr/sbin/cgrulesengd
 Restart=on-failure
 
 [Install]
-WantedBy=multi-user.target" > /etc/systemd/system/$cgrulesgend_service.service
+WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesgend_service.service
 
 echo "Configured $cgrulesgend_service service."
 
@@ -111,7 +109,7 @@ if [ ! -f /aquota.user ]; then
     if ! command -v quota &>/dev/null; then
         apt-get install -y quota >/dev/null 2>&1
     fi
-    sudo quotacheck -ugm / 
+    sudo quotacheck -ugm /
     sudo quotaon -v /
 fi
 

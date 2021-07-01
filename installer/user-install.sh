@@ -5,8 +5,9 @@
 # Check for user cpu and memory quotas.
 cpu=$1
 memory=$2
-if [ -z $cpu ] || [ -z $memory ]; then
-    echo "Expected: user-install <cpu quota micro seconds> <memory quota bytes>"
+disk=$3
+if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
+    echo "Expected: user-install <cpu quota micro seconds> <memory quota bytes> <disk quota kbytes>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -20,7 +21,7 @@ cgconfigparser_service=sashi-cgconfigparser
 cgrulesgend_service=sashi-cgrulesgend
 
 # Check if users already exists.
-[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
+[ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -59,6 +60,9 @@ echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf
 systemctl restart $cgconfigparser_service
 systemctl restart $cgrulesgend_service
 
+# Adding disk quota to the new user.
+sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+
 echo "Configured the resources"
 
 # Setup env variables for the user.
@@ -70,8 +74,7 @@ echo "Updated user .bashrc."
 
 # Wait until user systemd is functioning.
 user_systemd=""
-for (( i=0; i<30; i++ ))
-do
+for ((i = 0; i < 30; i++)); do
     sleep 0.1
     user_systemd=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-system-running 2>/dev/null)
     [ "$user_systemd" == "running" ] && break

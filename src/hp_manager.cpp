@@ -57,8 +57,8 @@ namespace hp
 
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
-        instance_resources.mem_bytes = conf::cfg.system.max_mem_bytes / conf::cfg.system.max_instance_count;
-        instance_resources.storage_bytes = conf::cfg.system.max_storage_bytes / conf::cfg.system.max_instance_count;
+        instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
+        instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
 
         return 0;
     }
@@ -148,7 +148,7 @@ namespace hp
             return -1;
         }
 
-        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_us << " MicroS, RAM: " << instance_resources.mem_bytes << " Bytes, Storage: " << instance_resources.storage_bytes << " Bytes.";
+        LOG_INFO << "Resources for instance - CPU: " << instance_resources.cpu_us << " MicroS, RAM: " << instance_resources.mem_kbytes << " KB, Storage: " << instance_resources.storage_kbytes << " KB.";
 
         // First check whether contract_id is valid uuid.
         if (!crypto::verify_uuid(contract_id))
@@ -176,7 +176,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_bytes) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes) == -1)
             return -1;
 
         const std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
@@ -191,11 +191,7 @@ namespace hp
             return -1;
         }
 
-        // Adding disk quota limits.
-        const std::string limit = std::to_string(instance_resources.storage_bytes / 1024); // Limit is in KB.
-        const std::string command = "sudo setquota -u -F vfsv0 " + username + " " + limit + " " + limit + " 0 0 /";
-        if (system(command.c_str()) != 0 ||
-            sqlite::insert_hp_instance_row(db, info) == -1)
+        if (sqlite::insert_hp_instance_row(db, info) == -1)
         {
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
@@ -781,10 +777,13 @@ namespace hp
      * Create new user and install dependencies and populate id and username.
      * @param user_id Uid of the created user to be populated.
      * @param username Username of the created user to be populated.
+     * @param max_cpu_us CPU quota allowed for this user.
+     * @param max_mem_kbytes Memory quota allowed for this user.
+     * @param storage_kbytes Disk quota allowed for this user.
     */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_bytes)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes)
     {
-        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_bytes)};
+        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes*1024), std::to_string(storage_kbytes)};
         std::vector<std::string> output_params;
         if (execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

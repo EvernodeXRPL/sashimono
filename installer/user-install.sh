@@ -17,7 +17,6 @@ user="$prefix$suffix"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
-cgconfigparser_service=sashi-cgconfigparser
 cgrulesgend_service=sashi-cgrulesgend
 
 # Check if users already exists.
@@ -43,15 +42,17 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
 # Setup user resources.
 
-# These will be added as single lines, so the line can be esily remove on user uninstall.
-echo "group $user-group {cpu{cpu.cfs_quota_us = $cpu;}memory{memory.limit_in_bytes = $memory;memory.memsw.limit_in_bytes = $memory;}}" >> /etc/cgconfig.conf
-echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf
+! (cgcreate -g cpu:$user-group &&
+    echo "$cpu" > /sys/fs/cgroup/cpu/$user-group/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user-group &&
+    echo "$memory" > /sys/fs/cgroup/memory/$user-group/memory.limit_in_bytes &&
+    echo "$memory" > /sys/fs/cgroup/memory/$user-group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+! echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf && echo rollback "CGROUP_USER_ADD"
 
 # Restart the services.
-# Even though cgconfigparser_service is started it'll be in inactive state.
-systemctl restart $cgconfigparser_service
-cg_par_cat=$(systemctl is-active $cgconfigparser_service)
-[ "$cg_par_cat" != "inactive" ] && rollback "NO_CGPARSVC"
+cg_rules_cat=$(systemctl is-enabled $cgrulesgend_service)
+
+[ "$cg_rules_cat" != "enabled" ] && systemctl daemon-reload && systemctl enable $cgrulesgend_service
 systemctl restart $cgrulesgend_service
 cg_rules_cat=$(systemctl is-active $cgrulesgend_service)
 [ "$cg_rules_cat" != "active" ] && rollback "NO_CGRULSVC"

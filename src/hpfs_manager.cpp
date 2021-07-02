@@ -176,11 +176,7 @@ namespace hpfs
             util::kill_process(pid, true);
         }
 
-        if (pclose(fpipe) != 0)
-        {
-            LOG_ERROR << errno << ": Error getting pids of hpfs for user: " << username;
-            return -1;
-        }
+        pclose(fpipe);
 
         return 0;
     }

@@ -3,7 +3,6 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 
-cgconfigparser_service=sashi-cgconfigparser
 cgrulesgend_service=sashi-cgrulesgend
 
 # Uninstall all contract instance users
@@ -40,11 +39,7 @@ if [ $ucount -gt 0 ]; then
     fi
 fi
 
-echo "Removing $cgconfigparser_service and $cgrulesgend_service services..."
-
-systemctl stop $cgconfigparser_service
-systemctl disable $cgconfigparser_service
-rm /etc/systemd/system/$cgconfigparser_service.service
+echo "Removing $cgrulesgend_service services..."
 
 systemctl stop $cgrulesgend_service
 systemctl disable $cgrulesgend_service

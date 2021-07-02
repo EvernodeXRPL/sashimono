@@ -5,7 +5,6 @@
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
-cgconfigparser_service=sashi-cgconfigparser
 cgrulesgend_service=sashi-cgrulesgend
 
 echo "Installing Sashimono..."
@@ -44,59 +43,11 @@ fi
 function rollback() {
     echo "Rolling back sashimono installation."
     $(pwd)/sashimono-uninstall.sh $user
+    rm -r $tmp
     echo "Rolled back the installation."
     exit 1
 }
 
-# Create cgroup the services.
-echo "[Unit]
-Description=cgroup config parser
-After=network.target
-
-[Service]
-User=root
-Group=root
-ExecStart=/usr/sbin/cgconfigparser -l /etc/cgconfig.conf
-Type=oneshot
-
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgconfigparser_service.service
-
-echo "Configured $cgconfigparser_service service."
-
-echo "[Unit]
-Description=cgroup rules generator
-After=network.target $cgconfigparser_service.service
-
-[Service]
-User=root
-Group=root
-Type=forking
-EnvironmentFile=-/etc/cgred.conf
-ExecStart=/usr/sbin/cgrulesengd
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesgend_service.service
-
-echo "Configured $cgrulesgend_service service."
-
-systemctl daemon-reload
-
-# Even though cgconfigparser_service is started it'll be in inactive state.
-systemctl enable $cgconfigparser_service
-systemctl start $cgconfigparser_service
-cg_par_cat=$(systemctl is-active $cgconfigparser_service)
-[ "$cg_par_cat" != "inactive" ] && echo "Starting $cgconfigparser_service service failed." && rollback
-
-systemctl enable $cgrulesgend_service
-systemctl start $cgrulesgend_service
-cg_rules_cat=$(systemctl is-active $cgrulesgend_service)
-[ "$cg_rules_cat" != "active" ] && echo "Starting $cgrulesgend_service service failed." && rollback
-
-echo "Started $cgconfigparser_service and $cgrulesgend_service services"
-
-echo "Successfully setup cgroup"
 
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
@@ -112,7 +63,8 @@ cd $docker_bin
 tar zxf $tmp/docker.tgz --strip-components=1
 tar zxf $tmp/rootless.tgz --strip-components=1
 
-rm -r $tmp
+# Check whether installation dir is still empty.
+[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && rollback
 
 # Adding quota limitation capability
 # Check and turn on user quota if not enabled.
@@ -125,8 +77,64 @@ if [ ! -f /aquota.user ]; then
     sudo quotaon -v /
 fi
 
-# Check whether installation dir is still empty.
-[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && rollback
+# Setup resources limitation dependencies.
 
+echo "[Unit]
+Description=cgroup rules generator
+After=network.target
+
+[Service]
+User=root
+Group=root
+Type=forking
+EnvironmentFile=-/etc/cgred.conf
+ExecStart=/usr/sbin/cgrulesengd
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesgend_service.service
+
+echo "Configured $cgrulesgend_service service."
+
+# Enable cgroup memory and swapaccount if not already configured
+# We create a temp of the grub file and replace with original file only if success.
+tmpgrub=$tmpgrub.tmp
+cp /etc/default/grub $tmpgrub
+
+function add_grub_line() {
+    var="${1}"
+    val="${2}"
+    file="${3}"
+    # Check whether exist.
+    sed -n -r -e "/^${var}=/{ /${val}/{q100}; }" $file
+    res=$?
+    if [ $res == 0 ]; then # if not exist and success.
+        sed -i -r -e "/^${var}=/{ /${val}/!{ s/\"\s*\$/ ${val}\"/ } }" $file
+    elif [ $res != 0 ] && [ $res != 100 ]; then # if error.
+        echo "Grub update failed." && rollback
+    fi
+    return $res
+}
+
+add_grub_line GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory $tmpgrub
+changed1=$?
+
+add_grub_line GRUB_CMDLINE_LINUX_DEFAULT swapaccount=1 $tmpgrub
+changed2=$?
+
+if [ $changed1 == 0 ] || [ $changed2 == 0 ]; then
+    mv $tmpgrub /etc/default/grub
+    rm -r $tmp
+    update-grub >/dev/null 2>&1
+    echo "Updated grub."
+    echo "System needs to be rebooted before start the sashimono."
+    echo "Reboot now|later?"
+    read confirmation
+    if [ "$confirmation" == "now" ]; then
+        reboot
+    fi
+fi
+
+rm -r $tmp
 echo "Done."
 exit 0

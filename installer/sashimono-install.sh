@@ -42,7 +42,7 @@ fi
 
 function rollback() {
     echo "Rolling back sashimono installation."
-    $(pwd)/sashimono-uninstall.sh $user
+    $(pwd)/sashimono-uninstall.sh
     rm -r $tmp
     echo "Rolled back the installation."
     exit 1
@@ -98,34 +98,59 @@ echo "Configured $cgrulesgend_service service."
 
 # Enable cgroup memory and swapaccount if not already configured
 # We create a temp of the grub file and replace with original file only if success.
-tmpgrub=$tmpgrub.tmp
+tmpgrub=$tmp.tmp
 cp /etc/default/grub $tmpgrub
 
-function add_grub_line() {
-    var="${1}"
-    val="${2}"
-    file="${3}"
-    # Check whether exist.
-    sed -n -r -e "/^${var}=/{ /${val}/{q100}; }" $file
+updated=0
+# Check GRUB_CMDLINE_LINUX_DEFAULT exists, create new if not exists.
+# If exists check for cgroup_enable=memory and swapaccount=1 and configure them if not already configured.
+sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{q100}" $tmpgrub
+res=$?
+if [ $res -eq 100 ]; then
+    # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /cgroup_enable=memory/{q100}; }" $tmpgrub
     res=$?
-    if [ $res == 0 ]; then # if not exist and success.
-        sed -i -r -e "/^${var}=/{ /${val}/!{ s/\"\s*\$/ ${val}\"/ } }" $file
-    elif [ $res != 0 ] && [ $res != 100 ]; then # if error.
-        echo "Grub update failed." && rollback
+    if [ $res -eq 0 ]; then
+        sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" $tmpgrub
+        res=$?
+        updated=1
     fi
-    return $res
-}
 
-add_grub_line GRUB_CMDLINE_LINUX_DEFAULT cgroup_enable=memory $tmpgrub
-changed1=$?
+    # Check swapaccount=1 exists, create new if not exists otherwise skip.
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" $tmpgrub
+    res=$?
+    if [ $res -eq 0 ]; then
+        # Check whether there's swapaccount value other that 1, If so replace value with 1.
+        # Otherwise add swapaccount=1 after cgroup_enable=memory.
+        sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" $tmpgrub
+        res=$?
+        if [ $res -eq 100 ]; then
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" $tmpgrub
+            res=$?
+            updated=1
+        elif [ $res -eq 0 ]; then
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" $tmpgrub
+            res=$?
+            updated=1
+        fi
+    fi
+elif [ $res -eq 0 ]; then
+    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"cgroup_enable=memory swapaccount=1\"" >> $tmpgrub
+    res=$?
+    updated=1
+fi
 
-add_grub_line GRUB_CMDLINE_LINUX_DEFAULT swapaccount=1 $tmpgrub
-changed2=$?
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub update failed." && rollback
 
-if [ $changed1 == 0 ] || [ $changed2 == 0 ]; then
+if [ $updated -eq 1 ]; then
+    # Create a backup of original grub and replace the back with original if update-grub failed.
+    cp /etc/default/grub /etc/default/grub.bk
     mv $tmpgrub /etc/default/grub
     rm -r $tmp
-    update-grub >/dev/null 2>&1
+    if [ ! update-grub >/dev/null 2>&1 ]; then
+        mv /etc/default/grub.bk /etc/default/grub
+        rollback
+    fi 
     echo "Updated grub."
     echo "System needs to be rebooted before start the sashimono."
     echo "Reboot now|later?"
@@ -133,6 +158,8 @@ if [ $changed1 == 0 ] || [ $changed2 == 0 ]; then
     if [ "$confirmation" == "now" ]; then
         reboot
     fi
+else
+    echo "Grub already configured."
 fi
 
 rm -r $tmp

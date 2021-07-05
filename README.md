@@ -26,8 +26,8 @@ A C++ version of sashimono agent
 1. Run `make` (Sashimono agent binary will be created as `./build/sagent`)
 
 ## Sashimono installation script.
-1. Edit `/etc/fstab` file and add **usrquota** option to root mount(`/`) and then run `sudo mount -o remount /`
 1. Run `sashimono-install.sh` script as root user to setup sashimono environment.
+This script changes the `/etc/fstab` and `/etc/default/grub` files. Backup files are made prior changes with names `fstab.sashi.bk` and `grub.sashi.bk` respectively in original locations.
 1. Run `sashimono-uninstall.sh` script as root user to do sashimono cleanups.
 
 ## Sashimono Client

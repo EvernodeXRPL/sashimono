@@ -68,6 +68,34 @@ tar zxf $tmp/rootless.tgz --strip-components=1
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && rollback
 
 # Adding quota limitation capability
+# Enable user quota in fstab for root mount.
+tmpfstab=$tmp.tmp
+originalfstab=/etc/fstab
+cp $originalfstab "$tmpfstab"
+backup=$originalfstab.sashi.bk
+
+updated=0
+sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrquota\S*/{q100} }" "$tmpfstab"
+res=$?
+if [ $res -eq 0 ]; then
+    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,usrquota/ }" "$tmpfstab"
+    res=$?
+    updated=1
+fi
+
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Fstab update failed." && rollback
+
+if [ $updated -eq 1 ]; then
+    cp $originalfstab $backup
+    mv "$tmpfstab" $originalfstab
+    if ! mount -o remount / 2>&1 ; then
+        mv $backup $originalfstab
+        echo "Re mounting error." && rollback
+    fi 
+    echo "Updated Fstab."
+else
+    echo "Fstab already configured."
+fi
 # Check and turn on user quota if not enabled.
 if [ ! -f /aquota.user ]; then
     # quota package is not installed.
@@ -100,43 +128,43 @@ echo "Configured $cgrulesgend_service service."
 # Enable cgroup memory and swapaccount if not already configured
 # We create a temp of the grub file and replace with original file only if success.
 tmpgrub=$tmp.tmp
-cp /etc/default/grub $tmpgrub
+cp /etc/default/grub "$tmpgrub"
 
 updated=0
 # Check GRUB_CMDLINE_LINUX_DEFAULT exists, create new if not exists.
 # If exists check for cgroup_enable=memory and swapaccount=1 and configure them if not already configured.
-sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{q100}" $tmpgrub
+sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{q100}" "$tmpgrub"
 res=$?
 if [ $res -eq 100 ]; then
     # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
-    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /cgroup_enable=memory/{q100}; }" $tmpgrub
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
     res=$?
     if [ $res -eq 0 ]; then
-        sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" $tmpgrub
+        sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" "$tmpgrub"
         res=$?
         updated=1
     fi
 
     # Check swapaccount=1 exists, create new if not exists otherwise skip.
-    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" $tmpgrub
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
     res=$?
     if [ $res -eq 0 ]; then
         # Check whether there's swapaccount value other that 1, If so replace value with 1.
         # Otherwise add swapaccount=1 after cgroup_enable=memory.
-        sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" $tmpgrub
+        sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" "$tmpgrub"
         res=$?
         if [ $res -eq 100 ]; then
-            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" $tmpgrub
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" "$tmpgrub"
             res=$?
             updated=1
         elif [ $res -eq 0 ]; then
-            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" $tmpgrub
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" "$tmpgrub"
             res=$?
             updated=1
         fi
     fi
 elif [ $res -eq 0 ]; then
-    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"cgroup_enable=memory swapaccount=1\"" >> $tmpgrub
+    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"cgroup_enable=memory swapaccount=1\"" >> "$tmpgrub"
     res=$?
     updated=1
 fi
@@ -147,8 +175,8 @@ if [ $updated -eq 1 ]; then
     # Create a backup of original grub, So we can replace the backup with original if update-grub failed.
     grub_backup=/etc/default/grub.sashi.bk
     cp /etc/default/grub $grub_backup
-    mv $tmpgrub /etc/default/grub
-    rm -r $tmp
+    mv "$tmpgrub" /etc/default/grub
+    rm -r "$tmp"
     if ! update-grub >/dev/null 2>&1 ; then
         mv $grub_backup /etc/default/grub
         echo "Grub update failed."
@@ -162,7 +190,7 @@ if [ $updated -eq 1 ]; then
         reboot
     fi
 else
-    rm -r $tmp
+    rm -r "$tmp"
     echo "Grub already configured."
 fi
 

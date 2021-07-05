@@ -20,25 +20,19 @@ if ! command -v curl &>/dev/null; then
     apt-get install -y curl
 fi
 
-# Install cucgroup-tools if not exists (required to setup resource control groups).
+# Install cgroup-tools if not exists (required to setup resource control groups).
 if ! command -v /usr/sbin/cgconfigparser &>/dev/null || ! command -v /usr/sbin/cgrulesengd &>/dev/null; then
     apt-get install -y cgroup-tools
 fi
 
 # Copy cgred.conf from examples if not exists to setup control groups.
-if [ ! -f /etc/cgred.conf ]; then
-    cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
-fi
+[ ! -f /etc/cgred.conf ] && cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
 
 # Create new cgconfig.conf if not exists to setup control groups.
-if [ ! -f /etc/cgconfig.conf ]; then
-    : >/etc/cgconfig.conf
-fi
+[ ! -f /etc/cgconfig.conf ] && : >/etc/cgconfig.conf
 
 # Create new cgrules.conf if not exists to setup control groups.
-if [ ! -f /etc/cgrules.conf ]; then
-    : >/etc/cgrules.conf
-fi
+[ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
 
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
@@ -83,7 +77,7 @@ if [ $res -eq 0 ]; then
     updated=1
 fi
 
-[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Fstab update failed." && rollback
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && rollback
 
 if [ $updated -eq 1 ]; then
     cp $originalfstab $backup
@@ -92,9 +86,9 @@ if [ $updated -eq 1 ]; then
         mv $backup $originalfstab
         echo "Re mounting error." && rollback
     fi 
-    echo "Updated Fstab."
+    echo "Updated fstab."
 else
-    echo "Fstab already configured."
+    echo "fstab already configured."
 fi
 # Check and turn on user quota if not enabled.
 if [ ! -f /aquota.user ]; then
@@ -183,7 +177,7 @@ if [ $updated -eq 1 ]; then
         rollback
     fi 
     echo "Updated grub."
-    echo "System needs to be rebooted before start the sashimono."
+    echo "System needs to be rebooted before starting Sashimono."
     echo "Reboot now|later?"
     read confirmation
     if [ "$confirmation" = "now" ]; then

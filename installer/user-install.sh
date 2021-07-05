@@ -7,7 +7,7 @@ cpu=$1
 memory=$2
 disk=$3
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
-    echo "Expected: user-install <cpu quota micro seconds> <memory quota kbytes> <disk quota kbytes>"
+    echo "Expected: user-install <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 

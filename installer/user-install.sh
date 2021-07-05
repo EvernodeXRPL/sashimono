@@ -7,7 +7,7 @@ cpu=$1
 memory=$2
 disk=$3
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
-    echo "Expected: user-install <cpu quota micro seconds> <memory quota bytes> <disk quota kbytes>"
+    echo "Expected: user-install <cpu quota micro seconds> <memory quota kbytes> <disk quota kbytes>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -45,8 +45,8 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
 ! (cgcreate -g cpu:$user-group &&
     echo "$cpu" > /sys/fs/cgroup/cpu/$user-group/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
 ! (cgcreate -g memory:$user-group &&
-    echo "$memory" > /sys/fs/cgroup/memory/$user-group/memory.limit_in_bytes &&
-    echo "$memory" > /sys/fs/cgroup/memory/$user-group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user-group/memory.limit_in_bytes &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user-group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
 ! echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf && echo rollback "CGROUP_USER_ADD"
 
 # Restart the services.

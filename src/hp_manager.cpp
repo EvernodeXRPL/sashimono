@@ -783,7 +783,7 @@ namespace hp
     */
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes)
     {
-        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes*1024), std::to_string(storage_kbytes)};
+        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes)};
         std::vector<std::string> output_params;
         if (execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

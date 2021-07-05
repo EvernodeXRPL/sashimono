@@ -40,21 +40,22 @@ if [ ! -f /etc/cgrules.conf ]; then
     : >/etc/cgrules.conf
 fi
 
-function rollback() {
-    echo "Rolling back sashimono installation."
-    $(pwd)/sashimono-uninstall.sh
-    rm -r $tmp
-    echo "Rolled back the installation."
-    exit 1
-}
-
-
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
 
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"
+
+installer_dir=$(pwd)
 tmp=$(mktemp -d)
+function rollback() {
+    echo "Rolling back sashimono installation."
+    $installer_dir/sashimono-uninstall.sh
+    [ -d $tmp ] && rm -r $tmp
+    echo "Rolled back the installation."
+    exit 1
+}
+
 cd $tmp
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-20.10.7.tgz --output docker.tgz
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-rootless-extras-20.10.7.tgz --output rootless.tgz
@@ -140,28 +141,30 @@ elif [ $res -eq 0 ]; then
     updated=1
 fi
 
-[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub update failed." && rollback
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX_DEFAULT update failed." && rollback
 
 if [ $updated -eq 1 ]; then
-    # Create a backup of original grub and replace the back with original if update-grub failed.
-    cp /etc/default/grub /etc/default/grub.bk
+    # Create a backup of original grub, So we can replace the backup with original if update-grub failed.
+    grub_backup=/etc/default/grub.sashi.bk
+    cp /etc/default/grub $grub_backup
     mv $tmpgrub /etc/default/grub
     rm -r $tmp
-    if [ ! update-grub >/dev/null 2>&1 ]; then
-        mv /etc/default/grub.bk /etc/default/grub
+    if ! update-grub >/dev/null 2>&1 ; then
+        mv $grub_backup /etc/default/grub
+        echo "Grub update failed."
         rollback
     fi 
     echo "Updated grub."
     echo "System needs to be rebooted before start the sashimono."
     echo "Reboot now|later?"
     read confirmation
-    if [ "$confirmation" == "now" ]; then
+    if [ "$confirmation" = "now" ]; then
         reboot
     fi
 else
+    rm -r $tmp
     echo "Grub already configured."
 fi
 
-rm -r $tmp
 echo "Done."
 exit 0

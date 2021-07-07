@@ -109,7 +109,7 @@ namespace conf
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 
-        const std::string sashimono_folder = "/etc/sashimono";
+        const std::string sashimono_folder = conf::ctx.environment == conf::ENVIRONMENT::DEVELOPMENT ? ctx.exe_dir : "/etc/sashimono";
         ctx.default_contract_path = sashimono_folder + "/default_contract";
         ctx.config_dir = sashimono_folder + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";

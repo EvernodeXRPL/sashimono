@@ -46,9 +46,9 @@ add_dependencies(sagent
 add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./dependencies/bin/hpws ./build/
     COMMAND cp ./dependencies/bin/hpfs ./build/
-    COMMAND cp -r ./dependencies/default_contract /etc/sashimono/
-    COMMAND cp ./bootstrap-contract/script.sh /etc/sashimono/default_contract/contract_fs/seed/state/script.sh
-    COMMAND cp ./build/bootstrap_contract /etc/sashimono/default_contract/contract_fs/seed/state/bootstrap_contract
+    COMMAND cp -r ./dependencies/default_contract ./build/
+    COMMAND cp ./bootstrap-contract/script.sh ./build/default_contract/contract_fs/seed/state/script.sh
+    COMMAND cp ./build/bootstrap_contract ./build/default_contract/contract_fs/seed/state/bootstrap_contract
     COMMAND cp ./installer/user-install.sh ./build/user-install.sh
     COMMAND cp ./installer/user-uninstall.sh ./build/user-uninstall.sh
 )

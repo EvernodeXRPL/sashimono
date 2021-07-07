@@ -4,6 +4,7 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
+sashimono_data=/etc/sashimono
 
 echo "Installing Sashimono..."
 
@@ -12,6 +13,8 @@ mkdir -p $sashimono_bin
 [ "$?" == "1" ] && echo "Could not create '$sashimono_bin'. Make sure you are running as sudo." && exit 1
 mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
+mkdir -p $sashimono_data
+[ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
 
 # Install curl if not exists (required to download installation artifacts).
 if ! command -v curl &> /dev/null
@@ -21,6 +24,11 @@ fi
 
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
+
+# Copy necessary files into sashimono data folder.
+cp -r ../dependencies/default_contract $sashimono_data
+# [TODO] Copy bootstrap contract and script.sh from this script. Currently it is created
+# when building sashimono.
 
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"

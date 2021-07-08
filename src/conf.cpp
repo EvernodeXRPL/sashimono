@@ -34,19 +34,15 @@ namespace conf
      */
     int create()
     {
-        if (util::is_dir_exists(ctx.config_dir))
+        if (util::is_file_exists(ctx.config_file))
         {
-            if (util::is_file_exists(ctx.config_file))
-            {
-                std::cerr << "Config file already exists. Cannot create config at the same location.\n";
-                return -1;
-            }
+            std::cerr << "Config file already exists. Cannot create config at the same location.\n";
+            return -1;
         }
         else
         {
             // Recursivly create contract directory. Return an error if unable to create
-            if (util::create_dir_tree_recursive(ctx.config_dir) == -1 ||
-                util::create_dir_tree_recursive(ctx.log_dir) == -1 ||
+            if (util::create_dir_tree_recursive(ctx.log_dir) == -1 ||
                 util::create_dir_tree_recursive(ctx.data_dir) == -1)
             {
                 std::cerr << "ERROR: unable to create directories.\n";
@@ -60,9 +56,10 @@ namespace conf
             sa_config cfg = {};
 
             cfg.version = "0.0.1";
+            cfg.hp.host_address = "localhost";
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
-            cfg.server.ip_port = {};
+            cfg.server.ip_port = {"localhost", 5000};
 
             cfg.system.max_instance_count = 10;
             cfg.system.max_mem_bytes = cfg.system.max_instance_count * 50 * 1024 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB
@@ -104,17 +101,17 @@ namespace conf
 
         // Take the parent directory path.
         ctx.exe_dir = dirname(exepath.data());
+        if (ctx.data_dir.empty())
+            ctx.data_dir = ctx.exe_dir;
+
         ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 
-        const std::string sashimono_folder = conf::ctx.environment == conf::ENVIRONMENT::DEVELOPMENT ? ctx.exe_dir : "/etc/sashimono";
-        ctx.default_contract_path = sashimono_folder + "/default_contract";
-        ctx.config_dir = sashimono_folder + "/cfg";
-        ctx.config_file = ctx.config_dir + "/sa.cfg";
-        ctx.log_dir = sashimono_folder + "/log";
-        ctx.data_dir = sashimono_folder + "/data";
+        ctx.default_contract_path = ctx.data_dir + "/default_contract";
+        ctx.config_file = ctx.data_dir + "/sa.cfg";
+        ctx.log_dir = ctx.data_dir + "/log";
     }
 
     /**
@@ -212,7 +209,7 @@ namespace conf
                     std::cerr << "Configured hp host_address is empty.\n";
                     return -1;
                 }
-                
+
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
                 {

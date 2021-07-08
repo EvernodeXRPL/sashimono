@@ -33,13 +33,7 @@ int parse_cmd(int argc, char **argv)
         conf::ctx.command = argv[1];
 
         if (argc == 3)
-        {
-            const std::string env(argv[2]);
-            if (env != "dev" && env != "prod")
-                PARSE_ERROR
-
-            conf::ctx.environment = (env == "dev") ? conf::ENVIRONMENT::DEVELOPMENT : conf::ENVIRONMENT::PRODUCTION;
-        }
+            conf::ctx.data_dir = std::string(argv[2]);
 
         if (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version")
         {
@@ -152,7 +146,7 @@ int main(int argc, char **argv)
             LOG_INFO << "Sashimono agent started."
                      << " Version: " << conf::cfg.version
                      << " | Log level: " << conf::cfg.log.log_level
-                     << " | Env: " << (conf::ctx.environment == conf::ENVIRONMENT::DEVELOPMENT ? "development" : "production");
+                     << " | Data dir: " << conf::ctx.data_dir;
 
             if (comm::init() == -1 || hp::init() == -1)
             {

@@ -53,7 +53,7 @@ const askForInput = (label) => {
     })
 }
 
-server.listen(8080, () => {
+server.listen(5000, () => {
     console.log(`wss://localhost:${server.address().port}`)
     console.log("Ready to accept inputs.");
 

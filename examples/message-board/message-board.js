@@ -68,6 +68,9 @@ server.listen(5000, () => {
                     switch (inp) {
                         case 'create':
                             contractId = await askForInput('Contract ID');
+                            if (contractId == "")
+                                contractId = uuidv4();
+                                
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',

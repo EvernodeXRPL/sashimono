@@ -80,11 +80,11 @@ namespace conf
 
     struct sa_context
     {
-        std::string command;               // The CLI command issued to launch Sashimono agent
-        std::string exe_dir;               // Hot Pocket executable dir.
-        std::string hpws_exe_path;         // hpws executable file path.
-        std::string hpfs_exe_path;         // hpfs executable file path.
-        std::string default_contract_path; // Path to default contract.
+        std::string command;                // The CLI command issued to launch Sashimono agent
+        std::string exe_dir;                // Hot Pocket executable dir.
+        std::string hpws_exe_path;          // hpws executable file path.
+        std::string hpfs_exe_path;          // hpfs executable file path.
+        std::string contract_template_path; // Path to default contract.
 
         std::string user_install_sh;
         std::string user_uninstall_sh;

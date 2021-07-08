@@ -45,8 +45,10 @@ add_dependencies(sagent
 
 add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp -r ./dependencies/* ./build/
-    COMMAND cp ./bootstrap-contract/script.sh ./build/default_contract/contract_fs/seed/state/
-    COMMAND mv ./build/bootstrap_contract ./build/default_contract/contract_fs/seed/state/
+    COMMAND tar xf ./build/contract_template.tar -C ./build/ && rm ./build/contract_template.tar
+    COMMAND mv ./build/hp.cfg ./build/contract_template/cfg/
+    COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
+    COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

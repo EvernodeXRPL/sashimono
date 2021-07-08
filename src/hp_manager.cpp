@@ -510,7 +510,7 @@ namespace hp
             LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
             return -1;
         }
-        const std::string source_path = conf::ctx.default_contract_path + "/*";
+        const std::string source_path = conf::ctx.contract_template_path + "/*";
         int len = 25 + source_path.length();
         char cp_command[len];
         sprintf(cp_command, COPY_DIR, source_path.data(), temp_dirpath);

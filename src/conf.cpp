@@ -109,7 +109,7 @@ namespace conf
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 
-        ctx.default_contract_path = ctx.data_dir + "/default_contract";
+        ctx.contract_template_path = ctx.data_dir + "/contract_template";
         ctx.config_file = ctx.data_dir + "/sa.cfg";
         ctx.log_dir = ctx.data_dir + "/log";
     }
@@ -125,7 +125,7 @@ namespace conf
             ctx.log_dir,
             ctx.data_dir,
             ctx.hpws_exe_path,
-            ctx.default_contract_path,
+            ctx.contract_template_path,
             ctx.user_install_sh,
             ctx.user_uninstall_sh};
 

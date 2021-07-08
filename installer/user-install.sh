@@ -7,14 +7,15 @@ cpu=$1
 memory=$2
 disk=$3
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
-    echo "Expected: user-install <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes>"
+    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
 prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
-group="sashimono"
+group="sashimonousers"
+cgroupsuffix="-cg"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
@@ -22,7 +23,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 [ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
 
 # Check cgroup mounts exists.
-([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "Cgroup is not configured. Make sure you've confgured cgroup and installed cgroup-tools." && exit 1
+([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "CGROUP_ERR,INST_ERR" && exit 1
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -44,11 +45,11 @@ user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
 # Setup user cgroup.
-! (cgcreate -g cpu:$user$group &&
-    echo "$cpu" > /sys/fs/cgroup/cpu/$user$group/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$group &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user$group/memory.limit_in_bytes &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user$group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "$cpu" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$cgroupsuffix &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
 
 # Adding disk quota to the new user.
 sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /

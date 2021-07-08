@@ -3,7 +3,8 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 sashimono_data=/etc/sashimono
-group="sashimono"
+group="sashimonousers"
+cgroupsuffix="-cg"
 
 [ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
 
@@ -54,7 +55,7 @@ rm -r $sashimono_data
 
 echo "Deleting cgroup rules..."
 groupdel $group
-sed -i -r "/^@$group\s+cpu,memory\s+%u$group/d" /etc/cgrules.conf
+sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
 
 echo "Sashimono uninstalled successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

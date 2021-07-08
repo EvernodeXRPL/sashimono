@@ -5,7 +5,8 @@
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
-group="sashimono"
+group="sashimonousers"
+cgroupsuffix="-cg"
 
 echo "Installing Sashimono..."
 
@@ -68,7 +69,7 @@ rm -r $tmp
 
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
-! echo "@$group       cpu,memory              %u$group" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+! echo "@$group       cpu,memory              %u$cgroupsuffix" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

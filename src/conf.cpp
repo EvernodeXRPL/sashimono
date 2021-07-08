@@ -65,9 +65,9 @@ namespace conf
             cfg.server.ip_port = {};
 
             cfg.system.max_instance_count = 10;
-            cfg.system.max_mem_bytes = cfg.system.max_instance_count * 50 * 1024 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB
-            cfg.system.max_cpu_micro_seconds = cfg.system.max_instance_count * 1000000;       // CPU cfs period can not be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
-            cfg.system.max_storage_bytes = cfg.system.max_instance_count * 100 * 1024 * 1024; // 100MB per instance.
+            cfg.system.max_mem_kbytes = cfg.system.max_instance_count * 50 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB
+            cfg.system.max_cpu_us = cfg.system.max_instance_count * 1000000;            // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
+            cfg.system.max_storage_kbytes = cfg.system.max_instance_count * 200 * 1024; // 200MB per instance.
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
@@ -212,7 +212,7 @@ namespace conf
                     std::cerr << "Configured hp host_address is empty.\n";
                     return -1;
                 }
-                
+
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
                 {
@@ -271,9 +271,9 @@ namespace conf
             {
                 const jsoncons::ojson &system = d["system"];
 
-                cfg.system.max_mem_bytes = system["max_mem_bytes"].as<size_t>();
-                cfg.system.max_cpu_micro_seconds = system["max_cpu_micro_seconds"].as<size_t>();
-                cfg.system.max_storage_bytes = system["max_storage_bytes"].as<size_t>();
+                cfg.system.max_mem_kbytes = system["max_mem_kbytes"].as<size_t>();
+                cfg.system.max_cpu_us = system["max_cpu_us"].as<size_t>();
+                cfg.system.max_storage_kbytes = system["max_storage_kbytes"].as<size_t>();
                 cfg.system.max_instance_count = system["max_instance_count"].as<size_t>();
             }
             catch (const std::exception &e)
@@ -345,9 +345,9 @@ namespace conf
         {
             jsoncons::ojson system_config;
 
-            system_config.insert_or_assign("max_mem_bytes", cfg.system.max_mem_bytes);
-            system_config.insert_or_assign("max_cpu_micro_seconds", cfg.system.max_cpu_micro_seconds);
-            system_config.insert_or_assign("max_storage_bytes", cfg.system.max_storage_bytes);
+            system_config.insert_or_assign("max_mem_kbytes", cfg.system.max_mem_kbytes);
+            system_config.insert_or_assign("max_cpu_us", cfg.system.max_cpu_us);
+            system_config.insert_or_assign("max_storage_kbytes", cfg.system.max_storage_kbytes);
             system_config.insert_or_assign("max_instance_count", cfg.system.max_instance_count);
 
             d.insert_or_assign("system", system_config);

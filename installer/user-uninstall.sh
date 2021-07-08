@@ -6,6 +6,8 @@ user=$1
 # Check whether this is a valid sashimono username.
 prefix="sashi"
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
+group="sashimonousers"
+cgroupsuffix="-cg"
 
 user_dir=/home/$user
 user_id=$(id -u $user)
@@ -54,6 +56,11 @@ if [ "$procs" != "0" ]; then
     fi
 
 fi
+
+echo "Removing cgroups"
+# Delete config values.
+cgdelete -g cpu:$user$cgroupsuffix
+cgdelete -g memory:$user$cgroupsuffix
 
 echo "Deleting user '$user'"
 userdel $user

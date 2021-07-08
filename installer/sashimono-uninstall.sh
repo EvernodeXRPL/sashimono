@@ -3,6 +3,15 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 sashimono_data=/etc/sashimono
+group="sashimonousers"
+cgroupsuffix="-cg"
+
+[ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
+
+echo "Are you sure you want to uninstall Sashimono?"
+echo "Type 'yes' to confirm uninstall:"
+read yes
+[ "$yes" != "yes" ] && echo "Uninstall cancelled." && exit 0
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -44,5 +53,10 @@ rm -r $sashimono_bin
 echo "Deleting data folder..."
 rm -r $sashimono_data
 
-echo "Done."
+echo "Deleting cgroup rules..."
+groupdel $group
+sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
+
+echo "Sashimono uninstalled successfully."
+echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

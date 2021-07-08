@@ -2,14 +2,28 @@
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
 
+# Check for user cpu and memory quotas.
+cpu=$1
+memory=$2
+disk=$3
+if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
+    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes>"
+    echo "INVALID_PARAMS,INST_ERR" && exit 1
+fi
+
 prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
+group="sashimonousers"
+cgroupsuffix="-cg"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 # Check if users already exists.
-[ `id -u $user 2>/dev/null || echo -1` -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
+[ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
+
+# Check cgroup mounts exists.
+([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "CGROUP_ERR,INST_ERR" && exit 1
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -21,6 +35,7 @@ function rollback() {
 # Setup user and dockerd service.
 useradd --shell /usr/sbin/nologin -m $user
 usermod --lock $user
+usermod -a -G $group $user
 loginctl enable-linger $user # Enable lingering to support rootless dockerd service installation.
 chmod o-rwx $user_dir
 echo "Created '$user' user."
@@ -28,6 +43,18 @@ echo "Created '$user' user."
 user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
+
+# Setup user cgroup.
+! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "$cpu" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$cgroupsuffix &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+
+# Adding disk quota to the new user.
+sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+
+echo "Configured the resources"
 
 # Setup env variables for the user.
 echo "
@@ -38,8 +65,7 @@ echo "Updated user .bashrc."
 
 # Wait until user systemd is functioning.
 user_systemd=""
-for (( i=0; i<30; i++ ))
-do
+for ((i = 0; i < 30; i++)); do
     sleep 0.1
     user_systemd=$(sudo -u $user XDG_RUNTIME_DIR=$user_runtime_dir systemctl --user is-system-running 2>/dev/null)
     [ "$user_systemd" == "running" ] && break

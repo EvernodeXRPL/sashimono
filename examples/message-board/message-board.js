@@ -21,7 +21,11 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (ws) => {
     ws.on('message', (msg) => {
-        console.log('Received: ', JSON.parse(Buffer.from(msg).toString()));
+        try {
+            console.log('Received: ', JSON.parse(Buffer.from(msg).toString()));
+        } catch (error) {
+            console.error("Error occured in json parsing." + error);
+        }
     });
 });
 

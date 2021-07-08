@@ -5,8 +5,13 @@
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
+group="sashimonousers"
+cgroupsuffix="-cg"
 
 echo "Installing Sashimono..."
+
+# Check cgroup rule config exists.
+[ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
 # Create bin dirs first so it automatically checks for privileged access.
 mkdir -p $sashimono_bin
@@ -17,8 +22,7 @@ mkdir -p $sashimono_data
 [ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
 
 # Install curl if not exists (required to download installation artifacts).
-if ! command -v curl &> /dev/null
-then
+if ! command -v curl &>/dev/null; then
     apt-get install -y curl
 fi
 
@@ -27,7 +31,17 @@ fi
 
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"
+
+installer_dir=$(pwd)
 tmp=$(mktemp -d)
+function rollback() {
+    echo "Rolling back sashimono installation."
+    $installer_dir/sashimono-uninstall.sh
+    [ -d $tmp ] && rm -r $tmp
+    echo "Rolled back the installation."
+    exit 1
+}
+
 cd $tmp
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-20.10.7.tgz --output docker.tgz
 curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-rootless-extras-20.10.7.tgz --output rootless.tgz
@@ -41,5 +55,10 @@ rm -r $tmp
 # Check whether installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && exit 1
 
-echo "Done."
+# Setting up cgroup rules.
+! groupadd $group && echo "Group creation failed." && rollback
+! echo "@$group       cpu,memory              %u$cgroupsuffix" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+
+echo "Sashimono installed successfully."
+echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

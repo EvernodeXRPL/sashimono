@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../hp_manager.hpp"
 
-#define __HANDLE_RESPONSE(id, type, content, ret, is_json)          \
-    {                                                              \
-        std::string res;                                           \
-        msg_parser.build_response(res, type, id, content, is_json); \
-        send(res);                                                 \
-        return ret;                                                \
+#define __HANDLE_RESPONSE(id, type, content, ret)                                                       \
+    {                                                                                                   \
+        std::string res;                                                                                \
+        msg_parser.build_response(res, type, id, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
+        send(res);                                                                                      \
+        return ret;                                                                                     \
     }
 
 namespace comm
@@ -172,68 +172,68 @@ namespace comm
     {
         std::string id, type;
         if (msg_parser.parse(msg) == -1 || msg_parser.extract_type_and_id(type, id) == -1)
-            __HANDLE_RESPONSE("", "error", "format_error", -1, false);
+            __HANDLE_RESPONSE("", "error", "format_error", -1);
 
         if (type == msg::MSGTYPE_CREATE)
         {
             msg::create_msg msg;
             if (msg_parser.extract_create_message(msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "format_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "format_error", -1);
 
             hp::instance_info info;
             if (hp::create_new_instance(info, msg.pubkey, msg.contract_id) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "create_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "create_error", -1);
 
             std::string create_res;
             msg_parser.build_create_response(create_res, info);
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, create_res, 0, true);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, create_res, 0);
         }
         else if (type == msg::MSGTYPE_INITIATE)
         {
             msg::initiate_msg msg;
             if (msg_parser.extract_initiate_message(msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "format_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "format_error", -1);
 
             if (hp::initiate_instance(msg.container_name, msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "init_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "init_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "initiated", 0, false);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "initiated", 0);
         }
         else if (type == msg::MSGTYPE_DESTROY)
         {
             msg::destroy_msg msg;
             if (msg_parser.extract_destroy_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "format_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "format_error", -1);
 
             if (hp::destroy_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroy_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroy_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroyed", 0, false);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroyed", 0);
         }
         else if (type == msg::MSGTYPE_START)
         {
             msg::start_msg msg;
             if (msg_parser.extract_start_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "format_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "format_error", -1);
 
             if (hp::start_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "start_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "start_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "started", 0, false);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "started", 0);
         }
         else if (type == msg::MSGTYPE_STOP)
         {
             msg::stop_msg msg;
             if (msg_parser.extract_stop_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "format_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "format_error", -1);
 
             if (hp::stop_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stop_error", -1, false);
+                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stop_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stopped", 0, false);
+            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stopped", 0);
         }
         else
-            __HANDLE_RESPONSE(id, "error", "type_error", -1, false);
+            __HANDLE_RESPONSE(id, "error", "type_error", -1);
 
         return 0;
     }

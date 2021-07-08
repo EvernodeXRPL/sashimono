@@ -514,9 +514,9 @@ namespace hp
         int len = 25 + source_path.length();
         char cp_command[len];
         sprintf(cp_command, COPY_DIR, source_path.data(), temp_dirpath);
-        if (system(cp_command) != 0)
+        if (system(cp_command) == -1)
         {
-            LOG_ERROR << "Default contract copying failed to " << temp_dirpath;
+            LOG_ERROR << errno << ": Default contract copying failed to " << temp_dirpath;
             return -1;
         }
 
@@ -576,9 +576,9 @@ namespace hp
         const std::string tls_command = "openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout " +
                                         config_dir + "/tlskey.pem" + " -out " + config_dir + "/tlscert.pem " +
                                         "-subj \"/C=HP/ST=HP/L=HP/O=HP/CN=" + pubkey_hex + ".hotpocket.contract\" > /dev/null 2>&1";
-        if (system(tls_command.c_str()) != 0)
+        if (system(tls_command.c_str()) == -1)
         {
-            LOG_ERROR << "Error generting tls key files at " << config_dir;
+            LOG_ERROR << errno << ": Error generting tls key files at " << config_dir;
             return -1;
         }
 

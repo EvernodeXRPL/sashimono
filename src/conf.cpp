@@ -56,10 +56,10 @@ namespace conf
             sa_config cfg = {};
 
             cfg.version = "0.0.1";
-            cfg.hp.host_address = "localhost";
+            cfg.hp.host_address = "127.0.0.1";
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
-            cfg.server.ip_port = {"localhost", 5000};
+            cfg.server.ip_port = {"127.0.0.1", 5000};
 
             cfg.system.max_instance_count = 10;
             cfg.system.max_mem_kbytes = cfg.system.max_instance_count * 50 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB

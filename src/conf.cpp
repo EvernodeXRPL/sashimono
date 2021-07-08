@@ -108,11 +108,13 @@ namespace conf
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
-        ctx.default_contract_path = ctx.exe_dir + "/default_contract";
-        ctx.config_dir = ctx.exe_dir + "/cfg";
+
+        const std::string sashimono_folder = conf::ctx.environment == conf::ENVIRONMENT::DEVELOPMENT ? ctx.exe_dir : "/etc/sashimono";
+        ctx.default_contract_path = sashimono_folder + "/default_contract";
+        ctx.config_dir = sashimono_folder + "/cfg";
         ctx.config_file = ctx.config_dir + "/sa.cfg";
-        ctx.log_dir = ctx.exe_dir + "/log";
-        ctx.data_dir = ctx.exe_dir + "/data";
+        ctx.log_dir = sashimono_folder + "/log";
+        ctx.data_dir = sashimono_folder + "/data";
     }
 
     /**

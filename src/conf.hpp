@@ -78,17 +78,24 @@ namespace conf
         log_config log;
     };
 
+    enum ENVIRONMENT
+    {
+        DEVELOPMENT,
+        PRODUCTION
+    };
+
     struct sa_context
     {
-        std::string command;               // The CLI command issued to launch Sashimono agent
-        std::string exe_dir;               // Hot Pocket executable dir.
-        std::string hpws_exe_path;         // hpws executable file path.
-        std::string hpfs_exe_path;         // hpfs executable file path.
-        std::string default_contract_path; // Path to default contract.
+        std::string command;                                // The CLI command issued to launch Sashimono agent
+        ENVIRONMENT environment = ENVIRONMENT::DEVELOPMENT; // Running environment mode. (dev | prod)
+        std::string exe_dir;                                // Hot Pocket executable dir.
+        std::string hpws_exe_path;                          // hpws executable file path.
+        std::string hpfs_exe_path;                          // hpfs executable file path.
+        std::string default_contract_path;                  // Path to default contract.
 
         std::string user_install_sh;
         std::string user_uninstall_sh;
-        
+
         std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.

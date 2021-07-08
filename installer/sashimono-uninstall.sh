@@ -2,6 +2,7 @@
 # Sashimono agent uninstall script.
 
 sashimono_bin=/usr/bin/sashimono-agent
+sashimono_data=/etc/sashimono
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -39,6 +40,9 @@ fi
 
 echo "Deleting binaries..."
 rm -r $sashimono_bin
+
+echo "Deleting data folder..."
+rm -r $sashimono_data
 
 echo "Done."
 exit 0

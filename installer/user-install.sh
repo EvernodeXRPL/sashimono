@@ -21,7 +21,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 # Check if users already exists.
 [ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
 
-# Check cgroup rule config and mounts exists.
+# Check cgroup mounts exists.
 ([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "Cgroup is not configured. Make sure you've confgured cgroup and installed cgroup-tools." && exit 1
 
 function rollback() {

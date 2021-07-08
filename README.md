@@ -27,7 +27,6 @@ A C++ version of sashimono agent
 
 ## Sashimono installation script.
 1. Run `sashimono-install.sh` script as root user to setup sashimono environment.
-This script changes the `/etc/fstab` and `/etc/default/grub` files. Backup files are made prior changes with names `fstab.sashi.bk` and `grub.sashi.bk` respectively in original locations.
 1. Run `sashimono-uninstall.sh` script as root user to do sashimono cleanups.
 
 ## Sashimono Client

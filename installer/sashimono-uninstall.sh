@@ -57,5 +57,5 @@ groupdel $group
 sed -i -r "/^@$group\s+cpu,memory\s+%u$group/d" /etc/cgrules.conf
 
 echo "Sashimono uninstalled successfully."
-echo "Please restart your Cgroup rule generator service or reboot your server for changes to apply."
+echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

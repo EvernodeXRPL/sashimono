@@ -9,8 +9,8 @@ group="sashimono"
 
 echo "Installing Sashimono..."
 
-# Check cgroup rule config and mounts exists.
-[ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've confgured cgroup and installed cgroup-tools." && exit 1
+# Check cgroup rule config exists.
+[ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
 # Create bin dirs first so it automatically checks for privileged access.
 mkdir -p $sashimono_bin
@@ -64,12 +64,12 @@ tar zxf $tmp/rootless.tgz --strip-components=1
 rm -r $tmp
 
 # Check whether installation dir is still empty.
-[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && rollback
+[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && exit 1
 
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$group" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
 echo "Sashimono installed successfully."
-echo "Please restart your Cgroup rule generator service or reboot your server for changes to apply."
+echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

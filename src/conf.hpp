@@ -106,7 +106,7 @@ namespace conf
 
     int create();
 
-    void set_dir_paths(std::string exepath);
+    void set_dir_paths(std::string exepath, std::string datadir);
 
     int validate_dir_paths();
 

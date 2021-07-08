@@ -42,11 +42,11 @@ namespace hp
     */
     int init()
     {
-        const std::string db_path = conf::ctx.data_dir + "/hp_instances.sqlite";
+        const std::string db_path = conf::ctx.data_dir + "/sa.sqlite";
         if (sqlite::open_db(db_path, &db, true) == -1 ||
             sqlite::initialize_hp_db(db) == -1)
         {
-            LOG_ERROR << "Error preparing hp database in " << db_path;
+            LOG_ERROR << "Error preparing database in " << db_path;
             return -1;
         }
 

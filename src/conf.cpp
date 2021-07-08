@@ -1,5 +1,6 @@
 #include "conf.hpp"
 #include "util/util.hpp"
+#include "version.hpp"
 
 namespace conf
 {
@@ -55,7 +56,7 @@ namespace conf
         {
             sa_config cfg = {};
 
-            cfg.version = "0.0.1";
+            cfg.version = version::AGENT_VERSION;
             cfg.hp.host_address = "127.0.0.1";
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
@@ -87,22 +88,21 @@ namespace conf
      * This is called after parsing SA command line arg in order to populate the ctx.
      * @param exepath Path to executable.
      */
-    void set_dir_paths(std::string exepath)
+    void set_dir_paths(std::string exepath, std::string datadir)
     {
         if (exepath.empty())
         {
             // This code branch will never execute the way main is currently coded, but it might change in future
-            std::cerr << "Executeble path must be specified\n";
+            std::cerr << "Executable path must be specified\n";
             exit(1);
         }
 
-        // resolving the path through realpath will remove any trailing slash if present
+        // Resolve the directory containing executables.
         exepath = util::realpath(exepath);
-
-        // Take the parent directory path.
         ctx.exe_dir = dirname(exepath.data());
-        if (ctx.data_dir.empty())
-            ctx.data_dir = ctx.exe_dir;
+
+        // If data dir is not specified, use the same dir as executables.
+        ctx.data_dir = datadir.empty() ? ctx.exe_dir : util::realpath(datadir);
 
         ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";

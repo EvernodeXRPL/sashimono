@@ -9,15 +9,16 @@
 #include "hp_manager.hpp"
 #include "crypto.hpp"
 #include "hp_manager.hpp"
+#include "version.hpp"
 
-#define PARSE_ERROR                                                                                        \
-    {                                                                                                      \
-        std::cerr << "Arguments mismatch.\n";                                                              \
-        std::cout << "Usage:\n";                                                                           \
-        std::cout << "sagent version\n";                                                                   \
-        std::cout << "sagent <command> <env> [command = run | new | rekey][env(optional) = dev | prod]\n"; \
-        std::cout << "Example: sagent run\n";                                                              \
-        return -1;                                                                                         \
+#define PARSE_ERROR                                          \
+    {                                                        \
+        std::cerr << "Arguments mismatch.\n";                \
+        std::cerr << "Usage:\n";                             \
+        std::cerr << "sagent version\n";                     \
+        std::cerr << "sagent <run|new> [data_dir]\n";        \
+        std::cerr << "Example: sagent run /etc/sashimono\n"; \
+        return -1;                                           \
     }
 
 /**
@@ -32,13 +33,14 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if (argc == 3)
-            conf::ctx.data_dir = std::string(argv[2]);
-
-        if (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version")
+        if (conf::ctx.command == "new" || conf::ctx.command == "run")
         {
             // We populate the global contract ctx with the detected command.
-            conf::set_dir_paths(argv[0]);
+            conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+            return 0;
+        }
+        else if (conf::ctx.command == "version")
+        {
             return 0;
         }
     }
@@ -125,13 +127,17 @@ int main(int argc, char **argv)
     if (parse_cmd(argc, argv) != 0)
         return -1;
 
+    if (conf::ctx.command == "version")
+    {
+        std::cout << "Sashimono Agent version " << version::AGENT_VERSION << "\n";
+    }
     if (conf::ctx.command == "new")
     {
         // This will create a new config.
         if (conf::create() != 0)
             return -1;
     }
-    else
+    else if (conf::ctx.command == "run")
     {
         if (conf::init() != 0)
             return -1;
@@ -141,33 +147,27 @@ int main(int argc, char **argv)
         if (crypto::init() == -1)
             return -1;
 
-        if (conf::ctx.command == "run")
+        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ")";
+        LOG_INFO << "Log level: " << conf::cfg.log.log_level;
+        LOG_INFO << "Data dir: " << conf::ctx.data_dir;
+
+        if (comm::init() == -1 || hp::init() == -1)
         {
-            LOG_INFO << "Sashimono agent started."
-                     << " Version: " << conf::cfg.version
-                     << " | Log level: " << conf::cfg.log.log_level
-                     << " | Data dir: " << conf::ctx.data_dir;
-
-            if (comm::init() == -1 || hp::init() == -1)
-            {
-                deinit();
-                return -1;
-            }
-
-            // After initializing primary subsystems, register the exit handler.
-            signal(SIGINT, &sig_exit_handler);
-            signal(SIGTERM, &sig_exit_handler);
-
-            // Waiting for the websocket sessions.
-            comm::wait();
-
             deinit();
-
-            LOG_INFO << "sashimono agent exited normally.";
+            return -1;
         }
-        else if (conf::ctx.command == "version")
-            LOG_INFO << "Sashimono Agent " << conf::cfg.version;
 
-        return 0;
+        // After initializing primary subsystems, register the exit handler.
+        signal(SIGINT, &sig_exit_handler);
+        signal(SIGTERM, &sig_exit_handler);
+
+        // Waiting for the websocket sessions.
+        comm::wait();
+
+        deinit();
+
+        LOG_INFO << "sashimono agent exited normally.";
     }
+
+    return 0;
 }

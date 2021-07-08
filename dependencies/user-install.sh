@@ -27,7 +27,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 
 function rollback() {
     echo "Rolling back user installation. $1"
-    $(pwd)/user-uninstall.sh $user
+    ./user-uninstall.sh $user
     echo "Rolled back the installation."
     echo "$1,INST_ERR" && exit 1
 }

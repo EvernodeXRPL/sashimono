@@ -47,8 +47,6 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp -r ./dependencies/* ./build/
     COMMAND cp ./bootstrap-contract/script.sh ./build/default_contract/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/default_contract/contract_fs/seed/state/
-    COMMAND cp ./installer/user-install.sh ./build/user-install.sh
-    COMMAND cp ./installer/user-uninstall.sh ./build/user-uninstall.sh
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

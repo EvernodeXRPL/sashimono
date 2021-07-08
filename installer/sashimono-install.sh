@@ -32,11 +32,10 @@ fi
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"
 
-installer_dir=$(pwd)
 tmp=$(mktemp -d)
 function rollback() {
     echo "Rolling back sashimono installation."
-    $installer_dir/sashimono-uninstall.sh
+    ./sashimono-uninstall.sh
     [ -d $tmp ] && rm -r $tmp
     echo "Rolled back the installation."
     exit 1

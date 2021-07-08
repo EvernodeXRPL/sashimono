@@ -3,8 +3,14 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 sashimono_data=/etc/sashimono
+group="sashimono"
 
-cgrulesgend_service=sashi-cgrulesgend
+[ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
+
+echo "Are you sure you want to uninstall Sashimono?"
+echo "Type 'yes' to confirm uninstall:"
+read yes
+[ "$yes" != "yes" ] && echo "Uninstall cancelled." && exit 0
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -40,20 +46,16 @@ if [ $ucount -gt 0 ]; then
     fi
 fi
 
-echo "Removing $cgrulesgend_service services..."
-
-systemctl stop $cgrulesgend_service
-systemctl disable $cgrulesgend_service
-rm /etc/systemd/system/$cgrulesgend_service.service
-
-systemctl daemon-reload
-systemctl reset-failed
-
 echo "Deleting binaries..."
 rm -r $sashimono_bin
 
 echo "Deleting data folder..."
 rm -r $sashimono_data
 
-echo "Done."
+echo "Deleting cgroup rules..."
+groupdel $group
+sed -i -r "/^@$group\s+cpu,memory\s+%u$group/d" /etc/cgrules.conf
+
+echo "Sashimono uninstalled successfully."
+echo "Please restart your Cgroup rule generator service or reboot your server for changes to apply."
 exit 0

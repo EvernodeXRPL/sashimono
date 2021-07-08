@@ -6,13 +6,12 @@ user=$1
 # Check whether this is a valid sashimono username.
 prefix="sashi"
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
+group="sashimono"
 
 user_dir=/home/$user
 user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 docker_bin=/usr/bin/sashimono-agent/dockerbin
-
-cgrulesgend_service=sashi-cgrulesgend
 
 # Check if users exists.
 if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then
@@ -57,20 +56,16 @@ if [ "$procs" != "0" ]; then
 
 fi
 
+echo "Removing resources"
+# Delete config values.
+cgdelete -g cpu:$user$group
+cgdelete -g memory:$user$group
+
 echo "Deleting user '$user'"
 userdel $user
 rm -r /home/$user
 
 [ -d /home/$user ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
-
-echo "Removing resources"
-# Delete config values.
-cgdelete -g cpu:$user-group
-cgdelete -g memory:$user-group
-sed -i -r "/$user/d" /etc/cgrules.conf
-
-# Restart the services.
-systemctl restart $cgrulesgend_service
 
 echo "UNINST_SUC"
 exit 0

@@ -14,13 +14,15 @@ fi
 prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
+group="sashimono"
 user_dir=/home/$user
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 
-cgrulesgend_service=sashi-cgrulesgend
-
 # Check if users already exists.
 [ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
+
+# Check cgroup rule config and mounts exists.
+([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "Cgroup is not configured. Make sure you've confgured cgroup and installed cgroup-tools." && exit 1
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -32,6 +34,7 @@ function rollback() {
 # Setup user and dockerd service.
 useradd --shell /usr/sbin/nologin -m $user
 usermod --lock $user
+usermod -a -G $group $user
 loginctl enable-linger $user # Enable lingering to support rootless dockerd service installation.
 chmod o-rwx $user_dir
 echo "Created '$user' user."
@@ -40,22 +43,12 @@ user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-# Setup user resources.
-
-! (cgcreate -g cpu:$user-group &&
-    echo "$cpu" > /sys/fs/cgroup/cpu/$user-group/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user-group &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user-group/memory.limit_in_bytes &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user-group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
-! echo "$user       cpu,memory              $user-group" >>/etc/cgrules.conf && echo rollback "CGROUP_USER_ADD"
-
-# Restart the services.
-cg_rules_cat=$(systemctl is-enabled $cgrulesgend_service)
-
-[ "$cg_rules_cat" != "enabled" ] && systemctl daemon-reload && systemctl enable $cgrulesgend_service
-systemctl restart $cgrulesgend_service
-cg_rules_cat=$(systemctl is-active $cgrulesgend_service)
-[ "$cg_rules_cat" != "active" ] && rollback "NO_CGRULSVC"
+# Setup user cgroup.
+! (cgcreate -g cpu:$user$group &&
+    echo "$cpu" > /sys/fs/cgroup/cpu/$user$group/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$group &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$group/memory.limit_in_bytes &&
+    echo "${memory}K" > /sys/fs/cgroup/memory/$user$group/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
 
 # Adding disk quota to the new user.
 sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /

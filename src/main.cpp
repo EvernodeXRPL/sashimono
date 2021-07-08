@@ -10,6 +10,16 @@
 #include "crypto.hpp"
 #include "hp_manager.hpp"
 
+#define PARSE_ERROR                                                                                        \
+    {                                                                                                      \
+        std::cerr << "Arguments mismatch.\n";                                                              \
+        std::cout << "Usage:\n";                                                                           \
+        std::cout << "sagent version\n";                                                                   \
+        std::cout << "sagent <command> <env> [command = run | new | rekey][env(optional) = dev | prod]\n"; \
+        std::cout << "Example: sagent run\n";                                                              \
+        return -1;                                                                                         \
+    }
+
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given.
  * @param argc Argument count.
@@ -21,8 +31,17 @@ int parse_cmd(int argc, char **argv)
     if (argc > 1)
     {
         conf::ctx.command = argv[1];
-        if (argc == 2 && //We get working dir as an arg anyway. So we need to check for ==2 args.
-            (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version"))
+
+        if (argc == 3)
+        {
+            const std::string env(argv[2]);
+            if (env != "dev" && env != "prod")
+                PARSE_ERROR
+
+            conf::ctx.environment = (env == "dev") ? conf::ENVIRONMENT::DEVELOPMENT : conf::ENVIRONMENT::PRODUCTION;
+        }
+
+        if (conf::ctx.command == "new" || conf::ctx.command == "run" || conf::ctx.command == "version")
         {
             // We populate the global contract ctx with the detected command.
             conf::set_dir_paths(argv[0]);
@@ -30,14 +49,8 @@ int parse_cmd(int argc, char **argv)
         }
     }
 
-    // If all extractions fail display help message.
-    std::cerr << "Arguments mismatch.\n";
-    std::cout << "Usage:\n";
-    std::cout << "sagent version\n";
-    std::cout << "sagent <command> (command = run | new | rekey)\n";
-    std::cout << "Example: sagent run\n";
-
-    return -1;
+    // If all extractions fail display help message and return -1.
+    PARSE_ERROR
 }
 
 /**
@@ -136,7 +149,10 @@ int main(int argc, char **argv)
 
         if (conf::ctx.command == "run")
         {
-            LOG_INFO << "Sashimono agent started. Version : " << conf::cfg.version << " Log level : " << conf::cfg.log.log_level;
+            LOG_INFO << "Sashimono agent started."
+                     << " Version: " << conf::cfg.version
+                     << " | Log level: " << conf::cfg.log.log_level
+                     << " | Env: " << (conf::ctx.environment == conf::ENVIRONMENT::DEVELOPMENT ? "development" : "production");
 
             if (comm::init() == -1 || hp::init() == -1)
             {

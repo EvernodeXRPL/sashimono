@@ -59,3 +59,13 @@ add_custom_command(TARGET sagent POST_BUILD
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
+
+# Add target to generate the installer setup.
+add_custom_target(installer
+  COMMAND mkdir -p ./build/sashimono-installer
+  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,sashimono-install.sh,sashimono-uninstall.sh,contract_template} ./build/sashimono-installer/"
+  COMMAND tar czf  ./build/sashimono-installer.tar.gz ./build/sashimono-installer
+  COMMAND rm -r ./build/sashimono-installer
+)
+set_target_properties(installer PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(installer sagent)

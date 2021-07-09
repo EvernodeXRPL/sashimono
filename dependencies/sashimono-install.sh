@@ -7,6 +7,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 group="sashimonousers"
 cgroupsuffix="-cg"
+script_dir=$(pwd)
 
 echo "Installing Sashimono..."
 
@@ -32,13 +33,13 @@ if ! command -v openssl &>/dev/null; then
 fi
 
 # Install Sashimono agent binaries into sashimono bin dir.
-# TODO.
+cp $script_dir/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
+chmod -R +x $sashimono_bin
 
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"
 
 tmp=$(mktemp -d)
-script_dir=$(pwd)
 function rollback() {
     echo "Rolling back sashimono installation."
     $script_dir/sashimono-uninstall.sh
@@ -57,12 +58,16 @@ tar zxf $tmp/rootless.tgz --strip-components=1
 
 rm -r $tmp
 
-# Check whether installation dir is still empty.
-[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Installation failed." && exit 1
+# Check whether docker installation dir is still empty.
+[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+
+# Setup Sashimono data dir.
+cp -r $script_dir/contract_template $sashimono_data
+$sashimono_bin/sagent new $sashimono_data
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

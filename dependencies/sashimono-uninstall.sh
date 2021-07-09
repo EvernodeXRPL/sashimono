@@ -3,6 +3,7 @@
 
 sashimono_bin=/usr/bin/sashimono-agent
 sashimono_data=/etc/sashimono
+sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
 
@@ -17,17 +18,15 @@ prefix="sashi"
 users=$(cut -d: -f1 /etc/passwd | grep "^$prefix" | sort)
 readarray -t userarr <<<"$users"
 validusers=()
-for user in "${userarr[@]}"
-do
-    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && continue
+for user in "${userarr[@]}"; do
+    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && continue
     validusers+=("$user")
 done
 
 ucount=${#validusers[@]}
 if [ $ucount -gt 0 ]; then
     echo "Are you sure you want to delete all $ucount Sashimono contract instances?"
-    for user in "${validusers[@]}"
-    do
+    for user in "${validusers[@]}"; do
         echo "$user"
     done
     echo "Type $ucount to confirm deletion:"
@@ -35,16 +34,20 @@ if [ $ucount -gt 0 ]; then
 
     if [ "$confirmation" == "$ucount" ]; then
         echo "Deleting $ucount contract instances..."
-        for user in "${validusers[@]}"
-        do
-           output=$($(pwd)/user-uninstall.sh $user | tee /dev/stderr)
-           [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
+        for user in "${validusers[@]}"; do
+            output=$($(pwd)/user-uninstall.sh $user | tee /dev/stderr)
+            [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
         done
     else
         echo "Uninstall cancelled."
         exit 0
     fi
 fi
+
+echo "Removing Sashimono service..."
+systemctl stop $sashimono_service
+systemctl disable $sashimono_service
+rm /etc/systemd/system/$sashimono_service.service
 
 echo "Deleting binaries..."
 rm -r $sashimono_bin

@@ -72,7 +72,7 @@ namespace salog
 
         const std::string trace_file = conf::ctx.log_dir + "/sa.log";
         static plog::RollingFileAppender<plog_formatter> fileAppender(trace_file.c_str(), conf::cfg.log.max_mbytes_per_file * 1024 * 1024, conf::cfg.log.max_file_count);
-        static plog::ColorConsoleAppender<plog_formatter> consoleAppender;
+        static plog::ConsoleAppender<plog_formatter> consoleAppender;
 
         plog::Logger<0> &logger = plog::init(level);
 

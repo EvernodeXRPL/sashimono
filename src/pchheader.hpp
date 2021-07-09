@@ -27,7 +27,7 @@
 #include <vector>
 #include <thread>
 #include <plog/Log.h>
-#include <plog/Appenders/ColorConsoleAppender.h>
+#include <plog/Appenders/ConsoleAppender.h>
 #include <pwd.h>
 #include <readerwriterqueue/readerwriterqueue.h>
 #include <regex>

@@ -26,6 +26,11 @@ if ! command -v curl &>/dev/null; then
     apt-get install -y curl
 fi
 
+# Install openssl if not exists (required by Sashimono agent to create contract tls certs).
+if ! command -v openssl &>/dev/null; then
+    apt-get install -y openssl
+fi
+
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
 

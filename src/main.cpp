@@ -10,6 +10,8 @@
 #include "crypto.hpp"
 #include "hp_manager.hpp"
 #include "version.hpp"
+#include "util/util.hpp"
+#include "killswitch/killswitch.h"
 
 #define PARSE_ERROR                                          \
     {                                                        \
@@ -139,6 +141,12 @@ int main(int argc, char **argv)
     }
     else if (conf::ctx.command == "run")
     {
+        if (kill_switch(util::get_epoch_milliseconds()))
+        {
+            std::cerr << "Sashimono Agent usage limit failure.\n";
+            return -1;
+        }
+
         if (conf::init() != 0)
             return -1;
 

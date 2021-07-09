@@ -12,9 +12,15 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY build)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-result -Wreturn-type")
 
+#-------Bootstrap contract-------
+
 add_executable(bootstrap_contract
     bootstrap-contract/bootstrap_contract.cpp
 )
+
+#-------Sashimono Agent-------
+
+add_subdirectory(src/killswitch)
 
 add_executable(sagent
     src/conf.cpp
@@ -32,6 +38,7 @@ add_executable(sagent
 )
 
 target_link_libraries(sagent
+    killswitch
     libsodium.a
     libboost_stacktrace_backtrace.a
     sqlite3

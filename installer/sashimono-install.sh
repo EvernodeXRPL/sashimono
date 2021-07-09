@@ -33,9 +33,10 @@ fi
 echo "Installing rootless docker packages into $docker_bin"
 
 tmp=$(mktemp -d)
+script_dir=$(pwd)
 function rollback() {
     echo "Rolling back sashimono installation."
-    ./sashimono-uninstall.sh
+    $script_dir/sashimono-uninstall.sh
     [ -d $tmp ] && rm -r $tmp
     echo "Rolled back the installation."
     exit 1

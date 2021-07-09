@@ -56,6 +56,7 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND mv ./build/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
+    COMMAND ./build/docker-install.sh ./build/dockerbin
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

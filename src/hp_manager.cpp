@@ -26,12 +26,12 @@ namespace hp
     bool is_shutting_down = false;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
+    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
-    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
-    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
-    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
-    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
+    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/sashimono-agent/dockerbin/docker start %s";
+    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/sashimono-agent/dockerbin/docker stop %s";
+    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/sashimono-agent/dockerbin/docker rm -f %s";
+    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
@@ -304,7 +304,7 @@ namespace hp
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
         const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
-        sprintf(command, DOCKER_CREATE, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
@@ -421,7 +421,7 @@ namespace hp
     {
         const int len = 100 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_START, username.data(), container_name.data());
+        sprintf(command, DOCKER_START, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -435,7 +435,7 @@ namespace hp
     {
         const int len = 99 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STOP, username.data(), container_name.data());
+        sprintf(command, DOCKER_STOP, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -449,7 +449,7 @@ namespace hp
     {
         const int len = 100 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_REMOVE, username.data(), container_name.data());
+        sprintf(command, DOCKER_REMOVE, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -624,7 +624,7 @@ namespace hp
     {
         const int len = 136 + username.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STATUS, username.data(), container_name.data());
+        sprintf(command, DOCKER_STATUS, username.data(), conf::ctx.exe_dir.data(), container_name.data());
 
         FILE *fpipe = popen(command, "r");
 

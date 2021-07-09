@@ -33,14 +33,6 @@ if ! command -v openssl &>/dev/null; then
     apt-get install -y openssl
 fi
 
-# Install Sashimono agent binaries into sashimono bin dir.
-cp $script_dir/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
-chmod -R +x $sashimono_bin
-
-# Download docker packages into a tmp dir and extract into docker bin.
-echo "Installing rootless docker packages into $docker_bin"
-
-tmp=$(mktemp -d)
 function rollback() {
     echo "Rolling back sashimono installation."
     $script_dir/sashimono-uninstall.sh
@@ -49,15 +41,12 @@ function rollback() {
     exit 1
 }
 
-cd $tmp
-curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-20.10.7.tgz --output docker.tgz
-curl https://download.docker.com/linux/static/stable/$(uname -m)/docker-rootless-extras-20.10.7.tgz --output rootless.tgz
+# Install Sashimono agent binaries into sashimono bin dir.
+cp $script_dir/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
+chmod -R +x $sashimono_bin
 
-cd $docker_bin
-tar zxf $tmp/docker.tgz --strip-components=1
-tar zxf $tmp/rootless.tgz --strip-components=1
-
-rm -r $tmp
+# Download and install rootless dockerd.
+$script_dir/docker-install.sh $docker_bin
 
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
@@ -66,32 +55,30 @@ rm -r $tmp
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
-# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=1 is to keep 1 second gap between restarts.
-if [ -f $sashimono_bin/sagent ]; then
-    echo "[Unit]
-    Description=Running and monitoring sashimono agent.
-    After=network.target
-    StartLimitIntervalSec=0
-    [Service]
-    User=root
-    Group=root
-    Type=simple
-    ExecStart=$sashimono_bin/sagent run $sashimono_data
-    Restart=on-failure
-    RestartSec=1
-    [Install]
-    WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
-
-    systemctl daemon-reload
-    systemctl enable $sashimono_service
-    systemctl start $sashimono_service
-else
-    echo "Sashimono binary not found in ${sashimono_bin}. Skipped adding Sashimono service."
-fi
-
 # Setup Sashimono data dir.
 cp -r $script_dir/contract_template $sashimono_data
 $sashimono_bin/sagent new $sashimono_data
+
+# Install Sashimono Agent systemd service.
+# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+echo "[Unit]
+Description=Running and monitoring sashimono agent.
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+User=root
+Group=root
+Type=simple
+WorkingDirectory=$sashimono_bin
+ExecStart=$sashimono_bin/sagent run $sashimono_data
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
+
+systemctl daemon-reload
+systemctl enable $sashimono_service
+systemctl start $sashimono_service
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

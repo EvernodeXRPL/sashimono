@@ -9,9 +9,8 @@ cgroupsuffix="-cg"
 [ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
 
 echo "Are you sure you want to uninstall Sashimono?"
-echo "Type 'yes' to confirm uninstall:"
-read yes
-[ "$yes" != "yes" ] && echo "Uninstall cancelled." && exit 0
+read -p "Type 'yes' to confirm uninstall: " confirmation < /dev/tty
+[ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -32,7 +31,7 @@ if [ $ucount -gt 0 ]; then
         echo "$user"
     done
     echo "Type $ucount to confirm deletion:"
-    read confirmation
+    read -p "Type $ucount to confirm deletion:" confirmation
 
     if [ "$confirmation" == "$ucount" ]; then
         echo "Deleting $ucount contract instances..."

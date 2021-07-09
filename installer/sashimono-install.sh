@@ -70,7 +70,7 @@ if [ -f $sashimono_bin/sagent ]; then
     User=root
     Group=root
     Type=simple
-    ExecStart=$sashimono_bin/sagent run /etc/sashimono
+    ExecStart=$sashimono_bin/sagent run $sashimono_data
     Restart=on-failure
     RestartSec=1
     [Install]
@@ -80,7 +80,7 @@ if [ -f $sashimono_bin/sagent ]; then
     systemctl enable $sashimono_service
     systemctl start $sashimono_service
 else
-    echo "Sashimono binary not found in ${sashimono_bin}. Skip adding sashimono service."
+    echo "Sashimono binary not found in ${sashimono_bin}. Skipped adding Sashimono service."
 fi
 
 echo "Sashimono installed successfully."

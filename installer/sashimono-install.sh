@@ -5,6 +5,7 @@
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
+sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
 
@@ -57,7 +58,30 @@ rm -r $tmp
 
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
-! echo "@$group       cpu,memory              %u$cgroupsuffix" >> /etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+
+# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=1 is to keep 1 second gap between restarts.
+if [ -f $sashimono_bin/sagent ]; then
+    echo "[Unit]
+    Description=Running and monitoring sashimono agent.
+    After=network.target
+    StartLimitIntervalSec=0
+    [Service]
+    User=root
+    Group=root
+    Type=simple
+    ExecStart=$sashimono_bin/sagent run $sashimono_data
+    Restart=on-failure
+    RestartSec=1
+    [Install]
+    WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
+
+    systemctl daemon-reload
+    systemctl enable $sashimono_service
+    systemctl start $sashimono_service
+else
+    echo "Sashimono binary not found in ${sashimono_bin}. Skipped adding Sashimono service."
+fi
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

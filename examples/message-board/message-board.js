@@ -71,7 +71,7 @@ server.listen(5000, () => {
                 else {
                     switch (inp) {
                         case 'create':
-                            contractId = await askForInput('Contract ID');
+                            contractId = await askForInput('Contract ID (optional)');
                             if (contractId == "")
                                 contractId = uuidv4();
                                 

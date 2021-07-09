@@ -575,7 +575,7 @@ namespace hp
         // Generate tls key files using openssl command is available.
         const std::string tls_command = "openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout " +
                                         config_dir + "/tlskey.pem" + " -out " + config_dir + "/tlscert.pem " +
-                                        "-subj \"/C=HP/ST=HP/L=HP/O=HP/CN=" + pubkey_hex + ".sashimono\" > /dev/null 2>&1";
+                                        "-subj \"/C=HP/ST=HP/L=HP/O=HP/CN=" + std::string(username) + "\"";
         if (system(tls_command.c_str()) != 0)
         {
             LOG_ERROR << errno << ": Error generting tls key files at " << config_dir;

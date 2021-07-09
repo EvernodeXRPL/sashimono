@@ -49,10 +49,10 @@ const sendToAll = (msg) => {
     });
 }
 
-const askForInput = (label) => {
+const askForInput = (label, defaultValue) => {
     return new Promise(resolve => {
         rl.question(`${label}? `, (input) => {
-            resolve(input);
+            resolve(input && input.length > 0 ? input : defaultValue);
         })
     })
 }
@@ -71,10 +71,8 @@ server.listen(5000, () => {
                 else {
                     switch (inp) {
                         case 'create':
-                            contractId = await askForInput('Contract ID (optional)');
-                            if (contractId == "")
-                                contractId = uuidv4();
-                                
+                            contractId = await askForInput('Contract ID (optional)', uuidv4());
+
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',
@@ -84,15 +82,15 @@ server.listen(5000, () => {
                             break;
                         case 'initiate':
                             containerName = await askForInput('Container Name');
-                            role = await askForInput('Role <validator> or <observer>');
-                            if (role && role != 'validator' && role != 'observer') {
+                            role = await askForInput('Role <validator> or <observer>', "validator");
+                            if (role != 'validator' && role != 'observer') {
                                 console.error('Invalid role. (Should be "validator" or "observer").')
                                 break;
                             }
-                            history = await askForInput('History <mode{full|custom},max_primary_shards{number},max_raw_shards{number}>');
+
+                            history = await askForInput('History <mode{full|custom},max_primary_shards{number},max_raw_shards{number}>', "custom,1,1");
                             split = [];
-                            if (history)
-                            {
+                            if (history) {
                                 split = history.split(',');
                                 if (split.length == 0 || split.length == 0 > 3) {
                                     console.error('Invalid history.')

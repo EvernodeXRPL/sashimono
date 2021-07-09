@@ -42,11 +42,11 @@ namespace hp
     */
     int init()
     {
-        const std::string db_path = conf::ctx.data_dir + "/hp_instances.sqlite";
+        const std::string db_path = conf::ctx.data_dir + "/sa.sqlite";
         if (sqlite::open_db(db_path, &db, true) == -1 ||
             sqlite::initialize_hp_db(db) == -1)
         {
-            LOG_ERROR << "Error preparing hp database in " << db_path;
+            LOG_ERROR << "Error preparing database in " << db_path;
             return -1;
         }
 
@@ -510,19 +510,20 @@ namespace hp
             LOG_ERROR << errno << ": Error creating temporary directory to create contract folder.";
             return -1;
         }
-        const std::string source_path = conf::ctx.default_contract_path + "/*";
+        const std::string source_path = conf::ctx.contract_template_path + "/*";
         int len = 25 + source_path.length();
         char cp_command[len];
         sprintf(cp_command, COPY_DIR, source_path.data(), temp_dirpath);
         if (system(cp_command) != 0)
         {
-            LOG_ERROR << "Default contract copying failed to " << temp_dirpath;
+            LOG_ERROR << errno << ": Default contract copying failed to " << temp_dirpath;
             return -1;
         }
 
+        const std::string config_dir = std::string(temp_dirpath) + "/cfg";
+
         // Read the config file into json document object.
-        std::string config_file_path(temp_dirpath);
-        config_file_path.append("/cfg/hp.cfg");
+        const std::string config_file_path = config_dir + "/hp.cfg";
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
 
         if (config_fd == -1)
@@ -570,6 +571,16 @@ namespace hp
             return -1;
         }
         close(config_fd);
+
+        // Generate tls key files using openssl command is available.
+        const std::string tls_command = "openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout " +
+                                        config_dir + "/tlskey.pem" + " -out " + config_dir + "/tlscert.pem " +
+                                        "-subj \"/C=HP/ST=HP/L=HP/O=HP/CN=" + std::string(username) + "\"";
+        if (system(tls_command.c_str()) != 0)
+        {
+            LOG_ERROR << errno << ": Error generting tls key files at " << config_dir;
+            return -1;
+        }
 
         // Move the contract to contract dir
         len = 22 + contract_dir.length();

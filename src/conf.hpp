@@ -42,11 +42,11 @@ namespace conf
 
     struct log_config
     {
-        std::string log_level;                   // Log severity level (dbg, inf, wrn, wrr)
-        LOG_SEVERITY log_level_type;             // Log severity level enum (debug, info, warn, error)
-        std::unordered_set<std::string> loggers; // List of enabled loggers (console, file)
-        size_t max_mbytes_per_file = 0;          // Max MB size of a single log file.
-        size_t max_file_count = 0;               // Max no. of log files to keep.
+        std::string log_level;                            // Log severity level (dbg, inf, wrn, wrr)
+        LOG_SEVERITY log_level_type = LOG_SEVERITY::INFO; // Log severity level enum (debug, info, warn, error)
+        std::unordered_set<std::string> loggers;          // List of enabled loggers (console, file)
+        size_t max_mbytes_per_file = 0;                   // Max MB size of a single log file.
+        size_t max_file_count = 0;                        // Max no. of log files to keep.
     };
 
     struct server_config
@@ -57,8 +57,8 @@ namespace conf
     struct hp_config
     {
         std::string host_address;
-        uint16_t init_peer_port;
-        uint16_t init_user_port;
+        uint16_t init_peer_port = 0;
+        uint16_t init_user_port = 0;
     };
 
     struct system_config
@@ -78,25 +78,17 @@ namespace conf
         log_config log;
     };
 
-    enum ENVIRONMENT
-    {
-        DEVELOPMENT,
-        PRODUCTION
-    };
-
     struct sa_context
     {
-        std::string command;                                // The CLI command issued to launch Sashimono agent
-        ENVIRONMENT environment = ENVIRONMENT::DEVELOPMENT; // Running environment mode. (dev | prod)
-        std::string exe_dir;                                // Hot Pocket executable dir.
-        std::string hpws_exe_path;                          // hpws executable file path.
-        std::string hpfs_exe_path;                          // hpfs executable file path.
-        std::string default_contract_path;                  // Path to default contract.
+        std::string command;                // The CLI command issued to launch Sashimono agent
+        std::string exe_dir;                // Sashimono Agent executable dir.
+        std::string hpws_exe_path;          // hpws executable file path.
+        std::string hpfs_exe_path;          // hpfs executable file path.
+        std::string contract_template_path; // Path to default contract.
 
         std::string user_install_sh;
         std::string user_uninstall_sh;
 
-        std::string config_dir;  // Config dir full path.
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.
         std::string data_dir;    // Data directory full path.
@@ -114,7 +106,7 @@ namespace conf
 
     int create();
 
-    void set_dir_paths(std::string exepath);
+    void set_dir_paths(std::string exepath, std::string datadir);
 
     int validate_dir_paths();
 

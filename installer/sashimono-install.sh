@@ -29,26 +29,14 @@ fi
 # Install Sashimono agent binaries into sashimono bin dir.
 # TODO.
 
-# Copy necessary files into sashimono data folder.
-cp -r ../dependencies/default_contract $sashimono_data
-if ! cp ../bootstrap-contract/script.sh $sashimono_data/default_contract/contract_fs/seed/state/script.sh; then
-    echo "script.sh file not found."
-    exit 1
-fi
-
-if ! cp ../build/bootstrap_contract $sashimono_data/default_contract/contract_fs/seed/state/bootstrap_contract; then
-    echo "bootstrap_contract file not found." 
-    exit 1
-fi
-
 # Download docker packages into a tmp dir and extract into docker bin.
 echo "Installing rootless docker packages into $docker_bin"
 
-installer_dir=$(pwd)
 tmp=$(mktemp -d)
+script_dir=$(pwd)
 function rollback() {
     echo "Rolling back sashimono installation."
-    $installer_dir/sashimono-uninstall.sh
+    $script_dir/sashimono-uninstall.sh
     [ -d $tmp ] && rm -r $tmp
     echo "Rolled back the installation."
     exit 1

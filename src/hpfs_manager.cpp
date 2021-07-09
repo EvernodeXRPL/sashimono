@@ -86,14 +86,16 @@ namespace hpfs
             dup2(fd, STDERR_FILENO);
             close(fd);
 
-            std::string trace_arg = "trace=";
-            trace_arg.append(log_level);
+            const std::string ugid_arg = "ugid=";
+            const std::string trace_arg = "trace=" + std::string(log_level);
+
             char *execv_args[] = {
                 conf::ctx.hpfs_exe_path.data(),
                 (char *)"fs",
                 (char *)fs_dir.data(),
                 (char *)mount_dir.data(),
                 (char *)(merge ? "merge=true" : "merge=false"),
+                (char *)ugid_arg.data(),
                 (char *)trace_arg.data(),
                 NULL};
 

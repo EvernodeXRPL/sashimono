@@ -25,9 +25,10 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 # Check cgroup mounts exists.
 ([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "CGROUP_ERR,INST_ERR" && exit 1
 
+script_dir=$(pwd)
 function rollback() {
     echo "Rolling back user installation. $1"
-    $(pwd)/user-uninstall.sh $user
+    $script_dir/user-uninstall.sh $user
     echo "Rolled back the installation."
     echo "$1,INST_ERR" && exit 1
 }

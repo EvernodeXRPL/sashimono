@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sashimono agent uninstall script.
-# -q for non-interactive(quiet) mode
+# -q for non-interactive (quiet) mode
 
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin

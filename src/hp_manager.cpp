@@ -460,10 +460,6 @@ namespace hp
     */
     int destroy_container(std::string_view container_name)
     {
-        std::cout << "AA1\n";
-        std::cout << container_name << " container_name\n";
-        std::cout << "AA2\n";
-
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)

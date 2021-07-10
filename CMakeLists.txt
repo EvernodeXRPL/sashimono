@@ -56,7 +56,7 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND mv ./build/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
-    COMMAND ./build/docker-install.sh ./build/dockerbin
+    COMMAND ./installer/docker-install.sh ./build/dockerbin
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
@@ -64,7 +64,8 @@ target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
 # Add target to generate the installer setup.
 add_custom_target(installer
   COMMAND mkdir -p ./build/sashimono-installer
-  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,sashimono-install.sh,sashimono-uninstall.sh,contract_template} ./build/sashimono-installer/"
+  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,contract_template} ./build/sashimono-installer/"
+  COMMAND bash -c "cp -r ./installer/{docker-install.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/sashimono-installer/"
   COMMAND tar cfz  ./build/sashimono-installer.tar.gz --directory=./build/ sashimono-installer
   COMMAND rm -r ./build/sashimono-installer
 )

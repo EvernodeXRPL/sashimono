@@ -80,6 +80,9 @@ sudo ldconfig
 popd > /dev/null 2>&1
 rm -r $workdir
 
+# Add the user group to which all contract instance users will belong.
+groupadd "sashimonousers"
+
 # Build sagent
 cmake .
 make

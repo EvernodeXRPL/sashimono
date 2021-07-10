@@ -39,6 +39,7 @@ signature=$(printf  "$string_to_sign" | openssl dgst -sha256 -mac HMAC -macopt "
 authorization_header="Authorization: $authorization $AZURE_STORAGE_ACCOUNT:$signature"
 OUTPUT_FILE="https://${AZURE_STORAGE_ACCOUNT}.blob.core.windows.net/${AZURE_CONTAINER_NAME}/${FILENAME}"
 
+echo "Uploading..."
 curl -X ${HTTP_METHOD} \
     -T ${FILEPATH} \
     -H "$x_ms_date_h" \

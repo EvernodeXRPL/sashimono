@@ -1,5 +1,6 @@
 #!/bin/bash
 # Sashimono agent uninstall script.
+# -q for non-interactive(quiet) mode
 
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
@@ -7,14 +8,15 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
-
-export SASHIMONO_DOCKER_BIN=$docker_bin
+quiet=$1
 
 [ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
 
-echo "Are you sure you want to uninstall Sashimono?"
-read -p "Type 'yes' to confirm uninstall: " confirmation < /dev/tty
-[ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
+if [ "$quiet" != "-q" ]; then
+    echo "Are you sure you want to uninstall Sashimono?"
+    read -p "Type 'yes' to confirm uninstall: " confirmation < /dev/tty
+    [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
+fi
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -28,17 +30,23 @@ done
 
 ucount=${#validusers[@]}
 if [ $ucount -gt 0 ]; then
-    echo "Are you sure you want to delete all $ucount Sashimono contract instances?"
+    
+    echo "Detected $ucount Sashimono contract instances."
     for user in "${validusers[@]}"; do
         echo "$user"
     done
 
-    read -p "Type $ucount to confirm deletion:" confirmation < /dev/tty
+    if [ "$quiet" != "-q" ]; then
+        echo "Are you sure you want to delete all $ucount Sashimono contract instances?"
+        read -p "Type $ucount to confirm deletion:" confirmation < /dev/tty
+    else
+        confirmation="$ucount"
+    fi
 
     if [ "$confirmation" == "$ucount" ]; then
         echo "Deleting $ucount contract instances..."
         for user in "${validusers[@]}"; do
-            output=$($(pwd)/user-uninstall.sh $user | tee /dev/stderr)
+            output=$($sashimono_bin/user-uninstall.sh $user | tee /dev/stderr)
             [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
         done
     else

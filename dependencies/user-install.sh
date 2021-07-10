@@ -17,7 +17,8 @@ user="$prefix$suffix"
 group="sashimonousers"
 cgroupsuffix="-cg"
 user_dir=/home/$user
-docker_bin=$(pwd)/dockerbin
+script_dir=$(dirname $(realpath $0))
+docker_bin=$script_dir/dockerbin
 
 # Check if users already exists.
 [ $(id -u $user 2>/dev/null || echo -1) -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -25,7 +26,6 @@ docker_bin=$(pwd)/dockerbin
 # Check cgroup mounts exists.
 ([ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]) && echo "CGROUP_ERR,INST_ERR" && exit 1
 
-script_dir=$(pwd)
 function rollback() {
     echo "Rolling back user installation. $1"
     $script_dir/user-uninstall.sh $user

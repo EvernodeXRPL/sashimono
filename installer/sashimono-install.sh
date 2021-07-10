@@ -8,9 +8,10 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
-script_dir=$(pwd)
+script_dir=$(dirname $(realpath $0))
 
-echo "Installing Sashimono..."
+[ -d $sashimono_bin ] && [ ! -z "$(ls -A $sashimono_bin)" ] && \
+    echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -22,6 +23,8 @@ mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
 mkdir -p $sashimono_data
 [ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
+
+echo "Installing Sashimono..."
 
 # Install curl if not exists (required to download installation artifacts).
 if ! command -v curl &>/dev/null; then

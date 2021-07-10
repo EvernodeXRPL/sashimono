@@ -11,7 +11,8 @@ cgroupsuffix="-cg"
 user_dir=/home/$user
 user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
-docker_bin="${SASHIMONO_DOCKER_BIN:-$(pwd)/dockerbin}"
+script_dir=$(dirname $(realpath $0))
+docker_bin=$script_dir/dockerbin
 
 # Check if users exists.
 if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then

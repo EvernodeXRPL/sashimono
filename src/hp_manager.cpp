@@ -302,7 +302,7 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 303 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
@@ -419,7 +419,7 @@ namespace hp
     */
     int docker_start(std::string_view username, std::string_view container_name)
     {
-        const int len = 100 + username.length() + container_name.length();
+        const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_START, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
@@ -433,7 +433,7 @@ namespace hp
     */
     int docker_stop(std::string_view username, std::string_view container_name)
     {
-        const int len = 99 + username.length() + container_name.length();
+        const int len = 99 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_STOP, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
@@ -447,7 +447,7 @@ namespace hp
     */
     int docker_remove(std::string_view username, std::string_view container_name)
     {
-        const int len = 100 + username.length() + container_name.length();
+        const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_REMOVE, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
@@ -460,6 +460,10 @@ namespace hp
     */
     int destroy_container(std::string_view container_name)
     {
+        std::cout << "AA1\n";
+        std::cout << container_name << " container_name\n";
+        std::cout << "AA2\n";
+
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
@@ -622,7 +626,7 @@ namespace hp
     */
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status)
     {
-        const int len = 136 + username.length() + container_name.length();
+        const int len = 136 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
         sprintf(command, DOCKER_STATUS, username.data(), conf::ctx.exe_dir.data(), container_name.data());
 

@@ -2,10 +2,13 @@
 # Sashimono agent uninstall script.
 
 sashimono_bin=/usr/bin/sashimono-agent
+docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
+
+export SASHIMONO_DOCKER_BIN=$docker_bin
 
 [ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
 
@@ -29,8 +32,8 @@ if [ $ucount -gt 0 ]; then
     for user in "${validusers[@]}"; do
         echo "$user"
     done
-    echo "Type $ucount to confirm deletion:"
-    read -p "Type $ucount to confirm deletion:" confirmation
+
+    read -p "Type $ucount to confirm deletion:" confirmation < /dev/tty
 
     if [ "$confirmation" == "$ucount" ]; then
         echo "Deleting $ucount contract instances..."

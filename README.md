@@ -14,14 +14,9 @@ A C++ version of sashimono agent
 * Boost Stacktrace - https://www.boost.org
 
 ## Setting up Sashimono Agent development environment
-Run the setup scripts located at the repo root (tested on Ubuntu 18.04).
-```
-# To be able to build Sashimono project.
-./dev-setup.sh
-
-# To be able to run and test Sashimono.
-./prereq.sh
-```
+1. Run `./prereq.sh` as sudo.
+1. Reboot the machine.
+1. Run `./dev-setup.sh`
 
 ## Build Sashimono Agent
 1. Run `cmake .` (You only have to do this once)

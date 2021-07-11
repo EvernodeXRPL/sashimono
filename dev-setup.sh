@@ -80,8 +80,11 @@ sudo ldconfig
 popd > /dev/null 2>&1
 rm -r $workdir
 
-# Add the user group to which all contract instance users will belong.
-groupadd "sashimonousers"
+# Setting up cgroup rules.
+group="sashimonousers"
+cgroupsuffix="-cg"
+! sudo groupadd $group && echo "Group creation failed."
+! sudo echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed."
 
 # Build sagent
 cmake .

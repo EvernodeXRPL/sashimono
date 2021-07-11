@@ -19,7 +19,7 @@ curl https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extr
 cd $docker_bin
 tar zxf $tmp/docker.tgz --strip-components=1
 tar zxf $tmp/rootless.tgz --strip-components=1
-chown -R $(id -u):$(id -g) $tmp/*
 rm -r $tmp
+chown -R $(id -u):$(id -g) $docker_bin/*
 
 exit 0

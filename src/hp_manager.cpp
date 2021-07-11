@@ -35,7 +35,7 @@ namespace hp
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
-    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
+    constexpr const char *RUN_SH = "bash %s %s";
 
     /**
      * Initialize hp related environment.
@@ -769,7 +769,7 @@ namespace hp
         }
         const int len = 23 + (file_name.length() * 2) + params.length();
         char command[len];
-        sprintf(command, RUN_SH, file_name.data(), file_name.data(), params.empty() ? "\0" : params.data());
+        sprintf(command, RUN_SH, file_name.data(), params.empty() ? "\0" : params.data());
 
         FILE *fpipe = popen(command, "r");
         if (fpipe == NULL)

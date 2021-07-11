@@ -53,7 +53,7 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
     echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
 
 # Adding disk quota to the new user.
-sudo setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
 
 echo "Configured the resources"
 

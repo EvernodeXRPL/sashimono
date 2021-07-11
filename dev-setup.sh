@@ -56,7 +56,7 @@ tar -zxvf 1.0.2.tar.gz
 pushd concurrentqueue-1.0.2 > /dev/null 2>&1
 sudo cp concurrentqueue.h /usr/local/include/
 popd > /dev/null 2>&1
-sudo rm 1.0.2.tar.gz && rm -r concurrentqueue-1.0.2
+sudo rm 1.0.2.tar.gz && sudo rm -r concurrentqueue-1.0.2
 
 # Libsodium
 sudo apt-get install -y libsodium-dev
@@ -76,7 +76,7 @@ sudo ldconfig
 
 # Pop workdir
 popd > /dev/null 2>&1
-rm -r $workdir
+sudo rm -r $workdir
 
 # Setting up cgroup rules.
 group="sashimonousers"

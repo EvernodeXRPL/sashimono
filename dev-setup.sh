@@ -20,15 +20,6 @@ sudo cp -r $cmake/bin/* /usr/local/bin/
 sudo cp -r $cmake/share/* /usr/local/share/
 rm $cmake.tar.gz && rm -r $cmake
 
-# Libsodium
-wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz
-tar -zxvf libsodium-1.0.18-stable.tar.gz
-pushd libsodium-stable > /dev/null 2>&1
-./configure && make
-sudo make install
-popd > /dev/null 2>&1
-rm libsodium-1.0.18-stable.tar.gz && rm -r libsodium-stable
-
 # jsoncons
 wget https://github.com/danielaparker/jsoncons/archive/v0.153.3.tar.gz
 tar -zxvf v0.153.3.tar.gz
@@ -39,9 +30,6 @@ sudo cp -r include/jsoncons_ext/bson /usr/local/include/jsoncons_ext/
 popd > /dev/null 2>&1
 rm v0.153.3.tar.gz && rm -r jsoncons-0.153.3
 
-# Sqlite
-sudo apt-get install -y sqlite3 libsqlite3-dev
-
 # Plog
 wget https://github.com/SergiusTheBest/plog/archive/1.1.5.tar.gz
 tar -zxvf 1.1.5.tar.gz
@@ -49,9 +37,6 @@ pushd plog-1.1.5 > /dev/null 2>&1
 sudo cp -r include/plog /usr/local/include/
 popd > /dev/null 2>&1
 rm 1.1.5.tar.gz && rm -r plog-1.1.5
-
-# Boost stacktrace
-sudo apt-get install -y libboost-stacktrace-dev
 
 # Reader-Writer queue
 wget https://github.com/cameron314/readerwriterqueue/archive/v1.0.3.tar.gz
@@ -72,6 +57,19 @@ pushd concurrentqueue-1.0.2 > /dev/null 2>&1
 sudo cp concurrentqueue.h /usr/local/include/
 popd > /dev/null 2>&1
 rm 1.0.2.tar.gz && rm -r concurrentqueue-1.0.2
+
+# Libsodium
+sudo apt-get install -y libsodium-dev
+
+# Sqlite
+sudo apt-get install -y sqlite3 libsqlite3-dev
+
+# Boost stacktrace
+sudo apt-get install -y libboost-stacktrace-dev
+
+# NodeJs
+curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 # Update linker library cache.
 sudo ldconfig

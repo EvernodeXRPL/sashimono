@@ -15,6 +15,8 @@ originalfstab=/etc/fstab
 cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
 
+sudo apt-get update
+
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*usrquota<Not whitespace>*
 # If not add usrquota to the options.

@@ -14,6 +14,7 @@ A C++ version of sashimono agent
 * Boost Stacktrace - https://www.boost.org
 
 ## Setting up Sashimono Agent development environment
+Tested on Ubuntu 18.04 and 20.04
 1. Run `sudo ./prereq.sh`
 1. Reboot the machine.
 1. Run `./dev-setup.sh`

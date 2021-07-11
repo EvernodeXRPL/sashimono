@@ -48,7 +48,7 @@ cmake ..
 sudo make install
 popd > /dev/null 2>&1
 popd > /dev/null 2>&1
-rm v1.0.3.tar.gz && rm -r readerwriterqueue-1.0.3
+rm v1.0.3.tar.gz && sudo rm -r readerwriterqueue-1.0.3
 
 # Concurrent queue
 wget https://github.com/cameron314/concurrentqueue/archive/1.0.2.tar.gz
@@ -56,7 +56,7 @@ tar -zxvf 1.0.2.tar.gz
 pushd concurrentqueue-1.0.2 > /dev/null 2>&1
 sudo cp concurrentqueue.h /usr/local/include/
 popd > /dev/null 2>&1
-sudo rm 1.0.2.tar.gz && sudo rm -r concurrentqueue-1.0.2
+rm 1.0.2.tar.gz && sudo rm -r concurrentqueue-1.0.2
 
 # Libsodium
 sudo apt-get install -y libsodium-dev

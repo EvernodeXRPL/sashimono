@@ -45,12 +45,31 @@ user_id=$(id -u $user)
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-# Setup user cgroup.
-! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "$cpu" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$cgroupsuffix &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${memory}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+# Setup a service to create control groups.
+cgcreate_service=$user-cgcreate
+
+create_command="cgcreate -g cpu:$user$cgroupsuffix && cgcreate -g memory:$user$cgroupsuffix"
+cpu_command="echo \"${cpu}\" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us"
+memmory_command="echo \"${memory}K\" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes"
+swap_command="echo \"${memory}K\" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes"
+
+echo "[Unit]
+    Description=Cgroup creation service for $user.
+    StartLimitIntervalSec=0
+    [Service]
+    User=root
+    Group=root
+    Type=oneshot
+    ExecStart=/bin/sh -c \"$create_command && $cpu_command && $memmory_command && $swap_command\"
+    [Install]
+    WantedBy=multi-user.target" >/etc/systemd/system/"$cgcreate_service".service
+
+systemctl daemon-reload
+systemctl enable $cgcreate_service
+systemctl start $cgcreate_service
+cgcreate_service_cat=$(systemctl is-active $cgcreate_service)
+[ "$cgcreate_service_cat" == "failed" ] && echo "Starting $cgcreate_service service failed." && rollback
+echo "Created and started $cgcreate_service service"
 
 # Adding disk quota to the new user.
 setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /

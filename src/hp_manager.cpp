@@ -26,16 +26,16 @@ namespace hp
     bool is_shutting_down = false;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
-    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
+    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
-    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker start %s";
-    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker stop %s";
-    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker rm -f %s";
-    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock /usr/bin/sashimono-agent/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
+    constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
+    constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
+    constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
+    constexpr const char *DOCKER_STATUS = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker inspect --format='{{json .State.Status}}' %s";
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
-    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
+    constexpr const char *RUN_SH = "bash %s %s";
 
     /**
      * Initialize hp related environment.
@@ -302,9 +302,9 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 303 + username.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 303 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
         char command[len];
-        sprintf(command, DOCKER_CREATE, username.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
@@ -419,9 +419,9 @@ namespace hp
     */
     int docker_start(std::string_view username, std::string_view container_name)
     {
-        const int len = 100 + username.length() + container_name.length();
+        const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_START, username.data(), container_name.data());
+        sprintf(command, DOCKER_START, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -433,9 +433,9 @@ namespace hp
     */
     int docker_stop(std::string_view username, std::string_view container_name)
     {
-        const int len = 99 + username.length() + container_name.length();
+        const int len = 99 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STOP, username.data(), container_name.data());
+        sprintf(command, DOCKER_STOP, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -447,9 +447,9 @@ namespace hp
     */
     int docker_remove(std::string_view username, std::string_view container_name)
     {
-        const int len = 100 + username.length() + container_name.length();
+        const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_REMOVE, username.data(), container_name.data());
+        sprintf(command, DOCKER_REMOVE, username.data(), conf::ctx.exe_dir.data(), container_name.data());
         return system(command) == 0 ? 0 : -1;
     }
 
@@ -622,9 +622,9 @@ namespace hp
     */
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status)
     {
-        const int len = 136 + username.length() + container_name.length();
+        const int len = 136 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
         char command[len];
-        sprintf(command, DOCKER_STATUS, username.data(), container_name.data());
+        sprintf(command, DOCKER_STATUS, username.data(), conf::ctx.exe_dir.data(), container_name.data());
 
         FILE *fpipe = popen(command, "r");
 
@@ -769,7 +769,7 @@ namespace hp
         }
         const int len = 23 + (file_name.length() * 2) + params.length();
         char command[len];
-        sprintf(command, RUN_SH, file_name.data(), file_name.data(), params.empty() ? "\0" : params.data());
+        sprintf(command, RUN_SH, file_name.data(), params.empty() ? "\0" : params.data());
 
         FILE *fpipe = popen(command, "r");
         if (fpipe == NULL)

@@ -62,10 +62,10 @@ namespace conf
             cfg.hp.init_user_port = 8081;
             cfg.server.ip_port = {"127.0.0.1", 5000};
 
-            cfg.system.max_instance_count = 10;
-            cfg.system.max_mem_kbytes = cfg.system.max_instance_count * 50 * 1024;      // 50MB per instance, Minimum allowed by single docker image is 6MB
-            cfg.system.max_cpu_us = cfg.system.max_instance_count * 1000000;            // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000);
-            cfg.system.max_storage_kbytes = cfg.system.max_instance_count * 200 * 1024; // 200MB per instance.
+            cfg.system.max_instance_count = 5;
+            cfg.system.max_mem_kbytes = 512000;      // Total 512MB RAM
+            cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
+            cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

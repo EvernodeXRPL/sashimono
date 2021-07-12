@@ -51,11 +51,23 @@ add_dependencies(sagent
 )
 
 add_custom_command(TARGET sagent POST_BUILD
-    COMMAND cp -r ./dependencies/* ./build/
-    COMMAND tar xf ./build/contract_template.tar -C ./build/ --no-same-owner && rm ./build/contract_template.tar
-    COMMAND mv ./build/hp.cfg ./build/contract_template/cfg/
+    COMMAND bash -c "cp -r ./dependencies/{hpfs,hpws,user-install.sh,user-uninstall.sh} ./build/"
+    COMMAND tar xf ./dependencies/contract_template.tar -C ./build/ --no-same-owner
+    COMMAND cp ./dependencies/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
+    COMMAND ./installer/docker-install.sh ./build/dockerbin
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
+
+# Add target to generate the installer setup.
+add_custom_target(installer
+  COMMAND mkdir -p ./build/sashimono-installer
+  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,contract_template} ./build/sashimono-installer/"
+  COMMAND bash -c "cp -r ./installer/{docker-install.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/sashimono-installer/"
+  COMMAND tar cfz  ./build/sashimono-installer.tar.gz --directory=./build/ sashimono-installer
+  COMMAND rm -r ./build/sashimono-installer
+)
+set_target_properties(installer PROPERTIES EXCLUDE_FROM_ALL TRUE)
+add_dependencies(installer sagent)

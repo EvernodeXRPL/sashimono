@@ -7,6 +7,7 @@ set -e # exit on error
 sudo apt-get update
 sudo apt-get install -y build-essential libssl-dev
 
+scriptdir=$(dirname $(realpath $0))
 workdir=~/sagent-setup
 
 mkdir $workdir
@@ -20,15 +21,6 @@ sudo cp -r $cmake/bin/* /usr/local/bin/
 sudo cp -r $cmake/share/* /usr/local/share/
 rm $cmake.tar.gz && rm -r $cmake
 
-# Libsodium
-wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18-stable.tar.gz
-tar -zxvf libsodium-1.0.18-stable.tar.gz
-pushd libsodium-stable > /dev/null 2>&1
-./configure && make
-sudo make install
-popd > /dev/null 2>&1
-rm libsodium-1.0.18-stable.tar.gz && rm -r libsodium-stable
-
 # jsoncons
 wget https://github.com/danielaparker/jsoncons/archive/v0.153.3.tar.gz
 tar -zxvf v0.153.3.tar.gz
@@ -39,9 +31,6 @@ sudo cp -r include/jsoncons_ext/bson /usr/local/include/jsoncons_ext/
 popd > /dev/null 2>&1
 rm v0.153.3.tar.gz && rm -r jsoncons-0.153.3
 
-# Sqlite
-sudo apt-get install -y sqlite3 libsqlite3-dev
-
 # Plog
 wget https://github.com/SergiusTheBest/plog/archive/1.1.5.tar.gz
 tar -zxvf 1.1.5.tar.gz
@@ -49,9 +38,6 @@ pushd plog-1.1.5 > /dev/null 2>&1
 sudo cp -r include/plog /usr/local/include/
 popd > /dev/null 2>&1
 rm 1.1.5.tar.gz && rm -r plog-1.1.5
-
-# Boost stacktrace
-sudo apt-get install -y libboost-stacktrace-dev
 
 # Reader-Writer queue
 wget https://github.com/cameron314/readerwriterqueue/archive/v1.0.3.tar.gz
@@ -63,7 +49,7 @@ cmake ..
 sudo make install
 popd > /dev/null 2>&1
 popd > /dev/null 2>&1
-rm v1.0.3.tar.gz && rm -r readerwriterqueue-1.0.3
+rm v1.0.3.tar.gz && sudo rm -r readerwriterqueue-1.0.3
 
 # Concurrent queue
 wget https://github.com/cameron314/concurrentqueue/archive/1.0.2.tar.gz
@@ -71,14 +57,33 @@ tar -zxvf 1.0.2.tar.gz
 pushd concurrentqueue-1.0.2 > /dev/null 2>&1
 sudo cp concurrentqueue.h /usr/local/include/
 popd > /dev/null 2>&1
-rm 1.0.2.tar.gz && rm -r concurrentqueue-1.0.2
+rm 1.0.2.tar.gz && sudo rm -r concurrentqueue-1.0.2
+
+# Library dependencies.
+sudo apt-get install -y \
+    libsodium-dev \
+    sqlite3 libsqlite3-dev \
+    libboost-stacktrace-dev \
+    fuse3
+
+cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
+
+# NodeJs
+curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+sudo apt-get install -y nodejs
 
 # Update linker library cache.
 sudo ldconfig
 
 # Pop workdir
 popd > /dev/null 2>&1
-rm -r $workdir
+sudo rm -r $workdir
+
+# Setting up cgroup rules.
+group="sashimonousers"
+cgroupsuffix="-cg"
+! sudo groupadd $group && echo "Group creation failed."
+! sudo echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed."
 
 # Build sagent
 cmake .

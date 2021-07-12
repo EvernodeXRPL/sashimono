@@ -88,6 +88,7 @@ namespace conf
 
         std::string user_install_sh;
         std::string user_uninstall_sh;
+        std::string hpfs_systemd_sh; // Hpfs systemd registration script file path.
 
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.

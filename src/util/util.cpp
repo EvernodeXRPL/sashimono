@@ -4,6 +4,7 @@
 namespace util
 {
     constexpr mode_t DIR_PERMS = 0755;
+    constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
 
     const std::string to_hex(const std::string_view bin)
     {
@@ -388,6 +389,53 @@ namespace util
         }
         buf.clear();
 
+        return 0;
+    }
+
+    /**
+     * Executes the given bash file and populates final comma seperated output into a vector.
+     * @param file_name Name of the bash script.
+     * @param output_params Final output of the bash script.
+     * @param input_params Input parameters to the bash script (Optional).
+    */
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params)
+    {
+        std::string params = "";
+        for (auto itr = input_params.begin(); itr != input_params.end(); itr++)
+        {
+            params.append(*itr);
+            if (std::next(itr) != input_params.end())
+                params.append(" ");;
+        }
+        const int len = 23 + (file_name.length() * 2) + params.length();
+        char command[len];
+        sprintf(command, RUN_SH, file_name.data(), file_name.data(), params.empty() ? "\0" : params.data());
+
+        FILE *fpipe = popen(command, "r");
+        if (fpipe == NULL)
+        {
+            LOG_ERROR << "Error on popen for command " << std::string(command);
+            return -1;
+        }
+
+        char buffer[200];
+        std::string output;
+
+        // Only take the last cout string It contains the output of the execution.
+        while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
+        {
+            output = buffer;
+            // Replace ending new line character at the end of the log line.
+            if (!output.empty())
+            {
+                if (output.back() == '\n')
+                    output.pop_back();
+                LOG_DEBUG << output;
+            }
+        }
+
+        pclose(fpipe);
+        util::split_string(output_params, output, ",");
         return 0;
     }
 

@@ -108,6 +108,7 @@ namespace conf
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
+        ctx.hpfs_systemd_sh = ctx.exe_dir + "/hpfs_systemd.sh";
 
         ctx.contract_template_path = ctx.data_dir + "/contract_template";
         ctx.config_file = ctx.data_dir + "/sa.cfg";
@@ -120,14 +121,15 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[7] = {
+        const std::string paths[8] = {
             ctx.config_file,
             ctx.log_dir,
             ctx.data_dir,
             ctx.hpws_exe_path,
             ctx.contract_template_path,
             ctx.user_install_sh,
-            ctx.user_uninstall_sh};
+            ctx.user_uninstall_sh,
+            ctx.hpfs_systemd_sh};
 
         for (const std::string &path : paths)
         {

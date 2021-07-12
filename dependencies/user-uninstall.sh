@@ -24,6 +24,16 @@ fi
 
 echo "Uninstalling user '$user'."
 
+echo "Stopping and cleaning hpfs systemd services."
+contract_fs_service="$user"-contract_fs
+ledger_fs_service="$user"-ledger_fs
+systemctl stop "$contract_fs_service"
+systemctl stop "$ledger_fs_service"
+systemctl disable "$contract_fs_service"
+systemctl disable "$ledger_fs_service"
+rm /etc/systemd/system/"$contract_fs_service".service
+rm /etc/systemd/system/"$ledger_fs_service".service
+
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
 sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/dockerd-rootless-setuptool.sh uninstall

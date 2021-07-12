@@ -7,6 +7,7 @@ set -e # exit on error
 sudo apt-get update
 sudo apt-get install -y build-essential libssl-dev
 
+scriptdir=$(dirname $(realpath $0))
 workdir=~/sagent-setup
 
 mkdir $workdir
@@ -58,14 +59,14 @@ sudo cp concurrentqueue.h /usr/local/include/
 popd > /dev/null 2>&1
 rm 1.0.2.tar.gz && sudo rm -r concurrentqueue-1.0.2
 
-# Libsodium
-sudo apt-get install -y libsodium-dev
+# Library dependencies.
+sudo apt-get install -y \
+    libsodium-dev \
+    sqlite3 libsqlite3-dev \
+    libboost-stacktrace-dev \
+    fuse3
 
-# Sqlite
-sudo apt-get install -y sqlite3 libsqlite3-dev
-
-# Boost stacktrace
-sudo apt-get install -y libboost-stacktrace-dev
+cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
 
 # NodeJs
 curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -

@@ -51,9 +51,9 @@ add_dependencies(sagent
 )
 
 add_custom_command(TARGET sagent POST_BUILD
-    COMMAND cp -r ./dependencies/* ./build/
-    COMMAND tar xf ./build/contract_template.tar -C ./build/ --no-same-owner && rm ./build/contract_template.tar
-    COMMAND mv ./build/hp.cfg ./build/contract_template/cfg/
+    COMMAND bash -c "cp -r ./dependencies/{hpfs,hpws,user-install.sh,user-uninstall.sh} ./build/"
+    COMMAND tar xf ./dependencies/contract_template.tar -C ./build/ --no-same-owner
+    COMMAND cp ./dependencies/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin

@@ -51,7 +51,7 @@ add_dependencies(sagent
 )
 
 add_custom_command(TARGET sagent POST_BUILD
-    COMMAND bash -c "cp -r ./dependencies/{hpfs,hpws,user-install.sh,user-uninstall.sh,libblake3.so} ./build/"
+    COMMAND bash -c "cp -r ./dependencies/{hpfs,hpws,user-install.sh,user-uninstall.sh} ./build/"
     COMMAND tar xf ./dependencies/contract_template.tar -C ./build/ --no-same-owner
     COMMAND cp ./dependencies/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./bootstrap-contract/script.sh ./build/contract_template/contract_fs/seed/state/
@@ -64,8 +64,9 @@ target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
 # Add target to generate the installer setup.
 add_custom_target(installer
   COMMAND mkdir -p ./build/sashimono-installer
-  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,contract_template,libblake3.so} ./build/sashimono-installer/"
+  COMMAND bash -c "cp -r ./build/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh,contract_template} ./build/sashimono-installer/"
   COMMAND bash -c "cp -r ./installer/{docker-install.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/sashimono-installer/"
+  COMMAND bash -c "cp -r ./dependencies/libblake3.so ./build/sashimono-installer/"
   COMMAND tar cfz  ./build/sashimono-installer.tar.gz --directory=./build/ sashimono-installer
   COMMAND rm -r ./build/sashimono-installer
 )

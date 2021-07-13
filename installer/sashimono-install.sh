@@ -8,9 +8,9 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 group="sashimonousers"
 cgroupsuffix="-cg"
-script_dir=$(dirname $(realpath $0))
+script_dir=$(dirname "$(realpath "$0")")
 
-[ -d $sashimono_bin ] && [ ! -z "$(ls -A $sashimono_bin)" ] && \
+[ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
     echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
 
 # Check cgroup rule config exists.
@@ -36,20 +36,30 @@ if ! command -v openssl &>/dev/null; then
     apt-get install -y openssl
 fi
 
+# Blake3 
+if [ ! -f /usr/local/lib/libblake3.so ]; then
+    cp "$script_dir"/libblake3.so /usr/local/lib/
+fi
+
+# Libfuse
+apt-get install -y fuse3
+
+# Update linker library cache.
+sudo ldconfig
+
 function rollback() {
     echo "Rolling back sashimono installation."
-    $script_dir/sashimono-uninstall.sh
-    [ -d $tmp ] && rm -r $tmp
+    "$script_dir"/sashimono-uninstall.sh
     echo "Rolled back the installation."
     exit 1
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp $script_dir/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
+cp "$script_dir"/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
 
 # Download and install rootless dockerd.
-$script_dir/docker-install.sh $docker_bin
+"$script_dir"/docker-install.sh $docker_bin
 
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
@@ -59,7 +69,7 @@ $script_dir/docker-install.sh $docker_bin
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
 # Setup Sashimono data dir.
-cp -r $script_dir/contract_template $sashimono_data
+cp -r "$script_dir"/contract_template $sashimono_data
 $sashimono_bin/sagent new $sashimono_data
 
 # Install Sashimono Agent systemd service.

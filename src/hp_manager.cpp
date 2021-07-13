@@ -35,7 +35,6 @@ namespace hp
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
-    constexpr const char *RUN_SH = "bash %s %s";
 
     /**
      * Initialize hp related environment.
@@ -192,7 +191,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes, container_name) == -1)
             return -1;
 
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
@@ -262,7 +261,9 @@ namespace hp
             write_json_values(d, config_msg) == -1 ||
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
-            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
+            // [TODO] Will add a environment file to systemd so these settings can be updated from there.
+            // Settings are hardcoded for now. Will do this change in next PBI.
+            hpfs::start_hpfs_systemd(info.username) == -1) 
         {
             LOG_ERROR << "Error when setting up container. name: " << container_name;
             close(config_fd);
@@ -274,7 +275,7 @@ namespace hp
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started hpfs processes if starting instance failed.
-            hpfs::stop_fs_processes(info.username);
+            hpfs::stop_hpfs_systemd(info.username);
             return -1;
         }
 
@@ -283,7 +284,7 @@ namespace hp
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started docker and hpfs processes if database update fails.
             docker_stop(info.username, container_name);
-            hpfs::stop_fs_processes(info.username);
+            hpfs::stop_hpfs_systemd(info.username);
             return -1;
         }
 
@@ -338,7 +339,7 @@ namespace hp
 
         if (docker_stop(info.username, container_name) == -1 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::STOPPED]) == -1 ||
-            hpfs::stop_fs_processes(info.username) == -1)
+            hpfs::stop_hpfs_systemd(info.username) == -1)
         {
             LOG_ERROR << "Error when stopping container. name: " << container_name;
             return -1;
@@ -367,35 +368,10 @@ namespace hp
             return -1;
         }
 
-        // Read the config file into json document object.
-        const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
-        std::string config_file_path(contract_dir);
-        config_file_path.append("/cfg/hp.cfg");
-        const int config_fd = open(config_file_path.data(), O_RDONLY);
-        if (config_fd == -1)
-        {
-            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
-            return -1;
-        }
-
-        jsoncons::ojson d;
-        std::string hpfs_log_level;
-        bool is_full_history;
-        if (util::read_json_file(config_fd, d) == -1 ||
-            read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_fs_processes(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
-        {
-            LOG_ERROR << "Error when setting up container. name: " << container_name;
-            close(config_fd);
-            return -1;
-        }
-        close(config_fd);
-
-        if (docker_start(info.username, container_name) == -1)
+        if (hpfs::start_hpfs_systemd(info.username) == -1 ||
+            docker_start(info.username, container_name) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
-            // Stop started hpfs processes if starting instance failed.
-            hpfs::stop_fs_processes(info.username);
             return -1;
         }
 
@@ -404,7 +380,7 @@ namespace hp
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started docker and hpfs processes if database update fails.
             docker_stop(info.username, container_name);
-            hpfs::stop_fs_processes(info.username);
+            hpfs::stop_hpfs_systemd(info.username);
             return -1;
         }
 
@@ -469,8 +445,7 @@ namespace hp
         }
 
         if (docker_remove(info.username, container_name) == -1 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            hpfs::stop_fs_processes(info.username) == -1)
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -753,53 +728,6 @@ namespace hp
     }
 
     /**
-     * Executes the given bash file and populates final comma seperated output into a vector.
-     * @param file_name Name of the bash script.
-     * @param output_params Final output of the bash script.
-     * @param input_params Input parameters to the bash script (Optional).
-    */
-    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params)
-    {
-        std::string params = "";
-        for (auto itr = input_params.begin(); itr != input_params.end(); itr++)
-        {
-            params.append(*itr);
-            if (std::next(itr) != input_params.end())
-                params.append(" ");;
-        }
-        const int len = 23 + (file_name.length() * 2) + params.length();
-        char command[len];
-        sprintf(command, RUN_SH, file_name.data(), params.empty() ? "\0" : params.data());
-
-        FILE *fpipe = popen(command, "r");
-        if (fpipe == NULL)
-        {
-            LOG_ERROR << "Error on popen for command " << std::string(command);
-            return -1;
-        }
-
-        char buffer[200];
-        std::string output;
-
-        // Only take the last cout string It contains the output of the execution.
-        while (fgets(buffer, sizeof(buffer), fpipe) != NULL)
-        {
-            output = buffer;
-            // Replace ending new line character at the end of the log line.
-            if (!output.empty())
-            {
-                if (output.back() == '\n')
-                    output.pop_back();
-                LOG_DEBUG << output;
-            }
-        }
-
-        pclose(fpipe);
-        util::split_string(output_params, output, ",");
-        return 0;
-    }
-
-    /**
      * Create new user and install dependencies and populate id and username.
      * @param user_id Uid of the created user to be populated.
      * @param username Username of the created user to be populated.
@@ -807,11 +735,11 @@ namespace hp
      * @param max_mem_kbytes Memory quota allowed for this user.
      * @param storage_kbytes Disk quota allowed for this user.
     */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name)
     {
-        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes)};
+        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes), container_name};
         std::vector<std::string> output_params;
-        if (execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
+        if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;
 
         if (strncmp(output_params.at(output_params.size() - 1).data(), "INST_SUC", 8) == 0) // If success.
@@ -847,7 +775,7 @@ namespace hp
     {
         const std::vector<std::string_view> input_params = {username};
         std::vector<std::string> output_params;
-        if (execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)
+        if (util::execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)
             return -1;
 
         // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);

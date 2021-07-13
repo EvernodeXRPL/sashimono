@@ -85,9 +85,7 @@ namespace hp
 
     int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg);
 
-    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params = {});
-
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes);
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name);
 
     int uninstall_user(std::string_view username);
 } // namespace hp

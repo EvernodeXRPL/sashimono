@@ -6,6 +6,7 @@ sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
+cgcreate_service="sashimono-cgcreate"
 group="sashimonousers"
 cgroupsuffix="-cg"
 script_dir=$(dirname "$(realpath "$0")")
@@ -55,7 +56,7 @@ function rollback() {
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,hpws,user-install.sh,user-uninstall.sh} $sashimono_bin
+cp "$script_dir"/{sagent,hpfs,hpws,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
 
 # Download and install rootless dockerd.
@@ -71,6 +72,19 @@ chmod -R +x $sashimono_bin
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data
 $sashimono_bin/sagent new $sashimono_data
+
+# Install Sashimono Agent cgcreate service.
+# This is a onshot service which runs only once.
+echo "[Unit]
+Description=Sashimono cgroup creation service.
+StartLimitIntervalSec=0
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=$sashimono_bin/user-cgcreate.sh $sashimono_data
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -90,8 +104,11 @@ RestartSec=5
 WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
 
 systemctl daemon-reload
+systemctl enable $cgcreate_service
+systemctl start $cgcreate_service
 systemctl enable $sashimono_service
 systemctl start $sashimono_service
+# Both of these services needed to be restarted if sa.cfg is changed.
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

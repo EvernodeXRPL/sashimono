@@ -67,18 +67,8 @@ fi
 
 echo "Removing cgroups"
 # Delete config values.
-cgdelete -g cpu:"$user"$cgroupsuffix
-cgdelete -g memory:"$user"$cgroupsuffix
-
-cgcreate_service=$user-cgcreate
-echo "Removing $cgcreate_service service."
-
-systemctl stop $cgcreate_service
-systemctl disable $cgcreate_service
-rm /etc/systemd/system/$cgcreate_service.service
-
-systemctl daemon-reload
-systemctl reset-failed
+cgdelete -g cpu:$user$cgroupsuffix
+cgdelete -g memory:$user$cgroupsuffix
 
 echo "Deleting user '$user'"
 userdel "$user"

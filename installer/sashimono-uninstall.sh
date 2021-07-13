@@ -6,6 +6,7 @@ sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
+cgcreate_service="sashimono-cgcreate"
 group="sashimonousers"
 cgroupsuffix="-cg"
 quiet=$1
@@ -55,6 +56,11 @@ if [ $ucount -gt 0 ]; then
     fi
 fi
 
+echo "Removing Sashimono cgroup creation service..."
+systemctl stop $cgcreate_service
+systemctl disable $cgcreate_service
+rm /etc/systemd/system/$cgcreate_service.service
+
 echo "Removing Sashimono service..."
 systemctl stop $sashimono_service
 systemctl disable $sashimono_service
@@ -71,5 +77,4 @@ groupdel $group
 sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
 
 echo "Sashimono uninstalled successfully."
-echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

@@ -63,7 +63,7 @@ namespace conf
             cfg.server.ip_port = {"127.0.0.1", 5000};
 
             cfg.system.max_instance_count = 5;
-            cfg.system.max_mem_kbytes = 512000;      // Total 512MB RAM
+            cfg.system.max_mem_kbytes = 1024000;     // Total 1GB RAM
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
@@ -108,7 +108,6 @@ namespace conf
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
-        ctx.hpfs_systemd_sh = ctx.exe_dir + "/hpfs_systemd.sh";
 
         ctx.contract_template_path = ctx.data_dir + "/contract_template";
         ctx.config_file = ctx.data_dir + "/sa.cfg";
@@ -121,15 +120,14 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[8] = {
+        const std::string paths[7] = {
             ctx.config_file,
             ctx.log_dir,
             ctx.data_dir,
             ctx.hpws_exe_path,
             ctx.contract_template_path,
             ctx.user_install_sh,
-            ctx.user_uninstall_sh,
-            ctx.hpfs_systemd_sh};
+            ctx.user_uninstall_sh};
 
         for (const std::string &path : paths)
         {

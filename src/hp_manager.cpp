@@ -191,7 +191,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes, container_name) == -1)
             return -1;
 
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
@@ -261,7 +261,9 @@ namespace hp
             write_json_values(d, config_msg) == -1 ||
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
-            hpfs::register_hpfs_systemd(info.username, contract_dir, hpfs_log_level, is_full_history) == -1)
+            // [TODO] Will add a environment file to systemd so these settings can be updated from there.
+            // Settings are hardcoded for now. Will do this change in next PBI.
+            hpfs::start_hpfs_systemd(info.username) == -1) 
         {
             LOG_ERROR << "Error when setting up container. name: " << container_name;
             close(config_fd);
@@ -443,8 +445,7 @@ namespace hp
         }
 
         if (docker_remove(info.username, container_name) == -1 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1 ||
-            hpfs::stop_hpfs_systemd(info.username) == -1)
+            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
@@ -734,9 +735,9 @@ namespace hp
      * @param max_mem_kbytes Memory quota allowed for this user.
      * @param storage_kbytes Disk quota allowed for this user.
     */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name)
     {
-        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes)};
+        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes), container_name};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

@@ -9,13 +9,13 @@ prefix="sashi"
 cgroupsuffix="-cg"
 
 user_dir=/home/$user
-user_id=$(id -u $user)
+user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
-script_dir=$(dirname $(realpath $0))
+script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 
 # Check if users exists.
-if [[ `id -u $user 2>/dev/null || echo -1` -ge 0 ]]; then
+if [[ $(id -u "$user" 2>/dev/null || echo -1) -ge 0 ]]; then
         :
 else
         echo "NO_USER,UNINST_ERR"
@@ -25,20 +25,18 @@ fi
 echo "Uninstalling user '$user'."
 
 echo "Stopping and cleaning hpfs systemd services."
-contract_fs_service="$user"-contract_fs
-ledger_fs_service="$user"-ledger_fs
-systemctl stop "$contract_fs_service"
-systemctl stop "$ledger_fs_service"
-systemctl disable "$contract_fs_service"
-systemctl disable "$ledger_fs_service"
-rm /etc/systemd/system/"$contract_fs_service".service
-rm /etc/systemd/system/"$ledger_fs_service".service
+contract_fs_service="contract_fs"
+ledger_fs_service="ledger_fs"
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user stop "$contract_fs_service"
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user stop "$ledger_fs_service"
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user disable "$contract_fs_service"
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user disable "$ledger_fs_service"
 
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
-sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/dockerd-rootless-setuptool.sh uninstall
+sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh uninstall
 echo "Removing rootless docker data."
-sudo -H -u $user PATH=$docker_bin:$PATH XDG_RUNTIME_DIR=$user_runtime_dir $docker_bin/rootlesskit rm -rf $user_dir/.local/share/docker
+sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/rootlesskit rm -rf "$user_dir"/.local/share/docker
 
 # Gracefully terminate user processes.
 echo "Terminating user processes."
@@ -50,7 +48,7 @@ fsmounts=$(cat /proc/mounts | cut -d ' ' -f 2 | grep "/home/$user")
 readarray -t mntarr <<<"$fsmounts"
 for mnt in "${mntarr[@]}"
 do
-   [ -z "$mnt" ] || umount $mnt
+   [ -z "$mnt" ] || umount "$mnt"
 done
 
 # Force kill user processes.
@@ -62,21 +60,21 @@ if [ "$procs" != "0" ]; then
     procs=$(ps -U root 2>/dev/null | wc -l)
     if [ "$procs" != "0" ]; then
         echo "Force killing user processes."
-        pkill -SIGKILL -u $user
+        pkill -SIGKILL -u "$user"
     fi
 
 fi
 
 echo "Removing cgroups"
 # Delete config values.
-cgdelete -g cpu:$user$cgroupsuffix
-cgdelete -g memory:$user$cgroupsuffix
+cgdelete -g cpu:"$user"$cgroupsuffix
+cgdelete -g memory:"$user"$cgroupsuffix
 
 echo "Deleting user '$user'"
-userdel $user
-rm -r /home/$user
+userdel "$user"
+rm -r /home/"${user:?}"
 
-[ -d /home/$user ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
+[ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 
 echo "UNINST_SUC"
 exit 0

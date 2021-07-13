@@ -2,6 +2,7 @@
 #define _SA_CONF_
 
 #include "pchheader.hpp"
+#include "util/util.hpp"
 
 namespace conf
 {
@@ -37,6 +38,45 @@ namespace conf
         const std::string to_string() const
         {
             return host_address + ":" + std::to_string(port);
+        }
+    };
+
+    struct ugid
+    {
+        uid_t uid = 0;
+        gid_t gid = 0;
+
+        bool empty() const
+        {
+            return uid <= 0 && gid <= 0;
+        }
+
+        int from_string(std::string_view str)
+        {
+            if (str.empty())
+                return 0;
+
+            std::vector<std::string> ids;
+            util::split_string(ids, str, ":");
+            if (ids.size() == 2)
+            {
+                const int _uid = atoi(ids[0].c_str());
+                const int _gid = atoi(ids[1].c_str());
+
+                if (_uid > 0 && _gid > 0)
+                {
+                    uid = _uid;
+                    gid = _gid;
+                    return 0;
+                }
+            }
+
+            return -1;
+        }
+
+        const std::string to_string() const
+        {
+            return (uid == 0 && gid == 0) ? "" : (std::to_string(uid) + ":" + std::to_string(gid));
         }
     };
 

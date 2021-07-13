@@ -63,7 +63,7 @@ namespace conf
             cfg.server.ip_port = {"127.0.0.1", 5000};
 
             cfg.system.max_instance_count = 5;
-            cfg.system.max_mem_kbytes = 512000;      // Total 512MB RAM
+            cfg.system.max_mem_kbytes = 1024000;     // Total 1GB RAM
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 

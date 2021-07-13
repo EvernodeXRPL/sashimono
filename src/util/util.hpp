@@ -58,6 +58,8 @@ namespace util
 
     int read_json_file(const int fd, jsoncons::ojson &d);
 
+    int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params = {});
+
 } // namespace util
 
 #endif

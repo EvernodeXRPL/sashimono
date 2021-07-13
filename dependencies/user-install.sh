@@ -82,8 +82,7 @@ svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user i
 
 echo "Installed rootless dockerd."
 
-# sashimono_bin=/usr/bin/sashimono-agent
-#     After=sashimono-agent.service
+echo "Adding hpfs services for the instance."
 echo "[Unit]
     Description=Running and monitoring contract fs.
     StartLimitIntervalSec=0

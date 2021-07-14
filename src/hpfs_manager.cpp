@@ -4,6 +4,7 @@
 
 namespace hpfs
 {
+    constexpr int FILE_PERMS = 0644;
     /**
      * Start hpfs systemd services of the instance.
      * @param username Username of the instance user.
@@ -51,6 +52,52 @@ namespace hpfs
             return -1;
         }
 
+        return 0;
+    }
+
+    /**
+     * Update service configuration file for the instance with hpfs related config values.
+     * @param username Username of the instance user.
+     * @param log_level Log level for hpfs.
+     * @param is_full_history Flag to indicate if full history is enabled.
+     * @return -1 on error and 0 on success.
+    */
+    int update_service_conf(const std::string &username, const std::string &log_level, const bool is_full_history)
+    {
+        const std::string path = "/home/" + username + "/.serviceconf";
+        std::map<std::string, std::string> data;
+        const int fd = open(path.c_str(), O_CREAT | O_RDWR, 0644);
+        if (fd == -1)
+        {
+            std::cout << "Error opening hpfs env file at " << path;
+            return -1;
+        }
+        char buf[1024];
+        const int res = read(fd, buf, sizeof(buf));
+        buf[res] = '\0'; // EOF
+        std::stringstream ss(buf);
+        std::string line;
+        while (getline(ss, line))
+        {
+            const size_t end = line.find("=");
+            if (end != std::string::npos)
+                data.insert(std::make_pair(line.substr(0, end), line.substr(end + 1, line.length() - end)));
+        }
+        data["HPFS_MERGE"] = is_full_history ? "false" : "true";
+        data["HPFS_TRACE"] = log_level;
+
+        std::stringstream ss_content;
+        for (const auto &[key, value] : data)
+            ss_content << key << "=" << value << "\n";
+
+        if (ftruncate(fd, 0) == -1 || pwrite(fd, ss_content.str().c_str(), ss_content.str().length(), 0) == -1)
+        {
+            std::cout << "Error writing to service configuration file at " << path;
+            close(fd);
+            return -1;
+        }
+
+        close(fd);
         return 0;
     }
 

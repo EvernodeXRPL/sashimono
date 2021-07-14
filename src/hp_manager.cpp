@@ -27,7 +27,7 @@ namespace hp
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
-                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/hotpocket:ubt.20.04 run /contract";
+                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/sashimono:hp-ubt.20.04 run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";

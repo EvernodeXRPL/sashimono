@@ -66,7 +66,7 @@ sudo apt-get install -y \
     libboost-stacktrace-dev \
     fuse3
 
-cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
+sudo cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
 
 # NodeJs
 curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -

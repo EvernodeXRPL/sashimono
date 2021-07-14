@@ -1,0 +1,5 @@
+FROM hotpocketdev/hotpocket:ubt.20.04-njs14
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y unzip jq \
+    && rm -rf /var/lib/apt/lists/*

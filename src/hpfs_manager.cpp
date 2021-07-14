@@ -4,6 +4,7 @@
 
 namespace hpfs
 {
+    constexpr int FILE_PERMS = 0644;
     /**
      * Start hpfs systemd services of the instance.
      * @param username Username of the instance user.
@@ -51,6 +52,58 @@ namespace hpfs
             return -1;
         }
 
+        return 0;
+    }
+
+    /**
+     * Update service configuration file for the instance with hpfs related config values.
+     * @param username Username of the instance user.
+     * @param log_level Log level for hpfs.
+     * @param is_full_history Flag to indicate if full history is enabled.
+     * @return -1 on error and 0 on success.
+    */
+    int update_service_conf(const std::string &username, const std::string &log_level, const bool is_full_history)
+    {
+        const std::string path = "/home/" + username + "/.serviceconf";
+        const int fd = open(path.c_str(), O_CREAT | O_RDWR, 0644);
+        if (fd == -1)
+        {
+            LOG_ERROR << errno << ": Error opening service configuration file at " << path;
+            return -1;
+        }
+        char buf[1024];
+        const int res = read(fd, buf, sizeof(buf));
+        if (res == -1)
+        {
+            LOG_ERROR << errno << ": Error reading service configuration file at " << path;
+            close(fd);
+            return -1;
+        }
+        buf[res] = '\0'; // EOF
+        std::map<std::string, std::string> data;
+        std::stringstream ss(buf);
+        std::string line;
+        while (getline(ss, line))
+        {
+            const size_t end = line.find("=");
+            if (end != std::string::npos)
+                data.insert(std::make_pair(line.substr(0, end), line.substr(end + 1, line.length() - end)));
+        }
+        data["HPFS_MERGE"] = is_full_history ? "false" : "true";
+        data["HPFS_TRACE"] = log_level;
+
+        std::string content;
+        for (const auto &[key, value] : data)
+            content += key + "=" + value + "\n";
+
+        if (ftruncate(fd, 0) == -1 || pwrite(fd, content.c_str(), content.length(), 0) == -1)
+        {
+            LOG_ERROR << "Error writing to service configuration file at " << path;
+            close(fd);
+            return -1;
+        }
+
+        close(fd);
         return 0;
     }
 

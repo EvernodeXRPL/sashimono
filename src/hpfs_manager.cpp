@@ -68,14 +68,14 @@ namespace hpfs
         const int fd = open(path.c_str(), O_CREAT | O_RDWR, 0644);
         if (fd == -1)
         {
-            std::cout << errno << ": Error opening service configuration file at " << path;
+            LOG_ERROR << errno << ": Error opening service configuration file at " << path;
             return -1;
         }
         char buf[1024];
         const int res = read(fd, buf, sizeof(buf));
         if (res == -1)
         {
-            std::cout << errno << ": Error reading service configuration file at " << path;
+            LOG_ERROR << errno << ": Error reading service configuration file at " << path;
             close(fd);
             return -1;
         }
@@ -98,7 +98,7 @@ namespace hpfs
 
         if (ftruncate(fd, 0) == -1 || pwrite(fd, content.c_str(), content.length(), 0) == -1)
         {
-            std::cout << "Error writing to service configuration file at " << path;
+            LOG_ERROR << "Error writing to service configuration file at " << path;
             close(fd);
             return -1;
         }

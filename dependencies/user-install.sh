@@ -94,7 +94,7 @@ goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
 hpfs_uid=$(expr $uoffset + $contract_uid)
 hpfs_gid=$(expr $goffset + $contract_gid)
 
-# Only contract fs will be run as contract guid.
+# UGID will be passed to hpfs in next PBI, with resolving cgroup issue.
 echo "[Unit]
 Description=Running and monitoring contract fs.
 StartLimitIntervalSec=0

@@ -77,7 +77,7 @@ $sashimono_bin/sagent new $sashimono_data
 # This is a onshot service which runs only once.
 echo "[Unit]
 Description=Sashimono cgroup creation service.
-StartLimitIntervalSec=0
+After=network.target
 [Service]
 User=root
 Group=root

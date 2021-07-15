@@ -108,7 +108,7 @@ systemctl enable $cgcreate_service
 systemctl start $cgcreate_service
 systemctl enable $sashimono_service
 systemctl start $sashimono_service
-# Both of these services needed to be restarted if sa.cfg is changed.
+# Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

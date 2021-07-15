@@ -12,6 +12,7 @@ namespace msg
         std::string type;
         std::string pubkey;
         std::string contract_id;
+        std::string image;
     };
 
     // Keep numerical config valus as optional so when updating the config if the value is empty
@@ -61,6 +62,7 @@ namespace msg
     constexpr const char *FLD_PUBKEY = "owner_pubkey";
     constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_CONTRACT_ID = "contract_id";
+    constexpr const char *FLD_IMAGE = "image";
     constexpr const char *FLD_ID = "id";
     constexpr const char *FLD_PEERS = "peers";
     constexpr const char *FLD_UNL = "unl";

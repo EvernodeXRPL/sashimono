@@ -96,26 +96,28 @@ hpfs_gid=$(expr $goffset + $contract_gid)
 
 # Only contract fs will be run as contract guid.
 echo "[Unit]
-    Description=Running and monitoring contract fs.
-    StartLimitIntervalSec=0
-    [Service]
-    Type=simple
-    ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/contract_fs $user_dir/$contract_dir/contract_fs/mnt merge=true ugid=$hpfs_uid:$hpfs_gid trace=err
-    Restart=on-failure
-    RestartSec=5
-    [Install]
-    WantedBy=default.target" >"$user_dir"/.config/systemd/user/contract_fs.service
+Description=Running and monitoring contract fs.
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+EnvironmentFile=-$user_dir/.serviceconf
+ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/contract_fs $user_dir/$contract_dir/contract_fs/mnt merge=\${HPFS_MERGE} ugid= trace=\${HPFS_TRACE}
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=default.target" >"$user_dir"/.config/systemd/user/contract_fs.service
 
 echo "[Unit]
-    Description=Running and monitoring ledger fs.
-    StartLimitIntervalSec=0
-    [Service]
-    Type=simple
-    ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/ledger_fs $user_dir/$contract_dir/ledger_fs/mnt merge=true ugid= trace=err
-    Restart=on-failure
-    RestartSec=5
-    [Install]
-    WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
+Description=Running and monitoring ledger fs.
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+EnvironmentFile=-$user_dir/.serviceconf
+ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/ledger_fs $user_dir/$contract_dir/ledger_fs/mnt merge=true ugid= trace=\${HPFS_TRACE}
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 echo "$user_id,$user,$dockerd_socket,INST_SUC"

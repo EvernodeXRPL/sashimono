@@ -67,6 +67,9 @@ namespace conf
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
+            cfg.docker.images["ubt.20.04"] = "hotpocketdev/sashimono:hp-ubt.20.04";
+            cfg.docker.images["ubt.20.04-njs.14"] = "hotpocketdev/sashimono:hp-ubt.20.04-njs.14";
+
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
@@ -280,6 +283,24 @@ namespace conf
             }
         }
 
+        // docker
+        {
+            jpath = "docker";
+
+            try
+            {
+                const jsoncons::ojson &docker = d["docker"];
+
+                for (const auto &elem : docker["images"].object_range())
+                    cfg.docker.images[elem.key()] = elem.value().as<std::string>();
+            }
+            catch (const std::exception &e)
+            {
+                print_missing_field_error(jpath, e);
+                return -1;
+            }
+        }
+
         // log
         {
             jpath = "log";
@@ -348,6 +369,18 @@ namespace conf
             system_config.insert_or_assign("max_instance_count", cfg.system.max_instance_count);
 
             d.insert_or_assign("system", system_config);
+        }
+
+        // Docker configs.
+        {
+            jsoncons::ojson docker_config;
+
+            jsoncons::ojson images;
+            for (const auto &[key, name] : cfg.docker.images)
+                images.insert_or_assign(key, name);
+            docker_config.insert_or_assign("images", images);
+
+            d.insert_or_assign("docker", docker_config);
         }
 
         // Log configs.

@@ -122,7 +122,8 @@ namespace msg::json
      *          {
      *            "type": "create",
      *            "owner_pubkey": "<pubkey of the owner>"
-     *            "contract_id": "<contract id>"
+     *            "contract_id": "<contract id>",
+     *            "image": "<docker image key>"
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -137,13 +138,26 @@ namespace msg::json
             return -1;
         }
 
+        if (!d.contains(msg::FLD_IMAGE))
+        {
+            LOG_ERROR << "Field image is missing.";
+            return -1;
+        }
+
         if (!d[msg::FLD_CONTRACT_ID].is<std::string>())
         {
             LOG_ERROR << "Invalid contract_id value.";
             return -1;
         }
 
+        if (!d[msg::FLD_IMAGE].is<std::string>())
+        {
+            LOG_ERROR << "Invalid image value.";
+            return -1;
+        }
+
         msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
+        msg.image = d[msg::FLD_IMAGE].as<std::string>();
         return 0;
     }
 

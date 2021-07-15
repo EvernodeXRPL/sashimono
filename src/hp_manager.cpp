@@ -27,7 +27,7 @@ namespace hp
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
-                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract hotpocketdev/sashimono:hp-ubt.20.04 run /contract";
+                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -131,9 +131,10 @@ namespace hp
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
+     * @param image_key Docker image name to use (must exist in the config iamge list).
      * @return 0 on success and -1 on error.
     */
-    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id)
+    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
         // If the max alloved instance count is already allocated. We won't allow more.
         const int allocated_count = sqlite::get_allocated_instance_count(db);
@@ -156,6 +157,14 @@ namespace hp
             LOG_ERROR << "Provided contract id is not a valid uuid.";
             return -1;
         }
+
+        const auto img_itr = conf::cfg.docker.images.find(image_key);
+        if (img_itr == conf::cfg.docker.images.end())
+        {
+            LOG_ERROR << "Provided docker image is not allowed.";
+            return -1;
+        }
+        const std::string image_name = img_itr->second;
 
         std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         int retries = 0;
@@ -197,7 +206,7 @@ namespace hp
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
-            create_container(username, container_name, contract_dir, instance_ports, info) == -1)
+            create_container(username, image_name, container_name, contract_dir, instance_ports, info) == -1)
         {
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
@@ -262,7 +271,7 @@ namespace hp
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
             hpfs::update_service_conf(info.username, hpfs_log_level, is_full_history) == -1 ||
-            hpfs::start_hpfs_systemd(info.username) == -1) 
+            hpfs::start_hpfs_systemd(info.username) == -1)
         {
             LOG_ERROR << "Error when setting up container. name: " << container_name;
             close(config_fd);
@@ -293,18 +302,20 @@ namespace hp
     /**
      * Creates a hotpocket docker image on the given contract and the ports.
      * @param username Username of the instance user.
+     * @param image_name Conatiner image name to use.
      * @param container_name Name of the container.
      * @param contract_dir Directory for the contract.
      * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
     */
-    int create_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
+    int create_container(std::string_view username, std::string_view image_name, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 303 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length();
+        const int len = 303 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
         char command[len];
-        sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(), user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data());
+        sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(),
+                user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
@@ -384,7 +395,7 @@ namespace hp
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             hpfs::update_service_conf(info.username, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_hpfs_systemd(info.username) == -1 ||
-            docker_start(info.username, container_name) == -1) 
+            docker_start(info.username, container_name) == -1)
         {
             LOG_ERROR << "Error when starting container. name: " << container_name;
             close(config_fd);

@@ -71,24 +71,30 @@ server.listen(5000, () => {
                 else {
                     switch (inp) {
                         case 'create':
-                            contractId = await askForInput('Contract ID (optional)', uuidv4());
+                            contractId = await askForInput('Contract ID (default:uuidv4)', uuidv4());
+                            image = await askForInput('Image: 1=ubuntu(default) | 2=nodejs', "1");
+                            if (image != "1" && image != "2") {
+                                console.error('Invalid image. (Should be "1" or "2").')
+                                break;
+                            }
 
                             sendToAll(JSON.stringify({
                                 id: uuidv4(),
                                 type: 'create',
                                 owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
-                                contract_id: contractId
+                                contract_id: contractId,
+                                image: (image == "1" ? "ubt.20.04" : "ubt.20.04-njs.14")
                             }));
                             break;
                         case 'initiate':
                             containerName = await askForInput('Container Name');
-                            role = await askForInput('Role <validator> or <observer>', "validator");
+                            role = await askForInput('Role: validator(default) | observer', "validator");
                             if (role != 'validator' && role != 'observer') {
                                 console.error('Invalid role. (Should be "validator" or "observer").')
                                 break;
                             }
 
-                            history = await askForInput('History <mode{full|custom},max_primary_shards{number},max_raw_shards{number}>', "custom,1,1");
+                            history = await askForInput('History <{full|custom},max_primary_shards,max_raw_shards> (custom,1,1)', "custom,1,1");
                             split = [];
                             if (history) {
                                 split = history.split(',');

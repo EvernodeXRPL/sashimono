@@ -69,12 +69,18 @@ namespace conf
         size_t max_instance_count = 0; // Max number of instances that can be created.
     };
 
+    struct docker_config
+    {
+        std::unordered_map<std::string, std::string> images;
+    };
+
     struct sa_config
     {
         std::string version;
         hp_config hp;
         server_config server;
         system_config system;
+        docker_config docker;
         log_config log;
     };
 

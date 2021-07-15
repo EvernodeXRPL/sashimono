@@ -181,7 +181,7 @@ namespace comm
                 __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "format_error", -1);
 
             hp::instance_info info;
-            if (hp::create_new_instance(info, msg.pubkey, msg.contract_id) == -1)
+            if (hp::create_new_instance(info, msg.pubkey, msg.contract_id, msg.image) == -1)
                 __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "create_error", -1);
 
             std::string create_res;

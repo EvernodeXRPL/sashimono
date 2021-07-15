@@ -58,11 +58,11 @@ namespace hp
 
     void hp_monitor_loop();
 
-    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id);
+    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key);
 
     int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg);
 
-    int create_container(std::string_view username, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
+    int create_container(std::string_view username, std::string_view image_name, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info);
 
     int start_container(std::string_view container_name);
 

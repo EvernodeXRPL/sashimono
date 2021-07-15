@@ -312,7 +312,7 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
-        const int len = 303 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
+        const int len = 268 + username.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), conf::ctx.exe_dir.data(), container_name.data(),
                 user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());

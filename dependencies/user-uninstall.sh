@@ -70,6 +70,9 @@ echo "Removing cgroups"
 cgdelete -g cpu:$user$cgroupsuffix
 cgdelete -g memory:$user$cgroupsuffix
 
+# Removing applied disk quota of the user before deleting.
+setquota -u -F vfsv0 "$user" 0 0 0 0 /
+
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"

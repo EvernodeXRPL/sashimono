@@ -25,6 +25,9 @@ namespace hp
     std::thread hp_monitor_thread;
     bool is_shutting_down = false;
 
+    conf::ugid contract_ugid;
+    constexpr int CONTRACT_USER_ID = 10000;
+
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker create -t -i --stop-signal=SIGINT --name=%s -p %s:%s -p %s:%s \
                                             --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
@@ -59,6 +62,7 @@ namespace hp
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
         instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
+        contract_ugid = {CONTRACT_USER_ID, CONTRACT_USER_ID};
 
         return 0;
     }
@@ -558,6 +562,10 @@ namespace hp
         d["node"]["public_key"] = pubkey_hex;
         d["node"]["private_key"] = util::to_hex(seckey);
         d["contract"]["id"] = contract_id;
+        
+        // Contract UGID will be passed to hpcore in next PBI, with resolving cgroup issue.
+        // d["contract"]["run_as"] = contract_ugid.to_string();
+        
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;
@@ -765,7 +773,13 @@ namespace hp
     */
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name)
     {
-        const std::vector<std::string_view> input_params = {std::to_string(max_cpu_us), std::to_string(max_mem_kbytes), std::to_string(storage_kbytes), container_name};
+        const std::vector<std::string_view> input_params = {
+            std::to_string(max_cpu_us),
+            std::to_string(max_mem_kbytes),
+            std::to_string(storage_kbytes),
+            container_name,
+            std::to_string(contract_ugid.uid),
+            std::to_string(contract_ugid.gid)};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

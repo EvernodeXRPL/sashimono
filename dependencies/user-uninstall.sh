@@ -67,8 +67,8 @@ fi
 
 echo "Removing cgroups"
 # Delete config values.
-cgdelete -g cpu:"$user"$cgroupsuffix
-cgdelete -g memory:"$user"$cgroupsuffix
+cgdelete -g cpu:$user$cgroupsuffix
+cgdelete -g memory:$user$cgroupsuffix
 
 echo "Deleting user '$user'"
 userdel "$user"

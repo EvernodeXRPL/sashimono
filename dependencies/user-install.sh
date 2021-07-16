@@ -7,8 +7,10 @@ cpu=$1
 memory=$2
 disk=$3
 contract_dir=$4
-if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ]; then
-    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes>"
+contract_uid=$5
+contract_gid=$6
+if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ]; then
+    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -47,11 +49,11 @@ user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
 # Setup user cgroup.
-! (cgcreate -g cpu:"$user"$cgroupsuffix &&
-    echo "$cpu" >/sys/fs/cgroup/cpu/"$user"$cgroupsuffix/cpu.cfs_quota_us) && echo rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:"$user"$cgroupsuffix &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/"$user"$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/"$user"$cgroupsuffix/memory.memsw.limit_in_bytes) && echo rollback "CGROUP_MEM_CREAT"
+! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$cgroupsuffix &&
+    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
 
 # Adding disk quota to the new user.
 setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
@@ -83,6 +85,16 @@ svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user i
 echo "Installed rootless dockerd."
 
 echo "Adding hpfs services for the instance."
+
+# Taking the uid and gid offsets
+uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
+[ -z $uoffset ] && rollback "SUBUID_ERR"
+goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
+[ -z $goffset ] && rollback "SUBGID_ERR"
+hpfs_uid=$(expr $uoffset + $contract_uid)
+hpfs_gid=$(expr $goffset + $contract_gid)
+
+# UGID will be passed to hpfs in next PBI, with resolving cgroup issue.
 echo "[Unit]
 Description=Running and monitoring contract fs.
 StartLimitIntervalSec=0

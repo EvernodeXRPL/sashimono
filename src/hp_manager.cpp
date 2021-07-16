@@ -562,10 +562,7 @@ namespace hp
         d["node"]["public_key"] = pubkey_hex;
         d["node"]["private_key"] = util::to_hex(seckey);
         d["contract"]["id"] = contract_id;
-        
-        // Contract UGID will be passed to hpcore in next PBI, with resolving cgroup issue.
-        // d["contract"]["run_as"] = contract_ugid.to_string();
-        
+        d["contract"]["run_as"] = contract_ugid.to_string();
         jsoncons::ojson unl(jsoncons::json_array_arg);
         unl.push_back(util::to_hex(pubkey));
         d["contract"]["unl"] = unl;

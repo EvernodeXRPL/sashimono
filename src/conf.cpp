@@ -67,8 +67,8 @@ namespace conf
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
-            cfg.docker.images["ubt.20.04"] = "hotpocketdev/sashimono:hp-ubt.20.04";
-            cfg.docker.images["ubt.20.04-njs.14"] = "hotpocketdev/sashimono:hp-ubt.20.04-njs.14";
+            cfg.docker.images["ubt.20.04"] = "localhost:4444/sashimono:hp-ubt.20.04";
+            cfg.docker.images["ubt.20.04-njs.14"] = "localhost:4444/sashimono:hp-ubt.20.04-njs.14";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

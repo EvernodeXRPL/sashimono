@@ -9,6 +9,7 @@ sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 group="sashimonousers"
 cgroupsuffix="-cg"
+registryuser="sashidockerreg"
 script_dir=$(dirname "$(realpath "$0")")
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
@@ -64,6 +65,10 @@ chmod -R +x $sashimono_bin
 
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
+
+# Install private docker registry.
+./registry-install.sh $docker_bin $registryuser
+[ "$?" == "1" ] && rollback
 
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback

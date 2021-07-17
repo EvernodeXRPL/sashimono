@@ -39,6 +39,9 @@ int parse_cmd(int argc, char **argv)
         {
             // We populate the global contract ctx with the detected command.
             conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+
+            // We assume we are in dev mode if binary path and data dir are the same.
+            conf::ctx.is_dev_mode = (conf::ctx.exe_dir == conf::ctx.data_dir);
             return 0;
         }
         else if (conf::ctx.command == "version")

@@ -11,6 +11,8 @@ namespace conf
     sa_config cfg;
 
     constexpr int FILE_PERMS = 0644;
+    constexpr const char *IMG_PREFIX_DEV = "hotpocketdev";
+    constexpr const char *IMG_PREFIX_PROD = "localhost:4444";
 
     bool init_success = false;
 
@@ -67,8 +69,9 @@ namespace conf
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
-            cfg.docker.images["ubt.20.04"] = "localhost:4444/sashimono:hp-ubt.20.04";
-            cfg.docker.images["ubt.20.04-njs.14"] = "localhost:4444/sashimono:hp-ubt.20.04-njs.14";
+            const std::string img_prefix = ctx.is_dev_mode ? IMG_PREFIX_DEV : IMG_PREFIX_PROD;
+            cfg.docker.images["ubt.20.04"] = img_prefix + "/sashimono:hp-ubt.20.04";
+            cfg.docker.images["ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp-ubt.20.04-njs.14";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

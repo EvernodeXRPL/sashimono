@@ -51,29 +51,6 @@ namespace conf
             return uid <= 0 && gid <= 0;
         }
 
-        int from_string(std::string_view str)
-        {
-            if (str.empty())
-                return 0;
-
-            std::vector<std::string> ids;
-            util::split_string(ids, str, ":");
-            if (ids.size() == 2)
-            {
-                const int _uid = atoi(ids[0].c_str());
-                const int _gid = atoi(ids[1].c_str());
-
-                if (_uid > 0 && _gid > 0)
-                {
-                    uid = _uid;
-                    gid = _gid;
-                    return 0;
-                }
-            }
-
-            return -1;
-        }
-
         const std::string to_string() const
         {
             return (uid == 0 && gid == 0) ? "" : (std::to_string(uid) + ":" + std::to_string(gid));
@@ -138,6 +115,8 @@ namespace conf
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.
         std::string data_dir;    // Data directory full path.
+
+        bool is_dev_mode = false; // Indicates whether we are running in the development environment.
     };
 
     // Global context struct exposed to the application.

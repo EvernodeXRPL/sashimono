@@ -3,18 +3,20 @@
 # This is intended to be called by Sashimono agent or via the user-install script for rollback.
 
 user=$1
-# Check whether this is a valid sashimono username.
 prefix="sashi"
-[ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] ||  [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
+
+# Check whether this is a valid sashimono username.
+[ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
 # Check if users exists.
 if [[ $(id -u "$user" 2>/dev/null || echo -1) -ge 0 ]]; then
-        :
+    :
 else
-        echo "NO_USER,UNINST_ERR"
-        exit 1
+    echo "NO_USER,UNINST_ERR"
+    exit 1
 fi
 
+contract_user="$user-secuser"
 cgroupsuffix="-cg"
 user_dir=/home/$user
 user_id=$(id -u "$user")
@@ -44,9 +46,8 @@ sleep 0.5
 echo "Unmounting user filesystems."
 fsmounts=$(cat /proc/mounts | cut -d ' ' -f 2 | grep "/home/$user")
 readarray -t mntarr <<<"$fsmounts"
-for mnt in "${mntarr[@]}"
-do
-   [ -z "$mnt" ] || umount "$mnt"
+for mnt in "${mntarr[@]}"; do
+    [ -z "$mnt" ] || umount "$mnt"
 done
 
 # Force kill user processes.
@@ -71,9 +72,14 @@ cgdelete -g memory:$user$cgroupsuffix
 # Removing applied disk quota of the user before deleting.
 setquota -u -F vfsv0 "$user" 0 0 0 0 /
 
+echo "Deleting contract user '$contract_user'"
+userdel "$contract_user"
+
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"
+# Even though we are creating a group specifically,
+# It'll be automatically deleted when we delete the user.
 
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 

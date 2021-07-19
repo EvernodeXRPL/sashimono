@@ -79,6 +79,8 @@ userdel "$contract_user"
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"
+# Even though we are creating a group specifically,
+# it'll automatically gets deleted when we delete the user.
 
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 

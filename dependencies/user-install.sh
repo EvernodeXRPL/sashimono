@@ -55,7 +55,8 @@ goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
 contract_host_uid=$(expr $uoffset + $contract_uid - 1)
 contract_host_gid=$(expr $goffset + $contract_gid - 1)
 
-useradd --shell /usr/sbin/nologin -M -u "$contract_host_uid" "$contract_user"
+groupadd -g "$contract_host_gid" "$contract_user"
+useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -u "$contract_host_uid" "$contract_user"
 usermod --lock "$contract_user"
 echo "Created '$contract_user' contract user."
 

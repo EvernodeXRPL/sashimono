@@ -45,8 +45,9 @@ loginctl enable-linger "$user" # Enable lingering to support rootless dockerd se
 chmod o-rwx "$user_dir"
 echo "Created '$user' user."
 
-# Creating a secondary user for the contract
-# Taking the uid and gid offsets
+# Creating a secondary user for the contract.
+# This is the respective host user for the child user of the sashimono user inside docker container.
+# Taking the uid and gid offsets.
 uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
 [ -z $uoffset ] && rollback "SUBUID_ERR"
 goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)

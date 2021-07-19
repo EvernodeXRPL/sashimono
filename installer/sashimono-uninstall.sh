@@ -67,8 +67,8 @@ systemctl stop $sashimono_service
 systemctl disable $sashimono_service
 rm /etc/systemd/system/$sashimono_service.service
 
-echo "Removing Sashimono private docker registry..."
-./registry-uninstall.sh $docker_bin $registryuser
+# echo "Removing Sashimono private docker registry..."
+# ./registry-uninstall.sh $docker_bin $registryuser
 
 echo "Deleting binaries..."
 rm -r $sashimono_bin

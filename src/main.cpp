@@ -130,11 +130,11 @@ int main(int argc, char **argv)
     }
     if (conf::ctx.command == "new")
     {
-        conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+        conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
 
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
-        const std::string registry_addr = (argc == 5) ? argv[4] : "";
+        const std::string registry_addr = (argc >= 5) ? argv[4] : "";
         if (conf::create(host_addr, registry_addr) != 0)
             return -1;
     }

@@ -17,6 +17,7 @@ fi
 prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
+contract_user="$user-secuser"
 group="sashimonousers"
 cgroupsuffix="-cg"
 user_dir=/home/$user
@@ -43,6 +44,21 @@ usermod -a -G $group "$user"
 loginctl enable-linger "$user" # Enable lingering to support rootless dockerd service installation.
 chmod o-rwx "$user_dir"
 echo "Created '$user' user."
+
+# Creating a secondary user for the contract.
+# This is the respective host user for the child user of the sashimono user inside docker container.
+# Taking the uid and gid offsets.
+uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
+[ -z $uoffset ] && rollback "SUBUID_ERR"
+goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
+[ -z $goffset ] && rollback "SUBGID_ERR"
+contract_host_uid=$(expr $uoffset + $contract_uid - 1)
+contract_host_gid=$(expr $goffset + $contract_gid - 1)
+
+groupadd -g "$contract_host_gid" "$contract_user"
+useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -u "$contract_host_uid" "$contract_user"
+usermod --lock "$contract_user"
+echo "Created '$contract_user' contract user."
 
 user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
@@ -86,22 +102,13 @@ echo "Installed rootless dockerd."
 
 echo "Adding hpfs services for the instance."
 
-# Taking the uid and gid offsets
-uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
-[ -z $uoffset ] && rollback "SUBUID_ERR"
-goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
-[ -z $goffset ] && rollback "SUBGID_ERR"
-hpfs_uid=$(expr $uoffset + $contract_uid)
-hpfs_gid=$(expr $goffset + $contract_gid)
-
-# UGID will be passed to hpfs in next PBI, with resolving cgroup issue.
 echo "[Unit]
 Description=Running and monitoring contract fs.
 StartLimitIntervalSec=0
 [Service]
 Type=simple
 EnvironmentFile=-$user_dir/.serviceconf
-ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/contract_fs $user_dir/$contract_dir/contract_fs/mnt merge=\${HPFS_MERGE} ugid= trace=\${HPFS_TRACE}
+ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/contract_fs $user_dir/$contract_dir/contract_fs/mnt merge=\${HPFS_MERGE} ugid=$contract_host_uid:$contract_host_gid trace=\${HPFS_TRACE}
 Restart=on-failure
 RestartSec=5
 [Install]

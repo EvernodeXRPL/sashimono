@@ -47,12 +47,15 @@ echo "Installed rootless dockerd for docker registry."
 
 # Run the docker registry container on port 4444
 DOCKER_HOST=$dockerd_socket $docker_bin/docker run -d -p $port:5000 --restart=always --name registry registry:2
+echo "Docker registry listening at $port"
 
 # Prefetch the required docker images.
-echo "Pulling Sashimono base contract images."
+echo "Pulling Sashimono base contract images..."
 for img in ${images[@]}; do
     DOCKER_HOST=$dockerd_socket $docker_bin/docker pull $hubacc/$img
     DOCKER_HOST=$dockerd_socket $docker_bin/docker tag $hubacc/$img localhost:$port/$img
+    DOCKER_HOST=$dockerd_socket $docker_bin/docker push localhost:$port/$img
+    DOCKER_HOST=$dockerd_socket $docker_bin/docker rmi $hubacc/$img
 done
 
 exit 0

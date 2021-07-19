@@ -75,8 +75,9 @@ chmod -R +x $sashimono_bin
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
 # Setup Sashimono data dir.
+selfip=$(ip -4 a l ens3 | awk '/inet/ {print $2}' | cut -d/ -f1)
 cp -r "$script_dir"/contract_template $sashimono_data
-$sashimono_bin/sagent new $sashimono_data
+$sashimono_bin/sagent new $sashimono_data $selfip
 
 # Install Sashimono Agent cgcreate service.
 # This is a onshot service which runs only once.

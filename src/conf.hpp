@@ -115,8 +115,6 @@ namespace conf
         std::string config_file; // Full path to the config file.
         std::string log_dir;     // Log directory full path.
         std::string data_dir;    // Data directory full path.
-
-        bool is_dev_mode = false; // Indicates whether we are running in the development environment.
     };
 
     // Global context struct exposed to the application.
@@ -129,7 +127,7 @@ namespace conf
 
     int init();
 
-    int create();
+    int create(std::string_view host_addr, std::string_view registry_addr);
 
     void set_dir_paths(std::string exepath, std::string datadir);
 

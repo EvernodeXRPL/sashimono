@@ -204,7 +204,7 @@ const restApi = async () => {
             type: 'create',
             owner_pubkey: req.body.owner_pubkey,
             contract_id: (req.body.contract_id === "") ? uuidv4() : req.body.contract_id,
-            image: (req.body.image == 1 ? "ubt.20.04" : "ubt.20.04-njs.14")
+            image: req.body.image ? req.body.image : "ubt.20.04"
         };
         reqMap[id] = res;
         sendToAllAgents(JSON.stringify(msg));

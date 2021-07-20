@@ -21,7 +21,6 @@ namespace msg
     {
         std::string id;
         std::string type;
-        std::string pubkey;
         std::string container_name;
         std::set<conf::host_ip_port> peers;
         std::set<std::string> unl;
@@ -35,7 +34,6 @@ namespace msg
     {
         std::string id;
         std::string type;
-        std::string pubkey;
         std::string container_name;
     };
 
@@ -43,7 +41,6 @@ namespace msg
     {
         std::string id;
         std::string type;
-        std::string pubkey;
         std::string container_name;
     };
 
@@ -51,7 +48,6 @@ namespace msg
     {
         std::string id;
         std::string type;
-        std::string pubkey;
         std::string container_name;
     };
 

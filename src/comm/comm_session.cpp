@@ -13,6 +13,7 @@
 namespace comm
 {
     constexpr uint16_t MAX_IN_MSG_QUEUE_SIZE = 64; // Maximum in message queue size, The size passed is rounded to next number in binary sequence 1(1),11(3),111(7),1111(15),11111(31)....
+    constexpr const int BUFFER_SIZE = 1024;
 
     comm_session::comm_session(const int socket)
         : msg_parser(msg::msg_parser()),
@@ -51,7 +52,6 @@ namespace comm
         {
             // If reading from the hpws_client failed we'll mark this session to closure.
             bool should_disconnect = false;
-            const int BUFFER_SIZE = 128;
             char buffer[BUFFER_SIZE];
             const int ret = read(socket, buffer, BUFFER_SIZE);
             if (ret == -1)

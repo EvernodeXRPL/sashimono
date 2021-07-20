@@ -14,8 +14,6 @@ namespace msg::json
 
     int extract_type_and_id(std::string &extracted_type, std::string &extracted_id, const jsoncons::json &d);
 
-    int extract_commons(std::string &type, std::string &id, std::string &pubkey, const jsoncons::json &d);
-
     int extract_create_message(create_msg &msg, const jsoncons::json &d);
 
     int extract_initiate_message(initiate_msg &msg, const jsoncons::json &d);

@@ -118,7 +118,6 @@ const interatctiveInterface = async () => {
                                 sendToAllAgents(JSON.stringify({
                                     id: uuidv4(),
                                     type: 'initiate',
-                                    owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                     container_name: containerName,
                                     peers: peers ? peers.split(',') : [],
                                     unl: unl ? unl.split(',') : [],
@@ -133,7 +132,6 @@ const interatctiveInterface = async () => {
                                 sendToAllAgents(JSON.stringify({
                                     id: uuidv4(),
                                     type: 'destroy',
-                                    owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                     container_name: containerName
                                 }))
                                 break;
@@ -142,7 +140,6 @@ const interatctiveInterface = async () => {
                                 sendToAllAgents(JSON.stringify({
                                     id: uuidv4(),
                                     type: 'start',
-                                    owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                     container_name: containerName
                                 }))
                                 break;
@@ -151,7 +148,6 @@ const interatctiveInterface = async () => {
                                 sendToAllAgents(JSON.stringify({
                                     id: uuidv4(),
                                     type: 'stop',
-                                    owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                                     container_name: containerName
                                 }))
                                 break;

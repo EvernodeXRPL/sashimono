@@ -7,7 +7,6 @@ namespace comm
 {
     constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; // 1MB;
     bool init_success;
-    constexpr const int BUFFER_SIZE = 128;
     constexpr const int POLL_TIMEOUT = 10;
 
 

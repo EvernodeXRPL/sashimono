@@ -18,7 +18,8 @@
         std::cerr << "Arguments mismatch.\n";                \
         std::cerr << "Usage:\n";                             \
         std::cerr << "sagent version\n";                     \
-        std::cerr << "sagent <run|new> [data_dir]\n";        \
+        std::cerr << "sagent new [data_dir] [host_addr] [registry_addr]\n";  \
+        std::cerr << "sagent run [data_dir]\n";              \
         std::cerr << "Example: sagent run /etc/sashimono\n"; \
         return -1;                                           \
     }
@@ -35,16 +36,10 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if (conf::ctx.command == "new" || conf::ctx.command == "run")
-        {
-            // We populate the global contract ctx with the detected command.
-            conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 5) ||
+            (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
+            (conf::ctx.command == "version" && argc == 2))
             return 0;
-        }
-        else if (conf::ctx.command == "version")
-        {
-            return 0;
-        }
     }
 
     // If all extractions fail display help message and return -1.
@@ -135,12 +130,18 @@ int main(int argc, char **argv)
     }
     if (conf::ctx.command == "new")
     {
+        conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
+
         // This will create a new config.
-        if (conf::create() != 0)
+        const std::string host_addr = (argc >= 4) ? argv[3] : "";
+        const std::string registry_addr = (argc >= 5) ? argv[4] : "";
+        if (conf::create(host_addr, registry_addr) != 0)
             return -1;
     }
     else if (conf::ctx.command == "run")
     {
+        conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+
         if (kill_switch(util::get_epoch_milliseconds()))
         {
             std::cerr << "Sashimono Agent usage limit failure.\n";

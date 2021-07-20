@@ -7,6 +7,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
+registryuser="sashidockerreg"
 group="sashimonousers"
 cgroupsuffix="-cg"
 quiet=$1
@@ -65,6 +66,9 @@ echo "Removing Sashimono service..."
 systemctl stop $sashimono_service
 systemctl disable $sashimono_service
 rm /etc/systemd/system/$sashimono_service.service
+
+# echo "Removing Sashimono private docker registry..."
+# ./registry-uninstall.sh $docker_bin $registryuser
 
 echo "Deleting binaries..."
 rm -r $sashimono_bin

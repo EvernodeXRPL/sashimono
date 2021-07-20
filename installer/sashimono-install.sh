@@ -9,6 +9,8 @@ sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 group="sashimonousers"
 cgroupsuffix="-cg"
+registryuser="sashidockerreg"
+registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
@@ -65,13 +67,21 @@ chmod -R +x $sashimono_bin
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
+selfip=$(ip -4 a l ens3 | awk '/inet/ {print $2}' | cut -d/ -f1)
+
+# Install private docker registry.
+# (Disabled until secure registry configuration)
+# ./registry-install.sh $docker_bin $registryuser $registryport
+# [ "$?" == "1" ] && rollback
+# registry_addr=$selfip:$registryport
+
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data
-$sashimono_bin/sagent new $sashimono_data
+$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr
 
 # Install Sashimono Agent cgcreate service.
 # This is a onshot service which runs only once.

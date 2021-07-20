@@ -7,6 +7,9 @@ namespace comm
 {
     constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; // 1MB;
     bool init_success;
+    constexpr const int BUFFER_SIZE = 128;
+    constexpr const int POLL_TIMEOUT = 10;
+
 
     comm_ctx ctx;
 
@@ -14,6 +17,26 @@ namespace comm
     {
         ctx.comm_handler_thread = std::thread(comm_handler_loop);
 
+        ctx.connection_socket = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+        if (ctx.connection_socket == -1)
+        {
+            LOG_ERROR << errno << ": Error creating the socket.";
+            return -1;
+        }
+        struct sockaddr_un sock_name;
+        memset(&sock_name, 0, sizeof(struct sockaddr_un));
+
+        sock_name.sun_family = AF_UNIX;
+        strncpy(sock_name.sun_path, conf::ctx.socket_path.c_str(), sizeof(sock_name.sun_path) - 1);
+
+        unlink(conf::ctx.socket_path.c_str());
+
+        if (bind(ctx.connection_socket, (const struct sockaddr *)&sock_name, sizeof(struct sockaddr_un)) == -1 ||
+            listen(ctx.connection_socket, 20) == -1)
+        {
+            LOG_ERROR << errno << ": Error binding the socket for " << conf::ctx.socket_path;
+            return -1;
+        }
         init_success = true;
 
         return 0;
@@ -27,6 +50,9 @@ namespace comm
 
             if (ctx.comm_handler_thread.joinable())
                 ctx.comm_handler_thread.join();
+
+            close(ctx.connection_socket);
+            unlink(conf::ctx.socket_path.c_str());
         }
     }
 
@@ -38,37 +64,14 @@ namespace comm
     */
     int connect(const conf::host_ip_port &ip_port)
     {
-        std::string_view host = ip_port.host_address;
-        const uint16_t port = ip_port.port;
-
-        LOG_DEBUG << "Trying to connect " << host << ":" << std::to_string(port);
-
-        std::variant<hpws::client, hpws::error> client_result = hpws::client::connect(conf::ctx.hpws_exe_path, DEFAULT_MAX_MSG_SIZE, host, port, "/", {}, util::fork_detach);
-
-        if (std::holds_alternative<hpws::error>(client_result))
+        const int data_socket = accept(ctx.connection_socket, NULL, NULL);
+        if (data_socket == -1)
         {
-            const hpws::error error = std::get<hpws::error>(client_result);
-            if (error.first != 202)
-                LOG_ERROR << "Connection hpws error:" << error.first << " " << error.second;
+            LOG_ERROR << errno << ": Error accepting the new connection.";
             return -1;
         }
-        else
-        {
-            hpws::client client = std::move(std::get<hpws::client>(client_result));
-            const std::variant<std::string, hpws::error> host_result = client.host_address();
-            if (std::holds_alternative<hpws::error>(host_result))
-            {
-                const hpws::error error = std::get<hpws::error>(host_result);
-                LOG_ERROR << "Error getting ip from hpws:" << error.first << " " << error.second;
-                return -1;
-            }
-            else
-            {
-                const std::string &host_address = std::get<std::string>(host_result);
-                ctx.session.emplace(host_address, std::move(client));
-                ctx.session->init();
-            }
-        }
+        ctx.session.emplace(data_socket);
+        ctx.session->init();
         return 0;
     }
 
@@ -80,7 +83,7 @@ namespace comm
     {
         if (ctx.session.has_value())
         {
-            ctx.session->close();
+            ctx.session->close_session();
             ctx.session.reset();
         }
     }
@@ -90,6 +93,7 @@ namespace comm
         LOG_INFO << "Message processor started.";
 
         util::mask_signal();
+        struct pollfd pfd;
 
         while (!ctx.is_shutting_down)
         {
@@ -99,20 +103,25 @@ namespace comm
                 // If no messages were processed in this cycle, wait for some time.
                 if (ctx.session->process_inbound_msg_queue() <= 0)
                     util::sleep(10);
-                
+
                 // If session is marked for closure since there's an issue, We disconnect the current session.
                 // And try to create a new session in the next round
                 if (ctx.session->state == SESSION_STATE::MUST_CLOSE)
                 {
-                    LOG_DEBUG << "Closing the session due to a failure: " << ctx.session->display_name();
+                    LOG_DEBUG << "Closing the session due to a failure.";
                     disconnect();
                     util::sleep(1000);
                 }
             }
             else
             {
-                // If host connection failed wait for some time.
-                if (connect(conf::cfg.server.ip_port) == -1)
+                pfd.fd = ctx.connection_socket;
+                pfd.events = POLLIN;
+
+                // Wait for some time if no connections are available.
+                if (poll(&pfd, 1, POLL_TIMEOUT) > 0)
+                    connect(conf::cfg.server.ip_port);
+                else
                     util::sleep(1000);
             }
         }

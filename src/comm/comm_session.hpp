@@ -22,10 +22,8 @@ namespace comm
     class comm_session
     {
     private:
-        std::optional<hpws::client> hpws_client;
         msg::msg_parser msg_parser;     // Message parser.
-        const std::string uniqueid;     // IP address.
-        const std::string host_address; // Connection host address of the remote party.
+        int socket;
 
         std::thread reader_thread;                               // The thread responsible for reading messages from the read fd.
         std::thread writer_thread;                               // The thread responsible for writing messages to the write fd.
@@ -40,13 +38,11 @@ namespace comm
 
     public:
         SESSION_STATE state = SESSION_STATE::NONE;
-        comm_session(
-            std::string_view host_address, hpws::client &&hpws_client);
+        comm_session(const int socket);
         int init();
         int send(std::string_view message);
         int process_inbound_msg_queue();
-        void close();
-        const std::string display_name() const;
+        void close_session();
     };
 
 } // namespace comm

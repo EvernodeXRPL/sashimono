@@ -112,6 +112,8 @@ namespace conf
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 
+        ctx.socket_path = ctx.data_dir + "/sa.sock";
+
         ctx.contract_template_path = ctx.data_dir + "/contract_template";
         ctx.config_file = ctx.data_dir + "/sa.cfg";
         ctx.log_dir = ctx.data_dir + "/log";

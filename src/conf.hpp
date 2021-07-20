@@ -132,6 +132,8 @@ namespace conf
         std::string hpfs_exe_path;          // hpfs executable file path.
         std::string contract_template_path; // Path to default contract.
 
+        std::string socket_path; // Path to the unix socket file.
+
         std::string user_install_sh;
         std::string user_uninstall_sh;
 

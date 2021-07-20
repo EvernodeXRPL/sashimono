@@ -11,6 +11,7 @@ namespace comm
         std::optional<comm_session> session;
         bool is_shutting_down = false;
         std::thread comm_handler_thread; // Incoming message processor thread.
+        int connection_socket = -1;
     };
 
     extern comm_ctx ctx;

@@ -14,12 +14,9 @@ namespace comm
 {
     constexpr uint16_t MAX_IN_MSG_QUEUE_SIZE = 64; // Maximum in message queue size, The size passed is rounded to next number in binary sequence 1(1),11(3),111(7),1111(15),11111(31)....
 
-    comm_session::comm_session(
-        std::string_view host_address, hpws::client &&hpws_client)
-        : uniqueid(host_address),
-          host_address(host_address),
-          hpws_client(std::move(hpws_client)),
-          msg_parser(msg::msg_parser()),
+    comm_session::comm_session(const int socket)
+        : msg_parser(msg::msg_parser()),
+          socket(socket),
           in_msg_queue(MAX_IN_MSG_QUEUE_SIZE)
     {
     }
@@ -37,11 +34,7 @@ namespace comm
             writer_thread = std::thread(&comm_session::outbound_msg_queue_processor, this);
             state = SESSION_STATE::ACTIVE;
 
-            // Send an initial message to the host.
-            std::string res;
-            msg_parser.build_response(res, msg::MSGTYPE_INIT, {}, "Connection initiated.");
-            send(res);
-            LOG_DEBUG << "Session started: " << uniqueid;
+            LOG_DEBUG << "Session started.";
         }
 
         return 0;
@@ -54,33 +47,20 @@ namespace comm
     {
         util::mask_signal();
 
-        while (state != SESSION_STATE::CLOSED && hpws_client)
+        while (state != SESSION_STATE::CLOSED && socket != -1)
         {
             // If reading from the hpws_client failed we'll mark this session to closure.
             bool should_disconnect = false;
-
-            const std::variant<std::string_view, hpws::error> read_result = hpws_client->read();
-            if (std::holds_alternative<hpws::error>(read_result))
+            const int BUFFER_SIZE = 128;
+            char buffer[BUFFER_SIZE];
+            const int ret = read(socket, buffer, BUFFER_SIZE);
+            if (ret == -1)
             {
+                LOG_ERROR << errno << ": Error receiving data.";
                 should_disconnect = true;
-                const hpws::error error = std::get<hpws::error>(read_result);
-                if (error.first != 1) // 1 indicates channel has closed.
-                    LOG_DEBUG << "hpws client read failed:" << error.first << " " << error.second;
             }
-            else
-            {
-                // Enqueue the message for processing.
-                std::string_view data = std::get<std::string_view>(read_result);
-                in_msg_queue.try_enqueue(std::string(data));
-
-                // Signal the hpws client that we are ready for next message.
-                const std::optional<hpws::error> error = hpws_client->ack(data);
-                if (error.has_value())
-                {
-                    should_disconnect = true;
-                    LOG_DEBUG << "hpws client ack failed:" << error->first << " " << error->second;
-                }
-            }
+            if (ret > 0)
+                in_msg_queue.try_enqueue(std::string(buffer));
 
             if (should_disconnect)
             {
@@ -123,16 +103,14 @@ namespace comm
     */
     int comm_session::process_outbound_message(std::string_view message)
     {
-        if (state == SESSION_STATE::CLOSED || !hpws_client)
+        if (state == SESSION_STATE::CLOSED || socket == -1)
             return -1;
 
-        const std::optional<hpws::error> error = hpws_client->write(message);
-        if (error.has_value())
-        {
-            LOG_ERROR << "hpws client write failed:" << error->first << " " << error->second;
-            return -1;
-        }
-        return 0;
+        const int ret = write(socket, message.data(), message.length() + 1);
+        // Close connection after sending the response to the client.
+        if (ret > 0)
+            mark_for_closure();
+        return ret == -1 ? -1 : 0;
     }
 
     /**
@@ -270,15 +248,14 @@ namespace comm
      * Close the connection and wrap up any session processing threads.
      * This will be only called by the global comm_handler.
      */
-    void comm_session::close()
+    void comm_session::close_session()
     {
         if (state == SESSION_STATE::CLOSED)
             return;
 
         state = SESSION_STATE::CLOSED;
 
-        // Destruct the hpws client instance so it will close the sockets and related processes.
-        hpws_client.reset();
+        close(socket);
 
         // Wait untill reader/writer threads gracefully stop.
         if (writer_thread.joinable())
@@ -287,16 +264,7 @@ namespace comm
         if (reader_thread.joinable())
             reader_thread.join();
 
-        LOG_DEBUG << "Session closed: " << uniqueid;
-    }
-
-    /**
-     * Returns printable name for the session based on uniqueid (used for logging).
-     * @return The display name as a string.
-     */
-    const std::string comm_session::display_name() const
-    {
-        return uniqueid;
+        LOG_DEBUG << "Session closed.";
     }
 
 } // namespace comm

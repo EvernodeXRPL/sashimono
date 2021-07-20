@@ -3,17 +3,10 @@
 # This is intended to be called by Sashimono agent or via the user-install script for rollback.
 
 user=$1
-contract_user="$user-secuser"
-# Check whether this is a valid sashimono username.
 prefix="sashi"
-[ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
-cgroupsuffix="-cg"
 
-user_dir=/home/$user
-user_id=$(id -u "$user")
-user_runtime_dir="/run/user/$user_id"
-script_dir=$(dirname "$(realpath "$0")")
-docker_bin=$script_dir/dockerbin
+# Check whether this is a valid sashimono username.
+[ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
 # Check if users exists.
 if [[ $(id -u "$user" 2>/dev/null || echo -1) -ge 0 ]]; then
@@ -22,6 +15,14 @@ else
     echo "NO_USER,UNINST_ERR"
     exit 1
 fi
+
+contract_user="$user-secuser"
+cgroupsuffix="-cg"
+user_dir=/home/$user
+user_id=$(id -u "$user")
+user_runtime_dir="/run/user/$user_id"
+script_dir=$(dirname "$(realpath "$0")")
+docker_bin=$script_dir/dockerbin
 
 echo "Uninstalling user '$user'."
 
@@ -36,8 +37,6 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user disable "$l
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh uninstall
-echo "Removing rootless docker data."
-sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/rootlesskit rm -rf "$user_dir"/.local/share/docker
 
 # Gracefully terminate user processes.
 echo "Terminating user processes."
@@ -52,12 +51,12 @@ for mnt in "${mntarr[@]}"; do
 done
 
 # Force kill user processes.
-procs=$(ps -U root 2>/dev/null | wc -l)
+procs=$(ps -U $user 2>/dev/null | wc -l)
 if [ "$procs" != "0" ]; then
 
     # Wait for some time and check again.
     sleep 1
-    procs=$(ps -U root 2>/dev/null | wc -l)
+    procs=$(ps -U $user 2>/dev/null | wc -l)
     if [ "$procs" != "0" ]; then
         echo "Force killing user processes."
         pkill -SIGKILL -u "$user"

@@ -33,7 +33,7 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create()
+    int create(std::string_view host_addr, std::string_view registry_addr)
     {
         if (util::is_file_exists(ctx.config_file))
         {
@@ -57,7 +57,8 @@ namespace conf
             sa_config cfg = {};
 
             cfg.version = version::AGENT_VERSION;
-            cfg.hp.host_address = "127.0.0.1";
+
+            cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
             cfg.server.ip_port = {"127.0.0.1", 5000};
@@ -67,8 +68,9 @@ namespace conf
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
-            cfg.docker.images["ubt.20.04"] = "hotpocketdev/sashimono:hp-ubt.20.04";
-            cfg.docker.images["ubt.20.04-njs.14"] = "hotpocketdev/sashimono:hp-ubt.20.04-njs.14";
+            const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);
+            cfg.docker.images["ubt.20.04"] = img_prefix + "/sashimono:hp-ubt.20.04";
+            cfg.docker.images["ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp-ubt.20.04-njs.14";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

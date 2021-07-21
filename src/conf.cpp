@@ -61,7 +61,6 @@ namespace conf
             cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
-            cfg.server.ip_port = {"127.0.0.1", 5000};
 
             cfg.system.max_instance_count = 5;
             cfg.system.max_mem_kbytes = 1024000;     // Total 1GB RAM
@@ -109,7 +108,6 @@ namespace conf
         // If data dir is not specified, use the same dir as executables.
         ctx.data_dir = datadir.empty() ? ctx.exe_dir : util::realpath(datadir);
 
-        ctx.hpws_exe_path = ctx.exe_dir + "/hpws";
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
@@ -127,11 +125,10 @@ namespace conf
      */
     int validate_dir_paths()
     {
-        const std::string paths[7] = {
+        const std::string paths[6] = {
             ctx.config_file,
             ctx.log_dir,
             ctx.data_dir,
-            ctx.hpws_exe_path,
             ctx.contract_template_path,
             ctx.user_install_sh,
             ctx.user_uninstall_sh};
@@ -142,8 +139,6 @@ namespace conf
             {
                 if (path == ctx.config_file)
                     std::cerr << path << " does not exist. Initialize with <sagent new> command.\n";
-                else if (path == ctx.hpws_exe_path)
-                    std::cerr << path << " binary does not exist.\n";
                 else
                     std::cerr << path << " does not exist.\n";
                 return -1;
@@ -238,35 +233,6 @@ namespace conf
             }
         }
 
-        // server
-        {
-            jpath = "server";
-
-            try
-            {
-                const jsoncons::ojson &server = d["server"];
-
-                cfg.server.ip_port.host_address = server["host"].as<std::string>();
-                cfg.server.ip_port.port = server["port"].as<uint16_t>();
-
-                if (cfg.server.ip_port.host_address.empty())
-                {
-                    std::cerr << "Configured server host_address is empty.\n";
-                    return -1;
-                }
-                else if (cfg.server.ip_port.port <= 0)
-                {
-                    std::cerr << "Configured server port invalid.\n";
-                    return -1;
-                }
-            }
-            catch (const std::exception &e)
-            {
-                print_missing_field_error(jpath, e);
-                return -1;
-            }
-        }
-
         // system
         {
             jpath = "system";
@@ -351,16 +317,6 @@ namespace conf
             hp_config.insert_or_assign("init_user_port", cfg.hp.init_user_port);
 
             d.insert_or_assign("hp", hp_config);
-        }
-
-        // Server configs.
-        {
-            jsoncons::ojson server_config;
-
-            server_config.insert_or_assign("host", cfg.server.ip_port.host_address);
-            server_config.insert_or_assign("port", cfg.server.ip_port.port);
-
-            d.insert_or_assign("server", server_config);
         }
 
         // System configs.

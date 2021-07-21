@@ -9,6 +9,7 @@ sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 registryuser="sashidockerreg"
 group="sashimonousers"
+admin_group="sashiadmin"
 cgroupsuffix="-cg"
 quiet=$1
 
@@ -79,6 +80,8 @@ rm -r $sashimono_data
 echo "Deleting cgroup rules..."
 groupdel $group
 sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
+
+groupdel $admin_group
 
 echo "Sashimono uninstalled successfully."
 exit 0

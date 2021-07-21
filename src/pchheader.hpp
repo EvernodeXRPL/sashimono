@@ -11,6 +11,7 @@
 #include <iostream>
 #include <jsoncons/json.hpp>
 #include <libgen.h>
+#include <netinet/in.h>
 #include <set>
 #include <string>
 #include <string_view>
@@ -27,6 +28,7 @@
 #include <unordered_set>
 #include <vector>
 #include <thread>
+#include <poll.h>
 #include <plog/Log.h>
 #include <plog/Appenders/ConsoleAppender.h>
 #include <pwd.h>

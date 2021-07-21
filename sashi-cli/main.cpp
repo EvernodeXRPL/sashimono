@@ -22,14 +22,6 @@ void deinit()
     cli::deinit();
 }
 
-void sig_exit_handler(int signum)
-{
-    std::cout << "Interrupt signal (" << signum << ") received.\n";
-    deinit();
-    std::cout << "Sashi CLI exited due to signal.\n";
-    exit(signum);
-}
-
 void segfault_handler(int signum)
 {
     std::cout << boost::stacktrace::stacktrace() << std::endl;

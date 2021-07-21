@@ -260,14 +260,15 @@ namespace comm
      **/
     int read_socket(std::string &message)
     {
-        char buffer[BUFFER_SIZE];
-        const int ret = read(ctx.data_socket, buffer, BUFFER_SIZE);
+        // Resize the message to max length and resize to original read length after reading.
+        message.resize(BUFFER_SIZE);
+        const int ret = read(ctx.data_socket, message.data(), message.length());
         if (ret == -1)
         {
             LOG_ERROR << errno << ": Error receiving data.";
             return -1;
         }
-        message = std::string(buffer);
+        message.resize(ret);
         return ret;
     }
 } // namespace comm

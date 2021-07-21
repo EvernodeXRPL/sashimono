@@ -49,6 +49,7 @@ namespace comm
             listen(ctx.connection_socket, 20) == -1)
         {
             LOG_ERROR << errno << ": Error binding the socket for " << conf::ctx.socket_path;
+            close(ctx.connection_socket);
             return -1;
         }
 

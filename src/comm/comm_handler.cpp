@@ -40,7 +40,7 @@ namespace comm
         // Remove the socket if it already exists.
         unlink(conf::ctx.socket_path.c_str());
 
-        std::string command = "chown :sashiadmin " + conf::ctx.socket_path;
+        const std::string command = "chown :sashiadmin " + conf::ctx.socket_path;
 
         char mode[] = "0660";                              // rw-rw----
         const mode_t permission_mode = strtol(mode, 0, 8); // Char to octal conversion.

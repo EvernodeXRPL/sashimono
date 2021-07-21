@@ -39,7 +39,7 @@ Run `make installer` ('sashimono-installer.tar.gz' will be placed in build direc
 ## Code structure
 Code is divided into subsystems via namespaces.
 
-**comm::** Handles generic web sockets communication functionality. Mainly acts as a wrapper for [hpws](https://github.com/RichardAH/hpws).
+**comm::** Handles socket related functionality.
 
 **conf::** Handles configuration. Loads and holds the central configuration object. Used by most of the subsystems.
 

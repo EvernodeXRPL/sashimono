@@ -18,14 +18,17 @@
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/un.h>
 #include <sodium.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
 #include <thread>
+#include <poll.h>
 #include <plog/Log.h>
 #include <plog/Appenders/ConsoleAppender.h>
 #include <pwd.h>

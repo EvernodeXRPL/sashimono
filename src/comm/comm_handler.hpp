@@ -2,15 +2,16 @@
 #define _SA_COMM_COMM_SERVER_
 
 #include "../pchheader.hpp"
-#include "comm_session.hpp"
+#include "../msg/msg_parser.hpp"
 
 namespace comm
 {
     struct comm_ctx
     {
-        std::optional<comm_session> session;
         bool is_shutting_down = false;
         std::thread comm_handler_thread; // Incoming message processor thread.
+        int connection_socket = -1;
+        int data_socket = -1;
     };
 
     extern comm_ctx ctx;
@@ -19,13 +20,19 @@ namespace comm
 
     void deinit();
 
-    int connect(const conf::host_ip_port &ip_port);
+    int connect();
 
     void disconnect();
 
     void comm_handler_loop();
 
+    int handle_message(std::string_view msg);
+
+    int send(std::string_view message);
+
     void wait();
+
+    int read_socket(std::string &message);
 
 } // namespace comm
 

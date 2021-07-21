@@ -66,11 +66,6 @@ namespace conf
         size_t max_file_count = 0;                        // Max no. of log files to keep.
     };
 
-    struct server_config
-    {
-        host_ip_port ip_port;
-    };
-
     struct hp_config
     {
         std::string host_address;
@@ -95,7 +90,6 @@ namespace conf
     {
         std::string version;
         hp_config hp;
-        server_config server;
         system_config system;
         docker_config docker;
         log_config log;
@@ -105,9 +99,10 @@ namespace conf
     {
         std::string command;                // The CLI command issued to launch Sashimono agent
         std::string exe_dir;                // Sashimono Agent executable dir.
-        std::string hpws_exe_path;          // hpws executable file path.
         std::string hpfs_exe_path;          // hpfs executable file path.
         std::string contract_template_path; // Path to default contract.
+
+        std::string socket_path; // Path to the unix socket file.
 
         std::string user_install_sh;
         std::string user_uninstall_sh;

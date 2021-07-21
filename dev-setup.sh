@@ -85,6 +85,10 @@ cgroupsuffix="-cg"
 ! sudo groupadd $group && echo "Group creation failed."
 ! sudo echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed."
 
+# Setting up Sashimono admin group.
+admin_group="sashiadmin"
+! sudo groupadd $admin_group && echo "Admin group creation failed."
+
 # Build sagent
 cmake .
 make

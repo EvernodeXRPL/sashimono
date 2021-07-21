@@ -78,43 +78,6 @@ namespace msg::json
     }
 
     /**
-     * Extracts type, id and pubkey in the msg.
-     * @param type Type in the message.
-     * @param id id in the message.
-     * @param pubkey Pubkey in the message.
-     * @param d The json document holding the read request message.
-     *          Accepted signed input container format:
-     *          {
-     *            ...
-     *            "type": "<message type>",
-     *            "id": "<message id>",
-     *            "owner_pubkey": "<pubkey of the owner>",
-     *            ...
-     *          }
-     * @return 0 on successful extraction. -1 for failure.
-     */
-    int extract_commons(std::string &type, std::string &id, std::string &pubkey, const jsoncons::json &d)
-    {
-        if (extract_type_and_id(type, id, d) == -1)
-            return -1;
-
-        if (!d.contains(msg::FLD_PUBKEY))
-        {
-            LOG_ERROR << "Field owner_pubkey is missing.";
-            return -1;
-        }
-
-        if (!d[msg::FLD_PUBKEY].is<std::string>())
-        {
-            LOG_ERROR << "Invalid owner_pubkey value.";
-            return -1;
-        }
-
-        pubkey = d[msg::FLD_PUBKEY].as<std::string>();
-        return 0;
-    }
-
-    /**
      * Extracts create message from msg.
      * @param msg Populated msg object.
      * @param d The json document holding the read request message.
@@ -129,8 +92,15 @@ namespace msg::json
      */
     int extract_create_message(create_msg &msg, const jsoncons::json &d)
     {
-        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+        if (extract_type_and_id(msg.type, msg.id, d) == -1)
             return -1;
+
+        
+        if (!d.contains(msg::FLD_PUBKEY))
+        {
+            LOG_ERROR << "Field owner_pubkey is missing.";
+            return -1;
+        }
 
         if (!d.contains(msg::FLD_CONTRACT_ID))
         {
@@ -141,6 +111,12 @@ namespace msg::json
         if (!d.contains(msg::FLD_IMAGE))
         {
             LOG_ERROR << "Field image is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_PUBKEY].is<std::string>())
+        {
+            LOG_ERROR << "Invalid owner_pubkey value.";
             return -1;
         }
 
@@ -156,6 +132,7 @@ namespace msg::json
             return -1;
         }
 
+        msg.pubkey = d[msg::FLD_PUBKEY].as<std::string>();
         msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
         msg.image = d[msg::FLD_IMAGE].as<std::string>();
         return 0;
@@ -181,7 +158,7 @@ namespace msg::json
      */
     int extract_initiate_message(initiate_msg &msg, const jsoncons::json &d)
     {
-        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+        if (extract_type_and_id(msg.type, msg.id, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -327,7 +304,7 @@ namespace msg::json
      */
     int extract_destroy_message(destroy_msg &msg, const jsoncons::json &d)
     {
-        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+        if (extract_type_and_id(msg.type, msg.id, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -360,7 +337,7 @@ namespace msg::json
      */
     int extract_start_message(start_msg &msg, const jsoncons::json &d)
     {
-        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+        if (extract_type_and_id(msg.type, msg.id, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -393,7 +370,7 @@ namespace msg::json
      */
     int extract_stop_message(stop_msg &msg, const jsoncons::json &d)
     {
-        if (extract_commons(msg.type, msg.id, msg.pubkey, d) == -1)
+        if (extract_type_and_id(msg.type, msg.id, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))

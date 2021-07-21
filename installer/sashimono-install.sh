@@ -8,6 +8,7 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 group="sashimonousers"
+admin_group="sashiadmin"
 cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
@@ -58,7 +59,7 @@ function rollback() {
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,hpws,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
 
 # Download and install rootless dockerd.
@@ -78,6 +79,9 @@ selfip=$(ip -4 a l ens3 | awk '/inet/ {print $2}' | cut -d/ -f1)
 # Setting up cgroup rules.
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+
+# Setting up Sashimono admin group.
+! groupadd $admin_group && echo "Admin group creation failed." && rollback
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data

@@ -68,7 +68,7 @@ const interatctiveInterface = async () => {
                             break;
                         }
 
-                        sendToAllAgents(JSON.stringify({
+                        sendToAgent(JSON.stringify({
                             id: uuidv4(),
                             type: 'create',
                             owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
@@ -99,7 +99,7 @@ const interatctiveInterface = async () => {
                         }
                         peers = await askForInput('Comma seperated Peer List <host1:port1>,<host2:port2>,...');
                         unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
-                        sendToAllAgents(JSON.stringify({
+                        sendToAgent(JSON.stringify({
                             id: uuidv4(),
                             type: 'initiate',
                             container_name: containerName,
@@ -113,7 +113,7 @@ const interatctiveInterface = async () => {
                         break;
                     case 'destroy':
                         containerName = await askForInput('Container Name');
-                        sendToAllAgents(JSON.stringify({
+                        sendToAgent(JSON.stringify({
                             id: uuidv4(),
                             type: 'destroy',
                             container_name: containerName
@@ -121,7 +121,7 @@ const interatctiveInterface = async () => {
                         break;
                     case 'start':
                         containerName = await askForInput('Container Name');
-                        sendToAllAgents(JSON.stringify({
+                        sendToAgent(JSON.stringify({
                             id: uuidv4(),
                             type: 'start',
                             container_name: containerName
@@ -129,7 +129,7 @@ const interatctiveInterface = async () => {
                         break;
                     case 'stop':
                         containerName = await askForInput('Container Name');
-                        sendToAllAgents(JSON.stringify({
+                        sendToAgent(JSON.stringify({
                             id: uuidv4(),
                             type: 'stop',
                             container_name: containerName
@@ -149,7 +149,7 @@ const interatctiveInterface = async () => {
     inputPump();
 }
 
-const sendToAllAgents = (msg, res = null) => {
+const sendToAgent = (msg, res = null) => {
     try {
         let output = execSync(`${cliPath} json '${msg}'`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
@@ -204,7 +204,7 @@ const restApi = async () => {
             contract_id: (req.body.contract_id === "") ? uuidv4() : req.body.contract_id,
             image: req.body.image ? req.body.image : "ubt.20.04"
         };
-        sendToAllAgents(JSON.stringify(msg), res);
+        sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/initiate", (req, res) => {
         const id = uuidv4();
@@ -219,7 +219,7 @@ const restApi = async () => {
             max_primary_shards: req.body.max_primary_shards ? req.body.max_primary_shards : 1,
             max_raw_shards: req.body.max_raw_shards ? req.body.max_raw_shards : 1
         };
-        sendToAllAgents(JSON.stringify(msg), res);
+        sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/start", (req, res) => {
         const id = uuidv4();
@@ -228,7 +228,7 @@ const restApi = async () => {
             type: 'start',
             container_name: req.body.container_name
         };
-        sendToAllAgents(JSON.stringify(msg), res);
+        sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/stop", (req, res) => {
         const id = uuidv4();
@@ -237,7 +237,7 @@ const restApi = async () => {
             type: 'stop',
             container_name: req.body.container_name
         };
-        sendToAllAgents(JSON.stringify(msg), res);
+        sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/destroy", (req, res) => {
         const id = uuidv4();
@@ -246,7 +246,7 @@ const restApi = async () => {
             type: 'destroy',
             container_name: req.body.container_name
         };
-        sendToAllAgents(JSON.stringify(msg), res);
+        sendToAgent(JSON.stringify(msg), res);
     });
     restServer = (webServerProtocol == "https") ?
         https.createServer({

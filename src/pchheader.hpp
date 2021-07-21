@@ -11,7 +11,6 @@
 #include <iostream>
 #include <jsoncons/json.hpp>
 #include <libgen.h>
-#include <netinet/in.h>
 #include <set>
 #include <string>
 #include <string_view>
@@ -19,6 +18,7 @@
 #include <sys/mount.h>
 #include <sys/prctl.h>
 #include <sys/stat.h>
+#include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/un.h>

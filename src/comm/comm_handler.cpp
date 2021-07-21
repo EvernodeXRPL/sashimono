@@ -23,8 +23,6 @@ namespace comm
 
     int init()
     {
-        ctx.comm_handler_thread = std::thread(comm_handler_loop);
-
         ctx.connection_socket = socket(AF_UNIX, SOCK_SEQPACKET, 0);
         if (ctx.connection_socket == -1)
         {
@@ -47,14 +45,15 @@ namespace comm
 
         if (bind(ctx.connection_socket, (const struct sockaddr *)&sock_name, sizeof(struct sockaddr_un)) == -1 ||
             chmod(conf::ctx.socket_path.c_str(), permission_mode) == -1 ||
-            listen(ctx.connection_socket, 20) == -1 ||
-            system(command.data()) == -1)
+            system(command.data()) == -1 ||
+            listen(ctx.connection_socket, 20) == -1)
         {
             LOG_ERROR << errno << ": Error binding the socket for " << conf::ctx.socket_path;
             return -1;
         }
 
         msg_parser = msg::msg_parser();
+        ctx.comm_handler_thread = std::thread(comm_handler_loop);
         init_success = true;
 
         return 0;

@@ -5,7 +5,7 @@ namespace cli
 {
     struct cli_context
     {
-        std::string sashi_dir;   // Path of the Sashi CLI executable, this with be populated from main method args.
+        std::string sashi_dir;   // Path of the Sashi CLI executable.
         std::string socket_path; // Path of the sashimono socket.
         int socket_fd = -1;      // File descriptor of the socket.
     };

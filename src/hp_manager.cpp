@@ -271,7 +271,7 @@ namespace hp
         std::string hpfs_log_level;
         bool is_full_history;
         if (util::read_json_file(config_fd, d) == -1 ||
-            write_json_values(d, config_msg) == -1 ||
+            write_json_values(d, config_msg.config) == -1 ||
             read_json_values(d, hpfs_log_level, is_full_history) == -1 ||
             util::write_json_file(config_fd, d) == -1 ||
             hpfs::update_service_conf(info.username, hpfs_log_level, is_full_history) == -1 ||
@@ -704,59 +704,165 @@ namespace hp
     /**
      * Write contract config values (only updated if provided config values are not empty) into the json file.
      * @param d Json file to be populated.
-     * @param config_msg Config values to be updated.
+     * @param config Config values to be updated.
      * @return 0 on success. -1 on failure.
      */
-    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg)
+    int write_json_values(jsoncons::ojson &d, const msg::config_struct &config)
     {
-        if (!config_msg.unl.empty())
+        // Contract
         {
-            jsoncons::ojson unl(jsoncons::json_array_arg);
-            for (auto &pubkey : config_msg.unl)
-                unl.push_back(util::to_hex(pubkey));
-            d["contract"]["unl"] = unl;
-        }
-
-        if (!config_msg.peers.empty())
-        {
-            jsoncons::ojson peers(jsoncons::json_array_arg);
-            for (auto &peer : config_msg.peers)
-                peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
-            d["mesh"]["known_peers"] = peers;
-        }
-
-        if (!config_msg.role.empty())
-        {
-            if (config_msg.role != "observer" && config_msg.role != "validator")
+            if (!config.contract.unl.empty())
             {
-                LOG_ERROR << "Invalid role value observer|validator";
+                jsoncons::ojson unl(jsoncons::json_array_arg);
+                for (auto &pubkey : config.contract.unl)
+                    unl.push_back(util::to_hex(pubkey));
+                d["contract"]["unl"] = unl;
+            }
+
+            if (config.contract.execute.has_value())
+                d["contract"]["execute"] = config.contract.execute.value();
+
+            if (config.contract.log.enable.has_value())
+                d["contract"]["log"]["enable"] = config.contract.log.enable.value();
+
+            if (config.contract.log.max_mbytes_per_file.has_value())
+                d["contract"]["log"]["max_mbytes_per_file"] = config.contract.log.max_mbytes_per_file.value();
+
+            if (config.contract.log.max_file_count.has_value())
+                d["contract"]["log"]["max_file_count"] = config.contract.log.max_file_count.value();
+        }
+
+        // Node
+        {
+            if (!config.node.role.empty())
+            {
+                if (config.node.role != "observer" && config.node.role != "validator")
+                {
+                    LOG_ERROR << "Invalid role value observer|validator";
+                    return -1;
+                }
+                d["node"]["role"] = config.node.role;
+            }
+
+            if (!config.node.history.empty())
+            {
+                if (config.node.history != "full" && config.node.history != "custom")
+                {
+                    LOG_ERROR << "Invalid history value full|custom";
+                    return -1;
+                }
+                d["node"]["history"] = config.node.history;
+            }
+
+            if (config.node.history_config.max_primary_shards.has_value())
+                d["node"]["history_config"]["max_primary_shards"] = config.node.history_config.max_primary_shards.value();
+
+            if (config.node.history_config.max_raw_shards.has_value())
+                d["node"]["history_config"]["max_raw_shards"] = config.node.history_config.max_raw_shards.value();
+
+            if (d["node"]["history"].as<std::string>() == "custom" && d["node"]["history_config"]["max_primary_shards"].as<uint64_t>() == 0)
+            {
+                LOG_ERROR << "'max_primary_shards' cannot be zero in history=custom mode.";
                 return -1;
             }
-            d["node"]["role"] = config_msg.role;
         }
 
-        if (!config_msg.history.empty())
+        // Mesh
         {
-            if (config_msg.history != "full" && config_msg.history != "custom")
+            if (config.mesh.idle_timeout.has_value())
+                d["mesh"]["idle_timeout"] = config.mesh.idle_timeout.value();
+
+            if (!config.mesh.known_peers.empty())
             {
-                LOG_ERROR << "Invalid history value full|custom";
-                return -1;
+                jsoncons::ojson known_peers(jsoncons::json_array_arg);
+                for (auto &peer : config.mesh.known_peers)
+                    known_peers.push_back(peer.host_address + ":" + std::to_string(peer.port));
+                d["mesh"]["known_peers"] = known_peers;
             }
-            d["node"]["history"] = config_msg.history;
+
+            if (config.mesh.msg_forwarding.has_value())
+                d["mesh"]["msg_forwarding"] = config.mesh.msg_forwarding.value();
+            
+            if (config.mesh.max_connections.has_value())
+                d["mesh"]["max_connections"] = config.mesh.max_connections.value();
+
+            if (config.mesh.max_known_connections.has_value())
+                d["mesh"]["max_known_connections"] = config.mesh.max_known_connections.value();
+
+            if (config.mesh.max_in_connections_per_host.has_value())
+                d["mesh"]["max_in_connections_per_host"] = config.mesh.max_in_connections_per_host.value();
+
+            if (config.mesh.max_bytes_per_msg.has_value())
+                d["mesh"]["max_bytes_per_msg"] = config.mesh.max_bytes_per_msg.value();
+
+            if (config.mesh.max_bytes_per_min.has_value())
+                d["mesh"]["max_bytes_per_min"] = config.mesh.max_bytes_per_min.value();
+            
+            if (config.mesh.max_bad_msgs_per_min.has_value())
+                d["mesh"]["max_bad_msgs_per_min"] = config.mesh.max_bad_msgs_per_min.value();
+
+            if (config.mesh.max_bad_msgsigs_per_min.has_value())
+                d["mesh"]["max_bad_msgsigs_per_min"] = config.mesh.max_bad_msgsigs_per_min.value();
+
+            if (config.mesh.max_dup_msgs_per_min.has_value())
+                d["mesh"]["max_dup_msgs_per_min"] = config.mesh.max_dup_msgs_per_min.value();
+
+            if (config.mesh.peer_discovery.enabled.has_value())
+                d["mesh"]["peer_discovery"]["enabled"] = config.mesh.peer_discovery.enabled.value();
+
+            if (config.mesh.peer_discovery.interval.has_value())
+                d["mesh"]["peer_discovery"]["interval"] = config.mesh.peer_discovery.interval.value();
         }
 
-        if (config_msg.max_primary_shards.has_value())
-            d["node"]["history_config"]["max_primary_shards"] = config_msg.max_primary_shards.value();
-
-        if (config_msg.max_raw_shards.has_value())
-            d["node"]["history_config"]["max_raw_shards"] = config_msg.max_raw_shards.value();
-
-        if (d["node"]["history"].as<std::string>() == "custom" && d["node"]["history_config"]["max_primary_shards"].as<uint64_t>() == 0)
+        // User
         {
-            LOG_ERROR << "'max_primary_shards' cannot be zero in history=custom mode.";
-            return -1;
+            if (config.user.idle_timeout.has_value())
+                d["user"]["idle_timeout"] = config.user.idle_timeout.value();
+
+            if (config.user.max_bytes_per_msg.has_value())
+                d["user"]["max_bytes_per_msg"] = config.user.max_bytes_per_msg.value();
+
+            if (config.user.max_bytes_per_min.has_value())
+                d["user"]["max_bytes_per_min"] = config.user.max_bytes_per_min.value();
+
+            if (config.user.max_bad_msgs_per_min.has_value())
+                d["user"]["max_bad_msgs_per_min"] = config.user.max_bad_msgs_per_min.value();
+
+            if (config.user.max_connections.has_value())
+                d["user"]["max_connections"] = config.user.max_connections.value();
+
+            if (config.user.max_in_connections_per_host.has_value())
+                d["user"]["max_in_connections_per_host"] = config.user.max_in_connections_per_host.value();
+
+            if (config.user.concurrent_read_reqeuests.has_value())
+                d["user"]["concurrent_read_reqeuests"] = config.user.concurrent_read_reqeuests.value();
         }
 
+        // Hpfs
+        {
+            if (!config.hpfs.log.log_level.empty())
+                d["hpfs"]["log"]["log_level"] = config.hpfs.log.log_level;
+        }
+
+        // Log
+        {
+            if (!config.log.log_level.empty())
+                d["log"]["log_level"] = config.log.log_level;
+
+            if (config.log.max_mbytes_per_file.has_value())
+                d["log"]["max_mbytes_per_file"] = config.log.max_mbytes_per_file.value();
+
+            if (config.log.max_file_count.has_value())
+                d["log"]["max_file_count"] = config.log.max_file_count.value();
+
+            if (!config.log.loggers.empty())
+            {
+                jsoncons::ojson loggers(jsoncons::json_array_arg);
+                for (auto &log : config.log.loggers)
+                    loggers.push_back(log);
+                d["log"]["loggers"] = loggers;
+            }
+        }
         return 0;
     }
 

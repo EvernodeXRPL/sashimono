@@ -15,7 +15,7 @@ namespace comm
     constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; // 1MB;
     bool init_success;
     constexpr const int POLL_TIMEOUT = 10;
-    constexpr const int BUFFER_SIZE = 1024;
+    constexpr const int BUFFER_SIZE = 4096;
     constexpr const int EMPTY_READ_TRESHOLD = 5;
     msg::msg_parser msg_parser;
 

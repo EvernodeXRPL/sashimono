@@ -381,7 +381,7 @@ namespace msg::json
                 msg.config.user.max_in_connections_per_host = user[msg::FLD_MAX_IN_CONS_HOST].as<uint16_t>();
 
             if (user.contains(msg::FLD_CON_READ_REQ))
-                msg.config.user.concurrent_read_reqeuests = user[msg::FLD_CON_READ_REQ].as<uint64_t>();
+                msg.config.user.concurrent_read_requests = user[msg::FLD_CON_READ_REQ].as<uint64_t>();
         }
         if (config.contains(msg::FLD_HPFS))
         {

@@ -834,8 +834,8 @@ namespace hp
             if (config.user.max_in_connections_per_host.has_value())
                 d["user"]["max_in_connections_per_host"] = config.user.max_in_connections_per_host.value();
 
-            if (config.user.concurrent_read_reqeuests.has_value())
-                d["user"]["concurrent_read_reqeuests"] = config.user.concurrent_read_reqeuests.value();
+            if (config.user.concurrent_read_requests.has_value())
+                d["user"]["concurrent_read_requests"] = config.user.concurrent_read_requests.value();
         }
 
         // Hpfs

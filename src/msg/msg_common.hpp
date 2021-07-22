@@ -71,7 +71,7 @@ namespace msg
         std::optional<uint64_t> max_bad_msgs_per_min;        // User bad messages per minute
         std::optional<uint16_t> max_connections;             // Max inbound user connections
         std::optional<uint16_t> max_in_connections_per_host; // Max inbound user connections per remote host (IP).
-        std::optional<uint64_t> concurrent_read_reqeuests;   // Supported concurrent read requests count.
+        std::optional<uint64_t> concurrent_read_requests;    // Supported concurrent read requests count.
     };
 
     struct hpfs_log_config
@@ -176,7 +176,7 @@ namespace msg
     constexpr const char *FLD_MAX_BAD_MSG_SIG_MIN = "max_bad_msgsigs_per_min";
     constexpr const char *FLD_MAX_DUP_MSG_MIN = "max_dup_msgs_per_min";
     constexpr const char *FLD_PEER_DISCOVERY = "peer_discovery";
-    constexpr const char *FLD_CON_READ_REQ = "concurrent_read_reqeuests";
+    constexpr const char *FLD_CON_READ_REQ = "concurrent_read_requests";
 
     // Message types
     constexpr const char *MSGTYPE_INIT = "init";

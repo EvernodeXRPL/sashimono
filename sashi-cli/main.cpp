@@ -4,14 +4,14 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
-#define PARSE_ERROR                                                                             \
-    {                                                                                           \
-        std::cerr << "Arguments mismatch.\n";                                                   \
-        std::cerr << "Usage:\n";                                                                \
+#define PARSE_ERROR                                                                            \
+    {                                                                                          \
+        std::cerr << "Arguments mismatch.\n";                                                  \
+        std::cerr << "Usage:\n";                                                               \
         std::cerr << "sashi status\n";                                                         \
         std::cerr << "sashi json <json message>\n";                                            \
         std::cerr << "Example: sashi json '{\"container_name\":\"<container name>\", ...}'\n"; \
-        return -1;                                                                              \
+        return -1;                                                                             \
     }
 
 /**
@@ -71,32 +71,33 @@ int main(int argc, char **argv)
         sigset_t mask;
         sigemptyset(&mask);
         sigaddset(&mask, SIGPIPE);
-        pthread_sigmask(SIG_BLOCK, &mask, NULL);
+        // sigprocmask is used instead of pthread_sigmask since this is single threaded.
+        sigprocmask(SIG_BLOCK, &mask, NULL);
     }
 
     if (argc > 1)
     {
-        // Take the realpath;
+        // Take the realpath of sash exec path.
         std::array<char, PATH_MAX> buffer;
         ::realpath(argv[0], buffer.data());
         buffer[PATH_MAX] = '\0';
-        cli::exec_dir = dirname(buffer.data());
+        const std::string exec_dir = dirname(buffer.data());
 
         const std::string command = argv[1];
 
         if (command == "status")
         {
-            std::string socket_path;
-            if (cli::get_socket_path(socket_path) == -1)
+            if (cli::init(exec_dir) == -1)
                 return -1;
 
-            std::cout << socket_path << std::endl;
+            std::cout << cli::ctx.socket_path << std::endl;
+            cli::deinit();
             return 0;
         }
         else if (command == "json" && argc == 3)
         {
             std::string output;
-            if (cli::init() == -1 || cli::write_to_socket(argv[2]) == -1 || cli::read_from_socket(output) == -1)
+            if (cli::init(exec_dir) == -1 || cli::write_to_socket(argv[2]) == -1 || cli::read_from_socket(output) == -1)
             {
                 cli::deinit();
                 return -1;

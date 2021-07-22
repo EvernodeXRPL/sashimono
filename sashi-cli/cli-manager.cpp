@@ -7,24 +7,25 @@ namespace cli
     constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
     constexpr const int BUFFER_SIZE = 1024;            // Max read buffer size.
 
+    cli_context ctx;
+
     bool init_success = false;
-    int socket_fd = -1;
-    std::string exec_dir;
 
     /**
      * Initialize the socket and connect.
      * @return 0 on success, -1 on error.
     */
-    int init()
+    int init(std::string_view sashi_dir)
     {
+        ctx.sashi_dir = sashi_dir;
+
         // Get the socket path from available location.
-        std::string socket_path;
-        if (get_socket_path(socket_path) == -1)
+        if (get_socket_path(ctx.socket_path) == -1)
             return -1;
 
         // Create the seq paket socket.
-        socket_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
-        if (socket_fd == -1)
+        ctx.socket_fd = socket(AF_UNIX, SOCK_SEQPACKET, 0);
+        if (ctx.socket_fd == -1)
         {
             std::cerr << errno << " :Error while creating the sashimono socket.\n";
             return -1;
@@ -34,16 +35,16 @@ namespace cli
         memset(&addr, 0, sizeof(struct sockaddr_un));
 
         addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, socket_path.data(), sizeof(addr.sun_path) - 1);
+        strncpy(addr.sun_path, ctx.socket_path.data(), sizeof(addr.sun_path) - 1);
 
-        if (connect(socket_fd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un)) == -1)
+        if (connect(ctx.socket_fd, (const struct sockaddr *)&addr, sizeof(struct sockaddr_un)) == -1)
         {
             // If permission denied, show a custom error.
             if (errno == EACCES)
                 std::cerr << "Permission denied: Only root or users in 'sashiadmin' group can access the sashimono socket.\n";
             else
                 std::cerr << errno << " :Error while connecting to the sashimono socket.\n";
-            close(socket_fd);
+            close(ctx.socket_fd);
             return -1;
         }
 
@@ -62,7 +63,7 @@ namespace cli
     int get_socket_path(std::string &socket_path)
     {
         // Check whether socket exists in exec path.
-        std::string path = exec_dir + std::string("/") + SOCKET_NAME;
+        std::string path = ctx.sashi_dir + std::string("/") + SOCKET_NAME;
         struct stat st;
         if (stat(path.data(), &st) == 0 && S_ISSOCK(st.st_mode))
         {
@@ -96,7 +97,7 @@ namespace cli
             return -1;
         }
 
-        if (write(socket_fd, message.data(), message.size()) == -1)
+        if (write(ctx.socket_fd, message.data(), message.size()) == -1)
         {
             std::cerr << errno << " :Error while wrting to the sashimono socket.\n";
             return -1;
@@ -120,7 +121,7 @@ namespace cli
 
         // Resize the message to max length and resize to original read length after reading.
         message.resize(BUFFER_SIZE);
-        const int res = read(socket_fd, message.data(), message.length());
+        const int res = read(ctx.socket_fd, message.data(), message.length());
         if (res == -1)
         {
             std::cerr << errno << " :Error while reading from the sashimono socket.\n";
@@ -137,6 +138,6 @@ namespace cli
     void deinit()
     {
         if (init_success)
-            close(socket_fd);
+            close(ctx.socket_fd);
     }
 }

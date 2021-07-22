@@ -27,7 +27,6 @@ add_executable(sashi
 
 target_link_libraries(sashi
     libboost_stacktrace_backtrace.a
-    pthread
     ${CMAKE_DL_LIBS} # Needed for stacktrace support
 )
 

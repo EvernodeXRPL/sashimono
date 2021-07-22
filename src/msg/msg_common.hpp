@@ -8,7 +8,6 @@ namespace msg
 {
     struct create_msg
     {
-        std::string id;
         std::string type;
         std::string pubkey;
         std::string contract_id;
@@ -106,7 +105,6 @@ namespace msg
     // We do nothing otherwise we take the value and update the config.
     struct initiate_msg
     {
-        std::string id;
         std::string type;
         std::string container_name;
         config_struct config;
@@ -114,34 +112,29 @@ namespace msg
 
     struct destroy_msg
     {
-        std::string id;
         std::string type;
         std::string container_name;
     };
 
     struct start_msg
     {
-        std::string id;
         std::string type;
         std::string container_name;
     };
 
     struct stop_msg
     {
-        std::string id;
         std::string type;
         std::string container_name;
     };
 
     // Message field names
     constexpr const char *FLD_TYPE = "type";
-    constexpr const char *FLD_REPLY_FOR = "reply_for";
     constexpr const char *FLD_CONTENT = "content";
     constexpr const char *FLD_PUBKEY = "owner_pubkey";
     constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_CONTRACT_ID = "contract_id";
     constexpr const char *FLD_IMAGE = "image";
-    constexpr const char *FLD_ID = "id";
     constexpr const char *FLD_KNOWN_PEERS = "known_peers";
     constexpr const char *FLD_MESH = "mesh";
     constexpr const char *FLD_USER = "user";

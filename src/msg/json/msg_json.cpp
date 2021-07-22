@@ -44,9 +44,9 @@ namespace msg::json
     }
 
     /**
-     * Extracts the message 'type' and 'id' values from the json document.
+     * Extracts the message 'type' values from the json document.
      */
-    int extract_type_and_id(std::string &extracted_type, std::string &extracted_id, const jsoncons::json &d)
+    int extract_type(std::string &extracted_type, const jsoncons::json &d)
     {
         if (!d.contains(msg::FLD_TYPE))
         {
@@ -60,19 +60,6 @@ namespace msg::json
             return -1;
         }
         extracted_type = d[msg::FLD_TYPE].as<std::string>();
-
-        if (!d.contains(msg::FLD_ID))
-        {
-            LOG_ERROR << "Field id is missing.";
-            return -1;
-        }
-
-        if (!d[msg::FLD_ID].is<std::string>())
-        {
-            LOG_ERROR << "Invalid id value.";
-            return -1;
-        }
-        extracted_id = d[msg::FLD_ID].as<std::string>();
 
         return 0;
     }
@@ -92,7 +79,7 @@ namespace msg::json
      */
     int extract_create_message(create_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type_and_id(msg.type, msg.id, d) == -1)
+        if (extract_type(msg.type, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_PUBKEY))
@@ -151,7 +138,7 @@ namespace msg::json
      */
     int extract_initiate_message(initiate_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type_and_id(msg.type, msg.id, d) == -1)
+        if (extract_type(msg.type, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -440,7 +427,7 @@ namespace msg::json
      */
     int extract_destroy_message(destroy_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type_and_id(msg.type, msg.id, d) == -1)
+        if (extract_type(msg.type, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -473,7 +460,7 @@ namespace msg::json
      */
     int extract_start_message(start_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type_and_id(msg.type, msg.id, d) == -1)
+        if (extract_type(msg.type, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -506,7 +493,7 @@ namespace msg::json
      */
     int extract_stop_message(stop_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type_and_id(msg.type, msg.id, d) == -1)
+        if (extract_type(msg.type, d) == -1)
             return -1;
 
         if (!d.contains(msg::FLD_CONTAINER_NAME))
@@ -530,7 +517,6 @@ namespace msg::json
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
      *            {
-     *              'reply_for': '<reply_for>'
      *              'type': '<message type>',
      *              "content": "<any string>"
      *            }
@@ -538,14 +524,10 @@ namespace msg::json
      * @param content Content inside the response.
      * @param json_content Whether content is a json string.
      */
-    void build_response(std::string &msg, std::string_view response_type, std::string_view reply_for, std::string_view content, const bool json_content)
+    void build_response(std::string &msg, std::string_view response_type, std::string_view content, const bool json_content)
     {
         msg.reserve(1024);
         msg += "{\"";
-        msg += msg::FLD_REPLY_FOR;
-        msg += SEP_COLON;
-        msg += std::string(reply_for);
-        msg += SEP_COMMA;
         msg += msg::FLD_TYPE;
         msg += SEP_COLON;
         msg += response_type;

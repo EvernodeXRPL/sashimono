@@ -69,7 +69,6 @@ const interatctiveInterface = async () => {
                         }
 
                         sendToAgent(JSON.stringify({
-                            id: uuidv4(),
                             type: 'create',
                             owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                             contract_id: contractId,
@@ -252,9 +251,7 @@ const interatctiveInterface = async () => {
                                 loggers: loggers ? loggers.split(',') : undefined
                             };
                         }
-                        console.log(config);
                         sendToAgent(JSON.stringify({
-                            id: uuidv4(),
                             type: 'initiate',
                             container_name: containerName,
                             config: config
@@ -263,7 +260,6 @@ const interatctiveInterface = async () => {
                     case 'destroy':
                         containerName = await askForInput('Container Name');
                         sendToAgent(JSON.stringify({
-                            id: uuidv4(),
                             type: 'destroy',
                             container_name: containerName
                         }))
@@ -271,7 +267,6 @@ const interatctiveInterface = async () => {
                     case 'start':
                         containerName = await askForInput('Container Name');
                         sendToAgent(JSON.stringify({
-                            id: uuidv4(),
                             type: 'start',
                             container_name: containerName
                         }))
@@ -279,7 +274,6 @@ const interatctiveInterface = async () => {
                     case 'stop':
                         containerName = await askForInput('Container Name');
                         sendToAgent(JSON.stringify({
-                            id: uuidv4(),
                             type: 'stop',
                             container_name: containerName
                         }))
@@ -345,7 +339,6 @@ const restApi = async () => {
         checkAgentStatus(res);
     });
     app.post("/create", (req, res) => {
-        const id = uuidv4();
         const msg = {
             id,
             type: 'create',
@@ -356,7 +349,6 @@ const restApi = async () => {
         sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/initiate", (req, res) => {
-        const id = uuidv4();
         const msg = {
             id,
             type: 'initiate',
@@ -371,7 +363,6 @@ const restApi = async () => {
         sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/start", (req, res) => {
-        const id = uuidv4();
         const msg = {
             id,
             type: 'start',
@@ -380,7 +371,6 @@ const restApi = async () => {
         sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/stop", (req, res) => {
-        const id = uuidv4();
         const msg = {
             id,
             type: 'stop',
@@ -389,7 +379,6 @@ const restApi = async () => {
         sendToAgent(JSON.stringify(msg), res);
     });
     app.post("/destroy", (req, res) => {
-        const id = uuidv4();
         const msg = {
             id,
             type: 'destroy',

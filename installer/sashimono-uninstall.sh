@@ -2,6 +2,7 @@
 # Sashimono agent uninstall script.
 # -q for non-interactive (quiet) mode
 
+user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
@@ -73,6 +74,9 @@ rm /etc/systemd/system/$sashimono_service.service
 
 echo "Deleting binaries..."
 rm -r $sashimono_bin
+
+echo "Deleting Sashimono CLI..."
+rm $user_bin/sashi
 
 echo "Deleting data folder..."
 rm -r $sashimono_data

@@ -2,6 +2,7 @@
 # Sashimono agent installation script.
 # This must be executed with root privileges.
 
+user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
 docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
@@ -61,6 +62,9 @@ function rollback() {
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
+
+# Install Sashimono CLI binaries into user bin dir.
+cp "$script_dir"/sashi $user_bin
 
 # Download and install rootless dockerd.
 "$script_dir"/docker-install.sh $docker_bin

@@ -91,6 +91,8 @@ namespace msg
         std::optional<size_t> max_file_count;      // Max no. of log files to keep.
     };
 
+    // Keep numerical config valus as optional so when updating the config if the value is empty
+    // We do nothing otherwise we take the value and update the config.
     struct config_struct
     {
         node_config node;
@@ -101,8 +103,6 @@ namespace msg
         log_config log;
     };
 
-    // Keep numerical config valus as optional so when updating the config if the value is empty
-    // We do nothing otherwise we take the value and update the config.
     struct initiate_msg
     {
         std::string type;

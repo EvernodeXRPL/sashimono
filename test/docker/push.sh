@@ -1,7 +1,5 @@
 #!/bin/bash
 
-repo=hotpocketdev/sashimono
+img=hotpocketdev/sashimono
 
-./build.sh
-docker push $repo:hp-ubt.20.04
-docker push $repo:hp-ubt.20.04-njs.14
+docker image push --all-tags $img

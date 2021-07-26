@@ -68,8 +68,8 @@ namespace conf
             cfg.system.max_storage_kbytes = 2048000; // Total 2GB
 
             const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);
-            cfg.docker.images["ubt.20.04"] = img_prefix + "/sashimono:hp-ubt.20.04";
-            cfg.docker.images["ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp-ubt.20.04-njs.14";
+            cfg.docker.images["hp.0.5-ubt.20.04"] = img_prefix + "/sashimono:hp.0.5-ubt.20.04";
+            cfg.docker.images["hp.0.5-ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp.0.5-ubt.20.04-njs.14";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

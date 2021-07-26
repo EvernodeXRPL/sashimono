@@ -7,7 +7,7 @@
 # ./cluster.sh create
 
 # Command modes:
-# select - Sets the currently active contract from the list of contracts defined in cluster config file.
+# select - Sets the currently active contract from the list of contracts defined in sashiconfig.json file.
 # create - Create new sashimono hotpocket instance in each node.
 # initiate - Initiate sashimono hotpocket instance with configs.
 # start - Start sashimono hotpocket instance.
@@ -20,8 +20,8 @@ if [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate"
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
-    echo " <N>: Required node no.   [N]: Optional node no."
+    echo " Expected: select | create <N> | initiate <N> | start <N> | stop <N> | destroy <N>"
+    echo " <N>: Node no."
     exit 1
 fi
 

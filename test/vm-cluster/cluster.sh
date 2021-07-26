@@ -92,6 +92,7 @@ else
 fi
 
 if [ $mode == "create" ]; then
+    # Read owner pubkey, contract id and image
     ownerpubkey=$(echo $continfo | jq -r '.owner_pubkey')
     if [ "$ownerpubkey" = "" ] || [ "$ownerpubkey" = "null" ]; then
         echo "owner_pubkey not specified."
@@ -110,13 +111,16 @@ if [ $mode == "create" ]; then
         exit 1
     fi
 
+    # Create an instance for given host.
     function createinstance() {
         hostaddr=$1
         command="sashi json '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
+        # If an output received consider updating the json file.
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
             echo $output
+            # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                 jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
             fi
@@ -136,19 +140,24 @@ if [ $mode == "create" ]; then
 fi
 
 if [ $mode == "initiate" ]; then
+    # Initiate the instance of given host.
     function initiateinstance() {
         hostaddr=$1
         peers=$2
         unl=$3
+        config=$(echo $continfo | jq -r ".config")
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         peerport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".peer_port")
         selfpeer="\"$hostaddr:$peerport\""
         # Remove self peer from the peers.
-        peers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
-        command="sashi json '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"peers\":$peers,\"unl\":$unl}'"
+        updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
+        # Update the in memory config with received peers and unl. 
+        updatedconfig=$(echo $config | jq ".mesh.known_peers = $updatedpeers" | jq ".contract.unl = $unl")
+        command="sashi json '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
         sshskp $sshuser@$hostaddr $command
     }
 
+    # Read each hosts config and construct cluster unl and peers.
     peers=""
     unl=""
     for hostaddr in "${hostaddrs[@]}"; do
@@ -168,6 +177,7 @@ if [ $mode == "initiate" ]; then
         unl+="\"$pubkey\","
     done
 
+    # Remove trainling comma(,) and add square brackets for the lists.
     peers="[${peers%?}]"
     unl="[${unl%?}]"
 
@@ -184,6 +194,7 @@ if [ $mode == "initiate" ]; then
 fi
 
 if [ $mode == "start" ]; then
+    # Start instance of given host.
     function startinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
@@ -204,6 +215,7 @@ if [ $mode == "start" ]; then
 fi
 
 if [ $mode == "stop" ]; then
+    # Stop instance of given host.
     function stopinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
@@ -224,14 +236,17 @@ if [ $mode == "stop" ]; then
 fi
 
 if [ $mode == "destroy" ]; then
+    # Destroy instance of given host.
     function destroyinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json '{\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
+        # If an output received consider updating the json file.
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
             echo $output
+            # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                 jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
             fi

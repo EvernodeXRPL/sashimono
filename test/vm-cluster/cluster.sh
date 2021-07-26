@@ -2,12 +2,12 @@
 # Sashimono cluster management script.
 
 # Usage examples:
-# ./cluster.sh select contract1
+# ./cluster.sh select contract
 # ./cluster.sh create 1
 # ./cluster.sh create
 
 # Command modes:
-# select - Sets the currently active contract from the list of contracts defined in sashiconfig.json file.
+# select - Sets the currently active contract from the list of contracts defined in config.json file.
 # create - Create new sashimono hotpocket instance in each node.
 # initiate - Initiate sashimono hotpocket instance with configs.
 # start - Start sashimono hotpocket instance.
@@ -21,7 +21,7 @@ if [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate"
 else
     echo "Invalid command."
     echo " Expected: select | create <N> | initiate <N> | start <N> | stop <N> | destroy <N>"
-    echo " <N>: Node no."
+    echo " <N>: Required node no.   [N]: Optional node no."
     exit 1
 fi
 
@@ -30,10 +30,10 @@ if ! command -v jq &>/dev/null; then
     sudo apt-get install -y jq
 fi
 
-configfile=sashiconfig.json
+configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract1","contracts":[{"name":"contract1","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","hosts":{"host1_ip":{}},"config":{}}]}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","hosts":{"host1_ip":{}},"config":{}}]}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -129,7 +129,7 @@ if [ $mode == "create" ]; then
 
     if [ $nodeid = -1 ]; then
         for hostaddr in "${hostaddrs[@]}"; do
-            createinstance $hostaddr
+            createinstance $hostaddr &
         done
         wait
     else
@@ -151,7 +151,7 @@ if [ $mode == "initiate" ]; then
         selfpeer="\"$hostaddr:$peerport\""
         # Remove self peer from the peers.
         updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
-        # Update the in memory config with received peers and unl. 
+        # Update the in memory config with received peers and unl.
         updatedconfig=$(echo $config | jq ".mesh.known_peers = $updatedpeers" | jq ".contract.unl = $unl")
         command="sashi json '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
         sshskp $sshuser@$hostaddr $command
@@ -183,7 +183,7 @@ if [ $mode == "initiate" ]; then
 
     if [ $nodeid = -1 ]; then
         for hostaddr in "${hostaddrs[@]}"; do
-            initiateinstance $hostaddr $peers $unl
+            initiateinstance $hostaddr $peers $unl &
         done
         wait
     else
@@ -204,7 +204,7 @@ if [ $mode == "start" ]; then
 
     if [ $nodeid = -1 ]; then
         for hostaddr in "${hostaddrs[@]}"; do
-            startinstance $hostaddr
+            startinstance $hostaddr &
         done
         wait
     else
@@ -225,7 +225,7 @@ if [ $mode == "stop" ]; then
 
     if [ $nodeid = -1 ]; then
         for hostaddr in "${hostaddrs[@]}"; do
-            stopinstance $hostaddr
+            stopinstance $hostaddr &
         done
         wait
     else
@@ -255,7 +255,7 @@ if [ $mode == "destroy" ]; then
 
     if [ $nodeid = -1 ]; then
         for hostaddr in "${hostaddrs[@]}"; do
-            destroyinstance $hostaddr
+            destroyinstance $hostaddr &
         done
         wait
     else

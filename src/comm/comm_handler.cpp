@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../conf.hpp"
 
-#define __HANDLE_RESPONSE(id, type, content, ret)                                                       \
-    {                                                                                                   \
-        std::string res;                                                                                \
-        msg_parser.build_response(res, type, id, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
-        send(res);                                                                                      \
-        return ret;                                                                                     \
+#define __HANDLE_RESPONSE(type, content, ret)                                                       \
+    {                                                                                               \
+        std::string res;                                                                            \
+        msg_parser.build_response(res, type, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
+        send(res);                                                                                  \
+        return ret;                                                                                 \
     }
 
 namespace comm
@@ -15,9 +15,10 @@ namespace comm
     constexpr uint32_t DEFAULT_MAX_MSG_SIZE = 1 * 1024 * 1024; // 1MB;
     bool init_success;
     constexpr const int POLL_TIMEOUT = 10;
-    constexpr const int BUFFER_SIZE = 1024;
+    constexpr const int BUFFER_SIZE = 4096;
     constexpr const int EMPTY_READ_TRESHOLD = 5;
     msg::msg_parser msg_parser;
+    std::vector<uint8_t> read_buffer(BUFFER_SIZE, 0); // Global buffer storing the current message.
 
     comm_ctx ctx;
 
@@ -113,12 +114,11 @@ namespace comm
             // Process queued messaged only if there's a socket connection.
             if (ctx.data_socket != -1)
             {
-                std::string message;
-                const int ret = read_socket(message);
-                if (ret == -1)
+                const int message_size = read_socket();
+                if (message_size == -1)
                     disconnect();
-                else if (ret > 0)
-                    handle_message(message);
+                else if (message_size > 0)
+                    handle_message(message_size);
                 else
                 {
                     empty_read_count++;
@@ -164,75 +164,82 @@ namespace comm
 
     /**
      * Handles the received message.
-     * @param msg Received message.
+     * @param message_size Message size.
      * @return 0 on success -1 on error.
     */
-    int handle_message(std::string_view msg)
+    int handle_message(const int message_size)
     {
-        std::string id, type;
-        if (msg_parser.parse(msg) == -1 || msg_parser.extract_type_and_id(type, id) == -1)
-            __HANDLE_RESPONSE("", "error", "format_error", -1);
+        std::string_view msg((char *)read_buffer.data(), message_size);
+        std::string type;
+        if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
+        {
+            read_buffer.clear();
+            __HANDLE_RESPONSE("error", "format_error", -1);
+        }
+
+        // Clear the buffer after the message is parsed.
+        read_buffer.clear();
 
         if (type == msg::MSGTYPE_CREATE)
         {
             msg::create_msg msg;
             if (msg_parser.extract_create_message(msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, "format_error", -1);
 
             hp::instance_info info;
             if (hp::create_new_instance(info, msg.pubkey, msg.contract_id, msg.image) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, "create_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, "create_error", -1);
 
             std::string create_res;
             msg_parser.build_create_response(create_res, info);
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_CREATE_RES, create_res, 0);
+            __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, create_res, 0);
         }
         else if (type == msg::MSGTYPE_INITIATE)
         {
             msg::initiate_msg msg;
             if (msg_parser.extract_initiate_message(msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "format_error", -1);
 
             if (hp::initiate_instance(msg.container_name, msg) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "init_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "init_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_INITIATE_RES, "initiated", 0);
+            __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "initiated", 0);
         }
         else if (type == msg::MSGTYPE_DESTROY)
         {
             msg::destroy_msg msg;
             if (msg_parser.extract_destroy_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "format_error", -1);
 
             if (hp::destroy_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroy_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "destroy_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_DESTROY_RES, "destroyed", 0);
+            __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "destroyed", 0);
         }
         else if (type == msg::MSGTYPE_START)
         {
             msg::start_msg msg;
             if (msg_parser.extract_start_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "format_error", -1);
 
             if (hp::start_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "start_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "start_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_START_RES, "started", 0);
+            __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "started", 0);
         }
         else if (type == msg::MSGTYPE_STOP)
         {
             msg::stop_msg msg;
             if (msg_parser.extract_stop_message(msg))
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "format_error", -1);
 
             if (hp::stop_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stop_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stop_error", -1);
 
-            __HANDLE_RESPONSE(msg.id, msg::MSGTYPE_STOP_RES, "stopped", 0);
+            __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stopped", 0);
         }
         else
-            __HANDLE_RESPONSE(id, "error", "type_error", -1);
+            __HANDLE_RESPONSE("error", "type_error", -1);
 
         return 0;
     }
@@ -254,21 +261,17 @@ namespace comm
     }
 
     /**
-     * Reads the message from the connected client.
-     * @param message Placeholder to store the message.
+     * Reads the message from the connected client to the global buffer.
      * @return Number of bytes read on success -1 on error.
      **/
-    int read_socket(std::string &message)
+    int read_socket()
     {
-        // Resize the message to max length and resize to original read length after reading.
-        message.resize(BUFFER_SIZE);
-        const int ret = read(ctx.data_socket, message.data(), message.length());
+        const int ret = read(ctx.data_socket, read_buffer.data(), BUFFER_SIZE);
         if (ret == -1)
         {
             LOG_ERROR << errno << ": Error receiving data.";
             return -1;
         }
-        message.resize(ret);
         return ret;
     }
 } // namespace comm

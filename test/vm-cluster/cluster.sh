@@ -112,10 +112,11 @@ if [ $mode == "create" ]; then
 
     function createinstance() {
         hostaddr=$1
-        command="sashi json '{\"id\":\"aa\",\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
+        command="sashi json '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
+            echo $output
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                 jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
             fi
@@ -144,8 +145,7 @@ if [ $mode == "initiate" ]; then
         selfpeer="\"$hostaddr:$peerport\""
         # Remove self peer from the peers.
         peers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
-        echo $peers
-        command="sashi json '{\"id\":\"aa\",\"type\":\"initiate\",\"container_name\":\"$containername\",\"peers\":$peers,\"unl\":$unl}'"
+        command="sashi json '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"peers\":$peers,\"unl\":$unl}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -187,7 +187,7 @@ if [ $mode == "start" ]; then
     function startinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"id\":\"aa\",\"type\":\"start\",\"container_name\":\"$containername\"}'"
+        command="sashi json '{\"type\":\"start\",\"container_name\":\"$containername\"}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -207,7 +207,7 @@ if [ $mode == "stop" ]; then
     function stopinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"id\":\"aa\",\"type\":\"stop\",\"container_name\":\"$containername\"}'"
+        command="sashi json '{\"type\":\"stop\",\"container_name\":\"$containername\"}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -227,7 +227,7 @@ if [ $mode == "destroy" ]; then
     function destroyinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"id\":\"aa\",\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
+        command="sashi json '{\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')

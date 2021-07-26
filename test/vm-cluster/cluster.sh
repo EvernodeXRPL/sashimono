@@ -20,7 +20,7 @@ if [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate"
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select | create <N> | initiate <N> | start <N> | stop <N> | destroy <N>"
+    echo " Expected: select <contract name> | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
     echo " <N>: Required node no.   [N]: Optional node no."
     exit 1
 fi

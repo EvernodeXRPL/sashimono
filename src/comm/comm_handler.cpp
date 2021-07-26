@@ -3,11 +3,11 @@
 #include "../conf.hpp"
 
 #define __HANDLE_RESPONSE(type, content, ret)                                                       \
-    {                                                                                                   \
-        std::string res;                                                                                \
+    {                                                                                               \
+        std::string res;                                                                            \
         msg_parser.build_response(res, type, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
-        send(res);                                                                                      \
-        return ret;                                                                                     \
+        send(res);                                                                                  \
+        return ret;                                                                                 \
     }
 
 namespace comm
@@ -18,6 +18,7 @@ namespace comm
     constexpr const int BUFFER_SIZE = 4096;
     constexpr const int EMPTY_READ_TRESHOLD = 5;
     msg::msg_parser msg_parser;
+    std::vector<uint8_t> buffer(BUFFER_SIZE, 0); // Global buffer storing the current message.
 
     comm_ctx ctx;
 
@@ -113,12 +114,11 @@ namespace comm
             // Process queued messaged only if there's a socket connection.
             if (ctx.data_socket != -1)
             {
-                std::string message;
-                const int ret = read_socket(message);
-                if (ret == -1)
+                const int message_size = read_socket();
+                if (message_size == -1)
                     disconnect();
-                else if (ret > 0)
-                    handle_message(message);
+                else if (message_size > 0)
+                    handle_message(message_size);
                 else
                 {
                     empty_read_count++;
@@ -164,14 +164,21 @@ namespace comm
 
     /**
      * Handles the received message.
-     * @param msg Received message.
+     * @param message_size Message size.
      * @return 0 on success -1 on error.
     */
-    int handle_message(std::string_view msg)
+    int handle_message(const int message_size)
     {
+        std::string_view msg((char *)buffer.data(), message_size);
         std::string type;
         if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
+        {
+            buffer.clear();
             __HANDLE_RESPONSE("error", "format_error", -1);
+        }
+
+        // Clear the buffer after the message is parsed.
+        buffer.clear();
 
         if (type == msg::MSGTYPE_CREATE)
         {
@@ -254,21 +261,17 @@ namespace comm
     }
 
     /**
-     * Reads the message from the connected client.
-     * @param message Placeholder to store the message.
+     * Reads the message from the connected client to the global buffer.
      * @return Number of bytes read on success -1 on error.
      **/
-    int read_socket(std::string &message)
+    int read_socket()
     {
-        // Resize the message to max length and resize to original read length after reading.
-        message.resize(BUFFER_SIZE);
-        const int ret = read(ctx.data_socket, message.data(), message.length());
+        const int ret = read(ctx.data_socket, buffer.data(), BUFFER_SIZE);
         if (ret == -1)
         {
             LOG_ERROR << errno << ": Error receiving data.";
             return -1;
         }
-        message.resize(ret);
         return ret;
     }
 } // namespace comm

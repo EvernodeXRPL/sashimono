@@ -33,7 +33,7 @@ fi
 configfile=sashiconfig.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"echo","contracts":[{"name":"echo","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","hosts":{"n1.evernode.org":{}},"config":{}}]}' | jq . >$configfile
+    echo '{"selected":"contract1","contracts":[{"name":"contract1","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","hosts":{"host1_ip":{}},"config":{}}]}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -74,13 +74,11 @@ if [ "$sshuser" == "" ] || [ "$sshuser" == "null" ]; then
     exit 1
 fi
 
-function sshexec() {
-    if [ "$sshpass" == "" ] || [ "$sshpass" == "null" ]; then
-        ssh -o StrictHostKeychecking=no $1 $2
-    else
-        sshpass -p $sshpass ssh -o StrictHostKeychecking=no $1 $2
-    fi
-}
+shopt -s expand_aliases
+alias sshskp='ssh -o StrictHostKeychecking=no'
+if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
+    alias sshskp='sshpass -p $sshpass ssh -o StrictHostKeychecking=no'
+fi
 
 hosts=$(echo $continfo | jq -r '.hosts')
 hostaddrs=($(echo $hosts | jq -r 'keys[]'))
@@ -115,12 +113,11 @@ if [ $mode == "create" ]; then
     function createinstance() {
         hostaddr=$1
         command="sashi json '{\"id\":\"aa\",\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
-        output=$(sshexec $sshuser@$hostaddr $command)
+        output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
-            echo $output
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.$hostaddr) |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
             fi
         fi
     }
@@ -142,15 +139,20 @@ if [ $mode == "initiate" ]; then
         hostaddr=$1
         peers=$2
         unl=$3
-        containername=$(echo $continfo | jq -r ".hosts.$hostaddr.name")
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+        peerport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".peer_port")
+        selfpeer="\"$hostaddr:$peerport\""
+        # Remove self peer from the peers.
+        peers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
+        echo $peers
         command="sashi json '{\"id\":\"aa\",\"type\":\"initiate\",\"container_name\":\"$containername\",\"peers\":$peers,\"unl\":$unl}'"
-        sshexec $sshuser@$hostaddr $command
+        sshskp $sshuser@$hostaddr $command
     }
 
     peers=""
     unl=""
     for hostaddr in "${hostaddrs[@]}"; do
-        hostinfo=$(echo $continfo | jq -r ".hosts.$hostaddr")
+        hostinfo=$(echo $continfo | jq -r ".hosts.\"$hostaddr\"")
         pubkey=$(echo $hostinfo | jq -r '.pubkey')
         ip=$(echo $hostinfo | jq -r '.ip')
         peerport=$(echo $hostinfo | jq -r '.peer_port')
@@ -162,7 +164,7 @@ if [ $mode == "initiate" ]; then
             echo "Host info is empty for $hostaddr"
             exit 1
         fi
-        peers+="\"$ip:$peerport\","
+        peers+="\"$hostaddr:$peerport\","
         unl+="\"$pubkey\","
     done
 
@@ -184,9 +186,9 @@ fi
 if [ $mode == "start" ]; then
     function startinstance() {
         hostaddr=$1
-        containername=$(echo $continfo | jq -r ".hosts.$hostaddr.name")
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json '{\"id\":\"aa\",\"type\":\"start\",\"container_name\":\"$containername\"}'"
-        sshexec $sshuser@$hostaddr $command
+        sshskp $sshuser@$hostaddr $command
     }
 
     if [ $nodeid = -1 ]; then
@@ -204,9 +206,9 @@ fi
 if [ $mode == "stop" ]; then
     function stopinstance() {
         hostaddr=$1
-        containername=$(echo $continfo | jq -r ".hosts.$hostaddr.name")
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json '{\"id\":\"aa\",\"type\":\"stop\",\"container_name\":\"$containername\"}'"
-        sshexec $sshuser@$hostaddr $command
+        sshskp $sshuser@$hostaddr $command
     }
 
     if [ $nodeid = -1 ]; then
@@ -224,14 +226,14 @@ fi
 if [ $mode == "destroy" ]; then
     function destroyinstance() {
         hostaddr=$1
-        containername=$(echo $continfo | jq -r ".hosts.$hostaddr.name")
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json '{\"id\":\"aa\",\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
-        output=$(sshexec $sshuser@$hostaddr $command)
+        output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
             echo $output
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.$hostaddr) |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
             fi
         fi
     }

@@ -2,7 +2,7 @@
 # Sashimono cluster management script.
 
 # Usage examples:
-# ./cluster.sh select
+# ./cluster.sh select contract1
 # ./cluster.sh create 1
 # ./cluster.sh create
 

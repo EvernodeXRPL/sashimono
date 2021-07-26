@@ -18,7 +18,7 @@ namespace comm
     constexpr const int BUFFER_SIZE = 4096;
     constexpr const int EMPTY_READ_TRESHOLD = 5;
     msg::msg_parser msg_parser;
-    std::vector<uint8_t> buffer(BUFFER_SIZE, 0); // Global buffer storing the current message.
+    std::vector<uint8_t> read_buffer(BUFFER_SIZE, 0); // Global buffer storing the current message.
 
     comm_ctx ctx;
 
@@ -169,16 +169,16 @@ namespace comm
     */
     int handle_message(const int message_size)
     {
-        std::string_view msg((char *)buffer.data(), message_size);
+        std::string_view msg((char *)read_buffer.data(), message_size);
         std::string type;
         if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
         {
-            buffer.clear();
+            read_buffer.clear();
             __HANDLE_RESPONSE("error", "format_error", -1);
         }
 
         // Clear the buffer after the message is parsed.
-        buffer.clear();
+        read_buffer.clear();
 
         if (type == msg::MSGTYPE_CREATE)
         {
@@ -266,7 +266,7 @@ namespace comm
      **/
     int read_socket()
     {
-        const int ret = read(ctx.data_socket, buffer.data(), BUFFER_SIZE);
+        const int ret = read(ctx.data_socket, read_buffer.data(), BUFFER_SIZE);
         if (ret == -1)
         {
             LOG_ERROR << errno << ": Error receiving data.";

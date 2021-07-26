@@ -83,7 +83,7 @@ namespace hp
 
     int read_json_values(const jsoncons::ojson &d, std::string &hpfs_log_level, bool &is_full_history);
 
-    int write_json_values(jsoncons::ojson &d, const msg::initiate_msg &config_msg);
+    int write_json_values(jsoncons::ojson &d, const msg::config_struct &config);
 
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name);
 

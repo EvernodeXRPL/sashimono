@@ -5,7 +5,7 @@ namespace cli
 {
     constexpr const char *SOCKET_NAME = "sa.sock";     // Name of the sashimono socket.
     constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
-    constexpr const int BUFFER_SIZE = 1024;            // Max read buffer size.
+    constexpr const int BUFFER_SIZE = 4096;            // Max read buffer size.
 
     cli_context ctx;
 

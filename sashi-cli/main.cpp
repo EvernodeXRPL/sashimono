@@ -10,7 +10,7 @@
         std::cerr << "Usage:\n";                                                               \
         std::cerr << "sashi status\n";                                                         \
         std::cerr << "sashi json <json message>\n";                                            \
-        std::cerr << "Example: sashi json '{\"container_name\":\"<container name>\", ...}'\n"; \
+        std::cerr << "Example: sashi json '{\"type\":\"<instruction_type>\", ...}'\n"; \
         return -1;                                                                             \
     }
 

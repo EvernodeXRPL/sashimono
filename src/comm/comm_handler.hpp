@@ -26,13 +26,13 @@ namespace comm
 
     void comm_handler_loop();
 
-    int handle_message(std::string_view msg);
+    int handle_message(const int message_size);
 
     int send(std::string_view message);
 
     void wait();
 
-    int read_socket(std::string &message);
+    int read_socket();
 
 } // namespace comm
 

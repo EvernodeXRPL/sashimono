@@ -61,7 +61,7 @@ int main(int argc, char **argv)
                     }
                     close(archive_fd);
                     std::vector<uint8_t> msg;
-                    create_upload_success_message(msg, BUNDLE_NAME);
+                    create_response_message(msg, "uploadResult", "Zip file uploaded successfully");
                     hp_write_user_msg(user, msg.data(), msg.size());
                     // Rename script.sh to post_exec.sh and grant executing permissions.
                     rename(SCRIPT_NAME, HP_POST_EXEC_SCRIPT_NAME);
@@ -79,7 +79,7 @@ int main(int argc, char **argv)
                 else if (type == "status")
                 {
                     std::vector<uint8_t> msg;
-                    create_status_message(msg, "Bootstrap contract is online");
+                    create_response_message(msg, "statusResult", "Bootstrap contract is online");
                     hp_write_user_msg(user, msg.data(), msg.size());
                 }
                 else
@@ -103,26 +103,12 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void create_upload_success_message(std::vector<uint8_t> &msg, std::string_view filename)
+void create_response_message(std::vector<uint8_t> &msg, std::string_view type, std::string_view message)
 {
     jsoncons::bson::bson_bytes_encoder encoder(msg);
     encoder.begin_object();
     encoder.key("type");
-    encoder.string_value("uploadResult");
-    encoder.key("status");
-    encoder.string_value("ok");
-    encoder.key("fileName");
-    encoder.string_value(filename);
-    encoder.end_object();
-    encoder.flush();
-}
-
-void create_status_message(std::vector<uint8_t> &msg, std::string_view message)
-{
-    jsoncons::bson::bson_bytes_encoder encoder(msg);
-    encoder.begin_object();
-    encoder.key("type");
-    encoder.string_value("statusResult");
+    encoder.string_value(type);
     encoder.key("status");
     encoder.string_value("ok");
     encoder.key("message");

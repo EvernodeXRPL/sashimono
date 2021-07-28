@@ -4,16 +4,6 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
-#define PARSE_ERROR                                                                            \
-    {                                                                                          \
-        std::cerr << "Arguments mismatch.\n";                                                  \
-        std::cerr << "Usage:\n";                                                               \
-        std::cerr << "sashi status\n";                                                         \
-        std::cerr << "sashi json -m <json message>\n";                                            \
-        std::cerr << "Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'\n"; \
-        return -1;                                                                             \
-    }
-
 /**
  * Performs any cleanup on graceful application termination.
  */
@@ -67,31 +57,31 @@ void std_terminate() noexcept
  */
 int parse_cmd(int argc, char **argv)
 {
+    // Initialize CLI.
+    CLI::App app("Sashimono CLI");
+    app.set_help_all_flag("--help-all", "Expand all help");
+
+    // Initialize subcommands.
+    CLI::App *status = app.add_subcommand("status", "Check socket accessibility");
+    CLI::App *json = app.add_subcommand("json", "JSON payload - Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+
+    // Initialize options.
+    std::string json_message;
+    json->add_option("-m,--message", json_message, "JSON message");
+
+    CLI11_PARSE(app, argc, argv);
+
     if (argc > 1)
     {
-        // initialize cli
-        CLI::App app("Sashimono - Sashi-cli.");
-        app.set_help_all_flag("--help-all", "Expand all help");
-
-        // initialize subcommands
-        CLI::App *status = app.add_subcommand("status", "Check socket accessibility");
-        CLI::App *json = app.add_subcommand("json", "Instant message - Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
-
-        // initialize options
-        std::string jsonMessage="";
-        json->add_option("-m,--message", jsonMessage, "json message");
-
-        CLI11_PARSE(app, argc, argv);
-
         // Take the realpath of sash exec path.
         std::array<char, PATH_MAX> buffer;
         ::realpath(argv[0], buffer.data());
         buffer[PATH_MAX] = '\0';
         const std::string exec_dir = dirname(buffer.data());
 
-        // verifying subcommands
-        const std::string subCommand = argv[1];
-        if (subCommand == "status")
+        // Verifying subcommands.
+        const std::string sub_command = argv[1];
+        if (sub_command == "status")
         {
             if (cli::init(exec_dir) == -1)
                 return -1;
@@ -100,26 +90,22 @@ int parse_cmd(int argc, char **argv)
             cli::deinit();
             return 0;
         }
-        else if (subCommand == "json" && argc == 4)
+        else if (sub_command == "json" && argc == 4 && !json_message.empty())
         {
-            if (!jsonMessage.empty())
+            std::string output;
+            if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
             {
-                std::string output;
-                if (cli::init(exec_dir) == -1 || cli::write_to_socket(argv[3]) == -1 || cli::read_from_socket(output) == -1)
-                {
-                    cli::deinit();
-                    return -1;
-                }
-
-                std::cout << output << std::endl;
                 cli::deinit();
-                return 0;
+                return -1;
             }
+
+            std::cout << output << std::endl;
+            cli::deinit();
+            return 0;
         }
     }
-
-    // If all extractions fail display help message and return -1.
-    PARSE_ERROR
+    std::cout << app.help();
+    return -1;
 }
 
 int main(int argc, char **argv)
@@ -139,6 +125,4 @@ int main(int argc, char **argv)
     }
 
     return parse_cmd(argc, argv);
-
-    PARSE_ERROR
 }

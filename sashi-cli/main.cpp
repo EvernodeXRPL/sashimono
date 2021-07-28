@@ -9,8 +9,8 @@
         std::cerr << "Arguments mismatch.\n";                                                  \
         std::cerr << "Usage:\n";                                                               \
         std::cerr << "sashi status\n";                                                         \
-        std::cerr << "sashi json <json message>\n";                                            \
-        std::cerr << "Example: sashi json '{\"type\":\"<instruction_type>\", ...}'\n"; \
+        std::cerr << "sashi json -m <json message>\n";                                            \
+        std::cerr << "Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'\n"; \
         return -1;                                                                             \
     }
 
@@ -59,6 +59,69 @@ void std_terminate() noexcept
     exit(1);
 }
 
+/**
+ * Parses CLI args and extracts sashimono agent command and parameters given using CLI11 library.
+ * @param argc Argument count.
+ * @param argv Arguments.
+ * @returns 0 on success, -1 on error.
+ */
+int parse_cmd(int argc, char **argv)
+{
+    if (argc > 1)
+    {
+        // initialize cli
+        CLI::App app("Sashimono - Sashi-cli.");
+        app.set_help_all_flag("--help-all", "Expand all help");
+
+        // initialize subcommands
+        CLI::App *status = app.add_subcommand("status", "Check socket accessibility");
+        CLI::App *json = app.add_subcommand("json", "Instant message - Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+
+        // initialize options
+        std::string jsonMessage="";
+        json->add_option("-m,--message", jsonMessage, "json message");
+
+        CLI11_PARSE(app, argc, argv);
+
+        // Take the realpath of sash exec path.
+        std::array<char, PATH_MAX> buffer;
+        ::realpath(argv[0], buffer.data());
+        buffer[PATH_MAX] = '\0';
+        const std::string exec_dir = dirname(buffer.data());
+
+        // verifying subcommands
+        const std::string subCommand = argv[1];
+        if (subCommand == "status")
+        {
+            if (cli::init(exec_dir) == -1)
+                return -1;
+
+            std::cout << cli::ctx.socket_path << std::endl;
+            cli::deinit();
+            return 0;
+        }
+        else if (subCommand == "json" && argc == 4)
+        {
+            if (!jsonMessage.empty())
+            {
+                std::string output;
+                if (cli::init(exec_dir) == -1 || cli::write_to_socket(argv[3]) == -1 || cli::read_from_socket(output) == -1)
+                {
+                    cli::deinit();
+                    return -1;
+                }
+
+                std::cout << output << std::endl;
+                cli::deinit();
+                return 0;
+            }
+        }
+    }
+
+    // If all extractions fail display help message and return -1.
+    PARSE_ERROR
+}
+
 int main(int argc, char **argv)
 {
     // Register exception and segfault handlers.
@@ -75,39 +138,7 @@ int main(int argc, char **argv)
         sigprocmask(SIG_BLOCK, &mask, NULL);
     }
 
-    if (argc > 1)
-    {
-        // Take the realpath of sash exec path.
-        std::array<char, PATH_MAX> buffer;
-        ::realpath(argv[0], buffer.data());
-        buffer[PATH_MAX] = '\0';
-        const std::string exec_dir = dirname(buffer.data());
-
-        const std::string command = argv[1];
-
-        if (command == "status")
-        {
-            if (cli::init(exec_dir) == -1)
-                return -1;
-
-            std::cout << cli::ctx.socket_path << std::endl;
-            cli::deinit();
-            return 0;
-        }
-        else if (command == "json" && argc == 3)
-        {
-            std::string output;
-            if (cli::init(exec_dir) == -1 || cli::write_to_socket(argv[2]) == -1 || cli::read_from_socket(output) == -1)
-            {
-                cli::deinit();
-                return -1;
-            }
-
-            std::cout << output << std::endl;
-            cli::deinit();
-            return 0;
-        }
-    }
+    return parse_cmd(argc, argv);
 
     PARSE_ERROR
 }

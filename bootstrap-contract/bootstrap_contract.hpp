@@ -7,4 +7,6 @@
 
 void create_upload_success_message(std::vector<uint8_t> &msg, std::string_view filename);
 
+void create_status_message(std::vector<uint8_t> &msg, std::string_view message);
+
 #endif

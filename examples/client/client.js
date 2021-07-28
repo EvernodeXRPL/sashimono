@@ -4,8 +4,6 @@ const bson = require('bson');
 var path = require("path");
 const HotPocket = require('./lib/hp-client-lib');
 
-const BUNDLE_NAME = "bundle.zip";
-
 async function main() {
     const workingDir = "datadir/";
 
@@ -59,18 +57,30 @@ async function main() {
     hpc.on(HotPocket.events.contractOutput, (r) => {
 
         r.outputs.forEach(output => {
-
-            const result = bson.deserialize(output);
-            if (result.type == "uploadResult") {
-                if (result.status == "ok")
-                    console.log("File " + result.fileName + " uploaded successfully.");
-                else
-                    console.log("File " + result.fileName + " upload failed. reason: " + result.status);
+            // If bson.deserialize error occured it'll be caught by this try catch.
+            try
+            {
+                const result = bson.deserialize(output);
+                if (result.type == "uploadResult") {
+                    if (result.status == "ok")
+                        console.log("File " + result.fileName + " uploaded successfully.");
+                    else
+                        console.log("File " + result.fileName + " upload failed. reason: " + result.status);
+                }
+                if (result.type == "statusResult") {
+                    if (result.status == "ok")
+                        console.log(result.message);
+                    else
+                        console.log("Status failed. reason: " + result.status);
+                }
+                else {
+                    console.log("Unknown contract output.");
+                }
             }
-            else {
-                console.log("Unknown contract output.");
+            catch (e)
+            {
+                console.log(e)
             }
-
         });
     })
 
@@ -78,36 +88,38 @@ async function main() {
 
     const input_pump = () => {
         rl.question('', async (inp) => {
+            if (inp.startsWith("status")) {
+                const input = await hpc.submitContractInput(bson.serialize({
+                    type: "status"
+                }));
 
-            if (inp.startsWith("upload ")) {
+                const submission = await input.submissionStatus;
+                if (submission.status != "accepted")
+                    console.log("Status failed. reason: " + submission.reason);
+            }
+            else if (inp.startsWith("upload ")) {
 
                 const filePath = inp.substr(7);
                 const fileName = path.basename(filePath);
-                if (fileName !== BUNDLE_NAME) {
-                    console.error(`Uploding file name should be ${BUNDLE_NAME}`);
-                }
-                else {
-                    if (fs.existsSync(filePath)) {
-                        const fileContent = fs.readFileSync(filePath);
-                        const sizeKB = Math.round(fileContent.length / 1024);
-                        console.log("Uploading file " + fileName + " (" + sizeKB + " KB)");
+                if (fs.existsSync(filePath)) {
+                    const fileContent = fs.readFileSync(filePath);
+                    const sizeKB = Math.round(fileContent.length / 1024);
+                    console.log("Uploading file " + fileName + " (" + sizeKB + " KB)");
 
-                        const input = await hpc.submitContractInput(bson.serialize({
-                            type: "upload",
-                            fileName: fileName,
-                            content: fileContent
-                        }));
+                    const input = await hpc.submitContractInput(bson.serialize({
+                        type: "upload",
+                        content: fileContent
+                    }));
 
-                        const submission = await input.submissionStatus;
-                        if (submission.status != "accepted")
-                            console.log("Upload failed. reason: " + submission.reason);
-                    }
-                    else
-                        console.log("File not found");
+                    const submission = await input.submissionStatus;
+                    if (submission.status != "accepted")
+                        console.log("Upload failed. reason: " + submission.reason);
                 }
+                else
+                    console.log("File not found");
             }
             else {
-                console.log("Invalid command. [upload <local path>] expected.")
+                console.log("Invalid command. [status] or [upload <local path>] expected.")
             }
 
             input_pump();

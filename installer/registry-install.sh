@@ -5,7 +5,7 @@ docker_bin=$1
 user=$2
 port=$3
 hubacc="hotpocketdev"
-images=("sashimono:hp-ubt.20.04" "sashimono:hp-ubt.20.04-njs.14")
+images=("sashimono:hp.0.5-ubt.20.04" "sashimono:hp.0.5-ubt.20.04-njs.14")
 user_dir=/home/$user
 
 # Check if users already exists.

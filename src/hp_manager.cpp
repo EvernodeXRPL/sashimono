@@ -604,9 +604,9 @@ namespace hp
         len = 12 + (username.length() * 2) + contract_dir.length();
         char own_command[len];
         sprintf(own_command, CHOWN_DIR, username.data(), username.data(), contract_dir.data());
-        if (system(own_command) != 0)
+        if (system(own_command) != 0 || chmod(contract_dir.data(), util::DIR_PERMS) == -1)
         {
-            LOG_ERROR << "Changing contract ownership failed " << contract_dir;
+            LOG_ERROR << "Changing contract ownership and permissions failed " << contract_dir;
             return -1;
         }
 

@@ -3,7 +3,6 @@
 
 namespace util
 {
-    constexpr mode_t DIR_PERMS = 0755;
     constexpr const char *RUN_SH = "chmod +x %s && sudo bash %s %s"; // Enable execute permission before running in case bash script does not have the permission.
 
     const std::string to_hex(const std::string_view bin)

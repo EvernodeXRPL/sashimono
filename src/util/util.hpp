@@ -8,6 +8,7 @@
  */
 namespace util
 {
+    constexpr const mode_t DIR_PERMS = 0755;
     struct user_info
     {
         std::string username;

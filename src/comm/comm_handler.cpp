@@ -41,8 +41,7 @@ namespace comm
 
         const std::string command = "chown :sashiadmin " + conf::ctx.socket_path;
 
-        char mode[] = "0660";                              // rw-rw----
-        const mode_t permission_mode = strtol(mode, 0, 8); // Char to octal conversion.
+        const mode_t permission_mode = 0660; // rw-rw----
 
         if (bind(ctx.connection_socket, (const struct sockaddr *)&sock_name, sizeof(struct sockaddr_un)) == -1 ||
             chmod(conf::ctx.socket_path.c_str(), permission_mode) == -1 ||

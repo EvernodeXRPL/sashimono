@@ -81,7 +81,7 @@ if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
 fi
 
 hosts=$(echo $continfo | jq -r '.hosts')
-hostaddrs=($(echo $hosts | jq -r 'keys[]'))
+hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
 
 # Check if second arg (nodeid) is a number or not.
 # If it's a number then reduce 1 from it to get zero-based node index.
@@ -114,16 +114,22 @@ if [ $mode == "create" ]; then
     # Create an instance for given host.
     function createinstance() {
         hostaddr=$1
-        command="sashi json '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
-        output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
-        # If an output received consider updating the json file.
-        if [ ! "$output" = "" ]; then
-            content=$(echo $output | jq -r '.content')
-            echo $output
-            # Update the json if no error.
-            if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+        # If host info is already populated, skip instance creation.
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+        if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
+            command="sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
+            output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
+            # If an output received consider updating the json file.
+            if [ ! "$output" = "" ]; then
+                content=$(echo $output | jq -r '.content')
+                echo $output
+                # Update the json if no error.
+                if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
+                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                fi
             fi
+        else
+            echo "Instance is already created for $hostaddr"
         fi
     }
 
@@ -153,7 +159,7 @@ if [ $mode == "initiate" ]; then
         updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
         # Update the in memory config with received peers and unl.
         updatedconfig=$(echo $config | jq ".mesh.known_peers = $updatedpeers" | jq ".contract.unl = $unl")
-        command="sashi json '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
+        command="sashi json -m '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -198,7 +204,7 @@ if [ $mode == "start" ]; then
     function startinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"type\":\"start\",\"container_name\":\"$containername\"}'"
+        command="sashi json -m '{\"type\":\"start\",\"container_name\":\"$containername\"}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -219,7 +225,7 @@ if [ $mode == "stop" ]; then
     function stopinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"type\":\"stop\",\"container_name\":\"$containername\"}'"
+        command="sashi json -m '{\"type\":\"stop\",\"container_name\":\"$containername\"}'"
         sshskp $sshuser@$hostaddr $command
     }
 
@@ -240,7 +246,7 @@ if [ $mode == "destroy" ]; then
     function destroyinstance() {
         hostaddr=$1
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        command="sashi json '{\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
+        command="sashi json -m '{\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         # If an output received consider updating the json file.
         if [ ! "$output" = "" ]; then

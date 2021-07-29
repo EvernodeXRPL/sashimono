@@ -294,7 +294,7 @@ const interatctiveInterface = async () => {
 
 const sendToAgent = (msg, res = null) => {
     try {
-        let output = execSync(`${cliPath} json '${msg}'`, { stdio: 'pipe' });
+        let output = execSync(`${cliPath} json -m '${msg}'`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
         message = JSON.parse(message.substring(0, message.length - 2)); // Skipping the \n from the result.
         console.log('Received: ', message);

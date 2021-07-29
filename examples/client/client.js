@@ -63,15 +63,15 @@ async function main() {
                 const result = bson.deserialize(output);
                 if (result.type == "uploadResult") {
                     if (result.status == "ok")
-                        console.log(`Zip upload response: ${result.message}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> ${result.message}`);
                     else
-                        console.log(`Zip upload failed. reason: ${result.status}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> Zip upload failed. reason: ${result.status}`);
                 }
                 else if (result.type == "statusResult") {
                     if (result.status == "ok")
-                        console.log(`Status response: ${result.message}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> ${result.message}`);
                     else
-                        console.log(`Status failed. reason: ${result.status}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> Status failed. reason: ${result.status}`);
                 }
                 else {
                     console.log("Unknown contract output.");

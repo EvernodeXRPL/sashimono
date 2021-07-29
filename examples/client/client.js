@@ -67,7 +67,7 @@ async function main() {
                     else
                         console.log(`Zip upload failed. reason: ${result.status}`);
                 }
-                if (result.type == "statusResult") {
+                else if (result.type == "statusResult") {
                     if (result.status == "ok")
                         console.log(`Status response: ${result.message}`);
                     else

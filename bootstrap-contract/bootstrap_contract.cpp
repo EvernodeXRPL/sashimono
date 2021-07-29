@@ -65,8 +65,7 @@ int main(int argc, char **argv)
                     hp_write_user_msg(user, msg.data(), msg.size());
                     // Rename script.sh to post_exec.sh and grant executing permissions.
                     rename(SCRIPT_NAME, HP_POST_EXEC_SCRIPT_NAME);
-                    char mode[] = "0777";
-                    const mode_t permission_mode = strtol(mode, 0, 8); // Char to octal conversion.
+                    const mode_t permission_mode = 0777;
                     if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)
                     {
                         std::cerr << errno << ": Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;

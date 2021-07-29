@@ -72,7 +72,7 @@ const interatctiveInterface = async () => {
                             type: 'create',
                             owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                             contract_id: contractId,
-                            image: (image == "1" ? "ubt.20.04" : "ubt.20.04-njs.14")
+                            image: (image == "1" ? "hp.0.5-ubt.20.04" : "hp.0.5-ubt.20.04-njs.14")
                         }));
                         break;
                     case 'initiate':
@@ -294,7 +294,7 @@ const interatctiveInterface = async () => {
 
 const sendToAgent = (msg, res = null) => {
     try {
-        let output = execSync(`${cliPath} json '${msg}'`, { stdio: 'pipe' });
+        let output = execSync(`${cliPath} json -m '${msg}'`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
         message = JSON.parse(message.substring(0, message.length - 2)); // Skipping the \n from the result.
         console.log('Received: ', message);
@@ -344,7 +344,7 @@ const restApi = async () => {
             type: 'create',
             owner_pubkey: req.body.owner_pubkey,
             contract_id: (req.body.contract_id === "") ? uuidv4() : req.body.contract_id,
-            image: req.body.image ? req.body.image : "ubt.20.04"
+            image: req.body.image ? req.body.image : "hp.0.5-ubt.20.04"
         };
         sendToAgent(JSON.stringify(msg), res);
     });

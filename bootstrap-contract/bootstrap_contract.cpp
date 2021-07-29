@@ -46,40 +46,47 @@ int main(int argc, char **argv)
             try
             {
                 const jsoncons::ojson d = jsoncons::bson::decode_bson<jsoncons::ojson>(buffer);
-                const std::string_view file_name = d["fileName"].as<std::string_view>();
-                if (file_name != BUNDLE_NAME)
+                const std::string type = d["type"].as_string();
+                if (type == "upload")
                 {
-                    std::cerr << "Uploaded file doesn't match with bundle name: " << BUNDLE_NAME << "\n";
-                    HP_DEINIT;
-                    return -1;
-                }
-                const jsoncons::byte_string_view data = d["content"].as_byte_string_view();
-                const int archive_fd = open(file_name.data(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+                    const jsoncons::byte_string_view data = d["content"].as_byte_string_view();
+                    const int archive_fd = open(BUNDLE_NAME, O_CREAT | O_TRUNC | O_RDWR, 0644);
 
-                if (open(file_name.data(), O_CREAT | O_TRUNC | O_RDWR, 0644) == -1 ||
-                    write(archive_fd, data.begin(), data.size()) == -1)
-                {
-                    std::cerr << errno << ": Error saving given file.\n";
+                    if (archive_fd == -1 || write(archive_fd, data.begin(), data.size()) == -1)
+                    {
+                        std::cerr << errno << ": Error saving given file.\n";
+                        close(archive_fd);
+                        HP_DEINIT;
+                        return -1;
+                    }
                     close(archive_fd);
-                    HP_DEINIT;
-                    return -1;
+                    std::vector<uint8_t> msg;
+                    create_response_message(msg, "uploadResult", "Zip file uploaded successfully");
+                    hp_write_user_msg(user, msg.data(), msg.size());
+                    // Rename script.sh to post_exec.sh and grant executing permissions.
+                    rename(SCRIPT_NAME, HP_POST_EXEC_SCRIPT_NAME);
+                    const mode_t permission_mode = 0777;
+                    if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)
+                    {
+                        std::cerr << errno << ": Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;
+                        HP_DEINIT;
+                        return -1;
+                    }
+                    // We have found our contract package input. No need to iterate furthur.
+                    break;
                 }
-                close(archive_fd);
-                std::vector<uint8_t> msg;
-                create_upload_success_message(msg, file_name);
-                hp_write_user_msg(user, msg.data(), msg.size());
-                // Rename script.sh to post_exec.sh and grant executing permissions.
-                rename(SCRIPT_NAME, HP_POST_EXEC_SCRIPT_NAME);
-                char mode[] = "0777";
-                const mode_t permission_mode = strtol(mode, 0, 8); // Char to octal conversion.
-                if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)
+                else if (type == "status")
                 {
-                    std::cerr << errno << ": Chmod failed for " << HP_POST_EXEC_SCRIPT_NAME << std::endl;
+                    std::vector<uint8_t> msg;
+                    create_response_message(msg, "statusResult", "Bootstrap contract is online");
+                    hp_write_user_msg(user, msg.data(), msg.size());
+                }
+                else
+                {
+                    std::cerr << "Invalid message type" << std::endl;
                     HP_DEINIT;
                     return -1;
                 }
-                // We have found our contract package input. No need to iterate furthur.
-                break;
             }
             catch (const std::exception &e)
             {
@@ -95,16 +102,16 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void create_upload_success_message(std::vector<uint8_t> &msg, std::string_view filename)
+void create_response_message(std::vector<uint8_t> &msg, std::string_view type, std::string_view message)
 {
     jsoncons::bson::bson_bytes_encoder encoder(msg);
     encoder.begin_object();
     encoder.key("type");
-    encoder.string_value("uploadResult");
+    encoder.string_value(type);
     encoder.key("status");
     encoder.string_value("ok");
-    encoder.key("fileName");
-    encoder.string_value(filename);
+    encoder.key("message");
+    encoder.string_value(message);
     encoder.end_object();
     encoder.flush();
 }

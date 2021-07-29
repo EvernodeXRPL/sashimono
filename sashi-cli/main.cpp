@@ -4,16 +4,6 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
-#define PARSE_ERROR                                                                            \
-    {                                                                                          \
-        std::cerr << "Arguments mismatch.\n";                                                  \
-        std::cerr << "Usage:\n";                                                               \
-        std::cerr << "sashi status\n";                                                         \
-        std::cerr << "sashi json <json message>\n";                                            \
-        std::cerr << "Example: sashi json '{\"type\":\"<instruction_type>\", ...}'\n"; \
-        return -1;                                                                             \
-    }
-
 /**
  * Performs any cleanup on graceful application termination.
  */
@@ -59,6 +49,65 @@ void std_terminate() noexcept
     exit(1);
 }
 
+/**
+ * Parses CLI args and extracts sashimono agent command and parameters given using CLI11 library.
+ * @param argc Argument count.
+ * @param argv Arguments.
+ * @returns 0 on success, -1 on error.
+ */
+int parse_cmd(int argc, char **argv)
+{
+    // Initialize CLI.
+    CLI::App app("Sashimono CLI");
+    app.set_help_all_flag("--help-all", "Expand all help");
+
+    // Initialize subcommands.
+    CLI::App *status = app.add_subcommand("status", "Check socket accessibility");
+    CLI::App *json = app.add_subcommand("json", "JSON payload - Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+
+    // Initialize options.
+    std::string json_message;
+    json->add_option("-m,--message", json_message, "JSON message");
+
+    CLI11_PARSE(app, argc, argv);
+
+    if (argc > 1)
+    {
+        // Take the realpath of sash exec path.
+        std::array<char, PATH_MAX> buffer;
+        ::realpath(argv[0], buffer.data());
+        buffer[PATH_MAX] = '\0';
+        const std::string exec_dir = dirname(buffer.data());
+
+        // Verifying subcommands.
+        const std::string sub_command = argv[1];
+        if (sub_command == "status")
+        {
+            if (cli::init(exec_dir) == -1)
+                return -1;
+
+            std::cout << cli::ctx.socket_path << std::endl;
+            cli::deinit();
+            return 0;
+        }
+        else if (sub_command == "json" && argc == 4 && !json_message.empty())
+        {
+            std::string output;
+            if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
+            {
+                cli::deinit();
+                return -1;
+            }
+
+            std::cout << output << std::endl;
+            cli::deinit();
+            return 0;
+        }
+    }
+    std::cout << app.help();
+    return -1;
+}
+
 int main(int argc, char **argv)
 {
     // Register exception and segfault handlers.
@@ -75,39 +124,5 @@ int main(int argc, char **argv)
         sigprocmask(SIG_BLOCK, &mask, NULL);
     }
 
-    if (argc > 1)
-    {
-        // Take the realpath of sash exec path.
-        std::array<char, PATH_MAX> buffer;
-        ::realpath(argv[0], buffer.data());
-        buffer[PATH_MAX] = '\0';
-        const std::string exec_dir = dirname(buffer.data());
-
-        const std::string command = argv[1];
-
-        if (command == "status")
-        {
-            if (cli::init(exec_dir) == -1)
-                return -1;
-
-            std::cout << cli::ctx.socket_path << std::endl;
-            cli::deinit();
-            return 0;
-        }
-        else if (command == "json" && argc == 3)
-        {
-            std::string output;
-            if (cli::init(exec_dir) == -1 || cli::write_to_socket(argv[2]) == -1 || cli::read_from_socket(output) == -1)
-            {
-                cli::deinit();
-                return -1;
-            }
-
-            std::cout << output << std::endl;
-            cli::deinit();
-            return 0;
-        }
-    }
-
-    PARSE_ERROR
+    return parse_cmd(argc, argv);
 }

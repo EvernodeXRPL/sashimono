@@ -71,39 +71,36 @@ int parse_cmd(int argc, char **argv)
 
     CLI11_PARSE(app, argc, argv);
 
-    if (argc > 1)
+    // Take the realpath of sash exec path.
+    std::array<char, PATH_MAX> buffer;
+    ::realpath(argv[0], buffer.data());
+    buffer[PATH_MAX] = '\0';
+    const std::string exec_dir = dirname(buffer.data());
+
+    // Verifying subcommands.
+    if (status->parsed())
     {
-        // Take the realpath of sash exec path.
-        std::array<char, PATH_MAX> buffer;
-        ::realpath(argv[0], buffer.data());
-        buffer[PATH_MAX] = '\0';
-        const std::string exec_dir = dirname(buffer.data());
+        if (cli::init(exec_dir) == -1)
+            return -1;
 
-        // Verifying subcommands.
-        const std::string sub_command = argv[1];
-        if (sub_command == "status")
-        {
-            if (cli::init(exec_dir) == -1)
-                return -1;
-
-            std::cout << cli::ctx.socket_path << std::endl;
-            cli::deinit();
-            return 0;
-        }
-        else if (sub_command == "json" && argc == 4 && !json_message.empty())
-        {
-            std::string output;
-            if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
-            {
-                cli::deinit();
-                return -1;
-            }
-
-            std::cout << output << std::endl;
-            cli::deinit();
-            return 0;
-        }
+        std::cout << cli::ctx.socket_path << std::endl;
+        cli::deinit();
+        return 0;
     }
+    else if (json->parsed() && argc == 4 && !json_message.empty())
+    {
+        std::string output;
+        if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
+        {
+            cli::deinit();
+            return -1;
+        }
+
+        std::cout << output << std::endl;
+        cli::deinit();
+        return 0;
+    }
+
     std::cout << app.help();
     return -1;
 }

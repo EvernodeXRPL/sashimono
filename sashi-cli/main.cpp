@@ -87,7 +87,7 @@ int parse_cmd(int argc, char **argv)
         cli::deinit();
         return 0;
     }
-    else if (json->parsed() && argc == 4 && !json_message.empty())
+    else if (json->parsed() && !json_message.empty())
     {
         std::string output;
         if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)

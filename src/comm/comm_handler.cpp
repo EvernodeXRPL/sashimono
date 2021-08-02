@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../conf.hpp"
 
-#define __HANDLE_RESPONSE(type, content, ret)                                                       \
-    {                                                                                               \
-        std::string res;                                                                            \
-        msg_parser.build_response(res, type, content, type == msg::MSGTYPE_CREATE_RES && ret == 0); \
-        send(res);                                                                                  \
-        return ret;                                                                                 \
+#define __HANDLE_RESPONSE(type, content, ret)                                                                                          \
+    {                                                                                                                                  \
+        std::string res;                                                                                                               \
+        msg_parser.build_response(res, type, content, (type == msg::MSGTYPE_CREATE_RES || type == msg::MSGTYPE_LIST_RES) && ret == 0); \
+        send(res);                                                                                                                     \
+        return ret;                                                                                                                    \
     }
 
 namespace comm
@@ -179,7 +179,15 @@ namespace comm
         // Clear the buffer after the message is parsed.
         read_buffer.clear();
 
-        if (type == msg::MSGTYPE_CREATE)
+        if (type == msg::MSGTYPE_LIST)
+        {
+            std::vector<hp::instance_info> instances;
+            hp::get_instance_list(instances);
+            std::string list_res;
+            msg_parser.build_list_response(list_res, instances);
+            __HANDLE_RESPONSE(msg::MSGTYPE_LIST_RES, list_res, 0);
+        }
+        else if (type == msg::MSGTYPE_CREATE)
         {
             msg::create_msg msg;
             if (msg_parser.extract_create_message(msg) == -1)
@@ -253,7 +261,7 @@ namespace comm
         if (ctx.data_socket == -1)
             return -1;
 
-        const int ret = write(ctx.data_socket, message.data(), message.length() + 1);
+        const int ret = write(ctx.data_socket, message.data(), message.length());
         // Close connection after sending the response to the client.
         disconnect();
         return ret == -1 ? -1 : 0;

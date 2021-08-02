@@ -48,4 +48,9 @@ namespace msg
         json::build_create_response(msg, info);
     }
 
+    void msg_parser::build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances) const
+    {
+        json::build_list_response(msg, instances);
+    }
+
 } // namespace msg

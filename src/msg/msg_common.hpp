@@ -178,6 +178,7 @@ namespace msg
     constexpr const char *MSGTYPE_DESTROY = "destroy";
     constexpr const char *MSGTYPE_START = "start";
     constexpr const char *MSGTYPE_STOP = "stop";
+    constexpr const char *MSGTYPE_LIST = "list";
 
     // Message res types
     constexpr const char *MSGTYPE_CREATE_RES = "create_res";
@@ -185,6 +186,7 @@ namespace msg
     constexpr const char *MSGTYPE_DESTROY_RES = "destroy_res";
     constexpr const char *MSGTYPE_START_RES = "start_res";
     constexpr const char *MSGTYPE_STOP_RES = "stop_res";
+    constexpr const char *MSGTYPE_LIST_RES = "list_res";
 
 } // namespace msg
 

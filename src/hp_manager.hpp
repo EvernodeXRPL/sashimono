@@ -43,6 +43,7 @@ namespace hp
         ports assigned_ports;
         std::string status;
         std::string username;
+        std::string image_name;
     };
 
     struct resources
@@ -88,5 +89,8 @@ namespace hp
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name);
 
     int uninstall_user(std::string_view username);
+
+    void get_instance_list(std::vector<hp::instance_info> &instances);
+
 } // namespace hp
 #endif

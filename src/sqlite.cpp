@@ -22,8 +22,8 @@ namespace sqlite
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, username, status, name, ip,"
-                                                    "peer_port, user_port, pubkey, contract_id"
-                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?)";
+                                                    "peer_port, user_port, pubkey, contract_id, image_name"
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?)";
 
     constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
                                                      "instances WHERE status == ? AND user_port NOT IN"
@@ -38,10 +38,10 @@ namespace sqlite
     constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_ALOCATED_INSTANCE_COUNT = "SELECT COUNT(name) FROM instances WHERE status != ?";
-    
+
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
-    constexpr const char *GET_RUNNING_INSTANCE_USER_AND_NAME_LIST = "SELECT username,name FROM instances WHERE status = ?";
+    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE status != ?";
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
@@ -296,7 +296,8 @@ namespace sqlite
                 table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("user_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
-                table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT)};
+                table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT),
+                table_column_info("image_name", COLUMN_DATA_TYPE::TEXT)};
 
             if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
                 create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
@@ -326,6 +327,7 @@ namespace sqlite
             sqlite3_bind_int64(stmt, 8, info.assigned_ports.user_port) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 9, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_text(stmt, 10, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 11, info.image_name.data(), info.image_name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
         {
             sqlite3_finalize(stmt);
@@ -493,25 +495,28 @@ namespace sqlite
     }
 
     /**
-     * Populate the given vector with user name and name of running hp instances.
+     * Populate the given vector with the instance list except destroyed instances.
      * @param db Database connection.
-     * @param running_instances Vector to hold user name and name of instances.
+     * @param running_instances Vector to hold instance details.
     */
-    void get_running_instance_user_and_name_list(sqlite3 *db, std::vector<std::pair<const std::string, const std::string>> &running_instances)
+    void get_instance_list(sqlite3 *db, std::vector<hp::instance_info> &instances)
     {
-        running_instances.clear();
-
         sqlite3_stmt *stmt;
-        std::string_view running_status(hp::CONTAINER_STATES[hp::STATES::RUNNING]);
+        std::string_view destroy_status(hp::CONTAINER_STATES[hp::STATES::DESTROYED]);
 
-        if (sqlite3_prepare_v2(db, GET_RUNNING_INSTANCE_USER_AND_NAME_LIST, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
-            sqlite3_bind_text(stmt, 1, running_status.data(), running_status.length(), SQLITE_STATIC) == SQLITE_OK)
+        if (sqlite3_prepare_v2(db, GET_INSTANCE_LIST, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, destroy_status.data(), destroy_status.length(), SQLITE_STATIC) == SQLITE_OK)
         {
             while (stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW)
             {
-                const std::string username(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0)));
-                const std::string name(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
-                running_instances.push_back({username, name});
+                hp::instance_info info;
+                info.container_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+                info.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+                info.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
+                info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
+                info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+                info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+                instances.push_back(info);
             }
         }
 

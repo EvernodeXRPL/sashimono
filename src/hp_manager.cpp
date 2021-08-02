@@ -99,28 +99,28 @@ namespace hp
             // time until the app closes in a SIGINT.
             if (counter == 0 || counter == 600)
             {
-                sqlite::get_running_instance_user_and_name_list(db, running_instances);
-                for (const auto &[username, name] : running_instances)
-                {
-                    std::string status;
-                    const int res = check_instance_status(username, name, status);
-                    if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
-                    {
-                        if (docker_start(username, name) == -1)
-                        {
-                            // We only change the current status variable from the monitor loop.
-                            // We try to start this container in next iteration as well untill the desired state is achieved.
-                            if (sqlite::update_current_status_in_container(db, name, CONTAINER_STATES[STATES::EXITED]) == 0)
-                                LOG_INFO << "Re-spinning " + name + " failed. Current status updated to 'exited' in DB.";
-                        }
-                        else
-                        {
-                            // Make the current field NULL because the instance is healthy now.
-                            if (sqlite::update_current_status_in_container(db, name, {}) == 0)
-                                LOG_INFO << "Re-spinning " + name + " successful.";
-                        }
-                    }
-                }
+                // sqlite::get_running_instance_user_and_name_list(db, running_instances);
+                // for (const auto &[username, name] : running_instances)
+                // {
+                //     std::string status;
+                //     const int res = check_instance_status(username, name, status);
+                //     if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
+                //     {
+                //         if (docker_start(username, name) == -1)
+                //         {
+                //             // We only change the current status variable from the monitor loop.
+                //             // We try to start this container in next iteration as well untill the desired state is achieved.
+                //             if (sqlite::update_current_status_in_container(db, name, CONTAINER_STATES[STATES::EXITED]) == 0)
+                //                 LOG_INFO << "Re-spinning " + name + " failed. Current status updated to 'exited' in DB.";
+                //         }
+                //         else
+                //         {
+                //             // Make the current field NULL because the instance is healthy now.
+                //             if (sqlite::update_current_status_in_container(db, name, {}) == 0)
+                //                 LOG_INFO << "Re-spinning " + name + " successful.";
+                //         }
+                //     }
+                // }
                 counter = 0;
             }
             counter++;
@@ -328,6 +328,7 @@ namespace hp
 
         info.container_name = container_name;
         info.contract_dir = contract_dir;
+        info.image_name = image_name;
         return 0;
     }
 
@@ -941,6 +942,15 @@ namespace hp
             LOG_ERROR << "Unknown user removing error : " << error;
             return -1;
         }
+    }
+
+    /**
+     * Get the instance list except destroyed instances from the database.
+     * @param instances List of instances to be populated.
+    */
+    void get_instance_list(std::vector<hp::instance_info> &instances)
+    {
+        sqlite::get_instance_list(db, instances);
     }
 
 } // namespace hp

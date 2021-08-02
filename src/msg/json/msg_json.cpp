@@ -588,4 +588,59 @@ namespace msg::json
         msg += "\"}";
     }
 
+    /**
+     * Constructs the response message for list message.
+     * @param msg Buffer to construct the generated json message string into.
+     *           Message format:
+     *           [
+     *             {
+     *              "name": "<instance name>",
+     *              "user": "<instance user name>",
+     *              "image": "<docker image name>",
+     *              "status": "<status of the instance>",
+     *              "peer_port": "<peer port of the instance>",
+     *              "user_port": "<user port of the instance>"
+     *             }
+     *           ]
+     * @param instances Instance list.
+     * 
+     */
+    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances)
+    {
+        msg.reserve(1024);
+        msg += "[";
+        for (int i = 0; i < instances.size(); i++)
+        {
+            const hp::instance_info &instance = instances[i];
+            msg += "{\"";
+            msg += "name";
+            msg += SEP_COLON;
+            msg += instance.container_name;
+            msg += SEP_COMMA;
+            msg += "user";
+            msg += SEP_COLON;
+            msg += instance.username;
+            msg += SEP_COMMA;
+            msg += "image";
+            msg += SEP_COLON;
+            msg += instance.image_name;
+            msg += SEP_COMMA;
+            msg += "status";
+            msg += SEP_COLON;
+            msg += instance.status;
+            msg += SEP_COMMA;
+            msg += "peer_port";
+            msg += SEP_COLON_NOQUOTE;
+            msg += std::to_string(instance.assigned_ports.peer_port);
+            msg += SEP_COMMA_NOQUOTE;
+            msg += "user_port";
+            msg += SEP_COLON_NOQUOTE;
+            msg += std::to_string(instance.assigned_ports.user_port);
+            msg += "}";
+            if (i < instances.size() - 1)
+                msg += ",";
+        }
+        msg += "]";
+    }
+
 } // namespace msg::json

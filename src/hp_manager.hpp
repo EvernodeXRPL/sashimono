@@ -57,8 +57,6 @@ namespace hp
 
     void deinit();
 
-    void hp_monitor_loop();
-
     int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key);
 
     int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg);

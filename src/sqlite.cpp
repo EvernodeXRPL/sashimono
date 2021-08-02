@@ -33,8 +33,6 @@ namespace sqlite
 
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 
-    constexpr const char *UPDATE_CURRENT_STATUS_IN_HP = "UPDATE instances SET current_status = ? WHERE name = ?";
-
     constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_ALOCATED_INSTANCE_COUNT = "SELECT COUNT(name) FROM instances WHERE status != ?";
@@ -290,7 +288,6 @@ namespace sqlite
                 table_column_info("time", COLUMN_DATA_TYPE::INT),
                 table_column_info("username", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("status", COLUMN_DATA_TYPE::TEXT),
-                table_column_info("current_status", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("name", COLUMN_DATA_TYPE::TEXT, true),
                 table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
@@ -388,28 +385,6 @@ namespace sqlite
             return 0;
         }
         LOG_ERROR << "Error updating container status for " << container_name;
-        return -1;
-    }
-
-    /**
-     * Update the current status of the given container to the new value.
-     * @param db Database connection.
-     * @param container_name Name of the container whose status should be updated.
-     * @param current_status The new status of the container.
-     * @return 0 on success and -1 on error. 
-    */
-    int update_current_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view current_status)
-    {
-        sqlite3_stmt *stmt;
-        if (sqlite3_prepare_v2(db, UPDATE_CURRENT_STATUS_IN_HP, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
-            sqlite3_bind_text(stmt, 1, current_status.data(), current_status.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 2, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_step(stmt) == SQLITE_DONE)
-        {
-            sqlite3_finalize(stmt);
-            return 0;
-        }
-        LOG_ERROR << "Error updating container current status for " << container_name;
         return -1;
     }
 

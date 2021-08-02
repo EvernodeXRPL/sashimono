@@ -6,6 +6,7 @@ namespace cli
     constexpr const char *SOCKET_NAME = "sa.sock";     // Name of the sashimono socket.
     constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
     constexpr const int BUFFER_SIZE = 4096;            // Max read buffer size.
+    constexpr const char *LIST_FORMATTER_STR = "%-38s%-27s%-10s%-10s%-10s%s\n";
 
     cli_context ctx;
 
@@ -154,16 +155,16 @@ namespace cli
                 return -1;
             }
 
-            printf("%-38s%-27s%-10s%-10s%-10s%s\n", "Name", "User", "UserPort", "MeshPort", "Status", "Image");
-            printf("%-38s%-27s%-10s%-10s%-10s%s\n", "====", "====", "========", "========", "======", "=====");
+            printf(LIST_FORMATTER_STR, "Name", "User", "UserPort", "MeshPort", "Status", "Image");
+            printf(LIST_FORMATTER_STR, "====", "====", "========", "========", "======", "=====");
 
             for (const auto &instance : d["content"].array_range())
             {
-                printf("%-38s%-27s%-10d%-10d%-10s%s\n",
+                printf(LIST_FORMATTER_STR,
                        instance["name"].as<std::string_view>().data(),
                        instance["user"].as<std::string_view>().data(),
-                       instance["user_port"].as<int>(),
-                       instance["peer_port"].as<int>(),
+                       std::to_string(instance["user_port"].as<uint16_t>()).c_str(),
+                       std::to_string(instance["peer_port"].as<uint16_t>()).c_str(),
                        instance["status"].as<std::string_view>().data(),
                        instance["image"].as<std::string_view>().data());
             }

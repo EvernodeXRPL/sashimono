@@ -11,5 +11,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 #include <CLI/CLI.hpp>
+#include <jsoncons/json.hpp>
 
 #endif

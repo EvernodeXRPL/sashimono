@@ -28,6 +28,8 @@ namespace msg::json
 
     void build_create_response(std::string &msg, const hp::instance_info &info);
 
+    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances);
+
 } // namespace msg::json
 
 #endif

@@ -21,8 +21,6 @@ namespace hp
     // Vector keeping vacant ports from destroyed instances.
     std::vector<ports> vacant_ports;
 
-    // This thread will monitor the status of the created instances.
-    std::thread hp_monitor_thread;
     bool is_shutting_down = false;
 
     conf::ugid contract_ugid;
@@ -55,9 +53,6 @@ namespace hp
         // Populate the vacant ports vector with vacant ports of destroyed containers.
         sqlite::get_vacant_ports(db, vacant_ports);
 
-        // Monitor thread is temperory disabled until the implementation details are finalized.
-        // hp_monitor_thread = std::thread(hp_monitor_loop);
-
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
@@ -73,61 +68,9 @@ namespace hp
     void deinit()
     {
         is_shutting_down = true;
-        if (hp_monitor_thread.joinable())
-            hp_monitor_thread.join();
 
         if (db != NULL)
             sqlite::close_db(&db);
-    }
-
-    /**
-     * Monitoring created container status. If any containers are crashed, then they are respawned.
-     * If the respawn fails, the current_status field is updated to 'exited' in the database.
-    */
-    void hp_monitor_loop()
-    {
-        LOG_INFO << "HP instance monitor started.";
-        std::vector<std::pair<const std::string, const std::string>> running_instances;
-
-        util::mask_signal();
-
-        int counter = 0;
-
-        while (!is_shutting_down)
-        {
-            // Check containers every 1 minute. One minute sleep is not added because if we do so, app will wait until the full
-            // time until the app closes in a SIGINT.
-            if (counter == 0 || counter == 600)
-            {
-                sqlite::get_running_instance_user_and_name_list(db, running_instances);
-                for (const auto &[username, name] : running_instances)
-                {
-                    std::string status;
-                    const int res = check_instance_status(username, name, status);
-                    if (res == 0 && status != CONTAINER_STATES[STATES::RUNNING])
-                    {
-                        if (docker_start(username, name) == -1)
-                        {
-                            // We only change the current status variable from the monitor loop.
-                            // We try to start this container in next iteration as well untill the desired state is achieved.
-                            if (sqlite::update_current_status_in_container(db, name, CONTAINER_STATES[STATES::EXITED]) == 0)
-                                LOG_INFO << "Re-spinning " + name + " failed. Current status updated to 'exited' in DB.";
-                        }
-                        else
-                        {
-                            // Make the current field NULL because the instance is healthy now.
-                            if (sqlite::update_current_status_in_container(db, name, {}) == 0)
-                                LOG_INFO << "Re-spinning " + name + " successful.";
-                        }
-                    }
-                }
-                counter = 0;
-            }
-            counter++;
-            util::sleep(100);
-        }
-
-        LOG_INFO << "HP instance monitor stopped.";
     }
 
     /**
@@ -328,6 +271,7 @@ namespace hp
 
         info.container_name = container_name;
         info.contract_dir = contract_dir;
+        info.image_name = image_name;
         return 0;
     }
 
@@ -941,6 +885,15 @@ namespace hp
             LOG_ERROR << "Unknown user removing error : " << error;
             return -1;
         }
+    }
+
+    /**
+     * Get the instance list except destroyed instances from the database.
+     * @param instances List of instances to be populated.
+    */
+    void get_instance_list(std::vector<hp::instance_info> &instances)
+    {
+        sqlite::get_instance_list(db, instances);
     }
 
 } // namespace hp

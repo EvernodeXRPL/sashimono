@@ -60,6 +60,9 @@ const interatctiveInterface = async () => {
                     case 'status':
                         checkAgentStatus();
                         break;
+                    case 'list':
+                        getList();
+                        break;
                     case 'create':
                         contractId = await askForInput('Contract ID (default:uuidv4)', uuidv4());
                         image = await askForInput('Image: 1=ubuntu(default) | 2=nodejs', "1");
@@ -296,9 +299,24 @@ const sendToAgent = (msg, res = null) => {
     try {
         let output = execSync(`${cliPath} json -m '${msg}'`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
-        message = JSON.parse(message.substring(0, message.length - 2)); // Skipping the \n from the result.
+        message = JSON.parse(message.substring(0, message.length - 1)); // Skipping the \n from the result.
         console.log('Received: ', message);
         res && res.status((message.content && typeof message.content == 'string' && message.content.endsWith("error")) ? 500 : 200).send(message);
+    }
+    catch (e) {
+        console.error(`Message sending error. ${e}`);
+        res && res.status(500).send(`Message sending error. ${e}`);
+    }
+}
+
+const getList = (res = null) => {
+    try {
+        let output = execSync(`${cliPath} list`, { stdio: 'pipe' });
+        let message = Buffer.from(output).toString();
+        if (!res)
+            console.log('Received: ', message);
+        else
+            res.status(200).send(message);
     }
     catch (e) {
         console.error(`Message sending error. ${e}`);
@@ -337,6 +355,9 @@ const restApi = async () => {
     app.use(express.json());
     app.post("/status", (req, res) => {
         checkAgentStatus(res);
+    });
+    app.post("/list", (req, res) => {
+        getList(res);
     });
     app.post("/create", (req, res) => {
         const msg = {

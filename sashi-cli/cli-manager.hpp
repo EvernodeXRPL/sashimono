@@ -20,6 +20,8 @@ namespace cli
 
     int read_from_socket(std::string &message);
 
+    int list();
+
     void deinit();
 }
 

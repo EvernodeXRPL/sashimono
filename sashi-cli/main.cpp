@@ -62,8 +62,9 @@ int parse_cmd(int argc, char **argv)
     app.set_help_all_flag("--help-all", "Expand all help");
 
     // Initialize subcommands.
-    CLI::App *status = app.add_subcommand("status", "Check socket accessibility");
-    CLI::App *json = app.add_subcommand("json", "JSON payload - Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+    CLI::App *status = app.add_subcommand("status", "Check socket accessibility.");
+    CLI::App *list = app.add_subcommand("list", "List all instances.");
+    CLI::App *json = app.add_subcommand("json", "JSON payload. Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
 
     // Initialize options.
     std::string json_message;
@@ -84,6 +85,19 @@ int parse_cmd(int argc, char **argv)
             return -1;
 
         std::cout << cli::ctx.socket_path << std::endl;
+        cli::deinit();
+        return 0;
+    }
+    else if (list->parsed())
+    {
+        if (cli::init(exec_dir) == -1)
+            return -1;
+        if (cli::list() == -1)
+        {
+            std::cerr << "Failed to list instances." << std::endl;
+            cli::deinit();
+            return -1;
+        }
         cli::deinit();
         return 0;
     }

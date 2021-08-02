@@ -69,15 +69,13 @@ namespace sqlite
 
     int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
 
-    int update_current_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status);
-
     void get_max_ports(sqlite3 *db, hp::ports &max_ports);
 
     void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports);
 
     void get_running_instance_names(sqlite3 *db, std::vector<std::string> &running_instance_names);
 
-    void get_running_instance_user_and_name_list(sqlite3 *db, std::vector<std::pair<const std::string, const std::string>> &running_instances);
+    void get_instance_list(sqlite3 *db, std::vector<hp::instance_info> &instances);
 
     int get_allocated_instance_count(sqlite3 *db);
 }

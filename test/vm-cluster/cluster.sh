@@ -7,6 +7,7 @@
 # ./cluster.sh create
 
 # Command modes:
+# reconfig - Re configure the sashimono in all the hosts.
 # select - Sets the currently active contract from the list of contracts defined in config.json file.
 # create - Create new sashimono hotpocket instance in each node.
 # initiate - Initiate sashimono hotpocket instance with configs.
@@ -16,12 +17,12 @@
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "reconfig" ] || [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
-    echo " <N>: Required node no.   [N]: Optional node no."
+    echo " Expected: reconfig [N] [R] | select <contract name> | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
+    echo " <N>: Required node no.   [N]: Optional node no.   [R]: If needed to reinstall."
     exit 1
 fi
 
@@ -33,7 +34,7 @@ fi
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"","hosts":{"host1_ip":{}},"config":{}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"","hosts":{"host1_ip":{}},"config":{},"sa_config":{"max_instance_count":-1}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -121,6 +122,68 @@ if ! [[ $2 =~ ^[0-9]+$ ]]; then
     let nodeid=-1
 else
     let nodeid=$2-1
+fi
+
+if [ $mode == "reconfig" ]; then
+    if [ $nodeid = -1 ]; then
+        reinstall=$2
+    else
+        reinstall=$3
+    fi
+
+    if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
+        echo "Warning: you'll lost all the sashimono instances!"
+        echo "Still are you sure you want to reinstall Sashimono?"
+        read -p "Type 'yes' to confirm reinstall: " confirmation </dev/tty
+        [ "$confirmation" != "yes" ] && echo "Reinstall cancelled." && exit 0
+    fi
+
+    max_instance_count=$(echo $continfo | jq -r '.sa_config.max_instance_count')
+    if ! [[ $max_instance_count =~ ^[0-9]+$ ]]; then
+        max_instance_count=-1
+    fi
+
+    cgrulesengd_service="cgrulesengdsvc"
+    sashimono_service="sashimono-agent"
+    saconfig="/etc/sashimono/sa.cfg"
+
+    uninstall="curl -fsSL https://hotpocketstorage.blob.core.windows.net/sashimono/uninstall.sh | bash -s -- -q"
+    install="curl -fsSL https://hotpocketstorage.blob.core.windows.net/sashimono/install.sh | bash"
+
+    restartcgrs="systemctl restart $cgrulesengd_service.service"
+    restartsas="systemctl restart $sashimono_service.service"
+
+    # Re configure sashimono for given host.
+    function reconfig() {
+        hostaddr=$1
+        changecfg="jq '.hp.host_address = \"$hostaddr\"' $saconfig >$saconfig.tmp && mv $saconfig.tmp $saconfig"
+        if [ $max_instance_count != -1 ]; then
+            changecfg+=" && jq '.system.max_instance_count = $max_instance_count' $saconfig >$saconfig.tmp && mv $saconfig.tmp $saconfig"
+        fi
+
+        if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
+            command="$uninstall && $install && $changecfg && $restartcgrs && $restartsas"
+        else
+            command="$changecfg && $restartsas"
+        fi
+
+        if ! sshskp $sshuser@$hostaddr $command &>/dev/null; then
+            echo "Error occured reconfiguring sashimono in $hostaddr"
+        else
+            echo "Successfully reconfigured sashimono in $hostaddr"
+        fi
+    }
+
+    if [ $nodeid = -1 ]; then
+        for hostaddr in "${hostaddrs[@]}"; do
+            reconfig $hostaddr &
+        done
+        wait
+    else
+        hostaddr=${hostaddrs[$nodeid]}
+        reconfig $hostaddr
+    fi
+    exit 0
 fi
 
 if [ $mode == "create" ]; then

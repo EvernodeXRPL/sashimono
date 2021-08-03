@@ -104,7 +104,7 @@ if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ] && ([ "$hosts" = "" ] 
     vultrips=$(echo $(echo $vultrvms | jq -r ".instances | sort_by(.label) | .[] | .main_ip"))
     readarray -d " " -t hostaddrs < <(printf '%s' "$vultrips") # Populate hostaddrs with ips retrieved from vultr.
 
-    # Update json files hosts section
+    # Update json file's hosts section
     hosts=$(printf '%s\n' "${hostaddrs[@]}" | jq -R . | jq -s . | jq -r 'map({(.): {}}) | add')
     jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= $hosts" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
     echo "Retrieved ${#hostaddrs[@]} host addresses from vultr group: '$vultrgroup'"
@@ -286,7 +286,7 @@ if [ $mode == "destroy" ]; then
             echo $output
             # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                # If a vultr group is given remove selt ip from the hosts.
+                # If a vultr group is defined remove self ip from the hosts.
                 if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ]; then
                     jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= del(.\"$hostaddr\")" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
                 else

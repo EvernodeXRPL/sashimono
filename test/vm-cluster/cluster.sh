@@ -5,6 +5,9 @@
 # ./cluster.sh select contract
 # ./cluster.sh create 1
 # ./cluster.sh create
+# ./cluster.sh reconfig
+# ./cluster.sh reconfig R
+# ./cluster.sh reconfig 1 R
 
 # Command modes:
 # reconfig - Re configure the sashimono in all the hosts.
@@ -125,12 +128,14 @@ else
 fi
 
 if [ $mode == "reconfig" ]; then
+    # If node if is specified take 3rd arg otherwise take 2nd.
     if [ $nodeid = -1 ]; then
         reinstall=$2
     else
         reinstall=$3
     fi
 
+    # If reinstall specified, show warn and take confirmation.
     if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
         echo "Warning: you'll lost all the sashimono instances!"
         echo "Still are you sure you want to reinstall Sashimono?"
@@ -161,6 +166,7 @@ if [ $mode == "reconfig" ]; then
             changecfg+=" && jq '.system.max_instance_count = $max_instance_count' $saconfig >$saconfig.tmp && mv $saconfig.tmp $saconfig"
         fi
 
+        # Reinstall sashimono only if reinstall specified.
         if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
             command="$uninstall && $install && $changecfg && $restartcgrs && $restartsas"
         else

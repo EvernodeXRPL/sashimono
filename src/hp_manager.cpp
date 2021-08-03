@@ -663,6 +663,9 @@ namespace hp
                 d["contract"]["unl"] = unl;
             }
 
+            if (config.contract.roundtime.has_value())
+                d["contract"]["roundtime"] = config.contract.roundtime.value();
+
             if (config.contract.execute.has_value())
                 d["contract"]["execute"] = config.contract.execute.value();
 

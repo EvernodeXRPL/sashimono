@@ -36,6 +36,7 @@ namespace msg
 
     struct contract_config
     {
+        std::optional<uint32_t> roundtime; 
         std::set<std::string> unl;
         std::optional<bool> execute;
         c_log_config log;
@@ -139,6 +140,7 @@ namespace msg
     constexpr const char *FLD_MESH = "mesh";
     constexpr const char *FLD_USER = "user";
     constexpr const char *FLD_EXECUTE = "execute";
+    constexpr const char *FLD_ROUNDTIME = "roundtime";
     constexpr const char *FLD_LOG = "log";
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";

@@ -33,7 +33,7 @@ fi
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"<vultr group name>","hosts":{"host1_ip":{}},"config":{}}], "vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"<vultr group name>","hosts":{"host1_ip":{}},"config":{}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then

@@ -107,7 +107,7 @@ if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ] && ([ "$hosts" = "" ] 
     # Update json files hosts section
     hosts=$(printf '%s\n' "${hostaddrs[@]}" | jq -R . | jq -s . | jq -r 'map({(.): {}}) | add')
     jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= $hosts" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
-    echo "Retrieved ${#hostaddrs[@]} host addresses from vultr group: '${_host1parts[1]}'"
+    echo "Retrieved ${#hostaddrs[@]} host addresses from vultr group: '$vultrgroup'"
 elif [ "$hosts" != "" ] && [ "$hosts" != "{}" ]; then
     hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
 else

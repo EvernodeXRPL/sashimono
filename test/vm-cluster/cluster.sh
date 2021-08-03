@@ -33,7 +33,7 @@ fi
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","hosts":{"host1_ip":{}},"config":{}}]}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"","hosts":{"host1_ip":{}},"config":{}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -81,7 +81,39 @@ if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
 fi
 
 hosts=$(echo $continfo | jq -r '.hosts')
-hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
+
+vultrgroup=$(echo $continfo | jq -r '.vultr_group')
+# Read from vultr group only if group name is given and hosts are empty.
+if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ] && ([ "$hosts" = "" ] || [ "$hosts" = "{}" ]); then
+    # Call Vultr rest api GET. (params: endpoint, apikey)
+    function vultrget() {
+        local _result=$(curl --silent "https://api.vultr.com/v2/$1" -X GET -H "Authorization: Bearer $2" -H "Content-Type: application/json" -w "\n%{http_code}")
+        local _parts
+        readarray -t _parts < <(printf '%s' "$_result")  # break parts by new line.
+        if [[ ${_parts[1]} == 2* ]]; then                # Check for 2xx status code.
+            [ ! -z "${_parts[0]}" ] && echo ${_parts[0]} # Return api output if there is any.
+        else
+            echo >&2 "Error on vultrget code:${_parts[1]} body:${_parts[0]}" && exit 1
+        fi
+    }
+
+    vultrapikey=$(jq -r ".vultr.api_key" $configfile)
+    [ -z $vultrapikey ] && echo >&2 "Vultr api key not found." && exit 1
+    vultrvms=$(vultrget "instances?tag=${vultrgroup}" "$vultrapikey")
+    [ -z "$vultrvms" ] && exit 1
+    vultrips=$(echo $(echo $vultrvms | jq -r ".instances | sort_by(.label) | .[] | .main_ip"))
+    readarray -d " " -t hostaddrs < <(printf '%s' "$vultrips") # Populate hostaddrs with ips retrieved from vultr.
+
+    # Update json file's hosts section
+    hosts=$(printf '%s\n' "${hostaddrs[@]}" | jq -R . | jq -s . | jq -r 'map({(.): {}}) | add')
+    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= $hosts" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+    echo "Retrieved ${#hostaddrs[@]} host addresses from vultr group: '$vultrgroup'"
+elif [ "$hosts" != "" ] && [ "$hosts" != "{}" ]; then
+    hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
+else
+    echo "Please provide a vultr_group or list of hosts"
+    exit 1
+fi
 
 # Check if second arg (nodeid) is a number or not.
 # If it's a number then reduce 1 from it to get zero-based node index.
@@ -254,7 +286,12 @@ if [ $mode == "destroy" ]; then
             echo $output
             # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                # If a vultr group is defined remove self ip from the hosts.
+                if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ]; then
+                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= del(.\"$hostaddr\")" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                else
+                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                fi
             fi
         fi
     }

@@ -281,6 +281,9 @@ namespace msg::json
             if (contract.contains(msg::FLD_EXECUTE))
                 msg.config.contract.execute = contract[msg::FLD_EXECUTE].as<bool>();
 
+            if (contract.contains(msg::FLD_ROUNDTIME))
+                msg.config.contract.roundtime = contract[msg::FLD_ROUNDTIME].as<uint32_t>();
+
             if (contract.contains(msg::FLD_LOG))
             {
                 const jsoncons::json &log = contract[msg::FLD_LOG];

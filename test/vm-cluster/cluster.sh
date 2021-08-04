@@ -20,11 +20,11 @@
 
 mode=$1
 
-if [ "$mode" == "reconfig" ] || [ "$mode" == "select" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: reconfig [N] [R] | select <contract name> | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
     echo " <N>: Required node no.   [N]: Optional node no.   [R]: If needed to reinstall."
     exit 1
 fi
@@ -188,6 +188,40 @@ if [ $mode == "reconfig" ]; then
     else
         hostaddr=${hostaddrs[$nodeid]}
         reconfig $hostaddr
+    fi
+    exit 0
+fi
+
+if [ $mode == "lcl" ]; then
+    # Get lcl for given host.
+    function getlcl() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=`expr $1 + 1`
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
+            echo "Host info is empty for $hostaddr"
+            exit 1
+        fi
+
+        cpath="contdir=\$(find / -type d -path '*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
+        msno="max_shard_no=\$(ls -v \$contdir/ledger_fs/seed/primary/ | tail -2 | head -1)"
+        lcl="[ ! -z \$max_shard_no ] && echo \"select seq_no || '-' || lower(hex(ledger_hash)) from ledger order by seq_no DESC limit 1;\" | sqlite3 file:\$contdir/ledger_fs/seed/primary/\$max_shard_no/ledger.sqlite?mode=ro"
+        command="$cpath && $msno && $lcl"
+        
+        output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
+        if [ ! "$output" = "" ]; then
+            echo "Node $nodeno lcl : $output"  
+        fi
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            getlcl $i &
+        done
+        wait
+    else
+        getlcl $nodeid
     fi
     exit 0
 fi

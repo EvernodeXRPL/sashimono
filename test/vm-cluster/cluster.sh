@@ -8,10 +8,13 @@
 # ./cluster.sh reconfig
 # ./cluster.sh reconfig R
 # ./cluster.sh reconfig 1 R
+# ./cluster.sh lcl
+# ./cluster.sh lcl 1
 
 # Command modes:
-# reconfig - Re configure the sashimono in all the hosts.
 # select - Sets the currently active contract from the list of contracts defined in config.json file.
+# reconfig - Re configure the sashimono in all the hosts.
+# lcl - Get lcl of the hosts.
 # create - Create new sashimono hotpocket instance in each node.
 # initiate - Initiate sashimono hotpocket instance with configs.
 # start - Start sashimono hotpocket instance.

@@ -108,7 +108,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 EnvironmentFile=-$user_dir/.serviceconf
-ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/contract_fs $user_dir/$contract_dir/contract_fs/mnt merge=\${HPFS_MERGE} ugid=$contract_host_uid:$contract_host_gid trace=\${HPFS_TRACE}
+ExecStart=$script_dir/hpfs fs -f $user_dir/$contract_dir/contract_fs -m $user_dir/$contract_dir/contract_fs/mnt -g \${HPFS_MERGE} -u $contract_host_uid:$contract_host_gid -t \${HPFS_TRACE}
 Restart=on-failure
 RestartSec=5
 [Install]
@@ -120,7 +120,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 EnvironmentFile=-$user_dir/.serviceconf
-ExecStart=$script_dir/hpfs fs $user_dir/$contract_dir/ledger_fs $user_dir/$contract_dir/ledger_fs/mnt merge=true ugid= trace=\${HPFS_TRACE}
+ExecStart=$script_dir/hpfs fs -f $user_dir/$contract_dir/ledger_fs -m $user_dir/$contract_dir/ledger_fs/mnt -g true -t \${HPFS_TRACE}
 Restart=on-failure
 RestartSec=5
 [Install]

@@ -204,7 +204,7 @@ if [ $mode == "lcl" ]; then
             exit 1
         fi
 
-        cpath="contdir=\$(find / -type d -path '*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
+        cpath="contdir=\$(find / -type d -path '/home/*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
         msno="max_shard_no=\$(ls -v \$contdir/ledger_fs/seed/primary/ | tail -2 | head -1)"
         lcl="[ ! -z \$max_shard_no ] && echo \"select seq_no || '-' || lower(hex(ledger_hash)) from ledger order by seq_no DESC limit 1;\" | sqlite3 file:\$contdir/ledger_fs/seed/primary/\$max_shard_no/ledger.sqlite?mode=ro"
         command="$cpath && $msno && $lcl"

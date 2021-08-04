@@ -666,6 +666,9 @@ namespace hp
             if (config.contract.execute.has_value())
                 d["contract"]["execute"] = config.contract.execute.value();
 
+            if (config.contract.roundtime.has_value())
+                d["contract"]["roundtime"] = config.contract.roundtime.value();
+
             if (config.contract.log.enable.has_value())
                 d["contract"]["log"]["enable"] = config.contract.log.enable.value();
 
@@ -726,7 +729,7 @@ namespace hp
 
             if (config.mesh.msg_forwarding.has_value())
                 d["mesh"]["msg_forwarding"] = config.mesh.msg_forwarding.value();
-            
+
             if (config.mesh.max_connections.has_value())
                 d["mesh"]["max_connections"] = config.mesh.max_connections.value();
 
@@ -741,7 +744,7 @@ namespace hp
 
             if (config.mesh.max_bytes_per_min.has_value())
                 d["mesh"]["max_bytes_per_min"] = config.mesh.max_bytes_per_min.value();
-            
+
             if (config.mesh.max_bad_msgs_per_min.has_value())
                 d["mesh"]["max_bad_msgs_per_min"] = config.mesh.max_bad_msgs_per_min.value();
 

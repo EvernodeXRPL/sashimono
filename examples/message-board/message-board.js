@@ -115,6 +115,7 @@ const interatctiveInterface = async () => {
                         if (modifyContract === 'y' || modifyContract === 'Y') {
                             unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
                             execute = await askForInput('Execute contract? (optional)');
+                            roundtime = await askForInput('Roundtime? (optional)');
                             log = await askForInput('log <{true|false},max_mbytes_per_file,max_file_count> (optional)');
                             if (log) {
                                 split = log.split(',');
@@ -129,6 +130,7 @@ const interatctiveInterface = async () => {
                             }
                             config.contract = {
                                 execute: execute ? (execute === 'true' ? true : false) : undefined,
+                                roundtime: roundtime ? parseInt(roundtime) : undefined,
                                 log: log ? {
                                     enable: split[0] === 'true' ? true : false,
                                     max_mbytes_per_file: parseInt(split[1]),

@@ -21,6 +21,9 @@
 # stop - Stop sashimono hotpocket instance.
 # destroy - Destroy sashimono hotpocket instance.
 
+LOCKFILE="/tmp/sashiclusercfg.lock"
+trap "rm -f $LOCKFILE" EXIT
+
 mode=$1
 
 if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
@@ -87,6 +90,12 @@ if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
     alias sshskp='sshpass -p $sshpass ssh -o StrictHostKeychecking=no'
 fi
 
+function updateconfig() {
+    # Update config using locking mechanism since update can be hapenned by multiple pocesses.
+    cmd="$1 $configfile >$configfile.tmp && mv $configfile.tmp $configfile"
+    flock -x $LOCKFILE -c "$cmd"
+}
+
 hosts=$(echo $continfo | jq -r '.hosts')
 
 vultrgroup=$(echo $continfo | jq -r '.vultr_group')
@@ -113,7 +122,7 @@ if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ] && ([ "$hosts" = "" ] 
 
     # Update json file's hosts section
     hosts=$(printf '%s\n' "${hostaddrs[@]}" | jq -R . | jq -s . | jq -r 'map({(.): {}}) | add')
-    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= $hosts" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+    updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= $hosts'"
     echo "Retrieved ${#hostaddrs[@]} host addresses from vultr group: '$vultrgroup'"
 elif [ "$hosts" != "" ] && [ "$hosts" != "{}" ]; then
     hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
@@ -163,7 +172,8 @@ if [ $mode == "reconfig" ]; then
 
     # Re configure sashimono for given host.
     function reconfig() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         changecfg="jq '.hp.host_address = \"$hostaddr\"' $saconfig >$saconfig.tmp && mv $saconfig.tmp $saconfig"
         if [ $max_instance_count != -1 ]; then
             changecfg+=" && jq '.system.max_instance_count = $max_instance_count' $saconfig >$saconfig.tmp && mv $saconfig.tmp $saconfig"
@@ -177,20 +187,23 @@ if [ $mode == "reconfig" ]; then
         fi
 
         if ! sshskp $sshuser@$hostaddr $command &>/dev/null; then
-            echo "Error occured reconfiguring sashimono in $hostaddr"
+            echo "Node $nodeno : Error occured reconfiguring sashimono."
         else
-            echo "Successfully reconfigured sashimono in $hostaddr"
+            # Remove host info if reinstall.
+            if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
+                updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}'"
+            fi
+            echo "Node $nodeno : Successfully reconfigured sashimono."
         fi
     }
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            reconfig $hostaddr &
+        for i in "${!hostaddrs[@]}"; do
+            reconfig $i &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        reconfig $hostaddr
+        reconfig $nodeid
     fi
     exit 0
 fi
@@ -199,23 +212,20 @@ if [ $mode == "lcl" ]; then
     # Get lcl for given host.
     function getlcl() {
         hostaddr=${hostaddrs[$1]}
-        nodeno=`expr $1 + 1`
+        nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
 
         if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
-            echo "Host info is empty for $hostaddr"
+            echo "Node $nodeno : Host info is empty."
             exit 1
         fi
 
-        cpath="contdir=\$(find / -type d -path '/home/*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
+        cpath="contdir=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
         msno="max_shard_no=\$(ls -v \$contdir/ledger_fs/seed/primary/ | tail -2 | head -1)"
         lcl="[ ! -z \$max_shard_no ] && echo \"select seq_no || '-' || lower(hex(ledger_hash)) from ledger order by seq_no DESC limit 1;\" | sqlite3 file:\$contdir/ledger_fs/seed/primary/\$max_shard_no/ledger.sqlite?mode=ro"
         command="$cpath && $msno && $lcl"
-        
-        output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
-        if [ ! "$output" = "" ]; then
-            echo "Node $nodeno lcl : $output"  
-        fi
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        echo "Node $nodeno : $output"
     }
 
     if [ $nodeid = -1 ]; then
@@ -251,7 +261,8 @@ if [ $mode == "create" ]; then
 
     # Create an instance for given host.
     function createinstance() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         # If host info is already populated, skip instance creation.
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
@@ -260,25 +271,26 @@ if [ $mode == "create" ]; then
             # If an output received consider updating the json file.
             if [ ! "$output" = "" ]; then
                 content=$(echo $output | jq -r '.content')
-                echo $output
+                echo "Node $nodeno : $output"
                 # Update the json if no error.
                 if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
-                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                    updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content'"
                 fi
+            else
+                echo "Node $nodeno : Instance creation error."
             fi
         else
-            echo "Instance is already created for $hostaddr"
+            echo "Node $nodeno : Instance is already created."
         fi
     }
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            createinstance $hostaddr &
+        for i in "${!hostaddrs[@]}"; do
+            createinstance $i &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        createinstance $hostaddr
+        createinstance $nodeid
     fi
     exit 0
 fi
@@ -286,7 +298,8 @@ fi
 if [ $mode == "initiate" ]; then
     # Initiate the instance of given host.
     function initiateinstance() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         peers=$2
         unl=$3
         config=$(echo $continfo | jq -r ".config")
@@ -296,9 +309,10 @@ if [ $mode == "initiate" ]; then
         # Remove self peer from the peers.
         updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
         # Update the in memory config with received peers and unl.
-        updatedconfig=$(echo $config | jq ".mesh.known_peers = $updatedpeers" | jq ".contract.unl = $unl")
+        updatedconfig=$(echo $config | jq ".mesh.known_peers = [$updatedpeers]" | jq ".contract.unl = [$unl]")
         command="sashi json -m '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
-        sshskp $sshuser@$hostaddr $command
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        echo "Node $nodeno : $output"
     }
 
     # Read each hosts config and construct cluster unl and peers.
@@ -322,17 +336,16 @@ if [ $mode == "initiate" ]; then
     done
 
     # Remove trainling comma(,) and add square brackets for the lists.
-    peers="[${peers%?}]"
-    unl="[${unl%?}]"
+    peers=${peers%?}
+    unl=${unl%?}
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            initiateinstance $hostaddr $peers $unl &
+        for i in "${!hostaddrs[@]}"; do
+            initiateinstance $i $peers $unl &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        initiateinstance $hostaddr $peers $unl
+        initiateinstance $nodeid $peers $unl
     fi
     exit 0
 fi
@@ -340,20 +353,21 @@ fi
 if [ $mode == "start" ]; then
     # Start instance of given host.
     function startinstance() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json -m '{\"type\":\"start\",\"container_name\":\"$containername\"}'"
-        sshskp $sshuser@$hostaddr $command
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        echo "Node $nodeno : $output"
     }
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            startinstance $hostaddr &
+        for i in "${!hostaddrs[@]}"; do
+            startinstance $i &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        startinstance $hostaddr
+        startinstance $nodeid
     fi
     exit 0
 fi
@@ -361,20 +375,21 @@ fi
 if [ $mode == "stop" ]; then
     # Stop instance of given host.
     function stopinstance() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json -m '{\"type\":\"stop\",\"container_name\":\"$containername\"}'"
-        sshskp $sshuser@$hostaddr $command
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        echo "Node $nodeno : $output"
     }
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            stopinstance $hostaddr &
+        for i in "${!hostaddrs[@]}"; do
+            stopinstance $i &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        stopinstance $hostaddr
+        stopinstance $nodeid
     fi
     exit 0
 fi
@@ -382,34 +397,36 @@ fi
 if [ $mode == "destroy" ]; then
     # Destroy instance of given host.
     function destroyinstance() {
-        hostaddr=$1
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json -m '{\"type\":\"destroy\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
         # If an output received consider updating the json file.
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
-            echo $output
+            echo "Node $nodeno : $output"
             # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                 # If a vultr group is defined remove self ip from the hosts.
                 if [ "$vultrgroup" != "" ] && [ "$vultrgroup" != "null" ]; then
-                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= del(.\"$hostaddr\")" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                    updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts) |= del(.\"$hostaddr\")'"
                 else
-                    jq "(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}" $configfile >$configfile.tmp && mv $configfile.tmp $configfile
+                    updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}'"
                 fi
             fi
+        else
+            echo "Node $nodeno : Instance destroy error."
         fi
     }
 
     if [ $nodeid = -1 ]; then
-        for hostaddr in "${hostaddrs[@]}"; do
-            destroyinstance $hostaddr &
+        for i in "${!hostaddrs[@]}"; do
+            destroyinstance $i &
         done
         wait
     else
-        hostaddr=${hostaddrs[$nodeid]}
-        destroyinstance $hostaddr
+        destroyinstance $nodeid
     fi
     exit 0
 fi

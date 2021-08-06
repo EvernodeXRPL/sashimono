@@ -13,7 +13,7 @@
 
 # Command modes:
 # select - Sets the currently active contract from the list of contracts defined in config.json file.
-# reconfig - Re configure the sashimono in all the hosts.
+# reconfig - Re configure the sashimono with given "max_instance_count" in all the hosts (Only update the sa.cfg, Reinstall the sashimono if "R" option is given).
 # lcl - Get lcl of the hosts.
 # create - Create new sashimono hotpocket instance in each node.
 # initiate - Initiate sashimono hotpocket instance with configs.
@@ -33,7 +33,7 @@ if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] 
 else
     echo "Invalid command."
     echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
-    echo " <N>: Required node no.   [N]: Optional node no.   [R]: If needed to reinstall."
+    echo " <N>: Required node no.   [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
 

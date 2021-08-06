@@ -24,6 +24,8 @@
 LOCKFILE="/tmp/sashiclusercfg.lock"
 trap "rm -f $LOCKFILE" EXIT
 
+PRINTFORMAT="Node %2s: %s\n"
+
 mode=$1
 
 if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
@@ -187,13 +189,13 @@ if [ $mode == "reconfig" ]; then
         fi
 
         if ! sshskp $sshuser@$hostaddr $command &>/dev/null; then
-            echo "Node $nodeno : Error occured reconfiguring sashimono."
+            printf "$PRINTFORMAT" "$nodeno" "Error occured reconfiguring sashimono."
         else
             # Remove host info if reinstall.
             if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
                 updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= {}'"
             fi
-            echo "Node $nodeno : Successfully reconfigured sashimono."
+            printf "$PRINTFORMAT" "$nodeno" "Successfully reconfigured sashimono."
         fi
     }
 
@@ -216,7 +218,7 @@ if [ $mode == "lcl" ]; then
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
 
         if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
-            echo "Node $nodeno : Host info is empty."
+            printf "$PRINTFORMAT" "$nodeno" "Host info is empty."
             exit 1
         fi
 
@@ -225,7 +227,7 @@ if [ $mode == "lcl" ]; then
         lcl="[ ! -z \$max_shard_no ] && echo \"select seq_no || '-' || lower(hex(ledger_hash)) from ledger order by seq_no DESC limit 1;\" | sqlite3 file:\$contdir/ledger_fs/seed/primary/\$max_shard_no/ledger.sqlite?mode=ro"
         command="$cpath && $msno && $lcl"
         output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
-        echo "Node $nodeno : $output"
+        printf "$PRINTFORMAT" "$nodeno" "$output"
     }
 
     if [ $nodeid = -1 ]; then
@@ -271,16 +273,16 @@ if [ $mode == "create" ]; then
             # If an output received consider updating the json file.
             if [ ! "$output" = "" ]; then
                 content=$(echo $output | jq -r '.content')
-                echo "Node $nodeno : $output"
+                printf "$PRINTFORMAT" "$nodeno" "$output"
                 # Update the json if no error.
                 if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                     updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content'"
                 fi
             else
-                echo "Node $nodeno : Instance creation error."
+                printf "$PRINTFORMAT" "$nodeno" "Instance creation error."
             fi
         else
-            echo "Node $nodeno : Instance is already created."
+            printf "$PRINTFORMAT" "$nodeno" "Instance is already created."
         fi
     }
 
@@ -312,7 +314,7 @@ if [ $mode == "initiate" ]; then
         updatedconfig=$(echo $config | jq ".mesh.known_peers = [$updatedpeers]" | jq ".contract.unl = [$unl]")
         command="sashi json -m '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
         output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
-        echo "Node $nodeno : $output"
+        printf "$PRINTFORMAT" "$nodeno" "$output"
     }
 
     # Read each hosts config and construct cluster unl and peers.
@@ -358,7 +360,7 @@ if [ $mode == "start" ]; then
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json -m '{\"type\":\"start\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
-        echo "Node $nodeno : $output"
+        printf "$PRINTFORMAT" "$nodeno" "$output"
     }
 
     if [ $nodeid = -1 ]; then
@@ -380,7 +382,7 @@ if [ $mode == "stop" ]; then
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         command="sashi json -m '{\"type\":\"stop\",\"container_name\":\"$containername\"}'"
         output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
-        echo "Node $nodeno : $output"
+        printf "$PRINTFORMAT" "$nodeno" "$output"
     }
 
     if [ $nodeid = -1 ]; then
@@ -405,7 +407,7 @@ if [ $mode == "destroy" ]; then
         # If an output received consider updating the json file.
         if [ ! "$output" = "" ]; then
             content=$(echo $output | jq -r '.content')
-            echo "Node $nodeno : $output"
+            printf "$PRINTFORMAT" "$nodeno" "$output"
             # Update the json if no error.
             if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                 # If a vultr group is defined remove self ip from the hosts.
@@ -416,7 +418,7 @@ if [ $mode == "destroy" ]; then
                 fi
             fi
         else
-            echo "Node $nodeno : Instance destroy error."
+            printf "$PRINTFORMAT" "$nodeno" "Instance destroy error."
         fi
     }
 

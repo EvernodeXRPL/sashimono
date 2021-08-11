@@ -33,7 +33,7 @@ if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] 
 else
     echo "Invalid command."
     echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
-    echo " <N>: Required node no.   [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
+    echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
 

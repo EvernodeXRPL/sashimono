@@ -22,10 +22,10 @@ apt install uidmap -y
 # And whether Options is <Not whitespace>*usrquota<Not whitespace>*
 # If not add usrquota to the options.
 updated=0
-sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrquota\S*/{q100} }" "$tmpfstab"
+sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrjquota=aquota.user,jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
 res=$?
 if [ $res -eq 0 ]; then
-    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,usrquota/ }" "$tmpfstab"
+    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,usrjquota=aquota.user,jqfmt=vfsv0/ }" "$tmpfstab"
     res=$?
     updated=1
 fi

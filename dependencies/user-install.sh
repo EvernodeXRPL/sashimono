@@ -56,7 +56,7 @@ contract_host_uid=$(expr $uoffset + $contract_uid - 1)
 contract_host_gid=$(expr $goffset + $contract_gid - 1)
 
 groupadd -g "$contract_host_gid" "$contract_user"
-useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -u "$contract_host_uid" "$contract_user"
+useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -G "$user" -u "$contract_host_uid" "$contract_user"
 usermod --lock "$contract_user"
 echo "Created '$contract_user' contract user."
 
@@ -71,8 +71,8 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
     echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
     echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
 
-# Adding disk quota to the new user.
-setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+# Adding disk quota to the group.
+setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
 
 echo "Configured the resources"
 

@@ -19,7 +19,7 @@ apt-get update
 apt install uidmap -y
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
-# And whether Options is <Not whitespace>*usrquota<Not whitespace>*
+# And whether Options is <Not whitespace>*usrjquota=aquota.user,grpjquota=aquota.group,jqfmt=vfsv0<Not whitespace>*
 # If not add usrquota and groupquota to the options.
 updated=0
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrjquota=aquota.user,grpjquota=aquota.group,jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"

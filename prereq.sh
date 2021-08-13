@@ -30,6 +30,9 @@ if [ $res -eq 0 ]; then
     updated=1
 fi
 
+# If the res is not success(0) or alredy exist(100).
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
+
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
 res=$?
 if [ $res -eq 0 ]; then
@@ -37,6 +40,9 @@ if [ $res -eq 0 ]; then
     res=$?
     updated=1
 fi
+
+# If the res is not success(0) or alredy exist(100).
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
 
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
 res=$?

@@ -19,7 +19,7 @@ apt-get update
 apt install uidmap -y
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
-# And whether Options is <Not whitespace>*usrjquota=aquota.user or grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
+# And whether Options is <Not whitespace>*usrjquota=grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
 # If not add usrquota and groupquota to the options.
 updated=0
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
@@ -58,7 +58,7 @@ else
     echo "fstab already configured."
 fi
 
-# Check and turn on user quota and group quota if not enabled.
+# Check and turn on group quota if not enabled.
 if [ ! -f /aquota.group ]; then
     # quota package is not installed.
     if ! command -v quota &>/dev/null; then

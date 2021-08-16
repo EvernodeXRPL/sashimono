@@ -19,13 +19,24 @@ apt-get update
 apt install uidmap -y
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
-# And whether Options is <Not whitespace>*usrquota<Not whitespace>*
-# If not add usrquota to the options.
+# And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
+# If not add groupquota to the options.
 updated=0
-sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrquota\S*/{q100} }" "$tmpfstab"
+sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
 res=$?
 if [ $res -eq 0 ]; then
-    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,usrquota/ }" "$tmpfstab"
+    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,grpjquota=aquota.group/ }" "$tmpfstab"
+    res=$?
+    updated=1
+fi
+
+# If the res is not success(0) or alredy exist(100).
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
+
+sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
+res=$?
+if [ $res -eq 0 ]; then
+    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,jqfmt=vfsv0/ }" "$tmpfstab"
     res=$?
     updated=1
 fi
@@ -47,8 +58,8 @@ else
     echo "fstab already configured."
 fi
 
-# Check and turn on user quota if not enabled.
-if [ ! -f /aquota.user ]; then
+# Check and turn on group quota if not enabled.
+if [ ! -f /aquota.group ]; then
     # quota package is not installed.
     if ! command -v quota &>/dev/null; then
         apt-get install -y quota

@@ -28,11 +28,11 @@ PRINTFORMAT="Node %2s: %s\n"
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | docker-pull [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
     echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -45,7 +45,7 @@ fi
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","image":"<docker image key>","vultr_group":"","hosts":{"host1_ip":{}},"config":{},"sa_config":{"max_instance_count":-1}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","docker":{"image":"<docker image key>","id":"","pass":""},"vultr_group":"","hosts":{"host1_ip":{}},"config":{},"sa_config":{"max_instance_count":-1}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -241,6 +241,57 @@ if [ $mode == "lcl" ]; then
     exit 0
 fi
 
+if [ $mode == "docker-pull" ]; then
+    dockerbin=/usr/bin/sashimono-agent/dockerbin/docker
+    dockerrepo="hotpocketdev/sashimono:"
+    # Read the image.
+    image=$(echo $continfo | jq -r '.docker.image')
+    if [ "$image" == "" ] || [ "$image" == "null" ]; then
+        echo "image not specified."
+        exit 1
+    fi
+
+    # Read docker credentials.
+    dockerid=$(echo $continfo | jq -r '.docker.id')
+    dockerpass=$(echo $continfo | jq -r '.docker.pass')
+    dockerpull="$dockerbin pull $dockerrepo$image"
+    # If credentials given.
+    if [ "$dockerid" != "" ] && [ "$dockerid" != "null" ] && [ "$dockerpass" != "" ] && [ "$dockerpass" != "null" ]; then
+        dockerpull="(echo $dockerpass | $dockerbin login -u $dockerid --password-stdin &>/dev/null) && $dockerpull && $dockerbin logout"
+    fi
+
+    # Docker pull for given host.
+    function dockerpull() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
+            printf "$PRINTFORMAT" "$nodeno" "Host info is empty."
+            exit 1
+        fi
+
+        user="user=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null | cut -d/ -f3) || [ ! -z \$user ]"
+        dpull="sudo -H -u \$user DOCKER_HOST=\"unix:///run/user/\$(id -u \$user)/docker.sock\" bash -c \"$dockerpull\""
+        command="$user && $dpull"
+        if ! sshskp $sshuser@$hostaddr $command 1>/dev/null; then
+            printf "$PRINTFORMAT" "$nodeno" "Error occured pulling $image."
+        else
+            printf "$PRINTFORMAT" "$nodeno" "Successfully pulled $image."
+        fi
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            dockerpull $i &
+        done
+        wait
+    else
+        dockerpull $nodeid
+    fi
+    exit 0
+fi
+
 if [ $mode == "create" ]; then
     # Read owner pubkey, contract id and image
     ownerpubkey=$(echo $continfo | jq -r '.owner_pubkey')
@@ -255,7 +306,7 @@ if [ $mode == "create" ]; then
         exit 1
     fi
 
-    image=$(echo $continfo | jq -r '.image')
+    image=$(echo $continfo | jq -r '.docker.image')
     if [ "$image" == "" ] || [ "$image" == "null" ]; then
         echo "image not specified."
         exit 1

@@ -138,22 +138,23 @@ namespace msg::json
      */
     int extract_initiate_message(initiate_msg &msg, const jsoncons::json &d)
     {
-        if (extract_type(msg.type, d) == -1)
-            return -1;
+        // Commented out when merging create and initiate messages.
+        // if (extract_type(msg.type, d) == -1)
+        //     return -1;
 
-        if (!d.contains(msg::FLD_CONTAINER_NAME))
-        {
-            LOG_ERROR << "Field container_name is missing.";
-            return -1;
-        }
+        // if (!d.contains(msg::FLD_CONTAINER_NAME))
+        // {
+        //     LOG_ERROR << "Field container_name is missing.";
+        //     return -1;
+        // }
 
-        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
-        {
-            LOG_ERROR << "Invalid container_name value.";
-            return -1;
-        }
+        // if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
+        // {
+        //     LOG_ERROR << "Invalid container_name value.";
+        //     return -1;
+        // }
 
-        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
+        // msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         if (!d.contains(msg::FLD_CONFIG))
         {
             LOG_ERROR << "Field config is missing.";

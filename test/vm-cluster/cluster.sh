@@ -16,7 +16,7 @@
 # reconfig - Re configure the sashimono with given "max_instance_count" in all the hosts (Only update the sa.cfg, Reinstall the sashimono if "R" option is given).
 # lcl - Get lcl of the hosts.
 # create - Create new sashimono hotpocket instance in each node.
-# initiate - Initiate sashimono hotpocket instance with configs.
+# docker-pull - Pull the latest docker image from docker hub.
 # start - Start sashimono hotpocket instance.
 # stop - Stop sashimono hotpocket instance.
 # destroy - Destroy sashimono hotpocket instance.
@@ -28,11 +28,11 @@ PRINTFORMAT="Node %2s: %s\n"
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "initiate" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | docker-pull [N] | create [N] | initiate [N] | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | docker-pull [N] | create [N] | start [N] | stop [N] | destroy [N]"
     echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -319,7 +319,30 @@ if [ $mode == "create" ]; then
         # If host info is already populated, skip instance creation.
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
-            command="sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\"}'"
+            if [ "$1" != 0 ]; then
+                hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[0]}\"")
+                pubkey=$(echo $hostinfo | jq -r '.pubkey')
+            fi
+            
+            config=$(echo $continfo | jq -c -r ".config")
+            if [ "$1" != 0 ]; then
+                peers=""
+                for ((i = 0; i < $1; i++)); do
+                    hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[$i]}\"")
+                    peerport=$(echo $hostinfo | jq -r '.peer_port')
+
+                    if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
+                        [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
+                        echo "Host info is empty for ${hostaddrs[$i]}"
+                        exit 1
+                    fi
+                    peers+="\"${hostaddrs[$i]}:$peerport\","
+                done
+                peers=${peers%?}
+                config=$(echo "$config" | jq -c ".mesh.known_peers = [$peers]" | jq -c ".contract.unl = [\"$pubkey\"]")
+            fi
+
+            command="sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\",\"config\":$config}'"
             output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
             # If an output received consider updating the json file.
             if [ ! "$output" = "" ]; then
@@ -328,6 +351,10 @@ if [ $mode == "create" ]; then
                 # Update the json if no error.
                 if [ ! "$content" == "" ] && [ ! "$content" == "null" ] && [[ ! "$content" =~ ^[a-zA-Z]+_error$ ]]; then
                     updateconfig "jq '(.contracts[] | select(.name == \"$selectedcont\") | .hosts.\"$hostaddr\") |= $content'"
+                    # Refresh the in-memory config to include latest node creation details.
+                    continfo=$(jq -r ".contracts[] | select(.name == \"$selectedcont\")" $configfile)
+                    hosts=$(echo $continfo | jq -r '.hosts')
+                    hostaddrs=($(echo $hosts | jq -r 'keys_unsorted[]'))
                 fi
             else
                 printf "$PRINTFORMAT" "$nodeno" "Instance creation error."
@@ -339,7 +366,7 @@ if [ $mode == "create" ]; then
 
     if [ $nodeid = -1 ]; then
         for i in "${!hostaddrs[@]}"; do
-            createinstance $i &
+            createinstance $i
         done
         wait
     else
@@ -348,60 +375,60 @@ if [ $mode == "create" ]; then
     exit 0
 fi
 
-if [ $mode == "initiate" ]; then
-    # Initiate the instance of given host.
-    function initiateinstance() {
-        hostaddr=${hostaddrs[$1]}
-        nodeno=$(expr $1 + 1)
-        peers=$2
-        unl=$3
-        config=$(echo $continfo | jq -r ".config")
-        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
-        peerport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".peer_port")
-        selfpeer="\"$hostaddr:$peerport\""
-        # Remove self peer from the peers.
-        updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
-        # Update the in memory config with received peers and unl.
-        updatedconfig=$(echo $config | jq ".mesh.known_peers = [$updatedpeers]" | jq ".contract.unl = [$unl]")
-        command="sashi json -m '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
-        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
-        printf "$PRINTFORMAT" "$nodeno" "$output"
-    }
+# if [ $mode == "initiate" ]; then
+#     # Initiate the instance of given host.
+#     function initiateinstance() {
+#         hostaddr=${hostaddrs[$1]}
+#         nodeno=$(expr $1 + 1)
+#         peers=$2
+#         unl=$3
+#         config=$(echo $continfo | jq -r ".config")
+#         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+#         peerport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".peer_port")
+#         selfpeer="\"$hostaddr:$peerport\""
+#         # Remove self peer from the peers.
+#         updatedpeers=$(echo $peers | sed "s/\($selfpeer,\|,$selfpeer\|$selfpeer\)//g")
+#         # Update the in memory config with received peers and unl.
+#         updatedconfig=$(echo $config | jq ".mesh.known_peers = [$updatedpeers]" | jq ".contract.unl = [$unl]")
+#         command="sashi json -m '{\"type\":\"initiate\",\"container_name\":\"$containername\",\"config\":$updatedconfig}'"
+#         output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+#         printf "$PRINTFORMAT" "$nodeno" "$output"
+#     }
 
-    # Read each hosts config and construct cluster unl and peers.
-    peers=""
-    unl=""
-    for hostaddr in "${hostaddrs[@]}"; do
-        hostinfo=$(echo $continfo | jq -r ".hosts.\"$hostaddr\"")
-        pubkey=$(echo $hostinfo | jq -r '.pubkey')
-        ip=$(echo $hostinfo | jq -r '.ip')
-        peerport=$(echo $hostinfo | jq -r '.peer_port')
+#     # Read each hosts config and construct cluster unl and peers.
+#     peers=""
+#     unl=""
+#     for hostaddr in "${hostaddrs[@]}"; do
+#         hostinfo=$(echo $continfo | jq -r ".hosts.\"$hostaddr\"")
+#         pubkey=$(echo $hostinfo | jq -r '.pubkey')
+#         ip=$(echo $hostinfo | jq -r '.ip')
+#         peerport=$(echo $hostinfo | jq -r '.peer_port')
 
-        if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
-            [ "$pubkey" == "" ] || [ "$pubkey" == "null" ] ||
-            [ "$ip" == "" ] || [ "$ip" == "null" ] ||
-            [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
-            echo "Host info is empty for $hostaddr"
-            exit 1
-        fi
-        peers+="\"$hostaddr:$peerport\","
-        unl+="\"$pubkey\","
-    done
+#         if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
+#             [ "$pubkey" == "" ] || [ "$pubkey" == "null" ] ||
+#             [ "$ip" == "" ] || [ "$ip" == "null" ] ||
+#             [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
+#             echo "Host info is empty for $hostaddr"
+#             exit 1
+#         fi
+#         peers+="\"$hostaddr:$peerport\","
+#         unl+="\"$pubkey\","
+#     done
 
-    # Remove trainling comma(,) and add square brackets for the lists.
-    peers=${peers%?}
-    unl=${unl%?}
+#     # Remove trainling comma(,) and add square brackets for the lists.
+#     peers=${peers%?}
+#     unl=${unl%?}
 
-    if [ $nodeid = -1 ]; then
-        for i in "${!hostaddrs[@]}"; do
-            initiateinstance $i $peers $unl &
-        done
-        wait
-    else
-        initiateinstance $nodeid $peers $unl
-    fi
-    exit 0
-fi
+#     if [ $nodeid = -1 ]; then
+#         for i in "${!hostaddrs[@]}"; do
+#             initiateinstance $i $peers $unl &
+#         done
+#         wait
+#     else
+#         initiateinstance $nodeid $peers $unl
+#     fi
+#     exit 0
+# fi
 
 if [ $mode == "start" ]; then
     # Start instance of given host.

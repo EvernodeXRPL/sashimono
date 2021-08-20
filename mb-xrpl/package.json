@@ -1,0 +1,13 @@
+{
+  "name": "mb-xrpl",
+  "version": "0.0.1",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "node-fetch": "^2.6.1",
+    "ripple-lib": "^1.9.8"
+  },
+  "devDependencies": {
+    "eslint": "*"
+  }
+}

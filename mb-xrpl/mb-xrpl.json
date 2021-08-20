@@ -1,0 +1,14 @@
+{
+  "host": {
+    "name": "",
+    "instanceSize": "1234"
+  },
+  "xrpl": {
+    "address": "rhuwarQmjkjrmz87eZzzpUXaZorMmk8EKA",
+    "secret": "sshcf1fTr5xFcoWaMM4mFG5sykiKM",
+    "token": "CHL",
+    "hookAddress": "rwQ7ECXhkF1ZF6qFHH4y7sc1y3ZnXgf6Rh",
+    "regTrustHash": "F23E8F9F13FDCDA0149EF5684D6CC256D646DD8E694FA926B1B496350FB56FA1",
+    "regFeeHash": ""
+  }
+}

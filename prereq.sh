@@ -18,6 +18,18 @@ backup=$originalfstab.sashi.bk
 apt-get update
 apt install uidmap -y
 
+# Install node 14 if not exists.
+if ! command -v node &>/dev/null; then
+    apt update
+    curl -sL https://deb.nodesource.com/setup_14.x | bash -
+    apt -y install nodejs
+else
+    version=$(node -v)
+    if [[ ! $version =~ v14\..* ]]; then
+        echo "Found node $version, recommended node v14.x.x"
+    fi
+fi
+
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
 # If not add groupquota to the options.

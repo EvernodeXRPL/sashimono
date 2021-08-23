@@ -6,7 +6,7 @@ const XrplAccount = xrpl.XrplAccount;
 
 const FAUSET_URL = 'https://faucet.altnet.rippletest.net/accounts';
 const RIPPLE_SERVER = "wss://s.altnet.rippletest.net";
-const CONFIG_PATH = 'mb-xrpl.json';
+const CONFIG_PATH = 'mb-xrpl.cfg';
 const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;

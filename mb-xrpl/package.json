@@ -1,7 +1,7 @@
 {
   "name": "mb-xrpl",
   "scripts": {
-    "build": "ncc build mb-xrpl.js -o dist/mb-xrpl"
+    "build": "ncc build mb-xrpl.js -o ../build/mb-xrpl"
   },
   "dependencies": {
     "node-fetch": "^2.6.1",

@@ -70,7 +70,6 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
     COMMAND npm run --prefix ./mb-xrpl build
-    COMMAND bash -c "cp -r ./mb-xrpl/dist/mb-xrpl ./build/"
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

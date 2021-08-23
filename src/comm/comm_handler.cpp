@@ -190,28 +190,33 @@ namespace comm
         else if (type == msg::MSGTYPE_CREATE)
         {
             msg::create_msg msg;
-            if (msg_parser.extract_create_message(msg) == -1)
+            msg::initiate_msg init_msg;
+            if (msg_parser.extract_create_message(msg) == -1 ||
+                msg_parser.extract_initiate_message(init_msg) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, "format_error", -1);
 
             hp::instance_info info;
             if (hp::create_new_instance(info, msg.pubkey, msg.contract_id, msg.image) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, "create_error", -1);
 
+            if (hp::initiate_instance(info.container_name, init_msg) == -1)
+                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "init_error", -1);
+
             std::string create_res;
             msg_parser.build_create_response(create_res, info);
             __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_RES, create_res, 0);
         }
-        else if (type == msg::MSGTYPE_INITIATE)
-        {
-            msg::initiate_msg msg;
-            if (msg_parser.extract_initiate_message(msg) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "format_error", -1);
+        // else if (type == msg::MSGTYPE_INITIATE)
+        // {
+        //     msg::initiate_msg msg;
+        //     if (msg_parser.extract_initiate_message(msg) == -1)
+        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "format_error", -1);
 
-            if (hp::initiate_instance(msg.container_name, msg) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "init_error", -1);
+        //     if (hp::initiate_instance(msg.container_name, msg) == -1)
+        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "init_error", -1);
 
-            __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "initiated", 0);
-        }
+        //     __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "initiated", 0);
+        // }
         else if (type == msg::MSGTYPE_DESTROY)
         {
             msg::destroy_msg msg;

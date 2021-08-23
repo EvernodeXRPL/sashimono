@@ -51,6 +51,185 @@ const interatctiveInterface = async () => {
         })
     }
 
+    const askForInstanceConfig = async (config) => {
+        modifyNode = await askForInput('Modify node section? [y/N]', 'n');
+        if (modifyNode === 'y' || modifyNode === 'Y') {
+            role = await askForInput('Role: validator | observer(optional)');
+            if (role && role != 'validator' && role != 'observer') {
+                console.error('Invalid role. (Should be "validator" or "observer").')
+                return -1;
+            }
+            history = await askForInput('History <{full|custom},max_primary_shards,max_raw_shards> (optional)');
+            split = [];
+            if (history) {
+                split = history.split(',');
+                if (split.length == 0 || split.length !== 3) {
+                    console.error('Invalid history.')
+                    return -1;
+                }
+                else if (split[0] != 'full' && split[0] != 'custom') {
+                    console.error('Invalid history. (Should be "full" or "custom").')
+                    return -1;
+                }
+            }
+            config.node = {
+                role: role,
+                history: history ? split[0] : undefined,
+                history_config: history ? {
+                    max_primary_shards: parseInt(split[1]),
+                    max_raw_shards: parseInt(split[2])
+                } : undefined
+            };
+        }
+
+        modifyContract = await askForInput('Modify contract section? [y/N]', 'n');
+        if (modifyContract === 'y' || modifyContract === 'Y') {
+            unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
+            execute = await askForInput('Execute contract? (optional)');
+            roundtime = await askForInput('Roundtime? (optional)');
+            log = await askForInput('log <{true|false},max_mbytes_per_file,max_file_count> (optional)');
+            if (log) {
+                split = log.split(',');
+                if (split.length == 0 || split.length !== 3) {
+                    console.error('Invalid log config.')
+                    return -1;
+                }
+                else if (split[0] != 'true' && split[0] != 'false') {
+                    console.error('Log enable tag should be either true or false')
+                    return -1;
+                }
+            }
+            config.contract = {
+                execute: execute ? (execute === 'true' ? true : false) : undefined,
+                roundtime: roundtime ? parseInt(roundtime) : undefined,
+                log: log ? {
+                    enable: split[0] === 'true' ? true : false,
+                    max_mbytes_per_file: parseInt(split[1]),
+                    max_file_count: parseInt(split[2])
+                } : undefined,
+                unl: unl ? unl.split(',') : undefined
+            }
+        }
+        modifyMesh = await askForInput('Modify mesh section? [y/N]', 'n');
+        if (modifyMesh === 'y' || modifyMesh === 'Y') {
+            idleTimeout = await askForInput('Idle timeout?(optional)');
+            peers = await askForInput('Comma seperated Peer List <host1:port1>,<host2:port2>,...(optional)');
+            msgForwarding = await askForInput('Message forwarding [true|false]?(optional)');
+            set01 = await askForInput('Comma seperated max_connections, max_known_connections and max_in_connections_per_host?(optional)');
+            if (set01) {
+                split01 = set01.split(',');
+                if (split01.length == 0 || split01.length !== 3) {
+                    console.error('Make sure to add all three. Eg: 1,1,1');
+                    return -1;
+                }
+            }
+
+            set02 = await askForInput('Comma seperated max_bytes_per_msg, max_bytes_per_min and max_bad_msgs_per_min?(optional)');
+            if (set02) {
+                split02 = set02.split(',');
+                if (split02.length == 0 || split02.length !== 3) {
+                    console.error('Make sure to add all three. Eg: 1,1,1');
+                    return -1;
+                }
+            }
+
+            set03 = await askForInput('Comma seperated max_bad_msgsigs_per_min and max_dup_msgs_per_min?(optional)');
+            if (set03) {
+                split03 = set03.split(',');
+                if (split03.length == 0 || split03.length !== 2) {
+                    console.error('Make sure to add all two. Eg: 1,1');
+                    return -1;
+                }
+            }
+
+            peerDiscovery = await askForInput('Peer discovery <{true|false}, Interval>?(optional)');
+            if (peerDiscovery) {
+                peerDiscovery = peerDiscovery.split(',');
+                if (peerDiscovery.length == 0 || peerDiscovery.length !== 2) {
+                    console.error('Make sure to add all two. Eg: true,10000');
+                    return -1;
+                }
+            }
+
+            config.mesh = {
+                idle_timeout: idleTimeout ? parseInt(idleTimeout) : undefined,
+                known_peers: peers ? peers.split(',') : undefined,
+                msg_forwarding: msgForwarding ? (msgForwarding === 'true' ? true : false) : undefined,
+                max_connections: set01 ? parseInt(split01[0]) : undefined,
+                max_known_connections: set01 ? parseInt(split01[1]) : undefined,
+                max_in_connections_per_host: set01 ? parseInt(split01[2]) : undefined,
+                max_bytes_per_msg: set02 ? parseInt(split02[0]) : undefined,
+                max_bytes_per_min: set02 ? parseInt(split02[1]) : undefined,
+                max_bad_msgs_per_min: set02 ? parseInt(split02[2]) : undefined,
+                max_bad_msgsigs_per_min: set03 ? parseInt(split03[0]) : undefined,
+                max_dup_msgs_per_min: set03 ? parseInt(split03[1]) : undefined,
+                peer_discovery: peerDiscovery ? {
+                    enabled: peerDiscovery[0] === 'true' ? true : false,
+                    interval: parseInt(peerDiscovery[1])
+                } : undefined
+            };
+
+
+        }
+        modifyUser = await askForInput('Modify user section? [y/N]', 'n');
+        if (modifyUser === 'y' || modifyUser === 'Y') {
+            idleTimeout = await askForInput('Idle timeout?(optional)');
+            set01 = await askForInput('Comma seperated max_bytes_per_msg, max_bytes_per_min and max_bad_msgs_per_min?(optional)');
+            if (set01) {
+                split01 = set01.split(',');
+                if (split01.length == 0 || split01.length !== 3) {
+                    console.error('Make sure to add all three. Eg: 1,1,1');
+                    return -1;
+                }
+            }
+            set02 = await askForInput('Comma seperated max_connections, max_in_connections_per_host and concurrent_read_reqeuests?(optional)');
+            if (set02) {
+                split02 = set02.split(',');
+                if (split02.length == 0 || split02.length !== 3) {
+                    console.error('Make sure to add all three. Eg: 1,1,1');
+                    return -1;
+                }
+            }
+            config.user = {
+                idle_timeout: idleTimeout ? parseInt(idleTimeout) : undefined,
+                max_bytes_per_msg: set01 ? parseInt(split01[0]) : undefined,
+                max_bytes_per_min: set01 ? parseInt(split01[1]) : undefined,
+                max_bad_msgs_per_min: set01 ? parseInt(split01[2]) : undefined,
+                max_connections: set02 ? parseInt(split02[0]) : undefined,
+                max_in_connections_per_host: set02 ? parseInt(split02[1]) : undefined,
+                concurrent_read_requests: set02 ? parseInt(split02[2]) : undefined
+            };
+        }
+        modifyHpfs = await askForInput('Modify hpfs section? [y/N]', 'n');
+        if (modifyHpfs === 'y' || modifyHpfs === 'Y') {
+            logLevel = await askForInput('Hpfs log level?(optional)');
+            config.hpfs = logLevel ? {
+                log_level: logLevel ? logLevel : undefined
+            } : undefined;
+        }
+
+        modifyLogs = await askForInput('Modify log section? [y/N]', 'n');
+        if (modifyLogs === 'y' || modifyLogs === 'Y') {
+            logLevel = await askForInput('HP log level?(optional)');
+            set01 = await askForInput('Comma seperated max_mbytes_per_file and max_file_count?(optional)');
+            if (set01) {
+                split01 = set01.split(',');
+                if (split01.length == 0 || split01.length !== 2) {
+                    console.error('Make sure to add all two. Eg: 1,1');
+                    return -1;
+                }
+            }
+            loggers = await askForInput('Comma seperated loggers?(optional)');
+            config.log = {
+                log_level: logLevel ? logLevel : undefined,
+                max_mbytes_per_file: set01 ? parseInt(split01[0]) : undefined,
+                max_file_count: set01 ? parseInt(split01[1]) : undefined,
+                loggers: loggers ? loggers.split(',') : undefined
+            };
+        }
+        return 0;
+    }
+
     console.log("Ready to accept inputs.");
 
     const inputPump = () => {
@@ -70,198 +249,31 @@ const interatctiveInterface = async () => {
                             console.error('Invalid image. (Should be "1" or "2").')
                             break;
                         }
+                        let createConfig = {};
+                        addConfig = await askForInput('Add config section? [y/N]', 'n');
+                        let ret = -1;
+                        if (addConfig === 'y' || addConfig === 'Y')
+                            ret = await askForInstanceConfig(createConfig);
 
                         sendToAgent(JSON.stringify({
                             type: 'create',
                             owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                             contract_id: contractId,
-                            image: (image == "1" ? "hp.0.5-ubt.20.04" : "hp.0.5-ubt.20.04-njs.14")
+                            image: (image == "1" ? "hp.0.5-ubt.20.04" : "hp.0.5-ubt.20.04-njs.14"),
+                            config: ret !== -1 ? createConfig : undefined
                         }));
                         break;
-                    case 'initiate':
-                        containerName = await askForInput('Container Name');
-                        let config = {};
-                        modifyNode = await askForInput('Modify node section? [y/N]', 'n');
-                        if (modifyNode === 'y' || modifyNode === 'Y') {
-                            role = await askForInput('Role: validator | observer(optional)');
-                            if (role && role != 'validator' && role != 'observer') {
-                                console.error('Invalid role. (Should be "validator" or "observer").')
-                                break;
-                            }
-                            history = await askForInput('History <{full|custom},max_primary_shards,max_raw_shards> (custom,1,1)', "custom,1,1");
-                            split = [];
-                            if (history) {
-                                split = history.split(',');
-                                if (split.length == 0 || split.length !== 3) {
-                                    console.error('Invalid history.')
-                                    break;
-                                }
-                                else if (split[0] != 'full' && split[0] != 'custom') {
-                                    console.error('Invalid history. (Should be "full" or "custom").')
-                                    break;
-                                }
-                            }
-                            config.node = {
-                                role: role,
-                                history: history ? split[0] : undefined,
-                                history_config: history ? {
-                                    max_primary_shards: parseInt(split[1]),
-                                    max_raw_shards: parseInt(split[2])
-                                } : undefined
-                            };
-                        }
+                    // case 'initiate':
+                    //     containerName = await askForInput('Container Name');
+                    //     let config = {};
+                    //     const iniRet = await askForInstanceConfig(config);
 
-                        modifyContract = await askForInput('Modify contract section? [y/N]', 'n');
-                        if (modifyContract === 'y' || modifyContract === 'Y') {
-                            unl = await askForInput('Comma seperated UNL <pubkey1>,<pubkey2>,...');
-                            execute = await askForInput('Execute contract? (optional)');
-                            roundtime = await askForInput('Roundtime? (optional)');
-                            log = await askForInput('log <{true|false},max_mbytes_per_file,max_file_count> (optional)');
-                            if (log) {
-                                split = log.split(',');
-                                if (split.length == 0 || split.length !== 3) {
-                                    console.error('Invalid log config.')
-                                    break;
-                                }
-                                else if (split[0] != 'true' && split[0] != 'false') {
-                                    console.error('Log enable tag should be either true or false')
-                                    break;
-                                }
-                            }
-                            config.contract = {
-                                execute: execute ? (execute === 'true' ? true : false) : undefined,
-                                roundtime: roundtime ? parseInt(roundtime) : undefined,
-                                log: log ? {
-                                    enable: split[0] === 'true' ? true : false,
-                                    max_mbytes_per_file: parseInt(split[1]),
-                                    max_file_count: parseInt(split[2])
-                                } : undefined,
-                                unl: unl ? unl.split(',') : undefined
-                            }
-                        }
-                        modifyMesh = await askForInput('Modify mesh section? [y/N]', 'n');
-                        if (modifyMesh === 'y' || modifyMesh === 'Y') {
-                            idleTimeout = await askForInput('Idle timeout?(optional)');
-                            peers = await askForInput('Comma seperated Peer List <host1:port1>,<host2:port2>,...(optional)');
-                            msgForwarding = await askForInput('Message forwarding [true|false]?(optional)');
-                            set01 = await askForInput('Comma seperated max_connections, max_known_connections and max_in_connections_per_host?(optional)');
-                            if (set01) {
-                                split01 = set01.split(',');
-                                if (split01.length == 0 || split01.length !== 3) {
-                                    console.error('Make sure to add all three. Eg: 1,1,1');
-                                    break;
-                                }
-                            }
-
-                            set02 = await askForInput('Comma seperated max_bytes_per_msg, max_bytes_per_min and max_bad_msgs_per_min?(optional)');
-                            if (set02) {
-                                split02 = set02.split(',');
-                                if (split02.length == 0 || split02.length !== 3) {
-                                    console.error('Make sure to add all three. Eg: 1,1,1');
-                                    break;
-                                }
-                            }
-
-                            set03 = await askForInput('Comma seperated max_bad_msgsigs_per_min and max_dup_msgs_per_min?(optional)');
-                            if (set03) {
-                                split03 = set03.split(',');
-                                if (split03.length == 0 || split03.length !== 2) {
-                                    console.error('Make sure to add all two. Eg: 1,1');
-                                    break;
-                                }
-                            }
-
-                            peerDiscovery = await askForInput('Peer discovery <{true|false}, Interval>?(optional)');
-                            if (peerDiscovery) {
-                                peerDiscovery = peerDiscovery.split(',');
-                                if (peerDiscovery.length == 0 || peerDiscovery.length !== 2) {
-                                    console.error('Make sure to add all two. Eg: true,10000');
-                                    break;
-                                }
-                            }
-
-                            config.mesh = {
-                                idle_timeout: idleTimeout ? parseInt(idleTimeout) : undefined,
-                                known_peers: peers ? peers.split(',') : undefined,
-                                msg_forwarding: msgForwarding ? (msgForwarding === 'true' ? true : false) : undefined,
-                                max_connections: set01 ? parseInt(split01[0]) : undefined,
-                                max_known_connections: set01 ? parseInt(split01[1]) : undefined,
-                                max_in_connections_per_host: set01 ? parseInt(split01[2]) : undefined,
-                                max_bytes_per_msg: set02 ? parseInt(split02[0]) : undefined,
-                                max_bytes_per_min: set02 ? parseInt(split02[1]) : undefined,
-                                max_bad_msgs_per_min: set02 ? parseInt(split02[2]) : undefined,
-                                max_bad_msgsigs_per_min: set03 ? parseInt(split03[0]) : undefined,
-                                max_dup_msgs_per_min: set03 ? parseInt(split03[1]) : undefined,
-                                peer_discovery: peerDiscovery ? {
-                                    enabled: peerDiscovery[0] === 'true' ? true : false,
-                                    interval: parseInt(peerDiscovery[1])
-                                } : undefined
-                            };
-
-
-                        }
-                        modifyUser = await askForInput('Modify user section? [y/N]', 'n');
-                        if (modifyUser === 'y' || modifyUser === 'Y') {
-                            idleTimeout = await askForInput('Idle timeout?(optional)');
-                            set01 = await askForInput('Comma seperated max_bytes_per_msg, max_bytes_per_min and max_bad_msgs_per_min?(optional)');
-                            if (set01) {
-                                split01 = set01.split(',');
-                                if (split01.length == 0 || split01.length !== 3) {
-                                    console.error('Make sure to add all three. Eg: 1,1,1');
-                                    break;
-                                }
-                            }
-                            set02 = await askForInput('Comma seperated max_connections, max_in_connections_per_host and concurrent_read_reqeuests?(optional)');
-                            if (set02) {
-                                split02 = set02.split(',');
-                                if (split02.length == 0 || split02.length !== 3) {
-                                    console.error('Make sure to add all three. Eg: 1,1,1');
-                                    break;
-                                }
-                            }
-                            config.user = {
-                                idle_timeout: idleTimeout ? parseInt(idleTimeout) : undefined,
-                                max_bytes_per_msg: set01 ? parseInt(split01[0]) : undefined,
-                                max_bytes_per_min: set01 ? parseInt(split01[1]) : undefined,
-                                max_bad_msgs_per_min: set01 ? parseInt(split01[2]) : undefined,
-                                max_connections: set02 ? parseInt(split02[0]) : undefined,
-                                max_in_connections_per_host: set02 ? parseInt(split02[1]) : undefined,
-                                concurrent_read_requests: set02 ? parseInt(split02[2]) : undefined
-                            };
-                        }
-                        modifyHpfs = await askForInput('Modify hpfs section? [y/N]', 'n');
-                        if (modifyHpfs === 'y' || modifyHpfs === 'Y') {
-                            logLevel = await askForInput('Hpfs log level?(optional)');
-                            config.hpfs = logLevel ? {
-                                log_level: logLevel ? logLevel : undefined
-                            } : undefined;
-                        }
-
-                        modifyLogs = await askForInput('Modify log section? [y/N]', 'n');
-                        if (modifyLogs === 'y' || modifyLogs === 'Y') {
-                            logLevel = await askForInput('HP log level?(optional)');
-                            set01 = await askForInput('Comma seperated max_mbytes_per_file and max_file_count?(optional)');
-                            if (set01) {
-                                split01 = set01.split(',');
-                                if (split01.length == 0 || split01.length !== 2) {
-                                    console.error('Make sure to add all two. Eg: 1,1');
-                                    break;
-                                }
-                            }
-                            loggers = await askForInput('Comma seperated loggers?(optional)');
-                            config.log = {
-                                log_level: logLevel ? logLevel : undefined,
-                                max_mbytes_per_file: set01 ? parseInt(split01[0]) : undefined,
-                                max_file_count: set01 ? parseInt(split01[1]) : undefined,
-                                loggers: loggers ? loggers.split(',') : undefined
-                            };
-                        }
-                        sendToAgent(JSON.stringify({
-                            type: 'initiate',
-                            container_name: containerName,
-                            config: config
-                        }));
-                        break;
+                    //     sendToAgent(JSON.stringify({
+                    //         type: 'initiate',
+                    //         container_name: containerName,
+                    //         config: iniRet !== -1 ? config : undefined
+                    //     }));
+                    //     break;
                     case 'destroy':
                         containerName = await askForInput('Container Name');
                         sendToAgent(JSON.stringify({
@@ -285,7 +297,7 @@ const interatctiveInterface = async () => {
                         break;
 
                     default:
-                        console.error('Invalid command. Only valid [create, initiate, destroy, start and stop]');
+                        console.error('Invalid command. Only valid [create, destroy, start and stop]');
                         break;
                 }
 

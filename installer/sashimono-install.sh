@@ -10,7 +10,7 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-mb_ixrpl_conf=$sashimono_bin/mb-ixrpl/mb-ixrpl.cfg
+mb_xrpl_conf=$sashimono_bin/mb-xrpl/mb-xrpl.cfg
 hook_xrpl_addr="rPmHA8hdJou71JcGLdCDYX9UjztRzmic3A"
 group="sashimonousers"
 admin_group="sashiadmin"
@@ -64,8 +64,23 @@ function rollback() {
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
+cp -r "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,mb-xrpl} $sashimono_bin
 chmod -R +x $sashimono_bin
+
+if [ "$quiet" != "-q" ]; then
+    # Setup xrpl message board.
+    echo "Please answer following questions to setup xrpl message board.."
+    read -p "Instance size (kb)? " instance_size </dev/tty
+    [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number." && rollback
+    read -p "Location? " location </dev/tty
+    [ -z "$location" ] && echo "Location cannot be empty." && rollback
+    [[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'." && rollback
+    read -p "Token name? " token </dev/tty
+    [ -z "$token" ] && echo "Token name cannot be empty." && rollback
+    [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
+fi
+
+echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"\",\"secret\":\"\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
 
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $user_bin
@@ -95,23 +110,9 @@ selfip="127.0.0.1"
 ! groupadd $admin_group && echo "Admin group creation failed." && rollback
 
 # Setup Sashimono data dir.
-cp -r "$script_dir"/{contract_template,mb-xrpl} $sashimono_data
+cp -r "$script_dir"/contract_template $sashimono_data
 $sashimono_bin/sagent new $sashimono_data $selfip $registry_addr
 
-if [ "$quiet" != "-q" ]; then
-    # Setup xrpl message board.
-    echo "Please answer following questions to setup xrpl message board.."
-    read -p "Instance size (kb)? " instance_size </dev/tty
-    [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number." && rollback
-    read -p "Location? " location </dev/tty
-    [ -z "$location" ] && echo "Location cannot be empty." && rollback
-    [[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'." && rollback
-    read -p "Token name? " token </dev/tty
-    [ -z "$token" ] && echo "Token name cannot be empty." && rollback
-    [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
-fi
-
-echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"\",\"secret\":\"\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_ixrpl_conf
 
 # Install Sashimono Agent cgcreate service.
 # This is a onshot service which runs only once.
@@ -173,6 +174,6 @@ systemctl start $mb_xrpl_service
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 if [ "$quiet" == "-q" ]; then
-    echo "Please update your Instance size, Location and Token name in $mb_ixrpl_conf and restart $mb_xrpl_service."
+    echo "Please update your Instance size, Location and Token name in $mb_xrpl_conf and restart $mb_xrpl_service."
 fi
 exit 0

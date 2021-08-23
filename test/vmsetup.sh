@@ -7,7 +7,7 @@
 # 2. Install Sashimono after reboot.
 # 3. Restarts cgroup engine service after installing Sashimono.
 
-cloudstorage="https://hotpocketstorage.blob.core.windows.net/sashimono"
+cloudstorage="https://sthotpocket.blob.core.windows.net/sashimono"
 bootscript="/usr/local/bin/sashimono-install.sh"
 cgrulesengd_service="cgrulesengdsvc"
 boot_service="sashimonoboot"

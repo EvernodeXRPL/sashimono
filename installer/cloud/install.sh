@@ -2,7 +2,7 @@
 # Sashimono cloud installer script.
 # This will download, extract and install the Sashimono installer package.
 
-package="https://hotpocketstorage.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
+package="https://sthotpocket.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
 
 tmp=$(mktemp -d)
 cd $tmp

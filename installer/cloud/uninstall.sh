@@ -3,7 +3,7 @@
 # This will download and extract the installer and then uninstall Sashimono.
 # -q for non-interactive (quiet) mode
 
-package="https://hotpocketstorage.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
+package="https://sthotpocket.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
 
 tmp=$(mktemp -d)
 cd $tmp

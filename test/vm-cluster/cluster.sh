@@ -166,8 +166,8 @@ if [ $mode == "reconfig" ]; then
     sashimono_service="sashimono-agent"
     saconfig="/etc/sashimono/sa.cfg"
 
-    uninstall="curl -fsSL https://hotpocketstorage.blob.core.windows.net/sashimono/uninstall.sh | bash -s -- -q"
-    install="curl -fsSL https://hotpocketstorage.blob.core.windows.net/sashimono/install.sh | bash"
+    uninstall="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/uninstall.sh | bash -s -- -q"
+    install="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/install.sh | bash"
 
     restartcgrs="systemctl restart $cgrulesengd_service.service"
     restartsas="systemctl restart $sashimono_service.service"

@@ -82,7 +82,7 @@ class MessageBoard {
                     const token = data.Amount.currency;
                     const issuer = data.Amount.issuer;
                     const amount = parseInt(data.Amount.value);
-                    const isInstruction = token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address
+                    const isInstruction = (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address);
                     if (isInstruction) {
                         const memos = data.Memos;
                         const deserialized = memos.map(m => {

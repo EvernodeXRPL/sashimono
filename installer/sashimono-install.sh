@@ -68,7 +68,7 @@ function rollback() {
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp -r "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
 
 # Install Sashimono CLI binaries into user bin dir.
@@ -145,7 +145,7 @@ if [ "$quiet" != "-q" ]; then
     chmod -R +x "$sashimono_bin"/mb-xrpl
 
     echo "Please answer following questions to setup xrpl message board.."
-    # Ask for input until correct value is given
+    # Ask for input until a correct value is given
     while [[ ! "$instance_size" =~ [0-9]+ ]]; do
         read -p "Instance size (kb)? " instance_size </dev/tty
         [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number."

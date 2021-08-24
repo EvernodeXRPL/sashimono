@@ -23,8 +23,6 @@ class XrplAccount {
         this.address = address;
         this.secret = secret;
         this.handlers = {};
-        this.connected = false;
-        this.keepConnectionAlive = false;
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {

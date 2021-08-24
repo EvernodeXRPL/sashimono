@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono agent installation script.
 # This must be executed with root privileges.
-# -q for non-interactive (quiet) mode
+# -q for non-interactive (quiet) mode (This will skip the installation of xrpl message board)
 
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
@@ -10,7 +10,7 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-mb_xrpl_conf=$sashimono_bin/mb-xrpl/mb-xrpl.cfg
+mb_xrpl_conf="$sashimono_bin"/mb-xrpl/mb-xrpl.cfg
 hook_xrpl_addr="rPmHA8hdJou71JcGLdCDYX9UjztRzmic3A"
 group="sashimonousers"
 admin_group="sashiadmin"
@@ -64,23 +64,8 @@ function rollback() {
 }
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp -r "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,mb-xrpl} $sashimono_bin
+cp -r "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
-
-if [ "$quiet" != "-q" ]; then
-    # Setup xrpl message board.
-    echo "Please answer following questions to setup xrpl message board.."
-    read -p "Instance size (kb)? " instance_size </dev/tty
-    [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number." && rollback
-    read -p "Location? " location </dev/tty
-    [ -z "$location" ] && echo "Location cannot be empty." && rollback
-    [[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'." && rollback
-    read -p "Token name? " token </dev/tty
-    [ -z "$token" ] && echo "Token name cannot be empty." && rollback
-    [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
-fi
-
-echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"\",\"secret\":\"\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
 
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $user_bin
@@ -113,7 +98,6 @@ selfip="127.0.0.1"
 cp -r "$script_dir"/contract_template $sashimono_data
 $sashimono_bin/sagent new $sashimono_data $selfip $registry_addr
 
-
 # Install Sashimono Agent cgcreate service.
 # This is a onshot service which runs only once.
 echo "[Unit]
@@ -144,36 +128,52 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
 
-# Install xrpl message board systemd service.
-# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-echo "[Unit]
-Description=Running and monitoring evernode xrpl transactions.
-After=network.target
-StartLimitIntervalSec=0
-[Service]
-User=root
-Group=root
-Type=simple
-WorkingDirectory=$sashimono_bin
-ExecStart=node $sashimono_bin/mb-xrpl
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
-
 systemctl daemon-reload
 systemctl enable $cgcreate_service
 systemctl start $cgcreate_service
 systemctl enable $sashimono_service
 systemctl start $sashimono_service
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
-systemctl enable $mb_xrpl_service
-systemctl start $mb_xrpl_service
-# This service needed to be restarted when mb-xrpl.cfg is changed.
+
+if [ "$quiet" != "-q" ]; then
+    # Setup xrpl message board.
+    cp -r "$script_dir"/mb-xrpl $sashimono_bin
+    chmod -R +x "$sashimono_bin"/mb-xrpl
+
+    echo "Please answer following questions to setup xrpl message board.."
+    read -p "Instance size (kb)? " instance_size </dev/tty
+    [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number." && rollback
+    read -p "Location? " location </dev/tty
+    [ -z "$location" ] && echo "Location cannot be empty." && rollback
+    [[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'." && rollback
+    read -p "Token name? " token </dev/tty
+    [ -z "$token" ] && echo "Token name cannot be empty." && rollback
+    [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
+
+    echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"\",\"secret\":\"\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
+
+    # Install xrpl message board systemd service.
+    # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+    echo "[Unit]
+    Description=Running and monitoring evernode xrpl transactions.
+    After=network.target
+    StartLimitIntervalSec=0
+    [Service]
+    User=root
+    Group=root
+    Type=simple
+    WorkingDirectory=$sashimono_bin
+    ExecStart=node $sashimono_bin/mb-xrpl
+    Restart=on-failure
+    RestartSec=5
+    [Install]
+    WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
+
+    # This service needed to be restarted when mb-xrpl.cfg is changed.
+    systemctl enable $mb_xrpl_service
+    systemctl start $mb_xrpl_service
+fi
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
-if [ "$quiet" == "-q" ]; then
-    echo "Please update your Instance size, Location and Token name in $mb_xrpl_conf and restart $mb_xrpl_service."
-fi
 exit 0

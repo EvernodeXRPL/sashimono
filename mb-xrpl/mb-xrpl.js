@@ -12,6 +12,14 @@ const RES_FEE = 0.000001;
 const SASHI_CLI_PATH_DEV = "../build/sashi";
 const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
 
+const hexToASCII = (hex) => {
+    let str = "";
+    for (let n = 0; n < hex.length; n += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+    }
+    return str;
+}
+
 class MessageBoard {
     constructor(configPath, sashiCliPath) {
         this.configPath = configPath;
@@ -26,7 +34,7 @@ class MessageBoard {
     }
 
     async init(rippleServer) {
-        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hookAddress)
+        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
         this.xrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.address, this.cfg.xrpl.secret);
@@ -70,9 +78,9 @@ class MessageBoard {
                         const memos = data.Memos;
                         const deserialized = memos.map(m => {
                             return {
-                                type: m.Memo.MemoType ? this.hexToASCII(m.Memo.MemoType) : null,
-                                format: m.Memo.MemoFormat ? this.hexToASCII(m.Memo.MemoFormat) : null,
-                                data: this.hexToASCII(m.Memo.MemoData)
+                                type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
+                                format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
+                                data: hexToASCII(m.Memo.MemoData)
                             };
                         }).filter(m => m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY && m.data);
                         const txHash = data.hash;
@@ -107,14 +115,6 @@ class MessageBoard {
 
     persistConfig() {
         fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
-    }
-
-    hexToASCII(hex) {
-        let str = "";
-        for (let n = 0; n < hex.length; n += 2) {
-            str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
-        }
-        return str;
     }
 }
 

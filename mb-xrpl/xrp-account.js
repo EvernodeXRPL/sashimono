@@ -1,5 +1,3 @@
-const RippleAPI = require('ripple-lib').RippleAPI;
-
 const maxLedgerOffset = 10;
 
 const MemoTypes = {
@@ -20,9 +18,8 @@ const Events = {
 }
 
 class XrplAccount {
-    constructor(server, address, secret = null) {
-        this.server = server;
-        this.api = new RippleAPI({ server: server });
+    constructor(rippleAPI, address, secret = null) {
+        this.api = rippleAPI;
         this.address = address;
         this.secret = secret;
         this.handlers = {};
@@ -30,26 +27,7 @@ class XrplAccount {
         this.keepConnectionAlive = false;
     }
 
-    async rippleConnect(keepAlive = false) {
-        if (!this.connected) {
-            await this.api.connect();
-            console.log(`Connected to ${this.server}`);
-            this.connected = true;
-        }
-        this.keepConnectionAlive = keepAlive;
-    }
-
-    async rippleDisconnect() {
-        if (this.connected && !this.keepConnectionAlive) {
-            await this.api.disconnect();
-            console.log(`Disconnected from ${this.server}`);
-            this.connected = false;
-        }
-    }
-
     async makePayment(toAddr, amount, currency, issuer, memos = null) {
-        await this.rippleConnect();
-
         // Get current ledger.
         const ledger = await (await this.api.getLedger()).ledgerVersion;
         const maxLedger = ledger + maxLedgerOffset;
@@ -82,8 +60,6 @@ class XrplAccount {
 
         await this.api.submit(signed.signedTransaction);
         const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
-        await this.rippleDisconnect();
-
         return verified ? signed.id : false;
     }
 
@@ -108,8 +84,6 @@ class XrplAccount {
     }
 
     async createTrustlines(lines) {
-        await this.rippleConnect();
-
         // Get current ledger.
         const ledger = await (await this.api.getLedger()).ledgerVersion;
         const maxLedger = ledger + maxLedgerOffset;
@@ -137,8 +111,6 @@ class XrplAccount {
         }
 
         const results = await Promise.all(tasks);
-        await this.rippleDisconnect();
-
         return results;
     }
 
@@ -170,20 +142,7 @@ class XrplAccount {
         })
     }
 
-    async getTrustlines(currency) {
-        await this.rippleConnect();
-        let res = await this.api.getTransactions(this.address, {
-            excludeFailures: true,
-            types: ["trustline"]
-        });
-        await this.rippleDisconnect();
-
-        return res;
-    }
-
     async subscribe() {
-        await this.rippleConnect(true);
-
         this.api.connection.request({
             command: 'subscribe',
             accounts: [this.address]

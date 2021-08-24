@@ -2,6 +2,7 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
+const RippleAPI = require('ripple-lib').RippleAPI;
 const xrpl = require('../../mb-xrpl/xrp-account');
 const XrplAccount = xrpl.XrplAccount;
 
@@ -33,12 +34,15 @@ const hexToASCII = (hex) => {
 }
 
 class TestUser {
-    constructor(configPath) {
+    constructor(configPath, rippleServer) {
         this.promises = {};
         this.configPath = configPath;
+        this.rippleServer = rippleServer;
+
+        this.ripplAPI = new RippleAPI({ server: this.rippleServer });
     }
 
-    async init(rippleServer) {
+    async init() {
         if (!fs.existsSync(this.configPath)) {
             this.cfg = { xrpl: { address: "", secret: "", hookAddress: "", hostAddress: "", hostToken: "" } }
             const newAcc = await createXrplAccount();
@@ -55,8 +59,11 @@ class TestUser {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hostAddress || !this.cfg.xrpl.hostToken || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        this.xrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        this.evernodeXrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.hookAddress);
+        await this.ripplAPI.connect();
+        console.log(`Connected to ${this.rippleServer}`);
+
+        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
 
         await this.evernodeXrplAcc.subscribe();
         this.evernodeXrplAcc.on(xrpl.Events.PAYMENT, (data, error) => {
@@ -360,8 +367,8 @@ class TestUser {
 }
 
 async function main() {
-    const user = new TestUser(CONFIG_PATH);
-    await user.init(RIPPLE_SERVER);
+    const user = new TestUser(CONFIG_PATH, RIPPLE_SERVER);
+    await user.init();
 }
 
 main().catch(console.error);

@@ -10,7 +10,8 @@ sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-mb_xrpl_conf="$sashimono_bin"/mb-xrpl/mb-xrpl.cfg
+mb_xrpl_dir="$sashimono_bin"/mb-xrpl
+mb_xrpl_conf="$mb_xrpl_dir"/mb-xrpl.cfg
 hook_xrpl_addr="rPmHA8hdJou71JcGLdCDYX9UjztRzmic3A"
 group="sashimonousers"
 admin_group="sashiadmin"
@@ -61,7 +62,7 @@ sudo ldconfig
 
 function rollback() {
     echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh
+    "$script_dir"/sashimono-uninstall.sh -q # Quiet uninstall.
     echo "Rolled back the installation."
     exit 1
 }
@@ -144,14 +145,19 @@ if [ "$quiet" != "-q" ]; then
     chmod -R +x "$sashimono_bin"/mb-xrpl
 
     echo "Please answer following questions to setup xrpl message board.."
-    read -p "Instance size (kb)? " instance_size </dev/tty
-    [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number." && rollback
-    read -p "Location? " location </dev/tty
-    [ -z "$location" ] && echo "Location cannot be empty." && rollback
-    [[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'." && rollback
-    read -p "Token name? " token </dev/tty
-    [ -z "$token" ] && echo "Token name cannot be empty." && rollback
-    [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
+    # Ask for input until correct value is given
+    while [[ ! "$instance_size" =~ [0-9]+ ]]; do
+        read -p "Instance size (kb)? " instance_size </dev/tty
+        [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number."
+    done
+    while [ -z "$location" ] || [[ "$location" =~ .*\;.* ]]; do
+        read -p "Location? " location </dev/tty
+        ([ -z "$location" ] && echo "Location cannot be empty.") || ([[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'.")
+    done
+    while [ -z "$token" ] || [[ "$token" =~ .*\;.* ]]; do
+        read -p "Token name? " token </dev/tty
+        ([ -z "$token" ] && echo "Token name cannot be empty.") || ([[ "$token" =~ .*\;.* ]] && echo "Token name include ';'.")
+    done
 
     # Generate new fauset account.
     new_acc=$(curl -X POST $xrpl_fauset_url)
@@ -162,7 +168,7 @@ if [ "$quiet" != "-q" ]; then
     secret=$(echo $new_acc | jq -r '.account.secret')
     ([ -z $address ] || [ -z $secret ]) && echo "Invalid xrpl account details." && rollback
 
-    echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
+    (! echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
 
     # Install xrpl message board systemd service.
     # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -174,8 +180,8 @@ if [ "$quiet" != "-q" ]; then
     User=root
     Group=root
     Type=simple
-    WorkingDirectory=$sashimono_bin
-    ExecStart=node $sashimono_bin/mb-xrpl $xrpl_server_url
+    WorkingDirectory=$mb_xrpl_dir
+    ExecStart=node $mb_xrpl_dir $xrpl_server_url
     Restart=on-failure
     RestartSec=5
     [Install]

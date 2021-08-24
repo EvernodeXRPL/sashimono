@@ -4,6 +4,7 @@ const maxLedgerOffset = 10;
 
 const MemoTypes = {
     INST_CRET: 'evndInstCreate',
+    INST_CRET_REF: 'evndInstCreateRef',
     INST_CRET_RESP: 'evndInstCreateResp',
     HOST_REG: 'evndHostReg'
 }
@@ -43,7 +44,7 @@ class XrplAccount {
         }
     }
 
-    async makePayment(toAddr, amount, currency, issuer, memoType = null, memoFormat = null, memoData = null) {
+    async makePayment(toAddr, amount, currency, issuer, memos = null) {
         await this.rippleConnect();
 
         // Get current ledger.
@@ -69,7 +70,7 @@ class XrplAccount {
                 address: toAddr,
                 amount: amountObj
             },
-            memos: this.getMemoCollection(memoType, memoFormat, memoData)
+            memos: this.getMemoCollection(memos)
         }, {
             maxLedgerVersion: maxLedger
         })
@@ -83,22 +84,24 @@ class XrplAccount {
         return verified ? signed.id : false;
     }
 
-    async createTrustline(currency, issuer, limit, memoType = null, memoFormat = null, memoData = null) {
+    async createTrustline(currency, issuer, limit, memos = null) {
         const res = await this.createTrustlines([{
             issuer: issuer,
             limit: limit,
             currency: currency,
-            memos: this.getMemoCollection(memoType, memoFormat, memoData)
+            memos: this.getMemoCollection(memos)
         }]);
         return res[0];
     }
 
-    getMemoCollection(memoType, memoFormat, memoData) {
-        return memoData ? [{
-            type: memoType,
-            format: memoFormat,
-            data: memoFormat == MemoFormats.JSON ? JSON.stringify(memoData) : memoData
-        }] : [];
+    getMemoCollection(memos) {
+        return memos ? memos.filter(m => m.data).map(m => {
+            return {
+                type: m.type,
+                format: m.format,
+                data: (typeof m.data === "object") ? JSON.stringify(m.data) : m.data
+            }
+        }) : [];
     }
 
     async createTrustlines(lines) {

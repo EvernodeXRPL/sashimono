@@ -41,14 +41,18 @@ class MessageBoard {
 
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
-            const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress, REG_FEE, EVR_CUR_CODE, this.cfg.xrpl.hookAddress, xrpl.MemoTypes.HOST_REG, xrpl.MemoFormats.TEXT, memoData);
+            const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+                REG_FEE,
+                EVR_CUR_CODE,
+                this.cfg.xrpl.hookAddress,
+                [{ type: xrpl.MemoTypes.HOST_REG, format: xrpl.MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res;
                 this.persistConfig();
             }
         }
 
-        this.evernodeXrplAcc = new XrplAccount(RIPPLE_SERVER, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.hookAddress);
 
         await this.evernodeXrplAcc.subscribe();
         this.evernodeXrplAcc.on(xrpl.Events.PAYMENT, (data, error) => {
@@ -71,12 +75,18 @@ class MessageBoard {
                                 data: this.hexToASCII(m.Memo.MemoData)
                             };
                         }).filter(m => m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY && m.data);
+                        const txHash = data.hash;
                         for (let instance of deserialized) {
                             try {
                                 this.sashiCli.checkStatus();
                                 const instanceInfo = this.sashiCli.createInstance(JSON.parse(instance.data));
-                                const memoData = JSON.stringify(instanceInfo);
-                                this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress, RES_FEE, "XRP", null, xrpl.MemoTypes.INST_CRET_RESP, xrpl.MemoFormats.BINARY, memoData).then(res => console.log(res)).catch(console.error);
+                                this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+                                    RES_FEE,
+                                    "XRP",
+                                    null,
+                                    [{ type: xrpl.MemoTypes.INST_CRET_REF, format: xrpl.MemoFormats.BINARY, data: txHash },
+                                    { type: xrpl.MemoTypes.INST_CRET_RESP, format: xrpl.MemoFormats.BINARY, data: instanceInfo }])
+                                    .then(res => console.log(res)).catch(console.error);
                             }
                             catch (e) {
                                 console.error("Error occured while creating instance ", e);
@@ -141,10 +151,10 @@ async function main() {
         throw 'Ripple Server Url argument is required.';
 
     let sashiCliPath;
-    if (args.length == 4 && args[3] == 'prod')
-        sashiCliPath = SASHI_CLI_PATH_PROD;
-    else if (args.length == 3 || (args.length == 4 && args[3] == 'dev'))
+    if (args.length == 4 && args[3] == 'dev')
         sashiCliPath = SASHI_CLI_PATH_DEV;
+    else if (args.length == 3 || (args.length == 4 && args[3] == 'prod'))
+        sashiCliPath = SASHI_CLI_PATH_PROD;
     else
         throw "Arguments mismatch.\n Usage: node message-board (optional)<dev|prod>";
 

@@ -1,50 +1,35 @@
 const fs = require('fs');
-const fetch = require('node-fetch');
 const { execSync } = require("child_process");
 const xrpl = require('./xrp-account');
 const XrplAccount = xrpl.XrplAccount;
 
-const FAUSET_URL = 'https://faucet.altnet.rippletest.net/accounts';
-const RIPPLE_SERVER = "wss://s.altnet.rippletest.net";
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
 
-class MessageBoard {
-    constructor() {
-        const sashiCliDevPath = "../build/sashi";
-        const sashiCliProdPath = "/usr/bin/sashi";
-        let sashiCliPath;
-        const args = process.argv;
-        if (args.length == 3 && args[2] == 'prod')
-            sashiCliPath = sashiCliProdPath;
-        else if (args.length == 2 || (args.length == 3 && args[2] == 'dev'))
-            sashiCliPath = sashiCliDevPath;
-        else {
-            console.log("Arguments mismatch.\n Usage: node message-board (optional)<dev|prod>");
-            process.exit(0);
-        }
+const SASHI_CLI_PATH_DEV = "../build/sashi";
+const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
 
-        if (!fs.existsSync(sashiCliPath)) {
-            console.error(`Sashi CLI does not exist in ${sashiCliPath}.`)
-            process.exit(0);
-        }
+class MessageBoard {
+    constructor(configPath, sashiCliPath) {
+        this.configPath = configPath;
+
+        if (!fs.existsSync(this.configPath))
+            throw `${this.configPath} does not exist.`;
+        else if (!fs.existsSync(sashiCliPath))
+            throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
         this.readConfig();
         this.sashiCli = new SashiCLI(sashiCliPath);
     }
 
-    async init() {
-        if (!this.cfg.xrpl.address) {
-            const newAcc = await this.createXrplAccount();
-            this.cfg.xrpl.address = newAcc.address;
-            this.cfg.xrpl.secret = newAcc.secret;
-            this.persistConfig();
-        }
+    async init(rippleServer) {
+        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hookAddress)
+            throw "Required cfg fields cannot be empty.";
 
-        this.xrplAcc = new XrplAccount(RIPPLE_SERVER, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         if (!this.cfg.xrpl.regTrustHash) {
             const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
@@ -106,20 +91,12 @@ class MessageBoard {
         });
     }
 
-    async createXrplAccount() {
-        const resp = await fetch(FAUSET_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        return (await resp.json()).account;
-    }
-
     readConfig() {
-        this.cfg = JSON.parse(fs.readFileSync(CONFIG_PATH).toString());
+        this.cfg = JSON.parse(fs.readFileSync(this.configPath).toString());
     }
 
     persistConfig() {
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify(this.cfg, null, 2));
+        fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
     }
 
     hexToASCII(hex) {
@@ -158,8 +135,22 @@ class SashiCLI {
 }
 
 async function main() {
-    const mb = new MessageBoard();
-    await mb.init();
+    // Read Ripple Server Url.
+    const args = process.argv;
+    if (args.length < 3)
+        throw 'Ripple Server Url argument is required.';
+
+    let sashiCliPath;
+    if (args.length == 4 && args[3] == 'prod')
+        sashiCliPath = SASHI_CLI_PATH_PROD;
+    else if (args.length == 3 || (args.length == 4 && args[3] == 'dev'))
+        sashiCliPath = SASHI_CLI_PATH_DEV;
+    else
+        throw "Arguments mismatch.\n Usage: node message-board (optional)<dev|prod>";
+
+    const rippleServer = args[2];
+    const mb = new MessageBoard(CONFIG_PATH, sashiCliPath);
+    await mb.init(rippleServer);
 }
 
-main();
+main().catch(console.error);

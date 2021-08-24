@@ -19,6 +19,9 @@ registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
 
+xrpl_server_url="wss://s.altnet.rippletest.net"
+xrpl_fauset_url="https://faucet.altnet.rippletest.net/accounts"
+
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
     echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
 
@@ -150,7 +153,16 @@ if [ "$quiet" != "-q" ]; then
     [ -z "$token" ] && echo "Token name cannot be empty." && rollback
     [[ "$token" =~ .*\;.* ]] && echo "Token name include ';'." && rollback
 
-    echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"\",\"secret\":\"\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
+    # Generate new fauset account.
+    new_acc=$(curl -X POST $xrpl_fauset_url)
+    # If result is not a json, account generation failed.
+    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl fauset account generation failed." && rollback
+
+    address=$(echo $new_acc | jq -r '.account.address')
+    secret=$(echo $new_acc | jq -r '.account.secret')
+    ([ -z $address ] || [ -z $secret ]) && echo "Invalid xrpl account details." && rollback
+
+    echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf
 
     # Install xrpl message board systemd service.
     # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -163,7 +175,7 @@ if [ "$quiet" != "-q" ]; then
     Group=root
     Type=simple
     WorkingDirectory=$sashimono_bin
-    ExecStart=node $sashimono_bin/mb-xrpl
+    ExecStart=node $sashimono_bin/mb-xrpl $xrpl_server_url
     Restart=on-failure
     RestartSec=5
     [Install]

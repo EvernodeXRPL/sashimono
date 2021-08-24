@@ -5,8 +5,8 @@ const fetch = require('node-fetch');
 const xrpl = require('../../mb-xrpl/xrp-account');
 const XrplAccount = xrpl.XrplAccount;
 
-const RIPPLE_SERVER = 'wss://s.altnet.rippletest.net';
-const FAUSET_URL = 'https://faucet.altnet.rippletest.net/accounts';
+const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
+const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
 
 const OWNER_PUBKEY = 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
 const CONFIG_PATH = 'user.cfg';
@@ -67,26 +67,26 @@ class TestUser {
                 const isFromHost = data.Account === this.cfg.xrpl.hostAddress;
                 if (isXrp && isToHook && isFromHost) {
                     const memos = data.Memos;
-                    const instanceRef = memos.map(m => {
+                    const deserialized = memos.map(m => {
                         return {
                             type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
                             format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                            data: hexToASCII(m.Memo.MemoData)
+                            data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                         };
-                    }).filter(m => m.type === xrpl.MemoTypes.INST_CRET_REF && m.format === xrpl.MemoFormats.BINARY && m.data);
-                    const instanceInfo = memos.map(m => {
-                        return {
-                            type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
-                            format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                            data: hexToASCII(m.Memo.MemoData)
-                        };
-                    }).filter(m => m.type === xrpl.MemoTypes.INST_CRET_RESP && m.format === xrpl.MemoFormats.BINARY && m.data);
+                    })
+                    const instanceRef = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_REF && m.format === xrpl.MemoFormats.BINARY);
+                    const instanceInfo = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_RESP && m.format === xrpl.MemoFormats.BINARY);
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
-                        const info = JSON.parse(instanceInfo[0].data);
+                        let info = instanceInfo[0].data;
                         let resolver = this.promises[ref];
                         if (resolver) {
+                            try {
+                                info = JSON.parse(info);
+                            }
+                            catch { }
+
                             resolver(info);
                             delete this.promises[ref];
                         }
@@ -112,8 +112,7 @@ class TestUser {
             switch (inp) {
                 case 'create':
                     const res = await this.createInstance();
-                    console.log("Successfully created the instance");
-                    console.log("Instance info", res);
+                    console.log("Instance creation results : ", res);
                     break;
                 default:
                     console.error('Invalid command. Only valid [create]');
@@ -346,9 +345,14 @@ class TestUser {
             this.cfg.xrpl.hostAddress,
             [{ type: xrpl.MemoTypes.INST_CRET, format: xrpl.MemoFormats.BINARY, data: memoData }]);
 
-        return new Promise(resolve => {
-            this.promises[res] = resolve
-        });
+        if (res) {
+            return new Promise(resolve => {
+                this.promises[res] = resolve
+            });
+        }
+        else {
+            return "Transaction failed.";
+        }
     }
 }
 

@@ -80,25 +80,26 @@ class MessageBoard {
                             return {
                                 type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
                                 format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                                data: hexToASCII(m.Memo.MemoData)
+                                data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                             };
-                        }).filter(m => m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY && m.data);
+                        }).filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY);
                         const txHash = data.hash;
                         for (let instance of deserialized) {
+                            let res;
                             try {
                                 this.sashiCli.checkStatus();
-                                const instanceInfo = this.sashiCli.createInstance(JSON.parse(instance.data));
-                                this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                                    RES_FEE,
-                                    "XRP",
-                                    null,
-                                    [{ type: xrpl.MemoTypes.INST_CRET_REF, format: xrpl.MemoFormats.BINARY, data: txHash },
-                                    { type: xrpl.MemoTypes.INST_CRET_RESP, format: xrpl.MemoFormats.BINARY, data: instanceInfo }])
-                                    .then(res => console.log(res)).catch(console.error);
+                                res = this.sashiCli.createInstance(JSON.parse(instance.data));
                             }
                             catch (e) {
-                                console.error("Error occured while creating instance ", e);
+                                res = e;
                             }
+                            this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+                                RES_FEE,
+                                "XRP",
+                                null,
+                                [{ type: xrpl.MemoTypes.INST_CRET_REF, format: xrpl.MemoFormats.BINARY, data: txHash },
+                                { type: xrpl.MemoTypes.INST_CRET_RESP, format: xrpl.MemoFormats.BINARY, data: res }])
+                                .then(res => console.log(res)).catch(console.error);
                         }
                     }
                 }

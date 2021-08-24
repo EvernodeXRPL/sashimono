@@ -20,8 +20,8 @@ registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
 
-xrpl_server_url="wss://s.altnet.rippletest.net"
-xrpl_fauset_url="https://faucet.altnet.rippletest.net/accounts"
+xrpl_server_url="wss://hooks-testnet.xrpl-labs.com"
+xrpl_fauset_url="https://hooks-testnet.xrpl-labs.com/newcreds"
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
     echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
@@ -164,8 +164,8 @@ if [ "$quiet" != "-q" ]; then
     # If result is not a json, account generation failed.
     [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl fauset account generation failed." && rollback
 
-    address=$(echo $new_acc | jq -r '.account.address')
-    secret=$(echo $new_acc | jq -r '.account.secret')
+    address=$(echo $new_acc | jq -r '.address')
+    secret=$(echo $new_acc | jq -r '.secret')
     ([ -z $address ] || [ -z $secret ]) && echo "Invalid xrpl account details." && rollback
 
     (! echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback

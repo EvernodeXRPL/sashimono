@@ -90,6 +90,9 @@ class TestUser {
                             resolver(info);
                             delete this.promises[ref];
                         }
+                        else {
+                            console.log("Received unawaited response : ", ref, info);
+                        }
                     }
                 }
             }

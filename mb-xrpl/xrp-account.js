@@ -20,9 +20,10 @@ const Events = {
 }
 
 class XrplAccount {
-    constructor(server, addr, secret = null) {
+    constructor(server, address, secret = null) {
+        this.server = server;
         this.api = new RippleAPI({ server: server });
-        this.addr = addr;
+        this.address = address;
         this.secret = secret;
         this.handlers = {};
         this.connected = false;
@@ -32,6 +33,7 @@ class XrplAccount {
     async rippleConnect(keepAlive = false) {
         if (!this.connected) {
             await this.api.connect();
+            console.log(`Connected to ${this.server}`);
             this.connected = true;
         }
         this.keepConnectionAlive = keepAlive;
@@ -40,6 +42,7 @@ class XrplAccount {
     async rippleDisconnect() {
         if (this.connected && !this.keepConnectionAlive) {
             await this.api.disconnect();
+            console.log(`Disconnected from ${this.server}`);
             this.connected = false;
         }
     }
@@ -61,9 +64,9 @@ class XrplAccount {
         if (!amountObj.counterparty)
             delete amountObj.counterparty;
 
-        const prepared = await this.api.preparePayment(this.addr, {
+        const prepared = await this.api.preparePayment(this.address, {
             source: {
-                address: this.addr,
+                address: this.address,
                 maxAmount: amountObj
             },
             destination: {
@@ -115,7 +118,7 @@ class XrplAccount {
         const tasks = [];
         for (const line of lines) {
             tasks.push(new Promise(async (resolve) => {
-                const prepared = await this.api.prepareTrustline(this.addr, {
+                const prepared = await this.api.prepareTrustline(this.address, {
                     counterparty: line.issuer,
                     currency: line.currency,
                     limit: line.limit.toString(),
@@ -169,7 +172,7 @@ class XrplAccount {
 
     async getTrustlines(currency) {
         await this.rippleConnect();
-        let res = await this.api.getTransactions(this.addr, {
+        let res = await this.api.getTransactions(this.address, {
             excludeFailures: true,
             types: ["trustline"]
         });
@@ -183,10 +186,10 @@ class XrplAccount {
 
         this.api.connection.request({
             command: 'subscribe',
-            accounts: [this.addr]
+            accounts: [this.address]
         });
 
-        console.log("Listening to transactions on " + this.addr);
+        console.log("Listening to transactions on " + this.address);
 
         this.api.connection.on("transaction", (data) => {
             const handler = this.handlers[data.transaction.TransactionType.toLowerCase()];

@@ -44,6 +44,7 @@ class MessageBoard {
             if (res) {
                 this.cfg.xrpl.regTrustHash = res;
                 this.persistConfig();
+                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`)
             }
         }
 
@@ -57,6 +58,7 @@ class MessageBoard {
             if (res) {
                 this.cfg.xrpl.regFeeHash = res;
                 this.persistConfig();
+                console.log('Registration payment made for evernode account.')
             }
         }
 
@@ -84,14 +86,17 @@ class MessageBoard {
                             };
                         }).filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY);
                         const txHash = data.hash;
+                        const txAccount = data.Account;
                         for (let instance of deserialized) {
                             let res;
                             try {
                                 this.sashiCli.checkStatus();
                                 res = this.sashiCli.createInstance(JSON.parse(instance.data));
+                                console.log(`Instance created for ${txAccount}`)
                             }
                             catch (e) {
                                 res = e;
+                                console.error(e)
                             }
                             this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                                 RES_FEE,
@@ -138,9 +143,10 @@ class SashiCLI {
     }
 
     checkStatus() {
-        let output = execSync(`${this.cliPath} status`, { stdio: 'pipe' });
+        const output = execSync(`${this.cliPath} status`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
         message = message.substring(0, message.length - 1); // Skipping the \n from the result.
+        console.log(`Sashi CLI : ${message}`);
         return message;
     }
 }

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const { execSync } = require("child_process");
+const RippleAPI = require('ripple-lib').RippleAPI;
 const xrpl = require('./xrp-account');
 const XrplAccount = xrpl.XrplAccount;
 
@@ -21,7 +22,7 @@ const hexToASCII = (hex) => {
 }
 
 class MessageBoard {
-    constructor(configPath, sashiCliPath) {
+    constructor(configPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
 
         if (!fs.existsSync(this.configPath))
@@ -31,13 +32,17 @@ class MessageBoard {
 
         this.readConfig();
         this.sashiCli = new SashiCLI(sashiCliPath);
+
+        this.ripplAPI = new RippleAPI({ server: rippleServer });
+        this.ripplAPI.connect();
+        console.log(`Connected to ${rippleServer}`);
     }
 
-    async init(rippleServer) {
+    async init() {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        this.xrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         if (!this.cfg.xrpl.regTrustHash) {
             const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
@@ -62,7 +67,7 @@ class MessageBoard {
             }
         }
 
-        this.evernodeXrplAcc = new XrplAccount(rippleServer, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
 
         await this.evernodeXrplAcc.subscribe();
         this.evernodeXrplAcc.on(xrpl.Events.PAYMENT, (data, error) => {
@@ -166,8 +171,8 @@ async function main() {
         throw "Arguments mismatch.\n Usage: node message-board (optional)<dev|prod>";
 
     const rippleServer = args[2];
-    const mb = new MessageBoard(CONFIG_PATH, sashiCliPath);
-    await mb.init(rippleServer);
+    const mb = new MessageBoard(CONFIG_PATH, sashiCliPath, rippleServer);
+    await mb.init();
 }
 
 main().catch(console.error);

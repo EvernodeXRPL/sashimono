@@ -166,7 +166,8 @@ if [ "$quiet" != "-q" ]; then
 
     address=$(echo $new_acc | jq -r '.address')
     secret=$(echo $new_acc | jq -r '.secret')
-    ([ -z $address ] || [ -z $secret ]) && echo "Invalid xrpl account details." && rollback
+    ([ "$address" == "" ] || [ "$address" == "null" ] ||
+        [ "$secret" == "" ] || [ "$secret" == "null" ]) && echo "Invalid xrpl account details: $new_acc" && rollback
 
     (! echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
 

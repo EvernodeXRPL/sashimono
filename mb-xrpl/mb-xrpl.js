@@ -128,7 +128,7 @@ class MessageBoard {
         this.evernodeXrplAcc.subscribe();
 
         // Subscribe to transactions when api is reconnected.
-        // Because api will automatically reconnects if it disconnected.
+        // Because API will be automatically reconnected if it's disconnected.
         this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
             this.evernodeXrplAcc.subscribe();
         });

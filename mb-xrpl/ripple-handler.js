@@ -84,10 +84,12 @@ class RippleAPIWarpper {
             }
             catch (e) {
                 console.log(`Couldn't connect ${this.rippleServer} : `, e);
+                // Wait for one second before retry.
                 await new Promise(resolve => setTimeout(resolve, CONNECTION_RETRY_INTERVAL));
             }
         }
 
+        this.connectionRetryCount = 0;
         throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
     }
 }

@@ -98,6 +98,14 @@ class XrplAccount {
         this.address = address;
         this.secret = secret;
         this.events = new EventEmitter();
+
+        this.api.connection.on("transaction", (data) => {
+            const eventName = data.transaction.TransactionType.toLowerCase();
+            if (data.engine_result === "tesSUCCESS")
+                this.events.emit(eventName, data.transaction)
+            else
+                this.events.emit(eventName, null, data.engine_result_message)
+        });
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {
@@ -220,16 +228,7 @@ class XrplAccount {
             command: 'subscribe',
             accounts: [this.address]
         });
-
-        console.log("Listening to transactions on " + this.address);
-
-        this.api.connection.on("transaction", (data) => {
-            const eventName = data.transaction.TransactionType.toLowerCase();
-            if (data.engine_result === "tesSUCCESS")
-                this.events.emit(eventName, data.transaction)
-            else
-                this.events.emit(eventName, null, data.engine_result_message)
-        });
+        console.log("Subscribed to transactions on " + this.address);
     }
 }
 

@@ -2,9 +2,9 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const RippleAPI = require('ripple-lib').RippleAPI;
-const xrpl = require('../../mb-xrpl/xrp-account');
+const xrpl = require('../../mb-xrpl/ripple-handler');
 const XrplAccount = xrpl.XrplAccount;
+const RippleAPIWarpper = xrpl.RippleAPIWarpper;
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
@@ -37,9 +37,8 @@ class TestUser {
     constructor(configPath, rippleServer) {
         this.promises = {};
         this.configPath = configPath;
-        this.rippleServer = rippleServer;
 
-        this.ripplAPI = new RippleAPI({ server: this.rippleServer });
+        this.ripplAPI = new RippleAPIWarpper(rippleServer);
     }
 
     async init() {
@@ -59,14 +58,13 @@ class TestUser {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hostAddress || !this.cfg.xrpl.hostToken || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        await this.ripplAPI.connect();
-        console.log(`Connected to ${this.rippleServer}`);
+        try { await this.ripplAPI.connect(); }
+        catch (e) { throw e; }
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
+        this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        await this.evernodeXrplAcc.subscribe();
-        this.evernodeXrplAcc.on(xrpl.Events.PAYMENT, (data, error) => {
+        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isXrp = (typeof data.Amount !== "object");
@@ -106,6 +104,13 @@ class TestUser {
             else {
                 console.error(error);
             }
+        });
+        this.evernodeXrplAcc.subscribe();
+
+        // Subscribe to transactions when api is reconnected.
+        // Because api will automatically reconnects if it disconnected.
+        this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
+            this.evernodeXrplAcc.subscribe();
         });
 
         this.rl = readLine.createInterface({

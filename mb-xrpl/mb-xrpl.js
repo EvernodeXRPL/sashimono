@@ -1,8 +1,8 @@
 const fs = require('fs');
 const { execSync } = require("child_process");
-const RippleAPI = require('ripple-lib').RippleAPI;
-const xrpl = require('./xrp-account');
+const xrpl = require('./ripple-handler');
 const XrplAccount = xrpl.XrplAccount;
+const RippleAPIWarpper = xrpl.RippleAPIWarpper;
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const EVR_CUR_CODE = 'EVR';
@@ -24,7 +24,6 @@ const hexToASCII = (hex) => {
 class MessageBoard {
     constructor(configPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
-        this.rippleServer = rippleServer;
 
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
@@ -33,19 +32,19 @@ class MessageBoard {
 
         this.readConfig();
         this.sashiCli = new SashiCLI(sashiCliPath);
-
-        this.ripplAPI = new RippleAPI({ server: this.rippleServer });
+        this.ripplAPI = new RippleAPIWarpper(rippleServer);
     }
 
     async init() {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        await this.ripplAPI.connect();
-        console.log(`Connected to ${this.rippleServer}`);
+        try { await this.ripplAPI.connect(); }
+        catch (e) { throw e; }
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
+        // Create trustline with evernode account.
         if (!this.cfg.xrpl.regTrustHash) {
             const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
             if (res) {
@@ -55,12 +54,19 @@ class MessageBoard {
             }
         }
 
+        // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
+            // For now we comment EVR reg fee transaction and make XRP transaction instead.
+            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            //     REG_FEE,
+            //     EVR_CUR_CODE,
+            //     this.cfg.xrpl.address,
+            //     [{ type: xrpl.MemoTypes.HOST_REG, format: xrpl.MemoFormats.TEXT, data: memoData }]);
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
-                EVR_CUR_CODE,
-                this.cfg.xrpl.hookAddress,
+                "XRP",
+                null,
                 [{ type: xrpl.MemoTypes.HOST_REG, format: xrpl.MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res;
@@ -69,10 +75,9 @@ class MessageBoard {
             }
         }
 
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        await this.evernodeXrplAcc.subscribe();
-        this.evernodeXrplAcc.on(xrpl.Events.PAYMENT, (data, error) => {
+        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isIssuedCurrency = (typeof data.Amount === "object");
@@ -119,6 +124,13 @@ class MessageBoard {
             else {
                 console.error(error);
             }
+        });
+        this.evernodeXrplAcc.subscribe();
+
+        // Subscribe to transactions when api is reconnected.
+        // Because api will automatically reconnects if it disconnected.
+        this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
+            this.evernodeXrplAcc.subscribe();
         });
     }
 

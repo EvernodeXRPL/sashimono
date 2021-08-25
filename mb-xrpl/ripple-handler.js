@@ -1,3 +1,8 @@
+const RippleAPI = require('ripple-lib').RippleAPI;
+
+const MAX_CONNECTION_RETRY_COUNT = 60;
+const CONNECTION_RETRY_INTERVAL = 1000;
+
 const maxLedgerOffset = 10;
 
 const MemoTypes = {
@@ -14,7 +19,73 @@ const MemoFormats = {
 }
 
 const Events = {
+    RECONNECTED: 'reconnected',
     PAYMENT: 'payment'
+}
+
+class EventEmitter {
+    constructor() {
+        this.handlers = {};
+    }
+
+    on(event, handler) {
+        if (!this.handlers[event])
+            this.handlers[event] = [];
+        this.handlers[event].push(handler);
+    }
+
+    emit(event, value, error = null) {
+        if (this.handlers[event])
+            this.handlers[event].forEach(handler => handler(value, error));
+    }
+}
+
+class RippleAPIWarpper {
+    constructor(rippleServer) {
+        this.connectionRetryCount = 0;
+        this.rippleServer = rippleServer;
+        this.events = new EventEmitter();
+
+        this.api = new RippleAPI({ server: this.rippleServer });
+        this.api.on('error', (errorCode, errorMessage) => {
+            console.log(errorCode + ': ' + errorMessage);
+        });
+        this.api.on('connected', () => {
+            console.log(`Connected to ${this.rippleServer}`);
+            this.connectionRetryCount = 0;
+        });
+        this.api.on('disconnected', async (code) => {
+            console.log(`Disconnected from ${this.rippleServer} code:`, code);
+            try {
+                await this.connect();
+                this.events.emit(Events.RECONNECTED, `Reconnected to ${this.rippleServer}`);
+            }
+            catch (e) { console.error(e); };
+        });
+    }
+
+    async connect() {
+        // If failed, Keep retrying until max threashold reaches.
+        return new Promise((resolve, reject) => {
+            console.log(`Trying to connect ${this.rippleServer}`);
+            this.connectionRetryCount++;
+            this.api.connect().then(() => {
+                resolve();
+            }).catch((e) => {
+                console.log(`Trying to connect ${this.rippleServer} failed : `, e);
+                if (this.connectionRetryCount <= MAX_CONNECTION_RETRY_COUNT) {
+                    setTimeout(async () => {
+                        try { await this.connect(); resolve(); }
+                        catch (e) { reject(e); }
+                    }, 1000);
+                }
+                else {
+                    const message = `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
+                    reject(message);
+                }
+            })
+        });
+    }
 }
 
 class XrplAccount {
@@ -22,7 +93,7 @@ class XrplAccount {
         this.api = rippleAPI;
         this.address = address;
         this.secret = secret;
-        this.handlers = {};
+        this.events = new EventEmitter();
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {
@@ -129,7 +200,7 @@ class XrplAccount {
                     console.log("Waiting for verification...");
                     setTimeout(() => {
                         this.verifyTransaction(txHash, minLedger, maxLedger).then(result => resolve(result));
-                    }, 1000);
+                    }, CONNECTION_RETRY_INTERVAL);
                 }
                 else {
                     console.log(error);
@@ -140,7 +211,7 @@ class XrplAccount {
         })
     }
 
-    async subscribe() {
+    subscribe() {
         this.api.connection.request({
             command: 'subscribe',
             accounts: [this.address]
@@ -151,26 +222,16 @@ class XrplAccount {
         this.api.connection.on("transaction", (data) => {
             const eventName = data.transaction.TransactionType.toLowerCase();
             if (data.engine_result === "tesSUCCESS")
-                this.emit(eventName, data.transaction)
+                this.events.emit(eventName, data.transaction)
             else
-                this.emit(eventName, null, data.engine_result_message)
+                this.events.emit(eventName, null, data.engine_result_message)
         });
-    }
-
-    on(event, handler) {
-        if (!this.handlers[event])
-            this.handlers[event] = [];
-        this.handlers[event].push(handler);
-    }
-
-    emit(event, value, error = null) {
-        if (this.handlers[event])
-            this.handlers[event].forEach(handler => handler(value, error));
     }
 }
 
 module.exports = {
     XrplAccount,
+    RippleAPIWarpper,
     MemoFormats,
     MemoTypes,
     Events

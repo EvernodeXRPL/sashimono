@@ -43,6 +43,7 @@ class EventEmitter {
 class RippleAPIWarpper {
     constructor(rippleServer) {
         this.connectionRetryCount = 0;
+        this.connected = false;
         this.rippleServer = rippleServer;
         this.events = new EventEmitter();
 
@@ -53,8 +54,13 @@ class RippleAPIWarpper {
         this.api.on('connected', () => {
             console.log(`Connected to ${this.rippleServer}`);
             this.connectionRetryCount = 0;
+            this.connected = true;
         });
         this.api.on('disconnected', async (code) => {
+            if (!this.connected)
+                return;
+
+            this.connected = false;
             console.log(`Disconnected from ${this.rippleServer} code:`, code);
             try {
                 await this.connect();
@@ -65,26 +71,24 @@ class RippleAPIWarpper {
     }
 
     async connect() {
+        if (this.connected)
+            return;
+
         // If failed, Keep retrying until max threashold reaches.
-        return new Promise((resolve, reject) => {
-            console.log(`Trying to connect ${this.rippleServer}`);
-            this.connectionRetryCount++;
-            this.api.connect().then(() => {
-                resolve();
-            }).catch((e) => {
-                console.log(`Trying to connect ${this.rippleServer} failed : `, e);
-                if (this.connectionRetryCount <= MAX_CONNECTION_RETRY_COUNT) {
-                    setTimeout(async () => {
-                        try { await this.connect(); resolve(); }
-                        catch (e) { reject(e); }
-                    }, 1000);
-                }
-                else {
-                    const message = `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
-                    reject(message);
-                }
-            })
-        });
+        while (this.connectionRetryCount < MAX_CONNECTION_RETRY_COUNT) {
+            try {
+                this.connectionRetryCount++;
+                console.log(`Trying to connect ${this.rippleServer}`);
+                await this.api.connect();
+                return;
+            }
+            catch (e) {
+                console.log(`Couldn't connect ${this.rippleServer} : `, e);
+                await new Promise(resolve => setTimeout(resolve, CONNECTION_RETRY_INTERVAL));
+            }
+        }
+
+        throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
     }
 }
 

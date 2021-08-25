@@ -149,18 +149,23 @@ class XrplAccount {
         console.log("Listening to transactions on " + this.address);
 
         this.api.connection.on("transaction", (data) => {
-            const handler = this.handlers[data.transaction.TransactionType.toLowerCase()];
-            if (handler) {
-                if (data.engine_result === "tesSUCCESS")
-                    handler(data.transaction);
-                else
-                    handler(null, data.engine_result_message)
-            }
+            const eventName = data.transaction.TransactionType.toLowerCase();
+            if (data.engine_result === "tesSUCCESS")
+                this.emit(eventName, data.transaction)
+            else
+                this.emit(eventName, null, data.engine_result_message)
         });
     }
 
     on(event, handler) {
-        this.handlers[event] = handler;
+        if (!this.handlers[event])
+            this.handlers[event] = [];
+        this.handlers[event].push(handler);
+    }
+
+    emit(event, value, error = null) {
+        if (this.handlers[event])
+            this.handlers[event].forEach(handler => handler(value, error));
     }
 }
 

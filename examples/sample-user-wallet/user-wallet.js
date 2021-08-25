@@ -80,7 +80,7 @@ class TestUser {
                             format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
                             data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                         };
-                    })
+                    });
                     const instanceRef = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_REF && m.format === xrpl.MemoFormats.BINARY);
                     const instanceInfo = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_RESP && m.format === xrpl.MemoFormats.BINARY);
 

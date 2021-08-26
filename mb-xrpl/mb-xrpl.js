@@ -1,14 +1,25 @@
 const fs = require('fs');
 const { execSync } = require("child_process");
 const xrpl = require('./ripple-handler');
+const sqlite = require('./sqlite-handler');
 const XrplAccount = xrpl.XrplAccount;
 const RippleAPIWarpper = xrpl.RippleAPIWarpper;
+const SqliteDatabase = sqlite.SqliteDatabase;
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
+const DB_PATH = 'mb-xrpl.sqlite';
+const DB_TABLE_NAME = 'redeem_ops';
 const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
+
+const RedeemStatus = {
+    Redeeming: 'Redeeming',
+    Redeemed: 'Redeemed',
+    Failed: 'Failed',
+    Expired: 'Expired'
+}
 
 const SASHI_CLI_PATH_DEV = "../build/sashi";
 const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
@@ -22,8 +33,9 @@ const hexToASCII = (hex) => {
 }
 
 class MessageBoard {
-    constructor(configPath, sashiCliPath, rippleServer) {
+    constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
+        this.redeemTable = DB_TABLE_NAME;
 
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
@@ -33,6 +45,8 @@ class MessageBoard {
         this.readConfig();
         this.sashiCli = new SashiCLI(sashiCliPath);
         this.ripplAPI = new RippleAPIWarpper(rippleServer);
+        this.db = new SqliteDatabase(dbPath);
+        this.createRedeemTable();
     }
 
     async init() {
@@ -87,9 +101,11 @@ class MessageBoard {
                     const token = data.Amount.currency;
                     const issuer = data.Amount.issuer;
                     const amount = parseInt(data.Amount.value);
-                    const isInstruction = (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address);
-                    if (isInstruction) {
+                    const isRedeem = (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address);
+                    if (isRedeem) {
                         const memos = data.Memos;
+                        const txHash = data.hash;
+                        const txAccount = data.Account;
                         const deserialized = memos.map(m => {
                             return {
                                 type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
@@ -97,17 +113,18 @@ class MessageBoard {
                                 data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                             };
                         }).filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY);
-                        const txHash = data.hash;
-                        const txAccount = data.Account;
                         for (let instance of deserialized) {
                             let res;
                             try {
+                                this.createRedeemRecord(txHash, txAccount, amount);
                                 res = this.sashiCli.createInstance(JSON.parse(instance.data));
                                 console.log(`Instance created for ${txAccount}`)
+                                this.updateRedeemStatus(txHash, RedeemStatus.Redeemed);
                             }
                             catch (e) {
                                 res = e;
-                                console.error(e)
+                                console.error(e);
+                                this.updateRedeemStatus(txHash, RedeemStatus.Failed);
                             }
                             this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                                 RES_FEE,
@@ -131,6 +148,31 @@ class MessageBoard {
         this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
             this.evernodeXrplAcc.subscribe();
         });
+    }
+
+    createRedeemTable() {
+        // Create table if not exists.
+        this.db.createTableIfNotExists(this.redeemTable, [
+            { name: 'timestamp', type: sqlite.DataTypes.INTEGER, notNull: true },
+            { name: 'tx_hash', type: sqlite.DataTypes.TEXT, notNull: true },
+            { name: 'user_xrp_address', type: sqlite.DataTypes.TEXT, notNull: true },
+            { name: 'h_token_amount', type: sqlite.DataTypes.INTEGER, notNull: true },
+            { name: 'status', type: sqlite.DataTypes.TEXT, notNull: true }
+        ]);
+    }
+
+    createRedeemRecord(txHash, txUserAddress, txAmount) {
+        this.db.insertValue(this.redeemTable, {
+            timestamp: Date.now(),
+            tx_hash: txHash,
+            user_xrp_address: txUserAddress,
+            h_token_amount: txAmount,
+            status: RedeemStatus.Redeeming
+        });
+    }
+
+    updateRedeemStatus(txHash, status) {
+        this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
     }
 
     readConfig() {
@@ -181,7 +223,7 @@ async function main() {
         sashiCliPath = SASHI_CLI_PATH_DEV;
 
     const rippleServer = args[2];
-    const mb = new MessageBoard(CONFIG_PATH, sashiCliPath, rippleServer);
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, sashiCliPath, rippleServer);
     await mb.init();
 }
 

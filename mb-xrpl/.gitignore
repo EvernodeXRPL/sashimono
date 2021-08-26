@@ -1,2 +1,4 @@
 node_modules
+dist
 mb-xrpl.cfg
+mb-xrpl.sqlite

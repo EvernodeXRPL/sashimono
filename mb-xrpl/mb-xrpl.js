@@ -174,15 +174,12 @@ async function main() {
     // Read Ripple Server Url.
     const args = process.argv;
     if (args.length < 3)
-        throw 'Ripple Server Url argument is required.';
+        throw "Arguments mismatch.\n Usage: node mb-xrpl rippleServer";
 
-    let sashiCliPath;
+    let sashiCliPath = SASHI_CLI_PATH_PROD;
+    // Use sashi CLI in the build folder for dev environment.
     if (args.length == 4 && args[3] == 'dev')
         sashiCliPath = SASHI_CLI_PATH_DEV;
-    else if (args.length == 3 || (args.length == 4 && args[3] == 'prod'))
-        sashiCliPath = SASHI_CLI_PATH_PROD;
-    else
-        throw "Arguments mismatch.\n Usage: node message-board (optional)<dev|prod>";
 
     const rippleServer = args[2];
     const mb = new MessageBoard(CONFIG_PATH, sashiCliPath, rippleServer);

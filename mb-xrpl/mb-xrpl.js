@@ -102,7 +102,6 @@ class MessageBoard {
                         for (let instance of deserialized) {
                             let res;
                             try {
-                                this.sashiCli.checkStatus();
                                 res = this.sashiCli.createInstance(JSON.parse(instance.data));
                                 console.log(`Instance created for ${txAccount}`)
                             }

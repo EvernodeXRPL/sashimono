@@ -146,9 +146,9 @@ if [ "$quiet" != "-q" ]; then
 
     echo "Please answer following questions to setup xrpl message board.."
     # Ask for input until a correct value is given
-    while [[ ! "$instance_size" =~ [0-9]+ ]]; do
-        read -p "Instance size (kb)? " instance_size </dev/tty
-        [[ ! "$instance_size" =~ [0-9]+ ]] && echo "Instance size should be a number."
+    while [ -z "$instance_size" ] || [[ "$instance_size" =~ .*\;.* ]]; do
+        read -p "Instance size? " instance_size </dev/tty
+        ([ -z "$instance_size" ] && echo "Instance size cannot be empty.") || ([[ "$instance_size" =~ .*\;.* ]] && echo "Instance size cannot include ';'.")
     done
     while [ -z "$location" ] || [[ "$location" =~ .*\;.* ]]; do
         read -p "Location? " location </dev/tty

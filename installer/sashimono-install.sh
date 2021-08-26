@@ -154,9 +154,9 @@ if [ "$quiet" != "-q" ]; then
         read -p "Location? " location </dev/tty
         ([ -z "$location" ] && echo "Location cannot be empty.") || ([[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'.")
     done
-    while [ -z "$token" ] || [[ "$token" =~ .*\;.* ]]; do
+    while [[ ! "$token" =~ ^[A-Z]{3}$ ]]; do
         read -p "Token name? " token </dev/tty
-        ([ -z "$token" ] && echo "Token name cannot be empty.") || ([[ "$token" =~ .*\;.* ]] && echo "Token name include ';'.")
+        [[ ! "$token" =~ ^[A-Z]{3}$ ]] && echo "Token name should be 3 UPPERCASE letters."
     done
 
     # Generate new fauset account.

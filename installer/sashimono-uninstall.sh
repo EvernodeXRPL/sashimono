@@ -8,6 +8,7 @@ docker_bin=/usr/bin/sashimono-agent/dockerbin
 sashimono_data=/etc/sashimono
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
+mb_xrpl_service="sashimono-mb-xrpl"
 registryuser="sashidockerreg"
 group="sashimonousers"
 admin_group="sashiadmin"
@@ -57,6 +58,13 @@ if [ $ucount -gt 0 ]; then
         echo "Uninstall cancelled."
         exit 0
     fi
+fi
+
+# Remove xrpl message board service if exists.
+if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then
+    systemctl stop $mb_xrpl_service
+    systemctl disable $mb_xrpl_service
+    rm /etc/systemd/system/$mb_xrpl_service.service
 fi
 
 echo "Removing Sashimono cgroup creation service..."

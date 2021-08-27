@@ -20,6 +20,7 @@ const MemoFormats = {
 
 const Events = {
     RECONNECTED: 'reconnected',
+    LEDGER: 'ledger',
     PAYMENT: 'payment'
 }
 
@@ -68,6 +69,9 @@ class RippleAPIWarpper {
             }
             catch (e) { console.error(e); };
         });
+        this.api.on('ledger', (ledger) => {
+            this.events.emit(Events.LEDGER, ledger);
+        });
     }
 
     async connect() {
@@ -91,6 +95,10 @@ class RippleAPIWarpper {
 
         this.connectionRetryCount = 0;
         throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
+    }
+
+    async getLedgerVersion() {
+        return (await this.api.getLedgerVersion());
     }
 }
 

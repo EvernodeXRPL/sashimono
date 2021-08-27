@@ -13,12 +13,13 @@ const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
+const LEDGERS_PER_MOMENT = 72;
 
 const RedeemStatus = {
-    Redeeming: 'Redeeming',
-    Redeemed: 'Redeemed',
-    Failed: 'Failed',
-    Expired: 'Expired'
+    REDEEMING: 'Redeeming',
+    REDEEMED: 'Redeemed',
+    FAILED: 'Failed',
+    EXPIRED: 'Expired'
 }
 
 const SASHI_CLI_PATH_DEV = "../build/sashi";
@@ -36,25 +37,36 @@ class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
+        this.destroyHandlers = [];
 
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
         else if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
-        this.readConfig();
         this.sashiCli = new SashiCLI(sashiCliPath);
         this.ripplAPI = new RippleAPIWarpper(rippleServer);
         this.db = new SqliteDatabase(dbPath);
-        this.createRedeemTable();
     }
 
     async init() {
+        this.readConfig();
+
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
+        this.createRedeemTable();
+
         try { await this.ripplAPI.connect(); }
         catch (e) { throw e; }
+
+        this.ripplAPI.events.on(xrpl.Events.LEDGER, (e) => {
+            const curHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion <= e.ledgerVersion);
+            for (const h of curHandlers) {
+                h.handle();
+            }
+            this.destroyHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion > e.ledgerVersion);
+        });
 
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
@@ -91,7 +103,7 @@ class MessageBoard {
 
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, (data, error) => {
+        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, async (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isIssuedCurrency = (typeof data.Amount === "object");
@@ -116,15 +128,19 @@ class MessageBoard {
                         for (let instance of deserialized) {
                             let res;
                             try {
+                                console.log(`Received redeem from ${txAccount}`)
                                 this.createRedeemRecord(txHash, txAccount, amount);
                                 res = this.sashiCli.createInstance(JSON.parse(instance.data));
                                 console.log(`Instance created for ${txAccount}`)
-                                this.updateRedeemStatus(txHash, RedeemStatus.Redeemed);
+                                const curLedger = await this.ripplAPI.getLedgerVersion();
+                                const life = curLedger + (amount * LEDGERS_PER_MOMENT);
+                                this.destroyOnLedger(res.content.name, txHash, life);
+                                this.updateRedeemStatus(txHash, RedeemStatus.REDEEMED);
                             }
                             catch (e) {
                                 res = e;
                                 console.error(e);
-                                this.updateRedeemStatus(txHash, RedeemStatus.Failed);
+                                this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                             }
                             this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                                 RES_FEE,
@@ -150,6 +166,18 @@ class MessageBoard {
         });
     }
 
+    destroyOnLedger(containerName, txHash, ledgerVersion) {
+        this.destroyHandlers.push({
+            maxLedgerVersion: ledgerVersion,
+            handle: () => {
+                console.log(`Moments exceeded. Destroying ${containerName}`)
+                this.sashiCli.destroyInstance(containerName);
+                this.updateRedeemStatus(txHash, RedeemStatus.EXPIRED);
+                console.log(`Destroyed ${containerName}`)
+            }
+        });
+    }
+
     createRedeemTable() {
         // Create table if not exists.
         this.db.createTableIfNotExists(this.redeemTable, [
@@ -167,7 +195,7 @@ class MessageBoard {
             tx_hash: txHash,
             user_xrp_address: txUserAddress,
             h_token_amount: txAmount,
-            status: RedeemStatus.Redeeming
+            status: RedeemStatus.REDEEMING
         });
     }
 
@@ -189,17 +217,33 @@ class SashiCLI {
         this.cliPath = cliPath;
     }
 
-    createInstance(msg) {
-        if (!msg.type)
-            msg.type = 'create';
+    createInstance(requirements) {
+        if (!requirements.type)
+            requirements.type = 'create';
 
-        let output = execSync(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' });
+        const res = this.execSashiCli(requirements);
+        if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
+            throw res;
+
+        return res;
+    }
+
+    destroyInstance(containerName) {
+        const msg = {
+            type: 'destroy',
+            container_name: containerName
+        };
+        const res = this.execSashiCli(msg);
+        if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
+            throw res;
+
+        return res;
+    }
+
+    execSashiCli(msg) {
+        const output = execSync(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' });
         let message = Buffer.from(output).toString();
-        message = JSON.parse(message.substring(0, message.length - 1)); // Skipping the \n from the result.
-        if (message.content && typeof message.content == 'string' && message.content.endsWith("error"))
-            throw message;
-
-        return message;
+        return JSON.parse(message.substring(0, message.length - 1)); // Skipping the \n from the result.
     }
 
     checkStatus() {

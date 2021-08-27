@@ -1,10 +1,7 @@
 const fs = require('fs');
-const { execSync } = require("child_process");
-const xrpl = require('./ripple-handler');
-const sqlite = require('./sqlite-handler');
-const XrplAccount = xrpl.XrplAccount;
-const RippleAPIWarpper = xrpl.RippleAPIWarpper;
-const SqliteDatabase = sqlite.SqliteDatabase;
+const { exec } = require("child_process");
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('./ripple-handler');
+const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const DB_PATH = 'mb-xrpl.sqlite';
@@ -55,17 +52,30 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        this.createRedeemTable();
 
         try { await this.ripplAPI.connect(); }
         catch (e) { throw e; }
 
-        this.ripplAPI.events.on(xrpl.Events.LEDGER, (e) => {
+        this.db.open();
+        this.createRedeemTable();
+
+        // const redeems = await this.getRedeemedRecords();
+        // for (const redeem of redeems) {
+        //     const txHash = redeem.tx_hash;
+        //     const amount = redeem.h_token_amount;
+        //     const curLedger = await this.ripplAPI.getLedgerVersion();
+        //     const life = curLedger + (amount * LEDGERS_PER_MOMENT);
+        //     this.destroyOnLedger(res.content.name, txHash, life);
+        // }
+
+        this.db.close();
+
+        this.ripplAPI.events.on(Events.LEDGER, async (e) => {
             const curHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion <= e.ledgerVersion);
-            for (const h of curHandlers) {
-                h.handle();
-            }
             this.destroyHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion > e.ledgerVersion);
+            for (const h of curHandlers) {
+                await h.handle();
+            }
         });
 
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
@@ -88,12 +98,12 @@ class MessageBoard {
             //     REG_FEE,
             //     EVR_CUR_CODE,
             //     this.cfg.xrpl.address,
-            //     [{ type: xrpl.MemoTypes.HOST_REG, format: xrpl.MemoFormats.TEXT, data: memoData }]);
+            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
                 "XRP",
                 null,
-                [{ type: xrpl.MemoTypes.HOST_REG, format: xrpl.MemoFormats.TEXT, data: memoData }]);
+                [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res;
                 this.persistConfig();
@@ -103,7 +113,7 @@ class MessageBoard {
 
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, async (data, error) => {
+        this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isIssuedCurrency = (typeof data.Amount === "object");
@@ -124,13 +134,15 @@ class MessageBoard {
                                 format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
                                 data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                             };
-                        }).filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET && m.format === xrpl.MemoFormats.BINARY);
+                        }).filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
                         for (let instance of deserialized) {
                             let res;
+
+                            this.db.open();
                             try {
                                 console.log(`Received redeem from ${txAccount}`)
                                 this.createRedeemRecord(txHash, txAccount, amount);
-                                res = this.sashiCli.createInstance(JSON.parse(instance.data));
+                                res = await this.sashiCli.createInstance(JSON.parse(instance.data));
                                 console.log(`Instance created for ${txAccount}`)
                                 const curLedger = await this.ripplAPI.getLedgerVersion();
                                 const life = curLedger + (amount * LEDGERS_PER_MOMENT);
@@ -138,16 +150,21 @@ class MessageBoard {
                                 this.updateRedeemStatus(txHash, RedeemStatus.REDEEMED);
                             }
                             catch (e) {
-                                res = e;
                                 console.error(e);
+                                res = {
+                                    code: 'REDEEM_ERR',
+                                    message: 'Error occured while redeeming.'
+                                }
                                 this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                             }
+                            this.db.close();
+
                             this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                                 RES_FEE,
                                 "XRP",
                                 null,
-                                [{ type: xrpl.MemoTypes.INST_CRET_REF, format: xrpl.MemoFormats.BINARY, data: txHash },
-                                { type: xrpl.MemoTypes.INST_CRET_RESP, format: xrpl.MemoFormats.BINARY, data: res }])
+                                [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
+                                { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: res }])
                                 .then(res => console.log(res)).catch(console.error);
                         }
                     }
@@ -161,7 +178,7 @@ class MessageBoard {
 
         // Subscribe to transactions when api is reconnected.
         // Because API will be automatically reconnected if it's disconnected.
-        this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
+        this.ripplAPI.events.on(Events.RECONNECTED, (e) => {
             this.evernodeXrplAcc.subscribe();
         });
     }
@@ -169,10 +186,14 @@ class MessageBoard {
     destroyOnLedger(containerName, txHash, ledgerVersion) {
         this.destroyHandlers.push({
             maxLedgerVersion: ledgerVersion,
-            handle: () => {
+            handle: async () => {
                 console.log(`Moments exceeded. Destroying ${containerName}`)
-                this.sashiCli.destroyInstance(containerName);
+                await this.sashiCli.destroyInstance(containerName);
+
+                this.db.open();
                 this.updateRedeemStatus(txHash, RedeemStatus.EXPIRED);
+                this.db.close();
+
                 console.log(`Destroyed ${containerName}`)
             }
         });
@@ -181,12 +202,16 @@ class MessageBoard {
     createRedeemTable() {
         // Create table if not exists.
         this.db.createTableIfNotExists(this.redeemTable, [
-            { name: 'timestamp', type: sqlite.DataTypes.INTEGER, notNull: true },
-            { name: 'tx_hash', type: sqlite.DataTypes.TEXT, notNull: true },
-            { name: 'user_xrp_address', type: sqlite.DataTypes.TEXT, notNull: true },
-            { name: 'h_token_amount', type: sqlite.DataTypes.INTEGER, notNull: true },
-            { name: 'status', type: sqlite.DataTypes.TEXT, notNull: true }
+            { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },
+            { name: 'tx_hash', type: DataTypes.TEXT, notNull: true },
+            { name: 'user_xrp_address', type: DataTypes.TEXT, notNull: true },
+            { name: 'h_token_amount', type: DataTypes.INTEGER, notNull: true },
+            { name: 'status', type: DataTypes.TEXT, notNull: true }
         ]);
+    }
+
+    async getRedeemedRecords() {
+        return (await this.db.getValues(this.redeemTable, { status: RedeemStatus.REDEEMED }));
     }
 
     createRedeemRecord(txHash, txUserAddress, txAmount) {
@@ -217,23 +242,23 @@ class SashiCLI {
         this.cliPath = cliPath;
     }
 
-    createInstance(requirements) {
+    async createInstance(requirements) {
         if (!requirements.type)
             requirements.type = 'create';
 
-        const res = this.execSashiCli(requirements);
+        const res = await this.execSashiCli(requirements);
         if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
             throw res;
 
         return res;
     }
 
-    destroyInstance(containerName) {
+    async destroyInstance(containerName) {
         const msg = {
             type: 'destroy',
             container_name: containerName
         };
-        const res = this.execSashiCli(msg);
+        const res = await this.execSashiCli(msg);
         if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
             throw res;
 
@@ -241,17 +266,33 @@ class SashiCLI {
     }
 
     execSashiCli(msg) {
-        const output = execSync(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' });
-        let message = Buffer.from(output).toString();
-        return JSON.parse(message.substring(0, message.length - 1)); // Skipping the \n from the result.
+        return new Promise((resolve, reject) => {
+            exec(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' }, (err, stdout, stderr) => {
+                if (err || stderr) {
+                    reject(err || stderr);
+                    return;
+                }
+
+                let message = Buffer.from(stdout).toString();
+                resolve(JSON.parse(message.substring(0, message.length - 1))); // Skipping the \n from the result.
+            });
+        })
     }
 
     checkStatus() {
-        const output = execSync(`${this.cliPath} status`, { stdio: 'pipe' });
-        let message = Buffer.from(output).toString();
-        message = message.substring(0, message.length - 1); // Skipping the \n from the result.
-        console.log(`Sashi CLI : ${message}`);
-        return message;
+        return new Promise((resolve, reject) => {
+            exec(`${this.cliPath} status`, { stdio: 'pipe' }, (err, stdout, stderr) => {
+                if (err || stderr) {
+                    reject(err || stderr);
+                    return;
+                }
+
+                let message = Buffer.from(stdout).toString();
+                message = message.substring(0, message.length - 1); // Skipping the \n from the result.
+                console.log(`Sashi CLI : ${message}`);
+                resolve(message);
+            });
+        });
     }
 }
 

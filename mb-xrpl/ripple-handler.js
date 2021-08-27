@@ -6,10 +6,10 @@ const CONNECTION_RETRY_INTERVAL = 1000;
 const maxLedgerOffset = 10;
 
 const MemoTypes = {
-    INST_CRET: 'evndInstCreate',
-    INST_CRET_REF: 'evndInstCreateRef',
-    INST_CRET_RESP: 'evndInstCreateResp',
-    HOST_REG: 'evndHostReg'
+    REDEEM: 'evnRedeem',
+    REDEEM_REF: 'evnRedeemRef',
+    REDEEM_RESP: 'evnRedeemResp',
+    HOST_REG: 'evnHostReg'
 }
 
 const MemoFormats = {

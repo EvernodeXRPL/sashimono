@@ -19,6 +19,7 @@ cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
+quiet=$1
 
 xrpl_server_url="wss://hooks-testnet.xrpl-labs.com"
 xrpl_fauset_url="https://hooks-testnet.xrpl-labs.com/newcreds"

@@ -20,7 +20,7 @@ class SqliteDatabase {
         this.db = null;
     }
 
-    createTableIfNotExists(tableName, columnInfo) {
+    async createTableIfNotExists(tableName, columnInfo) {
         if (!this.db)
             throw 'Database connection is not open.';
 
@@ -38,31 +38,35 @@ class SqliteDatabase {
         }).join(', ');
 
         const query = `CREATE TABLE IF NOT EXISTS ${tableName}(${columns})`;
-        this.runQuery(query);
+        await this.runQuery(query);
     }
 
     getValues(tableName, filter = null) {
         if (!this.db)
             throw 'Database connection is not open.';
 
-        let filters = [];
+        let values = [];
+        let filterStr = '1 AND '
         if (filter) {
             const columnNames = Object.keys(filter);
-            for (const columnName of columnNames)
-                filters.push(`${columnName} = '${filter[columnName]}'`);
+            for (const columnName of columnNames) {
+                filterStr += `${columnName} = ? AND `;
+                values.push(filter[columnName] ? filter[columnName] : 'NULL');
+            }
         }
-        const filterStr = filters.join(' && ');
+        filterStr = filterStr.slice(0, -5);
+
         const query = `SELECT * FROM ${tableName}` + (filterStr ? ` WHERE ${filterStr};` : ';');
         return new Promise((resolve, reject) => {
             let rows = [];
-            this.db.each(query, (err, row) => {
+            this.db.each(query, values, function (err, row) {
                 if (err) {
                     reject(err);
                     return;
                 }
 
                 rows.push(row);
-            }, (err, count) => {
+            }, function (err, count) {
                 if (err) {
                     reject(err);
                     return;
@@ -73,55 +77,72 @@ class SqliteDatabase {
         });
     }
 
-    insertValue(tableName, value) {
-        this.insertValues(tableName, [value]);
+    async insertValue(tableName, value) {
+        return (await this.insertValues(tableName, [value]));
     }
 
-    updateValue(tableName, value, filter = null) {
+    async updateValue(tableName, value, filter = null) {
         if (!this.db)
             throw 'Database connection is not open.';
 
         let columnNames = Object.keys(value);
+
+        let valueStr = '';
         let values = [];
-        for (const columnName of columnNames)
-            values.push(`${columnName} = '${value[columnName]}'`);
-        const valueStr = values.join(', ');
-        let filters = [];
+        for (const columnName of columnNames) {
+            valueStr += `${columnName} = ?,`;
+            values.push(value[columnName] ? value[columnName] : 'NULL');
+        }
+        valueStr = valueStr.slice(0, -1);
+
+        let filterStr = '1 AND '
         if (filter) {
             columnNames = Object.keys(filter);
-            for (const columnName of columnNames)
-                filters.push(`${columnName} = '${filter[columnName]}'`);
+            for (const columnName of columnNames) {
+                filterStr += `${columnName} = ? AND `;
+                values.push(filter[columnName] ? filter[columnName] : 'NULL');
+            }
         }
-        const filterStr = filters.join(' && ');
-        const query = `UPDATE ${tableName} SET ${valueStr}` + (filterStr ? ` WHERE ${filterStr};` : ';');
-        this.runQuery(query);
+        filterStr = filterStr.slice(0, -5);
+
+        const query = `UPDATE ${tableName} SET ${valueStr} WHERE ${filterStr};`;
+        return (await this.runQuery(query, values));
     }
 
-    insertValues(tableName, values) {
+    async insertValues(tableName, values) {
         if (!this.db)
             throw 'Database connection is not open.';
 
         if (values.length) {
             const columnNames = Object.keys(values[0]);
-            let rows = [];
-            for (const val of values) {
-                let rowValues = [];
-                for (const columnName of columnNames)
-                    rowValues.push(`'${val[columnName]}'`);
-                rows.push(`(${rowValues.join(', ')})`);
-            }
-            const columnStr = columnNames.join(', ');
-            const valueStr = rows.join(', ');
 
-            const query = `INSERT INTO ${tableName}(${columnStr}) VALUES ${valueStr}`;
-            this.runQuery(query);
+            let rowValueStr = '';
+            let rowValues = [];
+            for (const val of values) {
+                rowValueStr += '(';
+                for (const columnName of columnNames) {
+                    rowValueStr += ('?,');
+                    rowValues.push(val[columnName] ? val[columnName] : 'NULL');
+                }
+                rowValueStr = rowValueStr.slice(0, -1) + '),';
+            }
+            rowValueStr = rowValueStr.slice(0, -1);
+
+            const query = `INSERT INTO ${tableName}(${columnNames.join(', ')}) VALUES ${rowValueStr}`;
+            return (await this.runQuery(query, rowValues));
         }
     }
 
-    runQuery(query) {
-        this.db.run(query, (err) => {
-            if (err)
-                throw err;
+    runQuery(query, params = null) {
+        return new Promise((resolve, reject) => {
+            this.db.run(query, params ? params : [], function (err) {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                resolve({ lastId: this.lastID, changes: this.changes });
+            });
         });
     }
 }

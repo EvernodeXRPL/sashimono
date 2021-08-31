@@ -151,7 +151,7 @@ class XrplAccount {
 
         await this.api.submit(signed.signedTransaction);
         const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
-        return verified ? signed.id : false;
+        return verified ? verified : false;
     }
 
     async createTrustline(currency, issuer, limit, memos = null) {
@@ -197,7 +197,7 @@ class XrplAccount {
                 await this.api.submit(signed.signedTransaction);
                 console.log("Submitted trust line.");
                 const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
-                verified ? resolve(signed.id) : resolve(false);
+                verified ? resolve(verified) : resolve(false);
             }));
         }
 
@@ -214,8 +214,7 @@ class XrplAccount {
                 console.log(data.outcome.result);
                 if (data.outcome.result !== 'tesSUCCESS')
                     console.log("Transaction verification failed. Result: " + data.outcome.result);
-
-                resolve(data.outcome.result === 'tesSUCCESS');
+                resolve(data.outcome.result === 'tesSUCCESS' ? { txHash: data.id, ledgerVersion: data.outcome.ledgerVersion } : false);
             }).catch(error => {
                 // If transaction not in latest validated ledger, try again until max ledger is hit.
                 if (error instanceof this.api.errors.PendingLedgerVersionError || error instanceof this.api.errors.NotFoundError) {

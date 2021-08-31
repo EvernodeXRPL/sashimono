@@ -57,16 +57,11 @@ class MessageBoard {
         catch (e) { throw e; }
 
         this.db.open();
-        this.createRedeemTable();
+        await this.createRedeemTable();
 
-        // const redeems = await this.getRedeemedRecords();
-        // for (const redeem of redeems) {
-        //     const txHash = redeem.tx_hash;
-        //     const amount = redeem.h_token_amount;
-        //     const curLedger = await this.ripplAPI.getLedgerVersion();
-        //     const life = curLedger + (amount * LEDGERS_PER_MOMENT);
-        //     this.destroyOnLedger(res.content.name, txHash, life);
-        // }
+        const redeems = await this.getRedeemedRecords();
+        for (const redeem of redeems)
+            this.setDestroyHandler(redeem.container_name, redeem.tx_hash, this.getExpiryLedger(redeem.created_on_ledger, redeem.h_token_amount));
 
         this.db.close();
 
@@ -105,7 +100,7 @@ class MessageBoard {
                 null,
                 [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             if (res) {
-                this.cfg.xrpl.regFeeHash = res;
+                this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();
                 console.log('Registration payment made for evernode account.')
             }
@@ -135,38 +130,49 @@ class MessageBoard {
                                 data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                             };
                         }).filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
-                        for (let instance of deserialized) {
-                            let res;
 
-                            this.db.open();
+                        this.db.open();
+                        for (let instance of deserialized) {
+
+                            let createRes;
+                            let hasError = false;
                             try {
                                 console.log(`Received redeem from ${txAccount}`)
-                                this.createRedeemRecord(txHash, txAccount, amount);
-                                res = await this.sashiCli.createInstance(JSON.parse(instance.data));
+                                await this.createRedeemRecord(txHash, txAccount, amount);
+                                createRes = await this.sashiCli.createInstance(JSON.parse(instance.data));
                                 console.log(`Instance created for ${txAccount}`)
-                                const curLedger = await this.ripplAPI.getLedgerVersion();
-                                const life = curLedger + (amount * LEDGERS_PER_MOMENT);
-                                this.destroyOnLedger(res.content.name, txHash, life);
-                                this.updateRedeemStatus(txHash, RedeemStatus.REDEEMED);
                             }
                             catch (e) {
+                                hasError = true;
                                 console.error(e);
-                                res = {
+                                createRes = {
                                     code: 'REDEEM_ERR',
                                     message: 'Error occured while redeeming.'
                                 }
-                                this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                             }
-                            this.db.close();
 
-                            this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                                RES_FEE,
-                                "XRP",
-                                null,
-                                [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
-                                { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: res }])
-                                .then(res => console.log(res)).catch(console.error);
+                            try {
+                                const data = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+                                    RES_FEE,
+                                    "XRP",
+                                    null,
+                                    [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
+                                    { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: createRes }]);
+
+                                if (!hasError) {
+                                    this.setDestroyHandler(createRes.content.name, txHash, this.getExpiryLedger(data.ledgerVersion, amount));
+                                    await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                                }
+                            }
+                            catch (e) {
+                                hasError = true;
+                                console.error(e);
+                            }
+
+                            if (hasError)
+                                await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                         }
+                        this.db.close();
                     }
                 }
             }
@@ -183,29 +189,30 @@ class MessageBoard {
         });
     }
 
-    destroyOnLedger(containerName, txHash, ledgerVersion) {
+    setDestroyHandler(containerName, txHash, ledgerVersion) {
         this.destroyHandlers.push({
             maxLedgerVersion: ledgerVersion,
             handle: async () => {
-                console.log(`Moments exceeded. Destroying ${containerName}`)
+                console.log(`Moments exceeded. Destroying ${containerName}`);
                 await this.sashiCli.destroyInstance(containerName);
 
                 this.db.open();
-                this.updateRedeemStatus(txHash, RedeemStatus.EXPIRED);
+                await this.updateRedeemStatus(txHash, RedeemStatus.EXPIRED);
                 this.db.close();
-
-                console.log(`Destroyed ${containerName}`)
+                console.log(`Destroyed ${containerName}`);
             }
         });
     }
 
-    createRedeemTable() {
+    async createRedeemTable() {
         // Create table if not exists.
-        this.db.createTableIfNotExists(this.redeemTable, [
+        await this.db.createTableIfNotExists(this.redeemTable, [
             { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },
             { name: 'tx_hash', type: DataTypes.TEXT, notNull: true },
             { name: 'user_xrp_address', type: DataTypes.TEXT, notNull: true },
             { name: 'h_token_amount', type: DataTypes.INTEGER, notNull: true },
+            { name: 'container_name', type: DataTypes.TEXT },
+            { name: 'created_on_ledger', type: DataTypes.INTEGER },
             { name: 'status', type: DataTypes.TEXT, notNull: true }
         ]);
     }
@@ -214,8 +221,8 @@ class MessageBoard {
         return (await this.db.getValues(this.redeemTable, { status: RedeemStatus.REDEEMED }));
     }
 
-    createRedeemRecord(txHash, txUserAddress, txAmount) {
-        this.db.insertValue(this.redeemTable, {
+    async createRedeemRecord(txHash, txUserAddress, txAmount) {
+        await this.db.insertValue(this.redeemTable, {
             timestamp: Date.now(),
             tx_hash: txHash,
             user_xrp_address: txUserAddress,
@@ -224,8 +231,20 @@ class MessageBoard {
         });
     }
 
-    updateRedeemStatus(txHash, status) {
-        this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
+    async updateRedeemedRecord(txHash, containerName, ledgerVersion) {
+        await this.db.updateValue(this.redeemTable, {
+            container_name: containerName,
+            created_on_ledger: ledgerVersion,
+            status: RedeemStatus.REDEEMED
+        }, { tx_hash: txHash });
+    }
+
+    async updateRedeemStatus(txHash, status) {
+        await this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
+    }
+
+    getExpiryLedger(createdOnLedger, moments) {
+        return createdOnLedger + (moments * LEDGERS_PER_MOMENT);
     }
 
     readConfig() {

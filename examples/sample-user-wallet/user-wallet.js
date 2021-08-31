@@ -120,7 +120,7 @@ class TestUser {
     }
 
     async inputPump() {
-        const inp = await this.askForInput('');
+        const inp = await this.askForInput('Enter command');
         if (inp && inp.length > 0) {
             switch (inp) {
                 case 'create':
@@ -137,7 +137,7 @@ class TestUser {
 
     askForInput(label, defaultValue) {
         return new Promise(resolve => {
-            this.rl.question(label ? `${label}? ` : '', (input) => {
+            this.rl.question(label ? `${label} : ` : '', (input) => {
                 resolve(input && input.length > 0 ? input : defaultValue);
             })
         })
@@ -359,8 +359,9 @@ class TestUser {
             [{ type: MemoTypes.REDEEM, format: MemoFormats.BINARY, data: memoData }]);
 
         if (res) {
+            console.log("Transaction succeed, wait for the instance creation...");
             return new Promise(resolve => {
-                this.promises[res] = resolve
+                this.promises[res.txHash] = resolve;
             });
         }
         else {

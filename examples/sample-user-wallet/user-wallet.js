@@ -9,7 +9,6 @@ const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
 
 const OWNER_PUBKEY = 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
 const CONFIG_PATH = 'user.cfg';
-const REDEEM_FEE = 1;
 
 // Test Hook
 // rwQ7ECXhkF1ZF6qFHH4y7sc1y3ZnXgf6Rh
@@ -331,6 +330,7 @@ class TestUser {
     }
 
     async createInstance() {
+        const tokenCount = await this.askForInput(`${this.cfg.xrpl.hostToken} amount (default:1)`, 1);
         const contractId = await this.askForInput('Contract ID (default:uuidv4)', uuidv4());
         const image = await this.askForInput('Image: 1=ubuntu(default) | 2=nodejs', "1");
         if (image != "1" && image != "2") {
@@ -353,7 +353,7 @@ class TestUser {
 
         const memoData = JSON.stringify(data);
         const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            REDEEM_FEE,
+            +tokenCount,
             this.cfg.xrpl.hostToken,
             this.cfg.xrpl.hostAddress,
             [{ type: MemoTypes.REDEEM, format: MemoFormats.BINARY, data: memoData }]);

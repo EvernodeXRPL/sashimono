@@ -1,4 +1,5 @@
 const fs = require('fs');
+const logger = require('./logger');
 const { exec } = require("child_process");
 const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('./ripple-handler');
 const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
@@ -316,16 +317,24 @@ class SashiCLI {
 }
 
 async function main() {
-    // Read Ripple Server Url.
     const args = process.argv;
+
+    // This is used for logging purposes.
+    // Logs are formatted with the timestamp and a log file will be created inside log directory.
+    if (args.includes('--enable-logging'))
+        logger.init('log/mb-xrpl.log');
+
     if (args.length < 3)
-        throw "Arguments mismatch.\n Usage: node mb-xrpl rippleServer";
+        throw "Arguments mismatch.\n Usage: node mb-xrpl <ripple server url>";
 
     let sashiCliPath = SASHI_CLI_PATH_PROD;
     // Use sashi CLI in the build folder for dev environment.
-    if (args.length == 4 && args[3] == 'dev')
+    if (args.includes('--dev'))
         sashiCliPath = SASHI_CLI_PATH_DEV;
 
+    console.log('Starting the xrpl message board' + (args[3] == '--dev' ? ' (in dev mode)' : ''));
+
+    // Read Ripple Server Url.
     const rippleServer = args[2];
     const mb = new MessageBoard(CONFIG_PATH, DB_PATH, sashiCliPath, rippleServer);
     await mb.init();

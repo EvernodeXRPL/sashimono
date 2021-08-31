@@ -2,7 +2,7 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('../../mb-xrpl/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('../../mb-xrpl/lib/ripple-handler');
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';

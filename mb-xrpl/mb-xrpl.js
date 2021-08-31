@@ -1,8 +1,8 @@
 const fs = require('fs');
-const logger = require('./logger');
 const { exec } = require("child_process");
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('./ripple-handler');
-const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
+const logger = require('./lib/logger');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('./lib/ripple-handler');
+const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const DB_PATH = 'mb-xrpl.sqlite';

@@ -16,6 +16,7 @@
 # reconfig - Re configure the sashimono with given "max_instance_count" in all the hosts (Only update the sa.cfg, Reinstall the sashimono if "R" option is given).
 # lcl - Get lcl of the hosts.
 # create - Create new sashimono hotpocket instance in each node.
+# get-unl - Construct the UNL of all the nodes (Useful when creating cfg for contract upload).
 # docker-pull - Pull the latest docker image from docker hub.
 # start - Start sashimono hotpocket instance.
 # stop - Stop sashimono hotpocket instance.
@@ -28,11 +29,11 @@ PRINTFORMAT="Node %2s: %s\n"
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | docker-pull [N] | create [N] | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | start [N] | stop [N] | destroy [N]"
     echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -167,7 +168,7 @@ if [ $mode == "reconfig" ]; then
     saconfig="/etc/sashimono/sa.cfg"
 
     uninstall="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/uninstall.sh | bash -s -- -q"
-    install="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/install.sh | bash"
+    install="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/install.sh | bash -s -- -q"
 
     restartcgrs="systemctl restart $cgrulesengd_service.service"
     restartsas="systemctl restart $sashimono_service.service"
@@ -323,7 +324,7 @@ if [ $mode == "create" ]; then
                 hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[0]}\"")
                 pubkey=$(echo $hostinfo | jq -r '.pubkey')
             fi
-            
+
             config=$(echo $continfo | jq -c -r ".config")
             if [ "$1" != 0 ]; then
                 peers=""
@@ -372,6 +373,26 @@ if [ $mode == "create" ]; then
     else
         createinstance $nodeid
     fi
+    exit 0
+fi
+
+if [ $mode == "get-unl" ]; then
+    unl=""
+    for hostaddr in "${hostaddrs[@]}"; do
+        hostinfo=$(echo $continfo | jq -r ".hosts.\"$hostaddr\"")
+        pubkey=$(echo $hostinfo | jq -r '.pubkey')
+
+        if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
+            [ "$pubkey" == "" ] || [ "$pubkey" == "null" ]; then
+            echo "Host pubkey is empty for $hostaddr"
+            exit 1
+        fi
+        unl+="\"$pubkey\","
+    done
+
+    # Remove trainling comma(,) and add square brackets for the lists.
+    unl=${unl%?}
+    echo "{\"unl\":[$unl]}" | jq .
     exit 0
 fi
 

@@ -35,7 +35,7 @@ class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
-        this.destroyHandlers = [];
+        this.expiryList = [];
 
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
@@ -62,16 +62,27 @@ class MessageBoard {
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
-            this.setDestroyHandler(redeem.container_name, redeem.tx_hash, this.getExpiryLedger(redeem.created_on_ledger, redeem.h_token_amount));
+            this.addToExpiryList(redeem.tx_hash, redeem.container_name, this.getExpiryLedger(redeem.created_on_ledger, redeem.h_token_amount));
 
         this.db.close();
 
+        // Check fo instance expiry.
         this.ripplAPI.events.on(Events.LEDGER, async (e) => {
-            const curHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion <= e.ledgerVersion);
-            this.destroyHandlers = this.destroyHandlers.filter(h => h.maxLedgerVersion > e.ledgerVersion);
-            for (const h of curHandlers) {
-                await h.handle();
+            const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
+            if (expired && expired.length) {
+                this.expiryList = this.expiryList.filter(x => x.expiryLedger > e.ledgerVersion);
+
+                this.db.open();
+                for (const x of expired) {
+                    console.log(`Moments exceeded. Destroying ${x.containerName}`);
+                    await this.sashiCli.destroyInstance(x.containerName);
+                    await this.updateRedeemStatus(x.txHash, RedeemStatus.EXPIRED);
+                    console.log(`Destroyed ${x.containerName}`);
+                }
+                this.db.close();
             }
+
+
         });
 
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
@@ -161,7 +172,7 @@ class MessageBoard {
                                     { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: createRes }]);
 
                                 if (!hasError) {
-                                    this.setDestroyHandler(createRes.content.name, txHash, this.getExpiryLedger(data.ledgerVersion, amount));
+                                    this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
                                     await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
                                 }
                             }
@@ -190,18 +201,11 @@ class MessageBoard {
         });
     }
 
-    setDestroyHandler(containerName, txHash, ledgerVersion) {
-        this.destroyHandlers.push({
-            maxLedgerVersion: ledgerVersion,
-            handle: async () => {
-                console.log(`Moments exceeded. Destroying ${containerName}`);
-                await this.sashiCli.destroyInstance(containerName);
-
-                this.db.open();
-                await this.updateRedeemStatus(txHash, RedeemStatus.EXPIRED);
-                this.db.close();
-                console.log(`Destroyed ${containerName}`);
-            }
+    addToExpiryList(txHash, containerName, expiryLedger) {
+        this.expiryList.push({
+            txHash: txHash,
+            containerName: containerName,
+            expiryLedger: expiryLedger,
         });
     }
 

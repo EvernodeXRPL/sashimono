@@ -91,7 +91,7 @@ class MessageBoard {
         if (!this.cfg.xrpl.regTrustHash) {
             const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
             if (res) {
-                this.cfg.xrpl.regTrustHash = res;
+                this.cfg.xrpl.regTrustHash = res.txHash;
                 this.persistConfig();
                 console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`)
             }
@@ -213,7 +213,7 @@ class MessageBoard {
         // Create table if not exists.
         await this.db.createTableIfNotExists(this.redeemTable, [
             { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },
-            { name: 'tx_hash', type: DataTypes.TEXT, notNull: true },
+            { name: 'tx_hash', type: DataTypes.TEXT, primary: true, notNull: true },
             { name: 'user_xrp_address', type: DataTypes.TEXT, notNull: true },
             { name: 'h_token_amount', type: DataTypes.INTEGER, notNull: true },
             { name: 'container_name', type: DataTypes.TEXT },

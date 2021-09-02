@@ -53,7 +53,6 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-
         try { await this.ripplAPI.connect(); }
         catch (e) { throw e; }
 
@@ -81,8 +80,6 @@ class MessageBoard {
                 }
                 this.db.close();
             }
-
-
         });
 
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);

@@ -23,14 +23,6 @@ const RedeemStatus = {
 const SASHI_CLI_PATH_DEV = "../build/sashi";
 const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
 
-const hexToASCII = (hex) => {
-    let str = "";
-    for (let n = 0; n < hex.length; n += 2) {
-        str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
-    }
-    return str;
-}
-
 class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
@@ -93,71 +85,54 @@ class MessageBoard {
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
         this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
-            if (data) {
-                // Check whether issued currency
-                const isIssuedCurrency = (typeof data.Amount === "object");
-                // Check whether incomming to hook.
-                const isToHook = data.Destination === this.cfg.xrpl.hookAddress;
-                if (isIssuedCurrency && isToHook) {
-                    const token = data.Amount.currency;
-                    const issuer = data.Amount.issuer;
-                    const isRedeem = (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address);
-                    if (isRedeem) {
-                        const memos = data.Memos;
-                        const txHash = data.hash;
-                        const txAccount = data.Account;
-                        const txPubKey = data.SigningPubKey;
-                        const amount = parseInt(data.Amount.value);
-                        const deserialized = memos.map(m => {
-                            return {
-                                type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
-                                format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                                data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
-                            };
-                        }).filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
-
-                        this.db.open();
-                        for (let instance of deserialized) {
-
-                            let createRes;
-                            let hasError = false;
-                            try {
-                                console.log(`Received redeem from ${txAccount}`)
-                                await this.createRedeemRecord(txHash, txAccount, amount);
-                                createRes = await this.sashiCli.createInstance(JSON.parse(instance.data));
-                                console.log(`Instance created for ${txAccount}`)
-                            }
-                            catch (e) {
-                                hasError = true;
-                                console.error(e);
-                                createRes = {
-                                    code: 'REDEEM_ERR',
-                                    message: 'Error occured while redeeming.'
-                                }
-                            }
-
-                            try {
-                                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-
-                                if (!hasError) {
-                                    this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
-                                    await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
-                                }
-                            }
-                            catch (e) {
-                                hasError = true;
-                                console.error(e);
-                            }
-
-                            if (hasError)
-                                await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
-                        }
-                        this.db.close();
-                    }
-                }
-            }
-            else {
+            if (error)
                 console.error(error);
+            else if (!data)
+                console.log('Invalid transaction.');
+            else if (data && this.isRedeem(data)) {
+                const txHash = data.hash;
+                const txAccount = data.Account;
+                const txPubKey = data.SigningPubKey;
+                const amount = parseInt(data.Amount.value);
+                const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
+
+                this.db.open();
+                for (let memo of memos) {
+
+                    let createRes;
+                    let hasError = false;
+                    try {
+                        console.log(`Received redeem from ${txAccount}`)
+                        await this.createRedeemRecord(txHash, txAccount, amount);
+                        createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
+                        console.log(`Instance created for ${txAccount}`)
+                    }
+                    catch (e) {
+                        hasError = true;
+                        console.error(e);
+                        createRes = {
+                            code: 'REDEEM_ERR',
+                            message: 'Error occured while redeeming.'
+                        }
+                    }
+
+                    try {
+                        const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+
+                        if (!hasError) {
+                            this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                            await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                        }
+                    }
+                    catch (e) {
+                        hasError = true;
+                        console.error(e);
+                    }
+
+                    if (hasError)
+                        await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                }
+                this.db.close();
             }
         });
         this.evernodeXrplAcc.subscribe();
@@ -167,6 +142,19 @@ class MessageBoard {
         this.ripplAPI.events.on(Events.RECONNECTED, (e) => {
             this.evernodeXrplAcc.subscribe();
         });
+    }
+
+    isRedeem(transaction) {
+        // Check whether issued currency
+        const isIssuedCurrency = (typeof transaction.Amount === "object");
+        // Check whether incomming to hook.
+        const isToHook = transaction.Destination === this.cfg.xrpl.hookAddress;
+        if (isIssuedCurrency && isToHook) {
+            const token = transaction.Amount.currency;
+            const issuer = transaction.Amount.issuer;
+            return (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address && transaction.Memos && transaction.Memos.length);
+        }
+        return false;
     }
 
     async checkForRegistration() {

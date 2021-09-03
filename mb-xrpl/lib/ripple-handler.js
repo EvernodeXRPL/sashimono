@@ -1,7 +1,7 @@
 const eccrypto = require("eccrypto");
 const RippleAPI = require('ripple-lib').RippleAPI;
 
-const MAX_CONNECTION_RETRY_COUNT = 60;
+const CONNECTION_RETRY_THREASHOLD = 60;
 const CONNECTION_RETRY_INTERVAL = 1000;
 
 const maxLedgerOffset = 10;
@@ -23,6 +23,14 @@ const Events = {
     RECONNECTED: 'reconnected',
     LEDGER: 'ledger',
     PAYMENT: 'payment'
+}
+
+const hexToASCII = (hex) => {
+    let str = "";
+    for (let n = 0; n < hex.length; n += 2) {
+        str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
+    }
+    return str;
 }
 
 class EventEmitter {
@@ -79,8 +87,9 @@ class RippleAPIWarpper {
         if (this.connected)
             return;
 
-        // If failed, Keep retrying until max threashold reaches.
-        while (this.connectionRetryCount < MAX_CONNECTION_RETRY_COUNT) {
+        let retryInterval = CONNECTION_RETRY_INTERVAL;
+        // If failed, Keep retrying increasing the retry timeout.
+        while (true) {
             try {
                 this.connectionRetryCount++;
                 console.log(`Trying to connect ${this.rippleServer}`);
@@ -89,13 +98,13 @@ class RippleAPIWarpper {
             }
             catch (e) {
                 console.log(`Couldn't connect ${this.rippleServer} : `, e);
-                // Wait for one second before retry.
-                await new Promise(resolve => setTimeout(resolve, CONNECTION_RETRY_INTERVAL));
+                // If threashold reaches increase the retry interval.
+                if (this.connectionRetryCount % CONNECTION_RETRY_THREASHOLD === 0)
+                    retryInterval += CONNECTION_RETRY_INTERVAL;
+                // Wait before retry.
+                await new Promise(resolve => setTimeout(resolve, retryInterval));
             }
         }
-
-        this.connectionRetryCount = 0;
-        throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
     }
 
     deriveAddress(publicKey) {
@@ -109,14 +118,7 @@ class XrplAccount {
         this.address = address;
         this.secret = secret;
         this.events = new EventEmitter();
-
-        this.api.connection.on("transaction", (data) => {
-            const eventName = data.transaction.TransactionType.toLowerCase();
-            if (data.engine_result === "tesSUCCESS")
-                this.events.emit(eventName, data.transaction)
-            else
-                this.events.emit(eventName, null, data.engine_result_message)
-        });
+        this.eventHandled = false;
     }
 
     deriveKeypair() {
@@ -240,7 +242,30 @@ class XrplAccount {
         })
     }
 
+    deserializeMemo(memo) {
+        return {
+            type: memo.MemoType ? hexToASCII(memo.MemoType) : null,
+            format: memo.MemoFormat ? hexToASCII(memo.MemoFormat) : null,
+            data: memo.MemoData ? hexToASCII(memo.MemoData) : null
+        };
+    }
+
     subscribe() {
+        // Handle the event only once.
+        if (!this.eventHandled) {
+            this.api.connection.on("transaction", (data) => {
+                const eventName = data.transaction.TransactionType.toLowerCase();
+                if (data.engine_result === "tesSUCCESS") {
+                    if (data.transaction.Memos)
+                        data.transaction.Memos = data.transaction.Memos.filter(m => m.Memo).map(m => this.deserializeMemo(m.Memo));
+                    this.events.emit(eventName, data.transaction)
+                }
+                else
+                    this.events.emit(eventName, null, data.engine_result_message)
+            });
+            this.eventHandled = true;
+        }
+
         this.api.connection.request({
             command: 'subscribe',
             accounts: [this.address]

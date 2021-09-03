@@ -22,14 +22,6 @@ const createXrplAccount = async () => {
     return (await resp.json()).account;
 }
 
-const hexToASCII = (hex) => {
-    let str = "";
-    for (let n = 0; n < hex.length; n += 2) {
-        str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
-    }
-    return str;
-}
-
 class TestUser {
     constructor(configPath, rippleServer) {
         this.promises = {};
@@ -68,16 +60,8 @@ class TestUser {
                 const isToHook = data.Destination === this.cfg.xrpl.hookAddress;
                 const isFromHost = data.Account === this.cfg.xrpl.hostAddress;
                 if (isXrp && isToHook && isFromHost) {
-                    const memos = data.Memos;
-                    const deserialized = memos.map(m => {
-                        return {
-                            type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
-                            format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                            data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
-                        };
-                    });
-                    const instanceRef = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_REF && m.format === MemoFormats.BINARY);
-                    const instanceInfo = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_RESP && m.format === MemoFormats.BINARY);
+                    const instanceRef = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM_REF && m.format === MemoFormats.BINARY);
+                    const instanceInfo = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM_RESP && m.format === MemoFormats.BINARY);
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;

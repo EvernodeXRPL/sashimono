@@ -78,11 +78,11 @@ class MessageBoard {
 
         });
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         await this.checkForRegistration();
 
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
 
         this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
             if (error)
@@ -136,12 +136,6 @@ class MessageBoard {
             }
         });
         this.evernodeXrplAcc.subscribe();
-
-        // Subscribe to transactions when api is reconnected.
-        // Because API will be automatically reconnected if it's disconnected.
-        this.ripplAPI.events.on(Events.RECONNECTED, (e) => {
-            this.evernodeXrplAcc.subscribe();
-        });
     }
 
     isRedeem(transaction) {

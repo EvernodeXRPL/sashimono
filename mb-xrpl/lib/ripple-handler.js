@@ -114,23 +114,23 @@ class RippleAPIWarpper {
 
 class XrplAccount {
     constructor(rippleAPI, address, secret = null) {
-        this.api = rippleAPI;
+        this.rippleAPI = rippleAPI;
         this.address = address;
         this.secret = secret;
         this.events = new EventEmitter();
-        this.eventHandled = false;
+        this.subscribed = false;
     }
 
     deriveKeypair() {
         if (!this.secret)
             throw 'Cannot derive key pair: Account secret is empty.';
 
-        return this.api.deriveKeypair(this.secret);
+        return this.rippleAPI.api.deriveKeypair(this.secret);
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {
         // Get current ledger.
-        const ledger = await (await this.api.getLedger()).ledgerVersion;
+        const ledger = await (await this.rippleAPI.api.getLedger()).ledgerVersion;
         const maxLedger = ledger + maxLedgerOffset;
 
         const amountObj = {
@@ -143,7 +143,7 @@ class XrplAccount {
         if (!amountObj.counterparty)
             delete amountObj.counterparty;
 
-        const prepared = await this.api.preparePayment(this.address, {
+        const prepared = await this.rippleAPI.api.preparePayment(this.address, {
             source: {
                 address: this.address,
                 maxAmount: amountObj
@@ -157,9 +157,9 @@ class XrplAccount {
             maxLedgerVersion: maxLedger
         })
 
-        const signed = this.api.sign(prepared.txJSON, this.secret);
+        const signed = this.rippleAPI.api.sign(prepared.txJSON, this.secret);
 
-        await this.api.submit(signed.signedTransaction);
+        await this.rippleAPI.api.submit(signed.signedTransaction);
         const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
         return verified ? verified : false;
     }
@@ -186,14 +186,14 @@ class XrplAccount {
 
     async createTrustlines(lines) {
         // Get current ledger.
-        const ledger = await (await this.api.getLedger()).ledgerVersion;
+        const ledger = await (await this.rippleAPI.api.getLedger()).ledgerVersion;
         const maxLedger = ledger + maxLedgerOffset;
 
         // Create and verify multiple trust lines in parallel.
         const tasks = [];
         for (const line of lines) {
             tasks.push(new Promise(async (resolve) => {
-                const prepared = await this.api.prepareTrustline(this.address, {
+                const prepared = await this.rippleAPI.api.prepareTrustline(this.address, {
                     counterparty: line.issuer,
                     currency: line.currency,
                     limit: line.limit.toString(),
@@ -202,9 +202,9 @@ class XrplAccount {
                     maxLedgerVersion: maxLedger
                 })
 
-                const signed = this.api.sign(prepared.txJSON, this.secret);
+                const signed = this.rippleAPI.api.sign(prepared.txJSON, this.secret);
 
-                await this.api.submit(signed.signedTransaction);
+                await this.rippleAPI.api.submit(signed.signedTransaction);
                 console.log("Submitted trust line.");
                 const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
                 verified ? resolve(verified) : resolve(false);
@@ -217,7 +217,7 @@ class XrplAccount {
 
     verifyTransaction(txHash, minLedger, maxLedger) {
         return new Promise(resolve => {
-            this.api.getTransaction(txHash, {
+            this.rippleAPI.api.getTransaction(txHash, {
                 minLedgerVersion: minLedger,
                 maxLedgerVersion: maxLedger
             }).then(data => {
@@ -227,7 +227,7 @@ class XrplAccount {
                 resolve(data.outcome.result === 'tesSUCCESS' ? { txHash: data.id, ledgerVersion: data.outcome.ledgerVersion } : false);
             }).catch(error => {
                 // If transaction not in latest validated ledger, try again until max ledger is hit.
-                if (error instanceof this.api.errors.PendingLedgerVersionError || error instanceof this.api.errors.NotFoundError) {
+                if (error instanceof this.rippleAPI.api.errors.PendingLedgerVersionError || error instanceof this.rippleAPI.api.errors.NotFoundError) {
                     console.log("Waiting for verification...");
                     setTimeout(() => {
                         this.verifyTransaction(txHash, minLedger, maxLedger).then(result => resolve(result));
@@ -251,26 +251,38 @@ class XrplAccount {
     }
 
     subscribe() {
-        // Handle the event only once.
-        if (!this.eventHandled) {
-            this.api.connection.on("transaction", (data) => {
-                const eventName = data.transaction.TransactionType.toLowerCase();
-                if (data.engine_result === "tesSUCCESS") {
-                    if (data.transaction.Memos)
-                        data.transaction.Memos = data.transaction.Memos.filter(m => m.Memo).map(m => this.deserializeMemo(m.Memo));
-                    this.events.emit(eventName, data.transaction)
-                }
-                else
-                    this.events.emit(eventName, null, data.engine_result_message)
-            });
-            this.eventHandled = true;
+        if (this.subscribed) {
+            throw `Already subscribed to ${this.address}`
         }
 
-        this.api.connection.request({
+        this.rippleAPI.api.connection.on("transaction", (data) => {
+            const eventName = data.transaction.TransactionType.toLowerCase();
+            if (data.engine_result === "tesSUCCESS") {
+                if (data.transaction.Memos)
+                    data.transaction.Memos = data.transaction.Memos.filter(m => m.Memo).map(m => this.deserializeMemo(m.Memo));
+                this.events.emit(eventName, data.transaction)
+            }
+            else
+                this.events.emit(eventName, null, data.engine_result_message)
+        });
+
+        const request = {
             command: 'subscribe',
             accounts: [this.address]
+        }
+        const message = `Subscribed to transactions on ${this.address}`;
+
+        // Subscribe to transactions when api is reconnected.
+        // Because API will be automatically reconnected if it's disconnected.
+        this.rippleAPI.events.on(Events.RECONNECTED, (e) => {
+            this.rippleAPI.api.connection.request(request);
+            console.log(message);
         });
-        console.log("Subscribed to transactions on " + this.address);
+
+        this.rippleAPI.api.connection.request(request);
+        console.log(message);
+
+        this.eventHandled = true;
     }
 }
 

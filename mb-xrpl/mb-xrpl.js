@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('./lib/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, EncryptionHelper } = require('./lib/ripple-handler');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
@@ -58,7 +58,8 @@ class MessageBoard {
         catch (e) { throw e; }
 
         this.db.open();
-        await this.createRedeemTable();
+        // Create redeem table if not exist.
+        await this.createRedeemTableIfNotExists();
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -87,36 +88,7 @@ class MessageBoard {
 
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
-        // Create trustline with evernode account.
-        if (!this.cfg.xrpl.regTrustHash) {
-            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
-            if (res) {
-                this.cfg.xrpl.regTrustHash = res.txHash;
-                this.persistConfig();
-                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`)
-            }
-        }
-
-        // Make registration fee evernode account.
-        if (!this.cfg.xrpl.regFeeHash) {
-            const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
-            // For now we comment EVR reg fee transaction and make XRP transaction instead.
-            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            //     REG_FEE,
-            //     EVR_CUR_CODE,
-            //     this.cfg.xrpl.address,
-            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
-            const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                REG_FEE,
-                "XRP",
-                null,
-                [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
-            if (res) {
-                this.cfg.xrpl.regFeeHash = res.txHash;
-                this.persistConfig();
-                console.log('Registration payment made for evernode account.')
-            }
-        }
+        await this.checkForRegistration();
 
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
@@ -129,12 +101,13 @@ class MessageBoard {
                 if (isIssuedCurrency && isToHook) {
                     const token = data.Amount.currency;
                     const issuer = data.Amount.issuer;
-                    const amount = parseInt(data.Amount.value);
                     const isRedeem = (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address);
                     if (isRedeem) {
                         const memos = data.Memos;
                         const txHash = data.hash;
                         const txAccount = data.Account;
+                        const txPubKey = data.SigningPubKey;
+                        const amount = parseInt(data.Amount.value);
                         const deserialized = memos.map(m => {
                             return {
                                 type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
@@ -164,12 +137,7 @@ class MessageBoard {
                             }
 
                             try {
-                                const data = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                                    RES_FEE,
-                                    "XRP",
-                                    null,
-                                    [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
-                                    { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: createRes }]);
+                                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
 
                                 if (!hasError) {
                                     this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
@@ -201,6 +169,55 @@ class MessageBoard {
         });
     }
 
+    async checkForRegistration() {
+        // Create trustline with evernode account.
+        if (!this.cfg.xrpl.regTrustHash) {
+            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
+            if (res) {
+                this.cfg.xrpl.regTrustHash = res.txHash;
+                this.persistConfig();
+                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`)
+            }
+        }
+
+        // Make registration fee evernode account.
+        if (!this.cfg.xrpl.regFeeHash) {
+            const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
+            // For now we comment EVR reg fee transaction and make XRP transaction instead.
+            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            //     REG_FEE,
+            //     EVR_CUR_CODE,
+            //     this.cfg.xrpl.address,
+            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
+            const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+                REG_FEE,
+                "XRP",
+                null,
+                [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
+            if (res) {
+                this.cfg.xrpl.regFeeHash = res.txHash;
+                this.persistConfig();
+                console.log('Registration payment made for evernode account.')
+            }
+        }
+    }
+
+    async sendRedeemResponse(txHash, txPubkey, txAccount, response) {
+        // Verifying the pubkey.
+        const derivedAddress = this.ripplAPI.deriveAddress(txPubkey);
+        if (derivedAddress !== txAccount)
+            throw 'Invalid public key for encryption';
+
+        const encrypted = await EncryptionHelper.encrypt(txPubkey, response);
+
+        return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            RES_FEE,
+            "XRP",
+            null,
+            [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
+            { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: encrypted }]));
+    }
+
     addToExpiryList(txHash, containerName, expiryLedger) {
         this.expiryList.push({
             txHash: txHash,
@@ -209,7 +226,7 @@ class MessageBoard {
         });
     }
 
-    async createRedeemTable() {
+    async createRedeemTableIfNotExists() {
         // Create table if not exists.
         await this.db.createTableIfNotExists(this.redeemTable, [
             { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },

@@ -1,3 +1,4 @@
+const eccrypto = require("eccrypto");
 const RippleAPI = require('ripple-lib').RippleAPI;
 
 const MAX_CONNECTION_RETRY_COUNT = 60;
@@ -97,8 +98,8 @@ class RippleAPIWarpper {
         throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
     }
 
-    async getLedgerVersion() {
-        return (await this.api.getLedgerVersion());
+    deriveAddress(publicKey) {
+        return this.api.deriveAddress(publicKey);
     }
 }
 
@@ -116,6 +117,13 @@ class XrplAccount {
             else
                 this.events.emit(eventName, null, data.engine_result_message)
         });
+    }
+
+    deriveKeypair() {
+        if (!this.secret)
+            throw 'Cannot derive key pair: Account secret is empty.';
+
+        return this.api.deriveKeypair(this.secret);
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {
@@ -241,9 +249,35 @@ class XrplAccount {
     }
 }
 
+class EncryptionHelper {
+    static ivOffset = 65;
+    static macOffset = this.ivOffset + 16;
+    static ciphertextOffset = this.macOffset + 32;
+    static contentFormat = 'base64';
+    static keyFormat = 'hex';
+
+    static async encrypt(publicKeyStr, jsonObj) {
+        const encrypted = await eccrypto.encrypt(Buffer.from(publicKeyStr, this.keyFormat), Buffer.from(JSON.stringify(jsonObj)));
+        return Buffer.concat([encrypted.ephemPublicKey, encrypted.iv, encrypted.mac, encrypted.ciphertext]).toString(this.contentFormat);
+    }
+
+    static async decrypt(privateKeyStr, encryptedStr) {
+        const encryptedBuf = Buffer.from(encryptedStr, this.contentFormat);
+        const encrypted = {
+            ephemPublicKey: encryptedBuf.slice(0, this.ivOffset),
+            iv: encryptedBuf.slice(this.ivOffset, this.macOffset),
+            mac: encryptedBuf.slice(this.macOffset, this.ciphertextOffset),
+            ciphertext: encryptedBuf.slice(this.ciphertextOffset)
+        }
+        const decrypted = (await eccrypto.decrypt(Buffer.from(privateKeyStr, this.keyFormat).slice(1), encrypted)).toString();
+        return JSON.parse(decrypted);
+    }
+}
+
 module.exports = {
     XrplAccount,
     RippleAPIWarpper,
+    EncryptionHelper,
     MemoFormats,
     MemoTypes,
     Events

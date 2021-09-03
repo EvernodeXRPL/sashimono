@@ -2,7 +2,7 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('../../mb-xrpl/lib/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, EncryptionHelper } = require('../../mb-xrpl/lib/ripple-handler');
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
@@ -61,7 +61,7 @@ class TestUser {
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        this.evernodeXrplAcc.events.on(Events.PAYMENT, (data, error) => {
+        this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isXrp = (typeof data.Amount !== "object");
@@ -82,6 +82,10 @@ class TestUser {
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
                         let info = instanceInfo[0].data;
+
+                        const keyPair = this.xrplAcc.deriveKeypair();
+                        info = await EncryptionHelper.decrypt(keyPair.privateKey, info)
+
                         let resolver = this.promises[ref];
                         if (resolver) {
                             try {

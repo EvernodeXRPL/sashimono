@@ -65,7 +65,7 @@ class MessageBoard {
 
         this.db.close();
 
-        // Check fo instance expiry.
+        // Check for instance expiry.
         this.ripplAPI.events.on(Events.LEDGER, async (e) => {
             const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
             if (expired && expired.length) {

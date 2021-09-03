@@ -110,6 +110,10 @@ class RippleAPIWarpper {
     deriveAddress(publicKey) {
         return this.api.deriveAddress(publicKey);
     }
+
+    async getLedgerVersion() {
+        return (await this.api.getLedgerVersion());
+    }
 }
 
 class XrplAccount {

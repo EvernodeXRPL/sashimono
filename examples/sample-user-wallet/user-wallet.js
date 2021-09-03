@@ -2,16 +2,13 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const xrpl = require('../../mb-xrpl/ripple-handler');
-const XrplAccount = xrpl.XrplAccount;
-const RippleAPIWarpper = xrpl.RippleAPIWarpper;
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('../../mb-xrpl/lib/ripple-handler');
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
 
 const OWNER_PUBKEY = 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
 const CONFIG_PATH = 'user.cfg';
-const REDEEM_FEE = 1;
 
 // Test Hook
 // rwQ7ECXhkF1ZF6qFHH4y7sc1y3ZnXgf6Rh
@@ -64,7 +61,7 @@ class TestUser {
         this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
 
-        this.evernodeXrplAcc.events.on(xrpl.Events.PAYMENT, (data, error) => {
+        this.evernodeXrplAcc.events.on(Events.PAYMENT, (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isXrp = (typeof data.Amount !== "object");
@@ -79,8 +76,8 @@ class TestUser {
                             data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
                         };
                     });
-                    const instanceRef = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_REF && m.format === xrpl.MemoFormats.BINARY);
-                    const instanceInfo = deserialized.filter(m => m.data && m.type === xrpl.MemoTypes.INST_CRET_RESP && m.format === xrpl.MemoFormats.BINARY);
+                    const instanceRef = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_REF && m.format === MemoFormats.BINARY);
+                    const instanceInfo = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_RESP && m.format === MemoFormats.BINARY);
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
@@ -109,7 +106,7 @@ class TestUser {
 
         // Subscribe to transactions when api is reconnected.
         // Because API will be automatically reconnected if it's disconnected.
-        this.ripplAPI.events.on(xrpl.Events.RECONNECTED, (e) => {
+        this.ripplAPI.events.on(Events.RECONNECTED, (e) => {
             this.evernodeXrplAcc.subscribe();
         });
 
@@ -122,7 +119,7 @@ class TestUser {
     }
 
     async inputPump() {
-        const inp = await this.askForInput('');
+        const inp = await this.askForInput('Enter command');
         if (inp && inp.length > 0) {
             switch (inp) {
                 case 'create':
@@ -139,7 +136,7 @@ class TestUser {
 
     askForInput(label, defaultValue) {
         return new Promise(resolve => {
-            this.rl.question(label ? `${label}? ` : '', (input) => {
+            this.rl.question(label ? `${label} : ` : '', (input) => {
                 resolve(input && input.length > 0 ? input : defaultValue);
             })
         })
@@ -333,6 +330,7 @@ class TestUser {
     }
 
     async createInstance() {
+        const tokenCount = await this.askForInput(`${this.cfg.xrpl.hostToken} amount (default:1)`, 1);
         const contractId = await this.askForInput('Contract ID (default:uuidv4)', uuidv4());
         const image = await this.askForInput('Image: 1=ubuntu(default) | 2=nodejs', "1");
         if (image != "1" && image != "2") {
@@ -355,14 +353,15 @@ class TestUser {
 
         const memoData = JSON.stringify(data);
         const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            REDEEM_FEE,
+            +tokenCount,
             this.cfg.xrpl.hostToken,
             this.cfg.xrpl.hostAddress,
-            [{ type: xrpl.MemoTypes.INST_CRET, format: xrpl.MemoFormats.BINARY, data: memoData }]);
+            [{ type: MemoTypes.REDEEM, format: MemoFormats.BINARY, data: memoData }]);
 
         if (res) {
+            console.log("Transaction succeed, wait for the instance creation...");
             return new Promise(resolve => {
-                this.promises[res] = resolve
+                this.promises[res.txHash] = resolve;
             });
         }
         else {

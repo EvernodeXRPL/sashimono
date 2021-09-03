@@ -6,10 +6,10 @@ const CONNECTION_RETRY_INTERVAL = 1000;
 const maxLedgerOffset = 10;
 
 const MemoTypes = {
-    INST_CRET: 'evndInstCreate',
-    INST_CRET_REF: 'evndInstCreateRef',
-    INST_CRET_RESP: 'evndInstCreateResp',
-    HOST_REG: 'evndHostReg'
+    REDEEM: 'evnRedeem',
+    REDEEM_REF: 'evnRedeemRef',
+    REDEEM_RESP: 'evnRedeemResp',
+    HOST_REG: 'evnHostReg'
 }
 
 const MemoFormats = {
@@ -20,6 +20,7 @@ const MemoFormats = {
 
 const Events = {
     RECONNECTED: 'reconnected',
+    LEDGER: 'ledger',
     PAYMENT: 'payment'
 }
 
@@ -68,6 +69,9 @@ class RippleAPIWarpper {
             }
             catch (e) { console.error(e); };
         });
+        this.api.on('ledger', (ledger) => {
+            this.events.emit(Events.LEDGER, ledger);
+        });
     }
 
     async connect() {
@@ -91,6 +95,10 @@ class RippleAPIWarpper {
 
         this.connectionRetryCount = 0;
         throw `Max connection retry count reached for ${this.rippleServer}. Try again later.`;
+    }
+
+    async getLedgerVersion() {
+        return (await this.api.getLedgerVersion());
     }
 }
 
@@ -143,7 +151,7 @@ class XrplAccount {
 
         await this.api.submit(signed.signedTransaction);
         const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
-        return verified ? signed.id : false;
+        return verified ? verified : false;
     }
 
     async createTrustline(currency, issuer, limit, memos = null) {
@@ -189,7 +197,7 @@ class XrplAccount {
                 await this.api.submit(signed.signedTransaction);
                 console.log("Submitted trust line.");
                 const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
-                verified ? resolve(signed.id) : resolve(false);
+                verified ? resolve(verified) : resolve(false);
             }));
         }
 
@@ -206,8 +214,7 @@ class XrplAccount {
                 console.log(data.outcome.result);
                 if (data.outcome.result !== 'tesSUCCESS')
                     console.log("Transaction verification failed. Result: " + data.outcome.result);
-
-                resolve(data.outcome.result === 'tesSUCCESS');
+                resolve(data.outcome.result === 'tesSUCCESS' ? { txHash: data.id, ledgerVersion: data.outcome.ledgerVersion } : false);
             }).catch(error => {
                 // If transaction not in latest validated ledger, try again until max ledger is hit.
                 if (error instanceof this.api.errors.PendingLedgerVersionError || error instanceof this.api.errors.NotFoundError) {

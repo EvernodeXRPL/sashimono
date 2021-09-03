@@ -90,7 +90,7 @@ fi
 shopt -s expand_aliases
 alias sshskp='ssh -o StrictHostKeychecking=no'
 if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
-    alias sshskp='sshpass -p $sshpass ssh -o StrictHostKeychecking=no'
+    alias sshskp="sshpass -p $sshpass ssh -o StrictHostKeychecking=no"
 fi
 
 function updateconfig() {

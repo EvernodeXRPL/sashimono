@@ -183,7 +183,7 @@ if [ "$quiet" != "-q" ]; then
     Group=root
     Type=simple
     WorkingDirectory=$mb_xrpl_dir
-    ExecStart=node $mb_xrpl_dir $xrpl_server_url
+    ExecStart=node $mb_xrpl_dir $xrpl_server_url --enable-logging
     Restart=on-failure
     RestartSec=5
     [Install]

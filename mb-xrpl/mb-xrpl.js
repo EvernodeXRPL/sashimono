@@ -61,16 +61,22 @@ class MessageBoard {
 
         // Check for instance expiry.
         this.ripplAPI.events.on(Events.LEDGER, async (e) => {
+            // Filter out instances which needed to be expired and destrot them.
             const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
             if (expired && expired.length) {
                 this.expiryList = this.expiryList.filter(x => x.expiryLedger > e.ledgerVersion);
 
                 this.db.open();
                 for (const x of expired) {
-                    console.log(`Moments exceeded. Destroying ${x.containerName}`);
-                    await this.sashiCli.destroyInstance(x.containerName);
-                    await this.updateRedeemStatus(x.txHash, RedeemStatus.EXPIRED);
-                    console.log(`Destroyed ${x.containerName}`);
+                    try {
+                        console.log(`Moments exceeded. Destroying ${x.containerName}`);
+                        await this.sashiCli.destroyInstance(x.containerName);
+                        await this.updateRedeemStatus(x.txHash, RedeemStatus.EXPIRED);
+                        console.log(`Destroyed ${x.containerName}`);
+                    }
+                    catch (e) {
+                        console.error(e);
+                    }
                 }
                 this.db.close();
             }
@@ -78,10 +84,12 @@ class MessageBoard {
 
         this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
+        // Check whether registration fee is already payed and trustline is made.
         await this.checkForRegistration();
 
         this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
 
+        // Handle the transactions on evernode account and filter out redeem operations.
         this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
             if (error)
                 console.error(error);
@@ -92,6 +100,7 @@ class MessageBoard {
                 const txAccount = data.Account;
                 const txPubKey = data.SigningPubKey;
                 const amount = parseInt(data.Amount.value);
+                // Filter out the memo feilds with redeem type and binary format.
                 const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
 
                 this.db.open();
@@ -100,10 +109,10 @@ class MessageBoard {
                     let createRes;
                     let hasError = false;
                     try {
-                        console.log(`Received redeem from ${txAccount}`)
+                        console.log(`Received redeem from ${txAccount}`);
                         await this.createRedeemRecord(txHash, txAccount, amount);
                         createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
-                        console.log(`Instance created for ${txAccount}`)
+                        console.log(`Instance created for ${txAccount}`);
                     }
                     catch (e) {
                         hasError = true;
@@ -111,14 +120,17 @@ class MessageBoard {
                         createRes = {
                             code: 'REDEEM_ERR',
                             message: 'Error occured while redeeming.'
-                        }
+                        };
                     }
 
                     try {
+                        // Send the redeem response with created instance info.
                         const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
 
                         if (!hasError) {
+                            // Add to in-memory expiry list, so the instance will get destroyed when the moments axceed,
                             this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                            // Update the database for redeemed record.
                             await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
                         }
                     }
@@ -127,6 +139,7 @@ class MessageBoard {
                         console.error(e);
                     }
 
+                    // Unpdate the redeem response for failures.
                     if (hasError)
                         await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                 }
@@ -152,11 +165,11 @@ class MessageBoard {
     async checkForRegistration() {
         // Create trustline with evernode account.
         if (!this.cfg.xrpl.regTrustHash) {
-            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT);
+            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT, false);
             if (res) {
                 this.cfg.xrpl.regTrustHash = res.txHash;
                 this.persistConfig();
-                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`)
+                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`);
             }
         }
 
@@ -177,7 +190,7 @@ class MessageBoard {
             if (res) {
                 this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();
-                console.log('Registration payment made for evernode account.')
+                console.log('Registration payment made for evernode account.');
             }
         }
     }
@@ -188,6 +201,7 @@ class MessageBoard {
         if (derivedAddress !== txAccount)
             throw 'Invalid public key for encryption';
 
+        // Encrypt response with user pubkey.
         const encrypted = await EncryptionHelper.encrypt(txPubkey, response);
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,

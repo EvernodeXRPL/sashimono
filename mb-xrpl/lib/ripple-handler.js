@@ -168,11 +168,12 @@ class XrplAccount {
         return verified ? verified : false;
     }
 
-    async createTrustline(currency, issuer, limit, memos = null) {
+    async createTrustline(currency, issuer, limit, allowRippling, memos = null) {
         const res = await this.createTrustlines([{
             issuer: issuer,
             limit: limit,
             currency: currency,
+            allowRippling: allowRippling,
             memos: this.getMemoCollection(memos)
         }]);
         return res[0];
@@ -201,7 +202,8 @@ class XrplAccount {
                     counterparty: line.issuer,
                     currency: line.currency,
                     limit: line.limit.toString(),
-                    memos: line.memos
+                    memos: line.memos,
+                    ripplingDisabled: !line.allowRippling
                 }, {
                     maxLedgerVersion: maxLedger
                 })
@@ -256,7 +258,7 @@ class XrplAccount {
 
     subscribe() {
         if (this.subscribed) {
-            throw `Already subscribed to ${this.address}`
+            throw `Already subscribed to ${this.address}.`;
         }
 
         this.rippleAPI.api.connection.on("transaction", (data) => {
@@ -264,10 +266,10 @@ class XrplAccount {
             if (data.engine_result === "tesSUCCESS") {
                 if (data.transaction.Memos)
                     data.transaction.Memos = data.transaction.Memos.filter(m => m.Memo).map(m => this.deserializeMemo(m.Memo));
-                this.events.emit(eventName, data.transaction)
+                this.events.emit(eventName, data.transaction);
             }
             else
-                this.events.emit(eventName, null, data.engine_result_message)
+                this.events.emit(eventName, null, data.engine_result_message);
         });
 
         const request = {
@@ -286,32 +288,35 @@ class XrplAccount {
         this.rippleAPI.api.connection.request(request);
         console.log(message);
 
-        this.eventHandled = true;
+        this.subscribed = true;
     }
 }
 
 class EncryptionHelper {
+    // Offsets of the properties in the encrypted buffer.
     static ivOffset = 65;
     static macOffset = this.ivOffset + 16;
     static ciphertextOffset = this.macOffset + 32;
     static contentFormat = 'base64';
     static keyFormat = 'hex';
 
-    static async encrypt(publicKeyStr, jsonObj) {
-        const encrypted = await eccrypto.encrypt(Buffer.from(publicKeyStr, this.keyFormat), Buffer.from(JSON.stringify(jsonObj)));
+    static async encrypt(publicKey, json) {
+        // For the encryption library, both keys and data should be buffers.
+        const encrypted = await eccrypto.encrypt(Buffer.from(publicKey, this.keyFormat), Buffer.from(JSON.stringify(json)));
+        // Concat all the properties of the encrypted object to a single buffer.
         return Buffer.concat([encrypted.ephemPublicKey, encrypted.iv, encrypted.mac, encrypted.ciphertext]).toString(this.contentFormat);
     }
 
-    static async decrypt(privateKeyStr, encryptedStr) {
-        const encryptedBuf = Buffer.from(encryptedStr, this.contentFormat);
-        const encrypted = {
+    static async decrypt(privateKey, encrypted) {
+        // Extract the buffer from the string and prepare encrypt object from buffer offsets for decryption.
+        const encryptedBuf = Buffer.from(encrypted, this.contentFormat);
+        const encryptedObj = {
             ephemPublicKey: encryptedBuf.slice(0, this.ivOffset),
             iv: encryptedBuf.slice(this.ivOffset, this.macOffset),
             mac: encryptedBuf.slice(this.macOffset, this.ciphertextOffset),
             ciphertext: encryptedBuf.slice(this.ciphertextOffset)
         }
-        const decrypted = (await eccrypto.decrypt(Buffer.from(privateKeyStr, this.keyFormat).slice(1), encrypted)).toString();
-        return JSON.parse(decrypted);
+        return JSON.parse((await eccrypto.decrypt(Buffer.from(privateKey, this.keyFormat).slice(1), encryptedObj)).toString());
     }
 }
 

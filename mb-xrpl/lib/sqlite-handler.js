@@ -9,15 +9,30 @@ const DataTypes = {
 class SqliteDatabase {
     constructor(dbFile) {
         this.dbFile = dbFile;
+        this.openConnections = 0;
     }
 
     open() {
-        this.db = new sqlite3.Database(this.dbFile);
+        // Make sure only one connection is open.
+        // Otherwise increase the connection counter.
+        if (this.openConnections <= 0) {
+            this.db = new sqlite3.Database(this.dbFile);
+            this.openConnections = 1;
+        }
+        else
+            this.openConnections++;
     }
 
     close() {
-        this.db.close();
-        this.db = null;
+        // If there's no more open connections close the db.
+        // Otherwise keep the db open so it'll get closed in the next close() call.
+        if (this.openConnections <= 1) {
+            this.db.close();
+            this.db = null;
+            this.openConnections = 0;
+        }
+        else
+            this.openConnections--;
     }
 
     async createTableIfNotExists(tableName, columnInfo) {

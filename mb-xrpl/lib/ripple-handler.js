@@ -4,6 +4,8 @@ const RippleAPI = require('ripple-lib').RippleAPI;
 const CONNECTION_RETRY_THREASHOLD = 60;
 const CONNECTION_RETRY_INTERVAL = 1000;
 
+const DISABLE_MASTERKEY = 0x100000;
+
 const maxLedgerOffset = 10;
 
 const MemoTypes = {
@@ -117,6 +119,21 @@ class RippleAPIWarpper {
 
     async getLedgerVersion() {
         return (await this.api.getLedgerVersion());
+    }
+
+    async isValidAddress(publicKey, address) {
+        const derivedAddress = this.deriveAddress(publicKey);
+        const info = await this.getAccountInfo(address);
+        const accountFlags = info.account_data.Flags;
+        const regularKey = info.account_data.RegularKey;
+        const masterKeyDisabled = (DISABLE_MASTERKEY & accountFlags) === DISABLE_MASTERKEY;
+
+        // If the master key is disabled the derived address should be the regular key.
+        // Otherwise it could be master key or the regular key
+        if (masterKeyDisabled)
+            return regularKey && (derivedAddress === regularKey);
+        else
+            return derivedAddress === address || (regularKey && derivedAddress === regularKey);
     }
 }
 

@@ -13,8 +13,6 @@ const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
 
-const DISABLE_MASTERKEY = 0x100000;
-
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
     REDEEMED: 'Redeemed',
@@ -197,24 +195,9 @@ class MessageBoard {
         }
     }
 
-    async isValidAddress(publicKey, address) {
-        const derivedAddress = this.ripplAPI.deriveAddress(publicKey);
-        const info = await this.ripplAPI.getAccountInfo(address);
-        const accountFlags = info.account_data.Flags;
-        const regularKey = info.account_data.RegularKey;
-        const masterKeyDisabled = (DISABLE_MASTERKEY & accountFlags) === DISABLE_MASTERKEY;
-
-        // If the master key is disabled the derived address should be the regular key.
-        // Otherwise it could be master key or the regular key
-        if (masterKeyDisabled)
-            return regularKey && (derivedAddress === regularKey);
-        else
-            return derivedAddress === address || (regularKey && derivedAddress === regularKey);
-    }
-
     async sendRedeemResponse(txHash, txPubkey, txAccount, response) {
         // Verifying the pubkey.
-        if (!(await this.isValidAddress(txPubkey, txAccount)))
+        if (!(await this.ripplAPI.isValidAddress(txPubkey, txAccount)))
             throw 'Invalid public key for encryption';
 
         // Encrypt response with user pubkey.

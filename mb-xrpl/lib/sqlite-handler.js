@@ -13,8 +13,9 @@ class SqliteDatabase {
     }
 
     open() {
-        // Make sure only one connection is open.
-        // Otherwise increase the connection counter.
+        // Make sure only one connection is open at a time.
+        // If a connection is already open increase the connection count.
+        // This guarantees only one connection is open even if open() is called before closing the previous connections. 
         if (this.openConnections <= 0) {
             this.db = new sqlite3.Database(this.dbFile);
             this.openConnections = 1;
@@ -24,8 +25,9 @@ class SqliteDatabase {
     }
 
     close() {
-        // If there's no more open connections close the db.
-        // Otherwise keep the db open so it'll get closed in the next close() call.
+        // Only close the connection for the last open connection.
+        // Otherwise keep decreasing until connection count is 1.
+        // This prevents closing the connection even if close() is called while db is used by another open session.
         if (this.openConnections <= 1) {
             this.db.close();
             this.db = null;

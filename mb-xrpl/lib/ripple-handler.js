@@ -88,7 +88,7 @@ class RippleAPIWarpper {
             return;
 
         let retryInterval = CONNECTION_RETRY_INTERVAL;
-        // If failed, Keep retrying increasing the retry timeout.
+        // If failed, Keep retrying and increasing the retry timeout.
         while (true) {
             try {
                 this.connectionRetryCount++;
@@ -98,7 +98,7 @@ class RippleAPIWarpper {
             }
             catch (e) {
                 console.log(`Couldn't connect ${this.rippleServer} : `, e);
-                // If threashold reaches increase the retry interval.
+                // If threashold reaches, increase the retry interval.
                 if (this.connectionRetryCount % CONNECTION_RETRY_THREASHOLD === 0)
                     retryInterval += CONNECTION_RETRY_INTERVAL;
                 // Wait before retry.
@@ -109,6 +109,10 @@ class RippleAPIWarpper {
 
     deriveAddress(publicKey) {
         return this.api.deriveAddress(publicKey);
+    }
+
+    async getAccountInfo(address) {
+        return (await this.api.request('account_info', { account: address }));
     }
 
     async getLedgerVersion() {
@@ -237,7 +241,7 @@ class XrplAccount {
                     console.log("Waiting for verification...");
                     setTimeout(() => {
                         this.verifyTransaction(txHash, minLedger, maxLedger).then(result => resolve(result));
-                    }, CONNECTION_RETRY_INTERVAL);
+                    }, 1000);
                 }
                 else {
                     console.log(error);
@@ -257,13 +261,15 @@ class XrplAccount {
     }
 
     subscribe() {
-        if (this.subscribed) {
-            throw `Already subscribed to ${this.address}.`;
-        }
+        // Subscribe only once. Otherwise event handlers will be duplicated.
+        if (this.subscribed)
+            return;
 
         this.rippleAPI.api.connection.on("transaction", (data) => {
             const eventName = data.transaction.TransactionType.toLowerCase();
+            // Emit the event only for successful transactions, Otherwise emit error.
             if (data.engine_result === "tesSUCCESS") {
+                // Convert memo fields to ASCII before emitting the event.
                 if (data.transaction.Memos)
                     data.transaction.Memos = data.transaction.Memos.filter(m => m.Memo).map(m => this.deserializeMemo(m.Memo));
                 this.events.emit(eventName, data.transaction);

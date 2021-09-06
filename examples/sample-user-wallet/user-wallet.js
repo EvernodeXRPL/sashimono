@@ -68,8 +68,8 @@ class TestUser {
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
-                        // Only resolve the instance responses which mathces to our reference.
-                        // This will filter out the resonses belogs to us.
+                        // Only resolve the instance responses which matches to our reference.
+                        // This will filter out the resonses belongs to us.
                         let resolver = this.promises[ref];
                         if (resolver) {
                             let info = instanceInfo[0].data;

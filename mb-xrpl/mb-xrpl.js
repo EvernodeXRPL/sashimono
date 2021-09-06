@@ -13,6 +13,8 @@ const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
 
+const DISABLE_MASTERKEY = 0x100000;
+
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
     REDEEMED: 'Redeemed',
@@ -45,7 +47,6 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-
         try { await this.ripplAPI.connect(); }
         catch (e) { throw e; }
 
@@ -61,7 +62,7 @@ class MessageBoard {
 
         // Check for instance expiry.
         this.ripplAPI.events.on(Events.LEDGER, async (e) => {
-            // Filter out instances which needed to be expired and destrot them.
+            // Filter out instances which needed to be expired and destroy them.
             const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
             if (expired && expired.length) {
                 this.expiryList = this.expiryList.filter(x => x.expiryLedger > e.ledgerVersion);
@@ -100,7 +101,7 @@ class MessageBoard {
                 const txAccount = data.Account;
                 const txPubKey = data.SigningPubKey;
                 const amount = parseInt(data.Amount.value);
-                // Filter out the memo feilds with redeem type and binary format.
+                // Filter the memo feilds with redeem type and binary format.
                 const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
 
                 this.db.open();
@@ -125,6 +126,7 @@ class MessageBoard {
 
                     try {
                         // Send the redeem response with created instance info.
+                        // Send an error if create operation failed.
                         const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
 
                         if (!hasError) {
@@ -139,7 +141,7 @@ class MessageBoard {
                         console.error(e);
                     }
 
-                    // Unpdate the redeem response for failures.
+                    // Update the redeem response for failures.
                     if (hasError)
                         await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                 }
@@ -150,9 +152,9 @@ class MessageBoard {
     }
 
     isRedeem(transaction) {
-        // Check whether issued currency
+        // Check whether an issued currency.
         const isIssuedCurrency = (typeof transaction.Amount === "object");
-        // Check whether incomming to hook.
+        // Check whether an incomming transaction to the hook.
         const isToHook = transaction.Destination === this.cfg.xrpl.hookAddress;
         if (isIssuedCurrency && isToHook) {
             const token = transaction.Amount.currency;
@@ -195,10 +197,24 @@ class MessageBoard {
         }
     }
 
+    async isValidAddress(publicKey, address) {
+        const derivedAddress = this.ripplAPI.deriveAddress(publicKey);
+        const info = await this.ripplAPI.getAccountInfo(address);
+        const accountFlags = info.account_data.Flags;
+        const regularKey = info.account_data.RegularKey;
+        const masterKeyDisabled = (DISABLE_MASTERKEY & accountFlags) === DISABLE_MASTERKEY;
+
+        // If the master key is disabled the derived address should be the regular key.
+        // Otherwise it could be master key or the regular key
+        if (masterKeyDisabled)
+            return regularKey && (derivedAddress === regularKey);
+        else
+            return derivedAddress === address || (regularKey && derivedAddress === regularKey);
+    }
+
     async sendRedeemResponse(txHash, txPubkey, txAccount, response) {
         // Verifying the pubkey.
-        const derivedAddress = this.ripplAPI.deriveAddress(txPubkey);
-        if (derivedAddress !== txAccount)
+        if (!(await this.isValidAddress(txPubkey, txAccount)))
             throw 'Invalid public key for encryption';
 
         // Encrypt response with user pubkey.

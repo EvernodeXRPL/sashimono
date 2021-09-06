@@ -68,15 +68,13 @@ class TestUser {
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
-                        let info = instanceInfo[0].data;
-
-                        const keyPair = this.xrplAcc.deriveKeypair();
-                        info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
-
                         // Only resolve the instance responses which mathces to our reference.
                         // This will filter out the resonses belogs to us.
                         let resolver = this.promises[ref];
                         if (resolver) {
+                            let info = instanceInfo[0].data;
+                            const keyPair = this.xrplAcc.deriveKeypair();
+                            info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
                             try {
                                 info = JSON.parse(info);
                             }

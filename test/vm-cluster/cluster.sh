@@ -328,18 +328,22 @@ if [ $mode == "create" ]; then
             config=$(echo $continfo | jq -c -r ".config")
             if [ "$1" != 0 ]; then
                 peers=""
-                for ((i = 0; i < $1; i++)); do
-                    hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[$i]}\"")
-                    peerport=$(echo $hostinfo | jq -r '.peer_port')
+                # for ((i = 0; i < $1; i++)); do
+                #     hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[$i]}\"")
+                #     peerport=$(echo $hostinfo | jq -r '.peer_port')
 
-                    if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
-                        [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
-                        echo "Host info is empty for ${hostaddrs[$i]}"
-                        exit 1
-                    fi
-                    peers+="\"${hostaddrs[$i]}:$peerport\","
-                done
-                peers=${peers%?}
+                #     if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
+                #         [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
+                #         echo "Host info is empty for ${hostaddrs[$i]}"
+                #         exit 1
+                #     fi
+                #     peers+="\"${hostaddrs[$i]}:$peerport\","
+                # done
+                # peers=${peers%?}
+
+                # For all instances except the first, configure the first host's address as the peer for all.
+                # We expect Hot Pocket peer discovery to populate all peers in all instances.
+                peers=${hostaddrs[0]}
                 config=$(echo "$config" | jq -c ".mesh.known_peers = [$peers]" | jq -c ".contract.unl = [\"$pubkey\"]")
             fi
 
@@ -367,7 +371,7 @@ if [ $mode == "create" ]; then
 
     if [ $nodeid = -1 ]; then
         for i in "${!hostaddrs[@]}"; do
-            createinstance $i
+            createinstance $i &
         done
         wait
     else

@@ -5,6 +5,7 @@
 # ./cluster.sh select contract
 # ./cluster.sh create 1
 # ./cluster.sh create
+# ./cluster.sh createall 22861
 # ./cluster.sh reconfig
 # ./cluster.sh reconfig R
 # ./cluster.sh reconfig 1 R
@@ -16,6 +17,7 @@
 # reconfig - Re configure the sashimono with given "max_instance_count" in all the hosts (Only update the sa.cfg, Reinstall the sashimono if "R" option is given).
 # lcl - Get lcl of the hosts.
 # create - Create new sashimono hotpocket instance in each node.
+# createall - Create sashimono hotpocket instances in all nodes parallely.
 # get-unl - Construct the UNL of all the nodes (Useful when creating cfg for contract upload).
 # docker-pull - Pull the latest docker image from docker hub.
 # start - Start sashimono hotpocket instance.
@@ -29,11 +31,12 @@ PRINTFORMAT="Node %2s: %s\n"
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] || [ "$mode" == "create" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
+   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] | destroy [N]"
     echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -293,7 +296,7 @@ if [ $mode == "docker-pull" ]; then
     exit 0
 fi
 
-if [ $mode == "create" ]; then
+if [ $mode == "create" ] || [ $mode == "createall" ]; then
     # Read owner pubkey, contract id and image
     ownerpubkey=$(echo $continfo | jq -r '.owner_pubkey')
     if [ "$ownerpubkey" = "" ] || [ "$ownerpubkey" = "null" ]; then
@@ -328,22 +331,22 @@ if [ $mode == "create" ]; then
             config=$(echo $continfo | jq -c -r ".config")
             if [ "$1" != 0 ]; then
                 peers=""
-                # for ((i = 0; i < $1; i++)); do
-                #     hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[$i]}\"")
-                #     peerport=$(echo $hostinfo | jq -r '.peer_port')
+                for ((i = 0; i < $1; i++)); do
+                    if [ -z "$2" ]; then
+                        hostinfo=$(echo $continfo | jq -r ".hosts.\"${hostaddrs[$i]}\"")
+                        peerport=$(echo $hostinfo | jq -r '.peer_port')
 
-                #     if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
-                #         [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
-                #         echo "Host info is empty for ${hostaddrs[$i]}"
-                #         exit 1
-                #     fi
-                #     peers+="\"${hostaddrs[$i]}:$peerport\","
-                # done
-                # peers=${peers%?}
-
-                # For all instances except the first, configure the first host's address as the peer for all.
-                # We expect Hot Pocket peer discovery to populate all peers in all instances.
-                peers=${hostaddrs[0]}
+                        if [ "$hostinfo" == "" ] || [ "$hostinfo" == "null" ] ||
+                            [ "$peerport" == "" ] || [ "$peerport" == "null" ]; then
+                            echo "Host info is empty for ${hostaddrs[$i]}"
+                            exit 1
+                        fi
+                    else
+                        peerport=$2
+                    fi
+                    peers+="\"${hostaddrs[$i]}:$peerport\","
+                done
+                peers=${peers%?}
                 config=$(echo "$config" | jq -c ".mesh.known_peers = [$peers]" | jq -c ".contract.unl = [\"$pubkey\"]")
             fi
 
@@ -369,13 +372,28 @@ if [ $mode == "create" ]; then
         fi
     }
 
-    if [ $nodeid = -1 ]; then
+    if [ $mode == "create" ]; then
+        if [ $nodeid = -1 ]; then
+            for i in "${!hostaddrs[@]}"; do
+                createinstance $i
+            done
+        else
+            createinstance $nodeid $peerport
+        fi
+    else
+        # Create all instances parallely with specified peer port.
+        peerport=$2
+        [ -z "$peerport" ] && echo "Peer port is required." && exit 1
         for i in "${!hostaddrs[@]}"; do
-            createinstance $i &
+            if [ $i == "0" ]; then
+                # Create first instance sequentially so others can get its public key for their unl.
+                echo "Creating first instance..."
+                createinstance $i $peerport
+            else
+                createinstance $i $peerport &
+            fi
         done
         wait
-    else
-        createinstance $nodeid
     fi
     exit 0
 fi

@@ -49,7 +49,7 @@ fi
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.
-    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","docker":{"image":"<docker image key>","id":"","pass":""},"vultr_group":"","hosts":{"host1_ip":{}},"config":{},"sa_config":{"max_instance_count":-1}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
+    echo '{"selected":"contract","contracts":[{"name":"contract","sshuser":"root","sshpass":"<ssh password>","owner_pubkey":"ed.....","contract_id":"<uuid>","docker":{"repo":"<docker repository>","image":"<docker image key>","id":"","pass":""},"vultr_group":"","hosts":{"host1_ip":{}},"config":{},"sa_config":{"max_instance_count":-1}}],"vultr":{"api_key":"<vultr api key>"}}' | jq . >$configfile
 fi
 
 if [ $mode == "select" ]; then
@@ -247,7 +247,12 @@ fi
 
 if [ $mode == "docker-pull" ]; then
     dockerbin=/usr/bin/sashimono-agent/dockerbin/docker
-    dockerrepo="hotpocketdev/sashimono:"
+    repo=$(echo $continfo | jq -r '.docker.repo')
+    if [ "$repo" == "" ] || [ "$repo" == "null" ]; then
+        echo "repo not specified."
+        exit 1
+    fi
+
     # Read the image.
     image=$(echo $continfo | jq -r '.docker.image')
     if [ "$image" == "" ] || [ "$image" == "null" ]; then
@@ -255,10 +260,12 @@ if [ $mode == "docker-pull" ]; then
         exit 1
     fi
 
+    image="$repo:$image"
+
     # Read docker credentials.
     dockerid=$(echo $continfo | jq -r '.docker.id')
     dockerpass=$(echo $continfo | jq -r '.docker.pass')
-    dockerpull="$dockerbin pull $dockerrepo$image"
+    dockerpull="$dockerbin pull $image"
     # If credentials given.
     if [ "$dockerid" != "" ] && [ "$dockerid" != "null" ] && [ "$dockerpass" != "" ] && [ "$dockerpass" != "null" ]; then
         dockerpull="(echo $dockerpass | $dockerbin login -u $dockerid --password-stdin &>/dev/null) && $dockerpull && $dockerbin logout"
@@ -269,15 +276,23 @@ if [ $mode == "docker-pull" ]; then
         hostaddr=${hostaddrs[$1]}
         nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+        userport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".user_port")
+        peerport=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".peer_port")
 
         if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
             printf "$PRINTFORMAT" "$nodeno" "Host info is empty."
             exit 1
         fi
 
-        user="user=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null | cut -d/ -f3) || [ ! -z \$user ]"
-        dpull="sudo -H -u \$user DOCKER_HOST=\"unix:///run/user/\$(id -u \$user)/docker.sock\" bash -c \"$dockerpull\""
-        command="$user && $dpull"
+        contractpath="contractpath=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null) || [ ! -z \$contractpath ]"
+        user="user=\$(echo \$contractpath | cut -d/ -f3) || [ ! -z \$user ]"
+
+        dockerstop="$dockerbin stop $containername"
+        dockerrm="$dockerbin rm $containername"
+        dockercreate="$dockerbin create -t -i --stop-signal=SIGINT --name=$containername -p $userport:$userport -p $peerport:$peerport --restart unless-stopped --mount type=bind,source=\$contractpath,target=/contract $image run /contract"
+        dpull="sudo -H -u \$user DOCKER_HOST=\"unix:///run/user/\$(id -u \$user)/docker.sock\" bash -c \"$dockerpull && $dockerstop && $dockerrm && $dockercreate\""
+
+        command="$contractpath && $user && $dpull"
         if ! sshskp $sshuser@$hostaddr $command 1>/dev/null; then
             printf "$PRINTFORMAT" "$nodeno" "Error occured pulling $image."
         else

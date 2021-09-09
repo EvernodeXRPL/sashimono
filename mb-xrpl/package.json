@@ -4,6 +4,7 @@
     "build": "ncc build mb-xrpl.js -o dist/mb-xrpl"
   },
   "dependencies": {
+    "eccrypto": "^1.1.6",
     "ripple-lib": "^1.9.8",
     "sqlite3": "^5.0.2"
   }

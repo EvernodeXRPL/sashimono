@@ -2,7 +2,7 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes } = require('../../mb-xrpl/lib/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, EncryptionHelper } = require('../../mb-xrpl/lib/ripple-handler');
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
@@ -22,20 +22,12 @@ const createXrplAccount = async () => {
     return (await resp.json()).account;
 }
 
-const hexToASCII = (hex) => {
-    let str = "";
-    for (let n = 0; n < hex.length; n += 2) {
-        str += String.fromCharCode(parseInt(hex.substr(n, 2), 16));
-    }
-    return str;
-}
-
 class TestUser {
     constructor(configPath, rippleServer) {
         this.promises = {};
         this.configPath = configPath;
 
-        this.ripplAPI = new RippleAPIWarpper(rippleServer);
+        this.rippleAPI = new RippleAPIWarpper(rippleServer);
     }
 
     async init() {
@@ -55,45 +47,43 @@ class TestUser {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hostAddress || !this.cfg.xrpl.hostToken || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        try { await this.ripplAPI.connect(); }
+        try { await this.rippleAPI.connect(); }
         catch (e) { throw e; }
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI.api, this.cfg.xrpl.hookAddress);
+        this.xrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
 
-        this.evernodeXrplAcc.events.on(Events.PAYMENT, (data, error) => {
+        // Handle the transactions on evernode account and filter out redeem responses.
+        this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
             if (data) {
                 // Check whether issued currency
                 const isXrp = (typeof data.Amount !== "object");
                 const isToHook = data.Destination === this.cfg.xrpl.hookAddress;
                 const isFromHost = data.Account === this.cfg.xrpl.hostAddress;
+                // Filter responses from host to evernode account.
                 if (isXrp && isToHook && isFromHost) {
-                    const memos = data.Memos;
-                    const deserialized = memos.map(m => {
-                        return {
-                            type: m.Memo.MemoType ? hexToASCII(m.Memo.MemoType) : null,
-                            format: m.Memo.MemoFormat ? hexToASCII(m.Memo.MemoFormat) : null,
-                            data: m.Memo.MemoData ? hexToASCII(m.Memo.MemoData) : null
-                        };
-                    });
-                    const instanceRef = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_REF && m.format === MemoFormats.BINARY);
-                    const instanceInfo = deserialized.filter(m => m.data && m.type === MemoTypes.REDEEM_RESP && m.format === MemoFormats.BINARY);
+                    // Filter instance responses
+                    const instanceRef = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM_REF && m.format === MemoFormats.BINARY);
+                    const instanceInfo = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM_RESP && m.format === MemoFormats.BINARY);
 
                     if (instanceRef && instanceRef.length && instanceInfo && instanceInfo.length) {
                         const ref = instanceRef[0].data;
-                        let info = instanceInfo[0].data;
+                        // Only resolve the instance responses which matches to our reference.
+                        // This will filter out the resonses belongs to us.
                         let resolver = this.promises[ref];
                         if (resolver) {
+                            let info = instanceInfo[0].data;
+                            const keyPair = this.xrplAcc.deriveKeypair();
+                            info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
                             try {
                                 info = JSON.parse(info);
                             }
-                            catch { }
+                            catch (e) {
+                                console.error(e)
+                            }
 
                             resolver(info);
                             delete this.promises[ref];
-                        }
-                        else {
-                            console.log("Received unawaited response : ", ref, info);
                         }
                     }
                 }
@@ -103,12 +93,6 @@ class TestUser {
             }
         });
         this.evernodeXrplAcc.subscribe();
-
-        // Subscribe to transactions when api is reconnected.
-        // Because API will be automatically reconnected if it's disconnected.
-        this.ripplAPI.events.on(Events.RECONNECTED, (e) => {
-            this.evernodeXrplAcc.subscribe();
-        });
 
         this.rl = readLine.createInterface({
             input: process.stdin,

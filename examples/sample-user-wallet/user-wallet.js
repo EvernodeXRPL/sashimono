@@ -78,7 +78,9 @@ class TestUser {
                             try {
                                 info = JSON.parse(info);
                             }
-                            catch { }
+                            catch (e) {
+                                console.error(e)
+                            }
 
                             resolver(info);
                             delete this.promises[ref];

@@ -23,6 +23,8 @@
 # start - Start sashimono hotpocket instance.
 # stop - Stop sashimono hotpocket instance.
 # destroy - Destroy sashimono hotpocket instance.
+# ssh - Login with ssh or execute command on all nodes via ssh.
+# ip - Show ip address of nodes.
 
 LOCKFILE="/tmp/sashiclusercfg.lock"
 trap "rm -f $LOCKFILE" EXIT
@@ -32,11 +34,13 @@ PRINTFORMAT="Node %2s: %s\n"
 mode=$1
 
 if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
-   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ]; then
+   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] ||
+   [ "$mode" == "ssh" ] || [ "$mode" == "ip" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] | destroy [N]"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] |"
+    echo " destroy [N] | ssh <N>or<command> | ip [N]"
     echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -565,6 +569,42 @@ if [ $mode == "destroy" ]; then
         wait
     else
         destroyinstance $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode = "ssh" ]; then
+    if [ $nodeid = -1 ]; then
+        if [ -n "$2" ]; then
+            # Interpret second arg as a command to execute on all nodes.
+            command=${*:2}
+            echo "Executing '$command' on all nodes..."
+            for i in "${!hostaddrs[@]}"; do
+                hostaddr=${hostaddrs[i]}
+                let n=$i+1
+                echo "node"$n":" $(sshskp $sshuser@$hostaddr $command) &
+            done
+            wait
+            exit 0
+        else
+            echo "Please specify node no. or command to execute on all nodes."
+            exit 1
+        fi
+    else
+        hostaddr=${hostaddrs[$nodeid]}
+        sshskp -t $sshuser@$hostaddr
+        exit 0
+    fi
+fi
+
+if [ $mode = "ip" ]; then
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            let n=$i+1
+            echo "node"$n": ${hostaddrs[i]}"
+        done
+    else
+        echo "${hostaddrs[$nodeid]}"
     fi
     exit 0
 fi

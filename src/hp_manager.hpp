@@ -50,6 +50,7 @@ namespace hp
     {
         size_t cpu_us = 0;         // CPU time an instance can consume.
         size_t mem_kbytes = 0;     // Memory an instance can allocate.
+        size_t swap_kbytes = 0;    // Swap memory an instance can allocate.
         size_t storage_kbytes = 0; // Physical storage an instance can allocate.
     };
 
@@ -84,7 +85,7 @@ namespace hp
 
     int write_json_values(jsoncons::ojson &d, const msg::config_struct &config);
 
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name);
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name);
 
     int uninstall_user(std::string_view username);
 

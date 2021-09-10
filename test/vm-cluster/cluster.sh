@@ -159,7 +159,7 @@ if [ $mode == "reconfig" ]; then
 
     # If reinstall specified, show warn and take confirmation.
     if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
-        echo "Warning: you'll lost all the sashimono instances!"
+        echo "Warning: you'll lose all the sashimono instances!"
         echo "Still are you sure you want to reinstall Sashimono?"
         read -p "Type 'yes' to confirm reinstall: " confirmation </dev/tty
         [ "$confirmation" != "yes" ] && echo "Reinstall cancelled." && exit 0

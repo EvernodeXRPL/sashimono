@@ -56,6 +56,7 @@ namespace hp
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
+        instance_resources.swap_kbytes = instance_resources.mem_kbytes + (conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count);
         instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
         contract_ugid = {CONTRACT_USER_ID, CONTRACT_USER_ID};
 
@@ -147,7 +148,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.storage_kbytes, container_name) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name) == -1)
             return -1;
 
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
@@ -819,13 +820,15 @@ namespace hp
      * @param username Username of the created user to be populated.
      * @param max_cpu_us CPU quota allowed for this user.
      * @param max_mem_kbytes Memory quota allowed for this user.
+     * @param max_swap_kbytes Swap memory quota allowed for this user.
      * @param storage_kbytes Disk quota allowed for this user.
     */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t storage_kbytes, const std::string container_name)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
             std::to_string(max_mem_kbytes),
+            std::to_string(max_swap_kbytes),
             std::to_string(storage_kbytes),
             container_name,
             std::to_string(contract_ugid.uid),

@@ -1,8 +1,9 @@
 {
   "name": "user-wallet",
   "dependencies": {
+    "eccrypto": "^1.1.6",
+    "node-fetch": "^2.6.1",
     "ripple-lib": "^1.9.8",
-    "uuid": "^8.3.2",
-    "node-fetch": "^2.6.1"
+    "uuid": "^8.3.2"
   }
 }

@@ -24,7 +24,13 @@
 # stop - Stop sashimono hotpocket instance.
 # destroy - Destroy sashimono hotpocket instance.
 # ssh - Login with ssh or execute command on all nodes via ssh.
+# sshu - Login with ssh or execute command on all nodes via ssh under instance user.
+# attach - Attach to the docker instance output.
 # ip - Show ip address of nodes.
+# updatecfg - Update the hp config using the local file hp.cfg.
+# statefile - Send a local file to instance contract_fs/seed/state/
+# umount - Unmount instance contract/ledger fuse mounts. (Used to cleanup orphan mounts)
+# syncwith - Manually syncs the entire cluster with the given node.
 
 LOCKFILE="/tmp/sashiclusercfg.lock"
 trap "rm -f $LOCKFILE" EXIT
@@ -35,13 +41,14 @@ mode=$1
 
 if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
    [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] ||
-   [ "$mode" == "ssh" ] || [ "$mode" == "ip" ]; then
+   [ "$mode" == "ssh" ] || [ "$mode" == "sshu" ] || [ "$mode" == "attach" ] || [ "$mode" == "ip" ] || [ "$mode" == "updatecfg" ] ||
+   [ "$mode" == "statefile" ] || [ "$mode" == "umount" ] || [ "$mode" == "syncwith" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
     echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] |"
-    echo " destroy [N] | ssh <N>or<command> | ip [N]"
-    echo " [N]: Optional node no.   [R]: 'R' If sashimono needed to reinstall."
+    echo " destroy [N] | ssh <N>or<command> | sshu <N> | attach <N> | ip [N] | updatecfg [N] | statefile [N] <file> | umount [N] | syncwith <N>"
+    echo " [N]: Optional node no.   <N>: Required node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
 
@@ -96,8 +103,10 @@ fi
 
 shopt -s expand_aliases
 alias sshskp='ssh -o StrictHostKeychecking=no'
+alias scpskp='scp -o StrictHostKeychecking=no'
 if [ "$sshpass" != "" ] && [ "$sshpass" != "null" ]; then
     alias sshskp="sshpass -p $sshpass ssh -o StrictHostKeychecking=no"
+    alias scpskp="sshpass -p $sshpass scp -o StrictHostKeychecking=no"
 fi
 
 function updateconfig() {
@@ -597,6 +606,49 @@ if [ $mode = "ssh" ]; then
     fi
 fi
 
+if [ $mode == "sshu" ]; then
+
+    function sshwithuser() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+
+        ssh_command="cd /home/$username/$containername ; sudo -u $username bash"
+        sshskp -t $sshuser@$hostaddr $ssh_command
+    }
+
+    if [ $nodeid = -1 ]; then
+        echo "Must specify node no."
+        exit 1
+    else
+        sshwithuser $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "attach" ]; then
+
+    function attachdocker() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+
+        echo "Press ctrl+P,Q to detach."
+        ssh_command="sudo -u $username bash -i -c 'docker attach $containername'"
+        sshskp -t $sshuser@$hostaddr $ssh_command
+    }
+
+    if [ $nodeid = -1 ]; then
+        echo "Must specify node no."
+        exit 1
+    else
+        attachdocker $nodeid
+    fi
+    exit 0
+fi
+
 if [ $mode = "ip" ]; then
     if [ $nodeid = -1 ]; then
         for i in "${!hostaddrs[@]}"; do
@@ -605,6 +657,144 @@ if [ $mode = "ip" ]; then
         done
     else
         echo "${hostaddrs[$nodeid]}"
+    fi
+    exit 0
+fi
+
+if [ $mode == "updatecfg" ]; then
+
+    function sendcfg() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+        originalcfg="/home/$username/$containername/cfg/hp.cfg"
+        
+        scpskp -q hp.cfg $sshuser@$hostaddr:~/
+        sshskp $sshuser@$hostaddr "jq -s '.[0] * .[1]' $originalcfg ~/hp.cfg > ~/merged.cfg && mv ~/merged.cfg $originalcfg && chown $username:$username $originalcfg && rm ~/hp.cfg"
+        echo "node$nodeno: Updated $originalcfg"
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            sendcfg $i &
+        done
+        wait
+    else
+        sendcfg $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "statefile" ]; then
+
+    function sendstatefile() {
+        localfilepath=$2
+        filename=$(basename $2)
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+        fspath="/home/$username/$containername/contract_fs"
+        seedpath="$fspath/seed/state"
+        
+        scpskp -q $localfilepath $sshuser@$hostaddr:$seedpath/
+        sshskp $sshuser@$hostaddr "chown $username:$username $seedpath/$filename && rm -r $fspath/hmap && rm $fspath/log.hpfs"
+        echo "node$nodeno: Transferred to $seedpath/$filename"
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            sendstatefile $i $2 &
+        done
+        wait
+    else
+        sendstatefile $nodeid $3
+    fi
+    exit 0
+fi
+
+if [ $mode == "umount" ]; then
+
+    function unmountfuse() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+        contractmnt="/home/$username/$containername/contract_fs/mnt"
+        ledgermnt="/home/$username/$containername/ledger_fs/mnt"
+        
+        sshskp $sshuser@$hostaddr "fusermount -u $contractmnt ; fusermount -u $ledgermnt"
+        echo "node$nodeno: Unmount complete."
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            unmountfuse $i &
+        done
+        wait
+    else
+        unmountfuse $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "syncwith" ]; then
+
+    function syncdownload() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+        contractfs="/home/$username/$containername/contract_fs"
+        ledgerfs="/home/$username/$containername/ledger_fs"
+        
+        echo "Downloading from node$nodeno"
+        mkdir contract_fs
+        scpskp -r -q $sshuser@$hostaddr:$contractfs/seed contract_fs/
+
+        mkdir ledger_fs
+        scpskp -r -q $sshuser@$hostaddr:$ledgerfs/seed ledger_fs/
+        echo "Download complete."
+    }
+
+    function syncupload() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
+        contractfs="/home/$username/$containername/contract_fs"
+        ledgerfs="/home/$username/$containername/ledger_fs"
+
+        sshskp $sshuser@$hostaddr "rm -r $contractfs/{seed,hmap,log.hpfs} ; rm -r $ledgerfs/{seed,hmap,log.hpfs}"
+        echo "node$nodeno: Uploading to $contractfs/"
+        scpskp -r -q contract_fs/seed $sshuser@$hostaddr:$contractfs/
+        echo "node$nodeno: Uploading to $ledgerfs/"
+        scpskp -r -q ledger_fs/seed $sshuser@$hostaddr:$ledgerfs/
+
+        sshskp $sshuser@$hostaddr "chown -R $username:$username $contractfs/seed ; chown -R $username:$username $ledgerfs/seed"
+
+        echo "node$nodeno: Upload complete."
+    }
+
+    if [ $nodeid = -1 ]; then
+        echo "Must specify node no."
+        exit 1
+    else
+        syncdownload $nodeid
+        for i in "${!hostaddrs[@]}"; do
+            if [ "$i" != $nodeid ]; then
+                syncupload $i &
+            fi
+        done
+        wait
+        rm -r ledger_fs
+        rm -r contract_fs
     fi
     exit 0
 fi

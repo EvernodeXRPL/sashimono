@@ -2,13 +2,15 @@ const fs = require('fs');
 const readLine = require('readline');
 const { v4: uuidv4 } = require('uuid');
 const fetch = require('node-fetch');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, EncryptionHelper } = require('../../mb-xrpl/lib/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('../../mb-xrpl/lib/ripple-handler');
 
 const RIPPLE_SERVER = 'wss://hooks-testnet.xrpl-labs.com';
 const FAUSET_URL = 'https://hooks-testnet.xrpl-labs.com/newcreds';
 
 const OWNER_PUBKEY = 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50'
 const CONFIG_PATH = 'user.cfg';
+
+MIN_REDEEM_AMOUNT = 12;
 
 // Test Hook
 // rwQ7ECXhkF1ZF6qFHH4y7sc1y3ZnXgf6Rh
@@ -73,13 +75,13 @@ class TestUser {
                         let resolver = this.promises[ref];
                         if (resolver) {
                             let info = instanceInfo[0].data;
-                            const keyPair = this.xrplAcc.deriveKeypair();
-                            info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
-                            try {
-                                info = JSON.parse(info);
-                            }
-                            catch (e) {
-                                console.error(e)
+                            if (info != ErrorCodes.REDEEM_ERR) {
+                                const keyPair = this.xrplAcc.deriveKeypair();
+                                info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
+                                try {
+                                    info = JSON.parse(info);
+                                }
+                                catch { }
                             }
 
                             resolver(info);
@@ -314,7 +316,11 @@ class TestUser {
     }
 
     async createInstance() {
-        const tokenCount = await this.askForInput(`${this.cfg.xrpl.hostToken} amount (default:1)`, 1);
+        let tokenCount = await this.askForInput(`${this.cfg.xrpl.hostToken} amount (default:${MIN_REDEEM_AMOUNT})`, MIN_REDEEM_AMOUNT);
+        while (tokenCount < MIN_REDEEM_AMOUNT) {
+            console.error(`Minimum redeem amount is ${MIN_REDEEM_AMOUNT}`);
+            tokenCount = await this.askForInput(`${this.cfg.xrpl.hostToken} amount (default:${MIN_REDEEM_AMOUNT})`, MIN_REDEEM_AMOUNT);
+        }
         const contractId = await this.askForInput('Contract ID (default:uuidv4)', uuidv4());
         const image = await this.askForInput('Image: 1=ubuntu(default) | 2=nodejs', "1");
         if (image != "1" && image != "2") {

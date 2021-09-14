@@ -12,10 +12,6 @@ const CONFIG_PATH = 'user.cfg';
 
 MIN_REDEEM_AMOUNT = 12;
 
-// Test Hook
-// rwQ7ECXhkF1ZF6qFHH4y7sc1y3ZnXgf6Rh
-// ssYnjnveDXzeibGQFkZB3aRUfCHJN
-
 const createXrplAccount = async () => {
     const resp = await fetch(FAUSET_URL, {
         method: 'POST',
@@ -78,6 +74,8 @@ class TestUser {
                             if (info != ErrorCodes.REDEEM_ERR) {
                                 const keyPair = this.xrplAcc.deriveKeypair();
                                 info = await EncryptionHelper.decrypt(keyPair.privateKey, info);
+                                // This try catch is used to check whether response is json parsable.
+                                // If parsable resolves as a json obj, otherwise plain string.
                                 try {
                                     info = JSON.parse(info);
                                 }

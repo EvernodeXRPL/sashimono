@@ -112,7 +112,7 @@ class MessageBoard {
                         console.log(`Instance created for ${txAccount}`);
                         // Send the redeem response with created instance info.
                         const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-                        // Add to in-memory expiry list, so the instance will get destroyed when the moments axceed,
+                        // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                         this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
                         // Update the database for redeemed record.
                         await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);

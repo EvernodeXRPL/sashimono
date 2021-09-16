@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, EncryptionHelper } = require('./lib/ripple-handler');
+const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('./lib/ripple-handler');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 const CONFIG_PATH = 'mb-xrpl.cfg';
@@ -105,43 +105,24 @@ class MessageBoard {
                 this.db.open();
                 for (let memo of memos) {
 
-                    let createRes;
-                    let hasError = false;
                     try {
                         console.log(`Received redeem from ${txAccount}`);
                         await this.createRedeemRecord(txHash, txAccount, amount);
-                        createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
+                        const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
                         console.log(`Instance created for ${txAccount}`);
-                    }
-                    catch (e) {
-                        hasError = true;
-                        console.error(e);
-                        createRes = {
-                            code: 'REDEEM_ERR',
-                            message: 'Error occured while redeeming.'
-                        };
-                    }
-
-                    try {
                         // Send the redeem response with created instance info.
-                        // Send an error if create operation failed.
                         const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-
-                        if (!hasError) {
-                            // Add to in-memory expiry list, so the instance will get destroyed when the moments axceed,
-                            this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
-                            // Update the database for redeemed record.
-                            await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
-                        }
+                        // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                        this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                        // Update the database for redeemed record.
+                        await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
                     }
                     catch (e) {
-                        hasError = true;
                         console.error(e);
-                    }
-
-                    // Update the redeem response for failures.
-                    if (hasError)
+                        await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
+                        // Update the redeem response for failures.
                         await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                    }
                 }
                 this.db.close();
             }
@@ -177,15 +158,10 @@ class MessageBoard {
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
             // For now we comment EVR reg fee transaction and make XRP transaction instead.
-            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            //     REG_FEE,
-            //     EVR_CUR_CODE,
-            //     this.cfg.xrpl.address,
-            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
-                "XRP",
-                null,
+                EVR_CUR_CODE,
+                this.cfg.xrpl.hookAddress,
                 [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res.txHash;
@@ -195,20 +171,21 @@ class MessageBoard {
         }
     }
 
-    async sendRedeemResponse(txHash, txPubkey, txAccount, response) {
+    async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
         // Verifying the pubkey.
         if (!(await this.ripplAPI.isValidAddress(txPubkey, txAccount)))
             throw 'Invalid public key for encryption';
 
         // Encrypt response with user pubkey.
-        const encrypted = await EncryptionHelper.encrypt(txPubkey, response);
+        if (encrypt)
+            response = await EncryptionHelper.encrypt(txPubkey, response);
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
             RES_FEE,
             "XRP",
             null,
             [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
-            { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: encrypted }]));
+            { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: response }]));
     }
 
     addToExpiryList(txHash, containerName, expiryLedger) {

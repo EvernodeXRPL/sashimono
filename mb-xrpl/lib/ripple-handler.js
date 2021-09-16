@@ -27,6 +27,10 @@ const Events = {
     PAYMENT: 'payment'
 }
 
+const ErrorCodes = {
+    REDEEM_ERR: 'REDEEM_ERR'
+}
+
 const hexToASCII = (hex) => {
     let str = "";
     for (let n = 0; n < hex.length; n += 2) {
@@ -349,5 +353,6 @@ module.exports = {
     EncryptionHelper,
     MemoFormats,
     MemoTypes,
-    Events
+    Events,
+    ErrorCodes
 }

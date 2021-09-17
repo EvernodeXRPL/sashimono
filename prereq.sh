@@ -30,6 +30,11 @@ else
     fi
 fi
 
+# Install slirp4netns if not exists (required for high performance rootless networking).
+if ! command -v slirp4netns &>/dev/null; then
+    apt -y install slirp4netns
+fi
+
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
 # If not add groupquota to the options.

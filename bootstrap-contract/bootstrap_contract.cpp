@@ -1,7 +1,7 @@
 #include "bootstrap_contract.hpp"
 
 // This script will be renamed by this contract as post_exec.sh
-constexpr const char *SCRIPT_NAME = "script.sh";
+constexpr const char *SCRIPT_NAME = "bootstrap_upgrade.sh";
 constexpr const char *BUNDLE_NAME = "bundle.zip";
 #define HP_DEINIT                    \
     {                                \
@@ -61,9 +61,9 @@ int main(int argc, char **argv)
                     }
                     close(archive_fd);
                     std::vector<uint8_t> msg;
-                    create_response_message(msg, "uploadResult", "Zip file uploaded successfully");
+                    create_response_message(msg, "uploadResult", "uploadSuccess");
                     hp_write_user_msg(user, msg.data(), msg.size());
-                    // Rename script.sh to post_exec.sh and grant executing permissions.
+                    // Rename bootstrap_upgrade.sh to post_exec.sh and grant executing permissions.
                     rename(SCRIPT_NAME, HP_POST_EXEC_SCRIPT_NAME);
                     const mode_t permission_mode = 0777;
                     if (chmod(HP_POST_EXEC_SCRIPT_NAME, permission_mode) < 0)

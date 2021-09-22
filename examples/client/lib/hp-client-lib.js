@@ -22,7 +22,7 @@
         TextDecoder = util.TextDecoder;
     }
 
-    const supportedHpVersion = "0.5.";
+    const supportedHpVersion = "0.6.";
     const serverChallengeSize = 16;
     const outputValidationPassThreshold = 0.8;
     const connectionCheckIntervalMs = 1000;
@@ -552,7 +552,7 @@
             if (connectionStatus == 0 && m.type == "user_challenge" && m.hp_version && m.contract_id) {
 
                 if (!m.hp_version.startsWith(supportedHpVersion)) {
-                    liblog(1, `Incompatible Hot Pocket server version. Expected:${supportedHpVersion} Got:${m.hp_version}`);
+                    liblog(1, `Incompatible Hot Pocket server version. Expected:${supportedHpVersion}* Got:${m.hp_version}`);
                     return false;
                 }
                 else if (!m.contract_id) {
@@ -663,11 +663,12 @@
                         hpVersion: m.hp_version,
                         ledgerSeqNo: m.ledger_seq_no,
                         ledgerHash: msgHelper.deserializeValue(m.ledger_hash),
-                        inSync: m.in_sync,
+                        voteStatus: m.vote_status,
                         roundTime: m.round_time,
                         contractExecutionEnabled: m.contract_execution_enabled,
                         readRequestsEnabled: m.read_requests_enabled,
                         isFullHistoryNode: m.is_full_history_node,
+                        weaklyConnected: m.weakly_connected,
                         currentUnl: m.current_unl.map(u => msgHelper.deserializeValue(u)),
                         peers: m.peers
                     });
@@ -690,8 +691,8 @@
                 const ev = { event: m.event };
                 if (ev.event == "ledger_created")
                     ev.ledger = msgHelper.deserializeLedger(m.ledger);
-                else if (ev.event == "sync_status")
-                    ev.inSync = m.in_sync;
+                else if (ev.event == "vote_status")
+                    ev.voteStatus = m.vote_status;
                 emitter.emit(events.ledgerEvent, ev);
             }
             else if (m.type == "health_event") {

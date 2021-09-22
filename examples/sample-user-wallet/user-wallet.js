@@ -335,7 +335,7 @@ class TestUser {
             type: 'create',
             owner_pubkey: OWNER_PUBKEY,
             contract_id: contractId,
-            image: (image == "1" ? "hp.0.5-ubt.20.04" : "hp.0.5-ubt.20.04-njs.14"),
+            image: (image == "1" ? "hp.latest-ubt.20.04" : "hp.latest-ubt.20.04-njs.14"),
             config: ret !== -1 ? createConfig : {}
         };
 

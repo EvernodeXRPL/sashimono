@@ -7,6 +7,8 @@ const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const DB_PATH = 'mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
+const DB_UTIL_TABLE_NAME = 'util_data';
+const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
@@ -27,6 +29,7 @@ class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
+        this.utilTable = DB_UTIL_TABLE_NAME;
         this.expiryList = [];
 
         if (!fs.existsSync(this.configPath))
@@ -41,7 +44,6 @@ class MessageBoard {
 
     async init() {
         this.readConfig();
-
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
@@ -51,6 +53,7 @@ class MessageBoard {
         this.db.open();
         // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
+        await this.createUtilDataTableIfNotExists();
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -90,6 +93,12 @@ class MessageBoard {
 
         // Handle the transactions on evernode account and filter out redeem operations.
         this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
+            console.log(data);
+            if (!error) {
+                this.db.open();
+                await this.updateLastIndexRecord(data.LastLedgerSequence);
+                this.db.close();
+            }
             if (error)
                 console.error(error);
             else if (!data)
@@ -177,16 +186,16 @@ class MessageBoard {
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
             // For now we comment EVR reg fee transaction and make XRP transaction instead.
-            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            //     REG_FEE,
-            //     EVR_CUR_CODE,
-            //     this.cfg.xrpl.address,
-            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
-                "XRP",
-                null,
+                EVR_CUR_CODE,
+                this.cfg.xrpl.hookAddress,
                 [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
+            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            //     REG_FEE,
+            //     "XRP",
+            //     null,
+            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();
@@ -232,6 +241,22 @@ class MessageBoard {
         ]);
     }
 
+    async createUtilDataTableIfNotExists() {
+        // Create table if not exists.
+        await this.db.createTableIfNotExists(this.utilTable, [
+            { name: 'name', type: DataTypes.TEXT, notNull: true },
+            { name: 'value', type: DataTypes.INTEGER, notNull: true }
+        ]);
+        await this.createLastWatchedLedgerEntryIfNotExists();
+    }
+
+    async createLastWatchedLedgerEntryIfNotExists() {
+        const ret = await this.db.getValues(this.utilTable, { name: LAST_WATCHED_LEDGER });
+        if (ret.length === 0) {
+            await this.db.insertValue(this.utilTable, { name: LAST_WATCHED_LEDGER, value: -1 });
+        }
+    }
+
     async getRedeemedRecords() {
         return (await this.db.getValues(this.redeemTable, { status: RedeemStatus.REDEEMED }));
     }
@@ -244,6 +269,12 @@ class MessageBoard {
             h_token_amount: txAmount,
             status: RedeemStatus.REDEEMING
         });
+    }
+
+    async updateLastIndexRecord(ledger_idx) {
+        await this.db.updateValue(this.utilTable, {
+            value: ledger_idx,
+        }, { name: LAST_WATCHED_LEDGER });
     }
 
     async updateRedeemedRecord(txHash, containerName, ledgerVersion) {
@@ -269,6 +300,8 @@ class MessageBoard {
     persistConfig() {
         fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
     }
+
+    checkMissedTransactions() { }
 }
 
 class SashiCLI {

@@ -23,6 +23,7 @@ fi
 
 # Read config values
 max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)
+max_swap_kbytes=$(jq '.system.max_swap_kbytes' $saconfig)
 max_cpu_us=$(jq '.system.max_cpu_us' $saconfig)
 max_instance_count=$(jq '.system.max_instance_count' $saconfig)
 
@@ -31,6 +32,11 @@ max_instance_count=$(jq '.system.max_instance_count' $saconfig)
 instance_mem_kbytes=0
 if [ "$max_mem_kbytes" != "" ] && [ ! ${#max_mem_kbytes} -eq 0 ] && [ "$max_mem_kbytes" -gt 0 ]; then
     ! instance_mem_kbytes=$(expr $max_mem_kbytes / $max_instance_count) && echo "Max memory limit calculation error." && exit 1
+fi
+
+instance_swap_kbytes=0
+if [ "$max_swap_kbytes" != "" ] && [ ! ${#max_swap_kbytes} -eq 0 ] && [ "$max_swap_kbytes" -gt 0 ]; then
+    ! instance_swap_kbytes=$(expr $instance_mem_kbytes + $max_swap_kbytes / $max_instance_count) && echo "Max swap memory limit calculation error." && exit 1
 fi
 
 instance_cpu_us=0
@@ -61,7 +67,7 @@ for user in "${validusers[@]}"; do
     if [ $instance_mem_kbytes -gt 0 ] &&
         ! (cgcreate -g memory:$user$cgroupsuffix &&
         echo "${instance_mem_kbytes}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-        echo "${instance_mem_kbytes}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes); then
+        echo "${instance_swap_kbytes}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes); then
         echo "Memory cgroup creation for $user failed."
         has_err=1
     fi

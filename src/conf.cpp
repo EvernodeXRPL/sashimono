@@ -63,13 +63,14 @@ namespace conf
             cfg.hp.init_user_port = 8081;
 
             cfg.system.max_instance_count = 5;
-            cfg.system.max_mem_kbytes = 1024000;     // Total 1GB RAM
+            cfg.system.max_mem_kbytes = 1048576;     // Total 1GB RAM
+            cfg.system.max_swap_kbytes = 3145728;    // Total 3GB swap.
             cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
-            cfg.system.max_storage_kbytes = 2048000; // Total 2GB
+            cfg.system.max_storage_kbytes = 5242880; // Total 5GB
 
             const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);
-            cfg.docker.images["hp.0.5-ubt.20.04"] = img_prefix + "/sashimono:hp.0.5-ubt.20.04";
-            cfg.docker.images["hp.0.5-ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp.0.5-ubt.20.04-njs.14";
+            cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
+            cfg.docker.images["hp.latest-ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.14";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
@@ -242,6 +243,7 @@ namespace conf
                 const jsoncons::ojson &system = d["system"];
 
                 cfg.system.max_mem_kbytes = system["max_mem_kbytes"].as<size_t>();
+                cfg.system.max_swap_kbytes = system["max_swap_kbytes"].as<size_t>();
                 cfg.system.max_cpu_us = system["max_cpu_us"].as<size_t>();
                 cfg.system.max_storage_kbytes = system["max_storage_kbytes"].as<size_t>();
                 cfg.system.max_instance_count = system["max_instance_count"].as<size_t>();
@@ -324,6 +326,7 @@ namespace conf
             jsoncons::ojson system_config;
 
             system_config.insert_or_assign("max_mem_kbytes", cfg.system.max_mem_kbytes);
+            system_config.insert_or_assign("max_swap_kbytes", cfg.system.max_swap_kbytes);
             system_config.insert_or_assign("max_cpu_us", cfg.system.max_cpu_us);
             system_config.insert_or_assign("max_storage_kbytes", cfg.system.max_storage_kbytes);
             system_config.insert_or_assign("max_instance_count", cfg.system.max_instance_count);

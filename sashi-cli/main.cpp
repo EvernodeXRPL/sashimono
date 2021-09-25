@@ -79,6 +79,7 @@ int parse_cmd(int argc, char **argv)
     CLI::App *status = app.add_subcommand("status", "Check socket accessibility.");
     CLI::App *list = app.add_subcommand("list", "List all instances.");
     CLI::App *json = app.add_subcommand("json", "JSON payload. Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+    CLI::App *create = app.add_subcommand("create", "Creates an instance.");
     CLI::App *start = app.add_subcommand("start", "Starts an instance.");
     CLI::App *stop = app.add_subcommand("stop", "Stops an instance.");
     CLI::App *destroy = app.add_subcommand("destroy", "Destroys an instance.");
@@ -86,6 +87,11 @@ int parse_cmd(int argc, char **argv)
     // Initialize options.
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
+
+    std::string owner, contract_id, image;
+    create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
+    create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
+    create->add_option("-i,--image", image, "Container image to use");
 
     std::string container_name;
     start->add_option("-n,--name", container_name, "Instance name");
@@ -138,20 +144,25 @@ int parse_cmd(int argc, char **argv)
                                return 0;
                            });
     }
+    else if (create->parsed() && !contract_id.empty() && !image.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::create(owner, contract_id, image); });
+    }
     else if (start->parsed() && !container_name.empty())
     {
         return execute_cli([&]()
-                           { return (cli::execute_basic("start", container_name) == -1); });
+                           { return cli::execute_basic("start", container_name); });
     }
     else if (stop->parsed() && !container_name.empty())
     {
         return execute_cli([&]()
-                           { return (cli::execute_basic("stop", container_name) == -1); });
+                           { return cli::execute_basic("stop", container_name); });
     }
     else if (destroy->parsed() && !container_name.empty())
     {
         return execute_cli([&]()
-                           { return (cli::execute_basic("destroy", container_name) == -1); });
+                           { return cli::execute_basic("destroy", container_name); });
     }
 
     std::cout << app.help();

@@ -9,6 +9,7 @@ namespace cli
     constexpr const char *LIST_FORMATTER_STR = "%-38s%-27s%-10s%-10s%-10s%s\n";
     constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
+    constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
 
     cli_context ctx;
 
@@ -148,6 +149,18 @@ namespace cli
         std::string msg, output;
         msg.resize(31 + type.size() + container_name.size());
         sprintf(msg.data(), MSG_BASIC, type.data(), container_name.data());
+
+        const int ret = get_json_output(msg, output);
+        if (ret == 0)
+            std::cout << output << std::endl;
+        return ret;
+    }
+
+    int create(std::string_view owner, std::string_view contract_id, std::string_view image)
+    {
+        std::string msg, output;
+        msg.resize(75 + owner.size() + contract_id.size() + image.size());
+        sprintf(msg.data(), MSG_CREATE, owner.data(), contract_id.data(), image.data());
 
         const int ret = get_json_output(msg, output);
         if (ret == 0)

@@ -4,7 +4,7 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
-const char *BASIC_MSG = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
+std::string exec_dir;
 
 /**
  * Performs any cleanup on graceful application termination.
@@ -51,26 +51,15 @@ void std_terminate() noexcept
     exit(1);
 }
 
-int write_msg(std::string_view exec_dir, std::string_view json_message)
+template <typename executor>
+int execute_cli(executor const &func)
 {
-    std::string output;
-    if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
-    {
-        cli::deinit();
+    if (cli::init(exec_dir) == -1)
         return -1;
-    }
 
-    std::cout << output << std::endl;
+    const int ret = func();
     cli::deinit();
-    return 0;
-}
-
-int write_basic_msg(std::string_view exec_dir, std::string_view type, std::string_view container_name)
-{
-    std::string msg;
-    msg.resize(512);
-    sprintf(msg.data(), BASIC_MSG, type.data(), container_name.data());
-    return write_msg(exec_dir, msg);
+    return ret;
 }
 
 /**
@@ -105,11 +94,11 @@ int parse_cmd(int argc, char **argv)
 
     CLI11_PARSE(app, argc, argv);
 
-    // Take the realpath of sash exec path.
+    // Take the realpath of sashi cli exec path.
     std::array<char, PATH_MAX> buffer;
-    ::realpath(argv[0], buffer.data());
+    realpath(argv[0], buffer.data());
     buffer[PATH_MAX] = '\0';
-    const std::string exec_dir = dirname(buffer.data());
+    exec_dir = dirname(buffer.data());
 
     // Verifying subcommands.
     if (version->parsed())
@@ -119,41 +108,50 @@ int parse_cmd(int argc, char **argv)
     }
     else if (status->parsed())
     {
-        if (cli::init(exec_dir) == -1)
-            return -1;
-
-        std::cout << cli::ctx.socket_path << std::endl;
-        cli::deinit();
-        return 0;
+        return execute_cli([]()
+                           {
+                               std::cout << cli::ctx.socket_path << std::endl;
+                               return 0;
+                           });
     }
     else if (list->parsed())
     {
-        if (cli::init(exec_dir) == -1)
-            return -1;
-        if (cli::list() == -1)
-        {
-            std::cerr << "Failed to list instances." << std::endl;
-            cli::deinit();
-            return -1;
-        }
-        cli::deinit();
-        return 0;
+        return execute_cli([]()
+                           {
+                               if (cli::list() == -1)
+                               {
+                                   std::cerr << "Failed to list instances." << std::endl;
+                                   return -1;
+                               }
+                               return 0;
+                           });
     }
     else if (json->parsed() && !json_message.empty())
     {
-        return write_msg(exec_dir, json_message);
+        return execute_cli([&]()
+                           {
+                               std::string output;
+                               if (cli::get_json_output(json_message, output) == -1)
+                                   return -1;
+
+                               std::cout << output << std::endl;
+                               return 0;
+                           });
     }
     else if (start->parsed() && !container_name.empty())
     {
-        return write_basic_msg(exec_dir, "start", container_name);
+        return execute_cli([&]()
+                           { return (cli::execute_basic("start", container_name) == -1); });
     }
     else if (stop->parsed() && !container_name.empty())
     {
-        return write_basic_msg(exec_dir, "stop", container_name);
+        return execute_cli([&]()
+                           { return (cli::execute_basic("stop", container_name) == -1); });
     }
     else if (destroy->parsed() && !container_name.empty())
     {
-        return write_basic_msg(exec_dir, "destroy", container_name);
+        return execute_cli([&]()
+                           { return (cli::execute_basic("destroy", container_name) == -1); });
     }
 
     std::cout << app.help();

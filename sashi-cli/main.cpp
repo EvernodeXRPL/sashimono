@@ -4,6 +4,8 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
+std::string exec_dir;
+
 /**
  * Performs any cleanup on graceful application termination.
  */
@@ -49,6 +51,17 @@ void std_terminate() noexcept
     exit(1);
 }
 
+template <typename executor>
+int execute_cli(executor const &func)
+{
+    if (cli::init(exec_dir) == -1)
+        return -1;
+
+    const int ret = func();
+    cli::deinit();
+    return ret;
+}
+
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given using CLI11 library.
  * @param argc Argument count.
@@ -62,57 +75,94 @@ int parse_cmd(int argc, char **argv)
     app.set_help_all_flag("--help-all", "Expand all help");
 
     // Initialize subcommands.
+    CLI::App *version = app.add_subcommand("version", "Displays Sashimono CLI version.");
     CLI::App *status = app.add_subcommand("status", "Check socket accessibility.");
     CLI::App *list = app.add_subcommand("list", "List all instances.");
     CLI::App *json = app.add_subcommand("json", "JSON payload. Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+    CLI::App *create = app.add_subcommand("create", "Creates an instance.");
+    CLI::App *start = app.add_subcommand("start", "Starts an instance.");
+    CLI::App *stop = app.add_subcommand("stop", "Stops an instance.");
+    CLI::App *destroy = app.add_subcommand("destroy", "Destroys an instance.");
 
     // Initialize options.
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
 
+    std::string owner, contract_id, image;
+    create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
+    create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
+    create->add_option("-i,--image", image, "Container image to use");
+
+    std::string container_name;
+    start->add_option("-n,--name", container_name, "Instance name");
+    stop->add_option("-n,--name", container_name, "Instance name");
+    destroy->add_option("-n,--name", container_name, "Instance name");
+
     CLI11_PARSE(app, argc, argv);
 
-    // Take the realpath of sash exec path.
+    // Take the realpath of sashi cli exec path.
     std::array<char, PATH_MAX> buffer;
-    ::realpath(argv[0], buffer.data());
+    realpath(argv[0], buffer.data());
     buffer[PATH_MAX] = '\0';
-    const std::string exec_dir = dirname(buffer.data());
+    exec_dir = dirname(buffer.data());
 
     // Verifying subcommands.
-    if (status->parsed())
+    if (version->parsed())
     {
-        if (cli::init(exec_dir) == -1)
-            return -1;
-
-        std::cout << cli::ctx.socket_path << std::endl;
-        cli::deinit();
+        std::cout << "Sashimono CLI version 1.0.0" << std::endl;
         return 0;
+    }
+    else if (status->parsed())
+    {
+        return execute_cli([]()
+                           {
+                               std::cout << cli::ctx.socket_path << std::endl;
+                               return 0;
+                           });
     }
     else if (list->parsed())
     {
-        if (cli::init(exec_dir) == -1)
-            return -1;
-        if (cli::list() == -1)
-        {
-            std::cerr << "Failed to list instances." << std::endl;
-            cli::deinit();
-            return -1;
-        }
-        cli::deinit();
-        return 0;
+        return execute_cli([]()
+                           {
+                               if (cli::list() == -1)
+                               {
+                                   std::cerr << "Failed to list instances." << std::endl;
+                                   return -1;
+                               }
+                               return 0;
+                           });
     }
     else if (json->parsed() && !json_message.empty())
     {
-        std::string output;
-        if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
-        {
-            cli::deinit();
-            return -1;
-        }
+        return execute_cli([&]()
+                           {
+                               std::string output;
+                               if (cli::get_json_output(json_message, output) == -1)
+                                   return -1;
 
-        std::cout << output << std::endl;
-        cli::deinit();
-        return 0;
+                               std::cout << output << std::endl;
+                               return 0;
+                           });
+    }
+    else if (create->parsed() && !contract_id.empty() && !image.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::create(owner, contract_id, image); });
+    }
+    else if (start->parsed() && !container_name.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::execute_basic("start", container_name); });
+    }
+    else if (stop->parsed() && !container_name.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::execute_basic("stop", container_name); });
+    }
+    else if (destroy->parsed() && !container_name.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::execute_basic("destroy", container_name); });
     }
 
     std::cout << app.help();

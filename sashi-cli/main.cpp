@@ -4,6 +4,8 @@
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
 
+const char *BASIC_MSG = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
+
 /**
  * Performs any cleanup on graceful application termination.
  */
@@ -49,6 +51,28 @@ void std_terminate() noexcept
     exit(1);
 }
 
+int write_msg(std::string_view exec_dir, std::string_view json_message)
+{
+    std::string output;
+    if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
+    {
+        cli::deinit();
+        return -1;
+    }
+
+    std::cout << output << std::endl;
+    cli::deinit();
+    return 0;
+}
+
+int write_basic_msg(std::string_view exec_dir, std::string_view type, std::string_view container_name)
+{
+    std::string msg;
+    msg.resize(512);
+    sprintf(msg.data(), BASIC_MSG, type.data(), container_name.data());
+    return write_msg(exec_dir, msg);
+}
+
 /**
  * Parses CLI args and extracts sashimono agent command and parameters given using CLI11 library.
  * @param argc Argument count.
@@ -62,13 +86,22 @@ int parse_cmd(int argc, char **argv)
     app.set_help_all_flag("--help-all", "Expand all help");
 
     // Initialize subcommands.
+    CLI::App *version = app.add_subcommand("version", "Displays Sashimono CLI version.");
     CLI::App *status = app.add_subcommand("status", "Check socket accessibility.");
     CLI::App *list = app.add_subcommand("list", "List all instances.");
     CLI::App *json = app.add_subcommand("json", "JSON payload. Example: sashi json -m '{\"type\":\"<instruction_type>\", ...}'");
+    CLI::App *start = app.add_subcommand("start", "Starts an instance.");
+    CLI::App *stop = app.add_subcommand("stop", "Stops an instance.");
+    CLI::App *destroy = app.add_subcommand("destroy", "Destroys an instance.");
 
     // Initialize options.
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
+
+    std::string container_name;
+    start->add_option("-n,--name", container_name, "Instance name");
+    stop->add_option("-n,--name", container_name, "Instance name");
+    destroy->add_option("-n,--name", container_name, "Instance name");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -79,7 +112,12 @@ int parse_cmd(int argc, char **argv)
     const std::string exec_dir = dirname(buffer.data());
 
     // Verifying subcommands.
-    if (status->parsed())
+    if (version->parsed())
+    {
+        std::cout << "Sashimono CLI version 1.0.0" << std::endl;
+        return 0;
+    }
+    else if (status->parsed())
     {
         if (cli::init(exec_dir) == -1)
             return -1;
@@ -103,16 +141,19 @@ int parse_cmd(int argc, char **argv)
     }
     else if (json->parsed() && !json_message.empty())
     {
-        std::string output;
-        if (cli::init(exec_dir) == -1 || cli::write_to_socket(json_message) == -1 || cli::read_from_socket(output) == -1)
-        {
-            cli::deinit();
-            return -1;
-        }
-
-        std::cout << output << std::endl;
-        cli::deinit();
-        return 0;
+        return write_msg(exec_dir, json_message);
+    }
+    else if (start->parsed() && !container_name.empty())
+    {
+        return write_basic_msg(exec_dir, "start", container_name);
+    }
+    else if (stop->parsed() && !container_name.empty())
+    {
+        return write_basic_msg(exec_dir, "stop", container_name);
+    }
+    else if (destroy->parsed() && !container_name.empty())
+    {
+        return write_basic_msg(exec_dir, "destroy", container_name);
     }
 
     std::cout << app.help();

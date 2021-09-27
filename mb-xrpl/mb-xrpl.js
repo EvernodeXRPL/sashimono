@@ -7,6 +7,8 @@ const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 const CONFIG_PATH = 'mb-xrpl.cfg';
 const DB_PATH = 'mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
+const DB_UTIL_TABLE_NAME = 'util_data';
+const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
 const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
@@ -27,6 +29,7 @@ class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
+        this.utilTable = DB_UTIL_TABLE_NAME;
         this.expiryList = [];
 
         if (!fs.existsSync(this.configPath))
@@ -41,7 +44,6 @@ class MessageBoard {
 
     async init() {
         this.readConfig();
-
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
@@ -51,6 +53,7 @@ class MessageBoard {
         this.db.open();
         // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
+        await this.createUtilDataTableIfNotExists();
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -94,34 +97,39 @@ class MessageBoard {
                 console.error(error);
             else if (!data)
                 console.log('Invalid transaction.');
-            else if (data && this.isRedeem(data)) {
-                const txHash = data.hash;
-                const txAccount = data.Account;
-                const txPubKey = data.SigningPubKey;
-                const amount = parseInt(data.Amount.value);
-                // Filter the memo feilds with redeem type and binary format.
-                const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
-
+            else if (data) {
                 this.db.open();
-                for (let memo of memos) {
+                // Update last watched ledger sequence number regardless the transaction is redeem or not.
+                await this.updateLastIndexRecord(data.LastLedgerSequence);
 
-                    try {
-                        console.log(`Received redeem from ${txAccount}`);
-                        await this.createRedeemRecord(txHash, txAccount, amount);
-                        const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
-                        console.log(`Instance created for ${txAccount}`);
-                        // Send the redeem response with created instance info.
-                        const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-                        // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                        this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
-                        // Update the database for redeemed record.
-                        await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
-                    }
-                    catch (e) {
-                        console.error(e);
-                        await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
-                        // Update the redeem response for failures.
-                        await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                if (this.isRedeem(data)) {
+                    const txHash = data.hash;
+                    const txAccount = data.Account;
+                    const txPubKey = data.SigningPubKey;
+                    const amount = parseInt(data.Amount.value);
+                    // Filter the memo feilds with redeem type and binary format.
+                    const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
+
+                    for (let memo of memos) {
+
+                        try {
+                            console.log(`Received redeem from ${txAccount}`);
+                            await this.createRedeemRecord(txHash, txAccount, amount);
+                            const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
+                            console.log(`Instance created for ${txAccount}`);
+                            // Send the redeem response with created instance info.
+                            const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+                            // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                            this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                            // Update the database for redeemed record.
+                            await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                        }
+                        catch (e) {
+                            console.error(e);
+                            await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
+                            // Update the redeem response for failures.
+                            await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                        }
                     }
                 }
                 this.db.close();
@@ -209,6 +217,22 @@ class MessageBoard {
         ]);
     }
 
+    async createUtilDataTableIfNotExists() {
+        // Create table if not exists.
+        await this.db.createTableIfNotExists(this.utilTable, [
+            { name: 'name', type: DataTypes.TEXT, notNull: true },
+            { name: 'value', type: DataTypes.INTEGER, notNull: true }
+        ]);
+        await this.createLastWatchedLedgerEntryIfNotExists();
+    }
+
+    async createLastWatchedLedgerEntryIfNotExists() {
+        const ret = await this.db.getValues(this.utilTable, { name: LAST_WATCHED_LEDGER });
+        if (ret.length === 0) {
+            await this.db.insertValue(this.utilTable, { name: LAST_WATCHED_LEDGER, value: -1 });
+        }
+    }
+
     async getRedeemedRecords() {
         return (await this.db.getValues(this.redeemTable, { status: RedeemStatus.REDEEMED }));
     }
@@ -221,6 +245,12 @@ class MessageBoard {
             h_token_amount: txAmount,
             status: RedeemStatus.REDEEMING
         });
+    }
+
+    async updateLastIndexRecord(ledger_idx) {
+        await this.db.updateValue(this.utilTable, {
+            value: ledger_idx,
+        }, { name: LAST_WATCHED_LEDGER });
     }
 
     async updateRedeemedRecord(txHash, containerName, ledgerVersion) {
@@ -245,6 +275,14 @@ class MessageBoard {
 
     persistConfig() {
         fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
+    }
+
+    async getMissedPaymentTransactions(lastWatchedLedger) {
+        return await this.ripplAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
+            excludeFailures: true,
+            minLedgerVersion: lastWatchedLedger,
+            types: [Events.PAYMENT]
+        });
     }
 }
 

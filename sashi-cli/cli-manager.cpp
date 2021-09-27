@@ -7,6 +7,9 @@ namespace cli
     constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
     constexpr const int BUFFER_SIZE = 4096;            // Max read buffer size.
     constexpr const char *LIST_FORMATTER_STR = "%-38s%-27s%-10s%-10s%-10s%s\n";
+    constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
+    constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
+    constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
 
     cli_context ctx;
 
@@ -133,19 +136,51 @@ namespace cli
         return res;
     }
 
+    int get_json_output(std::string_view json_msg, std::string &output)
+    {
+        if (write_to_socket(json_msg) == -1 || read_from_socket(output) == -1)
+            return -1;
+
+        return 0;
+    }
+
+    int execute_basic(std::string_view type, std::string_view container_name)
+    {
+        std::string msg, output;
+        msg.resize(31 + type.size() + container_name.size());
+        sprintf(msg.data(), MSG_BASIC, type.data(), container_name.data());
+
+        const int ret = get_json_output(msg, output);
+        if (ret == 0)
+            std::cout << output << std::endl;
+        return ret;
+    }
+
+    int create(std::string_view owner, std::string_view contract_id, std::string_view image)
+    {
+        std::string msg, output;
+        msg.resize(75 + owner.size() + contract_id.size() + image.size());
+        sprintf(msg.data(), MSG_CREATE, owner.data(), contract_id.data(), image.data());
+
+        const int ret = get_json_output(msg, output);
+        if (ret == 0)
+            std::cout << output << std::endl;
+        return ret;
+    }
+
     /**
      * Print the list of instances in a tabular manner.
      * @return 0 on success, -1 on error.
     */
     int list()
     {
-        std::string message;
-        if (write_to_socket("{\"type\": \"list\"}") == -1 || read_from_socket(message) == -1)
+        std::string output;
+        if (get_json_output(MSG_LIST, output) == -1)
             return -1;
 
         try
         {
-            jsoncons::json d = jsoncons::json::parse(message, jsoncons::strict_json_parsing());
+            jsoncons::json d = jsoncons::json::parse(output, jsoncons::strict_json_parsing());
             if (!d.contains("type") ||
                 d["type"].as<std::string>() != "list_res" ||
                 !d.contains("content") ||

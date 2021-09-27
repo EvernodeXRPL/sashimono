@@ -20,6 +20,12 @@ namespace cli
 
     int read_from_socket(std::string &message);
 
+    int get_json_output(std::string_view msg, std::string &output);
+
+    int execute_basic(std::string_view type, std::string_view container_name);
+
+    int create(std::string_view owner, std::string_view contract_id, std::string_view image);
+
     int list();
 
     void deinit();

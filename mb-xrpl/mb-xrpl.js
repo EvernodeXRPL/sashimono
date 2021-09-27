@@ -283,7 +283,14 @@ class MessageBoard {
         fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
     }
 
-    checkMissedTransactions() { }
+    async checkMissedTransactions(lastWatchedLedger) {
+        const list = await this.ripplAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
+            excludeFailures: true,
+            minLedgerVersion: lastWatchedLedger,
+            types: [Events.PAYMENT]
+        });
+        console.log(list);
+    }
 }
 
 class SashiCLI {

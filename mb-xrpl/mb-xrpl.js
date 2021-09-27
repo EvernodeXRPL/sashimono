@@ -14,12 +14,14 @@ const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
+const REDEEM_TIMEOUT_WINDOW = 12; // Max no. of ledgers within which a redeem operation has to be serviced.
 
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
     REDEEMED: 'Redeemed',
     FAILED: 'Failed',
-    EXPIRED: 'Expired'
+    EXPIRED: 'Expired',
+    SASHI_TIMEOUT: 'SashiTimeout',
 }
 
 const SASHI_CLI_PATH_DEV = "../build/sashi";
@@ -55,6 +57,8 @@ class MessageBoard {
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
+        this.lastValidatedLedgerSequence = await this.ripplAPI.getLedgerVersion();
+
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
             this.addToExpiryList(redeem.tx_hash, redeem.container_name, this.getExpiryLedger(redeem.created_on_ledger, redeem.h_token_amount));
@@ -63,6 +67,8 @@ class MessageBoard {
 
         // Check for instance expiry.
         this.ripplAPI.events.on(Events.LEDGER, async (e) => {
+            this.lastValidatedLedgerSequence = e.ledgerVersion;
+
             // Filter out instances which needed to be expired and destroy them.
             const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
             if (expired && expired.length) {
@@ -115,14 +121,31 @@ class MessageBoard {
                         try {
                             console.log(`Received redeem from ${txAccount}`);
                             await this.createRedeemRecord(txHash, txAccount, amount);
+
+                            // The last validated ledger when we receive the redeem request.
+                            const startingValidatedLedger = this.lastValidatedLedgerSequence;
                             const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
-                            console.log(`Instance created for ${txAccount}`);
-                            // Send the redeem response with created instance info.
-                            const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-                            // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                            this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
-                            // Update the database for redeemed record.
-                            await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+
+                            // Number of validated ledgers passed while the instance is created.
+                            const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+
+                            // Give-up the redeeming porocess if the instance creation inself takes more than 80% of allowed window.
+                            const threshold = REDEEM_TIMEOUT_WINDOW * 0.8;
+                            if (diff > threshold) {
+                                console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                                // Update the redeem status of the request to 'SashiTimeout'.
+                                await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
+                                // Destroy the instance.
+                                await this.sashiCli.destroyInstance(createRes.content.name);
+                            } else {
+                                console.log(`Instance created for ${txAccount}`);
+                                // Send the redeem response with created instance info.
+                                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+                                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                                // Update the database for redeemed record.
+                                await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                            }
                         }
                         catch (e) {
                             console.error(e);

@@ -93,44 +93,43 @@ class MessageBoard {
 
         // Handle the transactions on evernode account and filter out redeem operations.
         this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
-            console.log(data);
-            if (!error) {
-                this.db.open();
-                await this.updateLastIndexRecord(data.LastLedgerSequence);
-                this.db.close();
-            }
             if (error)
                 console.error(error);
             else if (!data)
                 console.log('Invalid transaction.');
-            else if (data && this.isRedeem(data)) {
-                const txHash = data.hash;
-                const txAccount = data.Account;
-                const txPubKey = data.SigningPubKey;
-                const amount = parseInt(data.Amount.value);
-                // Filter the memo feilds with redeem type and binary format.
-                const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
-
+            else if (data) {
                 this.db.open();
-                for (let memo of memos) {
+                // Update last watched ledger sequence number regardless the transaction is redeem or not.
+                await this.updateLastIndexRecord(data.LastLedgerSequence);
 
-                    try {
-                        console.log(`Received redeem from ${txAccount}`);
-                        await this.createRedeemRecord(txHash, txAccount, amount);
-                        const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
-                        console.log(`Instance created for ${txAccount}`);
-                        // Send the redeem response with created instance info.
-                        const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-                        // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                        this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
-                        // Update the database for redeemed record.
-                        await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
-                    }
-                    catch (e) {
-                        console.error(e);
-                        await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
-                        // Update the redeem response for failures.
-                        await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                if (this.isRedeem(data)) {
+                    const txHash = data.hash;
+                    const txAccount = data.Account;
+                    const txPubKey = data.SigningPubKey;
+                    const amount = parseInt(data.Amount.value);
+                    // Filter the memo feilds with redeem type and binary format.
+                    const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
+
+                    for (let memo of memos) {
+
+                        try {
+                            console.log(`Received redeem from ${txAccount}`);
+                            await this.createRedeemRecord(txHash, txAccount, amount);
+                            const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
+                            console.log(`Instance created for ${txAccount}`);
+                            // Send the redeem response with created instance info.
+                            const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+                            // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                            this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                            // Update the database for redeemed record.
+                            await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                        }
+                        catch (e) {
+                            console.error(e);
+                            await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
+                            // Update the redeem response for failures.
+                            await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+                        }
                     }
                 }
                 this.db.close();
@@ -172,11 +171,6 @@ class MessageBoard {
                 EVR_CUR_CODE,
                 this.cfg.xrpl.hookAddress,
                 [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
-            // const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            //     REG_FEE,
-            //     "XRP",
-            //     null,
-            //     [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();

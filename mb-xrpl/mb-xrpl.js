@@ -14,7 +14,7 @@ const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
-const REDEEM_TIMEOUT_WINDOW = 12; // Max no. of ledgers within which a redeem operation has to be served.
+const REDEEM_TIMEOUT_WINDOW = 24; // Max no. of ledgers within which a redeem operation has to be served.
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
 
 const RedeemStatus = {
@@ -143,9 +143,9 @@ class MessageBoard {
                                 // Send the redeem response with created instance info.
                                 const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
                                 // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(data.ledgerVersion, amount));
+                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(this.lastValidatedLedgerSequence, amount));
                                 // Update the database for redeemed record.
-                                await this.updateRedeemedRecord(txHash, createRes.content.name, data.ledgerVersion);
+                                await this.updateRedeemedRecord(txHash, createRes.content.name, this.lastValidatedLedgerSequence);
                             }
                         }
                         catch (e) {

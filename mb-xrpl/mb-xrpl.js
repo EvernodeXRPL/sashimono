@@ -14,7 +14,8 @@ const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
-const REDEEM_TIMEOUT_WINDOW = 12; // Max no. of ledgers within which a redeem operation has to be serviced.
+const REDEEM_TIMEOUT_WINDOW = 12; // Max no. of ledgers within which a redeem operation has to be served.
+const REDEEM_TIMEOUT_THRESHOLD = 0.8;
 
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
@@ -129,8 +130,8 @@ class MessageBoard {
                             // Number of validated ledgers passed while the instance is created.
                             const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
 
-                            // Give-up the redeeming porocess if the instance creation inself takes more than 80% of allowed window.
-                            const threshold = REDEEM_TIMEOUT_WINDOW * 0.8;
+                            // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
+                            const threshold = REDEEM_TIMEOUT_WINDOW * REDEEM_TIMEOUT_THRESHOLD;
                             if (diff > threshold) {
                                 console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                                 // Update the redeem status of the request to 'SashiTimeout'.

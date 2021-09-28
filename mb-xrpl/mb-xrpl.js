@@ -142,10 +142,13 @@ class MessageBoard {
                                 console.log(`Instance created for ${txAccount}`);
                                 // Send the redeem response with created instance info.
                                 const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+
+                                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
+                                const current_ledger_seq = this.lastValidatedLedgerSequence;
                                 // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(this.lastValidatedLedgerSequence, amount));
+                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(current_ledger_seq, amount));
                                 // Update the database for redeemed record.
-                                await this.updateRedeemedRecord(txHash, createRes.content.name, this.lastValidatedLedgerSequence);
+                                await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
                             }
                         }
                         catch (e) {

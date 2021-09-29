@@ -260,7 +260,7 @@ const interatctiveInterface = async () => {
                             owner_pubkey: 'ed5cb83404120ac759609819591ef839b7d222c84f1f08b3012f490586159d2b50',
                             contract_id: contractId,
                             image: (image == "1" ? "hp.latest-ubt.20.04" : "hp.latest-ubt.20.04-njs.14"),
-                            config: ret !== -1 ? createConfig : undefined
+                            config: ret !== -1 ? createConfig : {}
                         }));
                         break;
                     // case 'initiate':

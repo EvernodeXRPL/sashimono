@@ -113,6 +113,14 @@ class RippleAPIWarpper {
         }
     }
 
+    async disconnect() {
+        if (!this.connected)
+            return;
+
+        this.connected = false;
+        await this.api.disconnect();
+    }
+
     deriveAddress(publicKey) {
         return this.api.deriveAddress(publicKey);
     }
@@ -155,6 +163,23 @@ class XrplAccount {
             throw 'Cannot derive key pair: Account secret is empty.';
 
         return this.rippleAPI.api.deriveKeypair(this.secret);
+    }
+
+    async setDefaultRippling(enabled) {
+
+        const ledger = await (await this.rippleAPI.api.getLedger()).ledgerVersion;
+        const maxLedger = ledger + maxLedgerOffset;
+
+        const prepared = await this.rippleAPI.api.prepareSettings(this.address, {
+            defaultRipple: enabled
+        }, {
+            maxLedgerVersion: maxLedger
+        });
+        const signed = this.rippleAPI.api.sign(prepared.txJSON, this.secret);
+
+        await this.rippleAPI.api.submit(signed.signedTransaction);
+        const verified = await this.verifyTransaction(signed.id, ledger, maxLedger);
+        return verified ? verified : false;
     }
 
     async makePayment(toAddr, amount, currency, issuer, memos = null) {

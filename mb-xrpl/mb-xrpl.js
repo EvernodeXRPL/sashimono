@@ -4,13 +4,13 @@ const logger = require('./lib/logger');
 const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('./lib/ripple-handler');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
-const CONFIG_PATH = 'mb-xrpl.cfg';
-const DB_PATH = 'mb-xrpl.sqlite';
+const DATA_DIR = process.env.DATADIR || "./";
+const CONFIG_PATH = DATA_DIR + 'mb-xrpl.cfg';
+const DB_PATH = DATA_DIR + 'mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
-const EVR_LIMIT = 99999999;
 const REG_FEE = 5;
 const RES_FEE = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
@@ -179,15 +179,8 @@ class MessageBoard {
     }
 
     async checkForRegistration() {
-        // Create trustline with evernode account.
-        if (!this.cfg.xrpl.regTrustHash) {
-            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT, false);
-            if (res) {
-                this.cfg.xrpl.regTrustHash = res.txHash;
-                this.persistConfig();
-                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`);
-            }
-        }
+
+        // We assume host account already posseses some EVR balance along with EVR trust line.
 
         // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
@@ -389,6 +382,7 @@ async function main() {
         sashiCliPath = SASHI_CLI_PATH_DEV;
 
     console.log('Starting the xrpl message board' + (args[3] == '--dev' ? ' (in dev mode)' : ''));
+    console.log('Data dir: ' + DATA_DIR);
 
     // Read Ripple Server Url.
     const rippleServer = args[2];

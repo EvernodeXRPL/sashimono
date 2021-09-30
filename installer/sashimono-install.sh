@@ -5,13 +5,14 @@
 
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
-docker_bin=/usr/bin/sashimono-agent/dockerbin
+mb_xrpl_bin=$sashimono_bin/mb-xrpl
+docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
+mb_xrpl_data=$sashimono_data/mb-xrpl
+mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-mb_xrpl_dir="$sashimono_bin"/mb-xrpl
-mb_xrpl_conf="$mb_xrpl_dir"/mb-xrpl.cfg
 hook_xrpl_addr="rwGLw5uSGYm2couHZnrbCDKaQZQByvamj8"
 group="sashimonousers"
 admin_group="sashiadmin"
@@ -37,6 +38,8 @@ mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
 mkdir -p $sashimono_data
 [ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
+mkdir -p $mb_xrpl_data
+[ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
 
 echo "Installing Sashimono..."
 
@@ -141,7 +144,7 @@ systemctl start $sashimono_service
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
 # Setup xrpl message board.
-
+echo "Installing Evernode xrpl message board..."
 if [ "$quiet"=="-q" ]; then
 
     # We are in the quiet mode. Hence we auto-generate an XRPL account and token details for the host.
@@ -154,6 +157,12 @@ if [ "$quiet"=="-q" ]; then
     secret=$(echo $new_acc | jq -r '.secret')
     ([ "$address" == "" ] || [ "$address" == "null" ] ||
         [ "$secret" == "" ] || [ "$secret" == "null" ]) && echo "Invalid generated xrpl account details: $new_acc" && rollback
+
+    # Setup the host xrpl account with an EVR balance and default rippling flag.
+    echo "Setting up host XRP account..."
+    acc_setup_func="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ==&action=setuphost&addr=$address&secret=$secret"
+    faucet_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_setup_func)
+    [ "$faucet_code" != "200" ] && echo "Faucet account setup failed. code:$faucet_code" && rollback
 
     # Generate random details for instance size, location and token.
     instance_size="AUTO InstSize "$(tr -dc A-Z </dev/urandom | head -c 10)
@@ -187,7 +196,7 @@ else
 fi
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
-(! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
+(! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
 
 # Install xrpl message board systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -199,8 +208,9 @@ StartLimitIntervalSec=0
 User=root
 Group=root
 Type=simple
-WorkingDirectory=$mb_xrpl_dir
-ExecStart=node $mb_xrpl_dir $xrpl_server_url --enable-logging
+WorkingDirectory=$mb_xrpl_bin
+Environment=\"DATADIR=$mb_xrpl_data/\"
+ExecStart=node $mb_xrpl_bin $xrpl_server_url --enable-logging
 Restart=on-failure
 RestartSec=5
 [Install]

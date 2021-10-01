@@ -22,7 +22,6 @@ registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
 quiet=$1
 
-xrpl_server_url="wss://hooks-testnet.xrpl-labs.com"
 xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
@@ -147,7 +146,8 @@ systemctl start $sashimono_service
 echo "Installing Evernode xrpl message board..."
 if [ "$quiet"=="-q" ]; then
 
-    # We are in the quiet mode. Hence we auto-generate an XRPL account and token details for the host.
+    # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
+    # (This is done for testing purposes during development)
     
     # Generate new fauset account.
     new_acc=$(curl -X POST $xrpl_faucet_url)
@@ -209,8 +209,9 @@ User=root
 Group=root
 Type=simple
 WorkingDirectory=$mb_xrpl_bin
-Environment=\"DATADIR=$mb_xrpl_data/\"
-ExecStart=node $mb_xrpl_bin $xrpl_server_url --enable-logging
+Environment=\"MB_DATA_DIR=$mb_xrpl_data/\"
+Environment=\"MB_LOG=1/\"
+ExecStart=node $mb_xrpl_bin
 Restart=on-failure
 RestartSec=5
 [Install]

@@ -4,7 +4,13 @@ const logger = require('./lib/logger');
 const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('./lib/ripple-handler');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
-const DATA_DIR = process.env.DATADIR || "./";
+// Environment variables.
+const IS_DEV_MODE = process.env.MB_DEV === "1";
+const LOG_ENABLED = process.env.MB_LOG === "1";
+const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
+const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
+const DATA_DIR = process.env.MB_DATA_DIR || "./";
+
 const CONFIG_PATH = DATA_DIR + 'mb-xrpl.cfg';
 const DB_PATH = DATA_DIR + 'mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
@@ -12,10 +18,11 @@ const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
 const REG_FEE = 5;
-const RES_FEE = 0.000001;
+const MIN_XRP = 0.000001;
 const LEDGERS_PER_MOMENT = 72;
 const REDEEM_TIMEOUT_WINDOW = 24; // Max no. of ledgers within which a redeem operation has to be served.
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
+const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
@@ -25,8 +32,6 @@ const RedeemStatus = {
     SASHI_TIMEOUT: 'SashiTimeout',
 }
 
-const SASHI_CLI_PATH_DEV = "../build/sashi";
-const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
 
 class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippleServer) {
@@ -52,6 +57,14 @@ class MessageBoard {
 
         try { await this.ripplAPI.connect(); }
         catch (e) { throw e; }
+
+        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+
+        if (IS_DEREGISTER) {
+            await this.deregisterHost();
+            this.ripplAPI.disconnect();
+            return;
+        }
 
         this.db.open();
         // Create redeem table if not exist.
@@ -90,8 +103,6 @@ class MessageBoard {
                 this.db.close();
             }
         });
-
-        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         // Check whether registration fee is already payed and trustline is made.
         await this.checkForRegistration();
@@ -186,6 +197,7 @@ class MessageBoard {
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
             // For now we comment EVR reg fee transaction and make XRP transaction instead.
+            console.log(`Making Evernode host registration payment of ${REG_FEE} ${EVR_CUR_CODE}...`)
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
                 EVR_CUR_CODE,
@@ -199,6 +211,18 @@ class MessageBoard {
         }
     }
 
+    async deregisterHost() {
+        // Sends evernode host de-registration transaction.
+        console.log(`Performing Evernode host deregistration...`);
+        const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            MIN_XRP,
+            "XRP",
+            null,
+            [{ type: MemoTypes.HOST_DEREG, format: MemoFormats.TEXT, data: "" }]);
+        if (res)
+            console.log('Deregistration complete.');
+    }
+
     async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
         // Verifying the pubkey.
         if (!(await this.ripplAPI.isValidAddress(txPubkey, txAccount)))
@@ -209,7 +233,7 @@ class MessageBoard {
             response = await EncryptionHelper.encrypt(txPubkey, response);
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            RES_FEE,
+            MIN_XRP,
             "XRP",
             null,
             [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
@@ -366,27 +390,18 @@ class SashiCLI {
 }
 
 async function main() {
-    const args = process.argv;
 
     // This is used for logging purposes.
     // Logs are formatted with the timestamp and a log file will be created inside log directory.
-    if (args.includes('--enable-logging'))
+    if (LOG_ENABLED)
         logger.init('log/mb-xrpl.log');
 
-    if (args.length < 3)
-        throw "Arguments mismatch.\n Usage: node mb-xrpl <ripple server url>";
-
-    let sashiCliPath = SASHI_CLI_PATH_PROD;
-    // Use sashi CLI in the build folder for dev environment.
-    if (args.includes('--dev'))
-        sashiCliPath = SASHI_CLI_PATH_DEV;
-
-    console.log('Starting the xrpl message board' + (args[3] == '--dev' ? ' (in dev mode)' : ''));
+    console.log('Starting the xrpl message board' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
     console.log('Data dir: ' + DATA_DIR);
+    console.log('Rippled server: ' + RIPPLED_URL);
+    console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
 
-    // Read Ripple Server Url.
-    const rippleServer = args[2];
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, sashiCliPath, rippleServer);
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
     await mb.init();
 }
 

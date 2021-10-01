@@ -12,7 +12,8 @@ const MemoTypes = {
     REDEEM: 'evnRedeem',
     REDEEM_REF: 'evnRedeemRef',
     REDEEM_RESP: 'evnRedeemResp',
-    HOST_REG: 'evnHostReg'
+    HOST_REG: 'evnHostReg',
+    HOST_DEREG: 'evnHostDereg',
 }
 
 const MemoFormats = {

@@ -4,8 +4,10 @@
 
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
-docker_bin=/usr/bin/sashimono-agent/dockerbin
+mb_xrpl_bin=$sashimono_bin/mb-xrpl
+docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
+mb_xrpl_data=$sashimono_data/mb-xrpl
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
@@ -22,6 +24,17 @@ if [ "$quiet" != "-q" ]; then
     read -p "Type 'yes' to confirm uninstall: " confirmation < /dev/tty
     [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
 fi
+
+# Remove xrpl message board service if exists.
+if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then
+    systemctl stop $mb_xrpl_service
+    systemctl disable $mb_xrpl_service
+    rm /etc/systemd/system/$mb_xrpl_service.service
+fi
+
+# Deregister evernode message board host registration.
+echo "Attempting Evernode xrpl message board host deregistration..."
+MB_DATA_DIR=$mb_xrpl_data/ MB_LOG=1 MB_DEREGISTER=1 node $mb_xrpl_bin
 
 # Uninstall all contract instance users
 prefix="sashi"
@@ -58,13 +71,6 @@ if [ $ucount -gt 0 ]; then
         echo "Uninstall cancelled."
         exit 0
     fi
-fi
-
-# Remove xrpl message board service if exists.
-if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then
-    systemctl stop $mb_xrpl_service
-    systemctl disable $mb_xrpl_service
-    rm /etc/systemd/system/$mb_xrpl_service.service
 fi
 
 echo "Removing Sashimono cgroup creation service..."

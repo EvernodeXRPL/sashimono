@@ -9,10 +9,10 @@ const IS_DEV_MODE = process.env.MB_DEV === "1";
 const LOG_ENABLED = process.env.MB_LOG === "1";
 const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
-const DATA_DIR = process.env.MB_DATA_DIR || "./";
+const DATA_DIR = process.env.MB_DATA_DIR || ".";
 
-const CONFIG_PATH = DATA_DIR + 'mb-xrpl.cfg';
-const DB_PATH = DATA_DIR + 'mb-xrpl.sqlite';
+const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
+const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';

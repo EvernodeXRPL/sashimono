@@ -12,7 +12,7 @@ const currentContract = config.contracts.filter(config.selected)[0];
 if (!currentContract)
     throw "Invalid contract selected.";
 
-async function createInstance(host, useContractId, useImage, useConfig, elem) {
+async function createInstance(host, elem, peers, unl) {
 
     if (Object.keys(elem).length > 0)
         return;
@@ -22,10 +22,54 @@ async function createInstance(host, useContractId, useImage, useConfig, elem) {
 
     // Send redeem req.
     // Get redeem resp.
+
     const resp = "{}";
     const inst = JSON.parse(resp);
     for (var k in inst)
         elem[k] = inst[k];
+
+    saveConfig();
+}
+
+async function createInstancesSequentially() {
+    await initHosts();
+
+    let peers = null, unl = null;
+
+    for (const [host, elem] of Object.entries(currentContract.hosts)) {
+        await createInstance(host, elem, unl, peers);
+
+        if (!unl)
+            unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
+
+        if (!peers)
+            peers = [];
+        peers.push(`${host}:${elem.peer_port}`);
+    }
+}
+
+async function createInstancesParallely(peerPort) {
+    await initHosts();
+
+    // Create first instace and then create all other instances parallely assuming they all have the same peer port.
+
+    let unl = null;
+    const peers = Object.keys(currentContract.hosts).map(h => `${h}:${peerPort}`);
+    const tasks = [];
+
+    for (const [host, elem] of Object.entries(currentContract.hosts)) {
+
+        if (!unl) {
+            await createInstance(host, elem, peers, null);
+            unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
+        }
+        else {
+            // Add to parallel creation tasks.
+            tasks.push(createInstance(host, elem, peers, unl));
+        }
+    }
+
+    await Promise.all(tasks);
 }
 
 async function initHosts() {
@@ -35,10 +79,6 @@ async function initHosts() {
     const ips = await getVultrHosts(currentContract.vultr_group);
     ips.forEach(ip => currentContract.hosts[ip] = {});
     saveConfig();
-}
-
-async function createInstancesSequentially() {
-    await initHosts();
 }
 
 function saveConfig() {

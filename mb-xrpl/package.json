@@ -1,11 +1,10 @@
 {
-  "name": "mb-xrpl",
-  "scripts": {
-    "build": "ncc build mb-xrpl.js -o dist/mb-xrpl"
-  },
-  "dependencies": {
-    "eccrypto": "^1.1.6",
-    "ripple-lib": "^1.9.8",
-    "sqlite3": "^5.0.2"
-  }
+    "name": "mb-xrpl",
+    "scripts": {
+        "build": "ncc build mb-xrpl.js -o dist/mb-xrpl"
+    },
+    "dependencies": {
+        "evernode-js-client": "0.0.6-alpha",
+        "sqlite3": "5.0.2"
+    }
 }

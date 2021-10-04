@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('./lib/ripple-handler');
+const { XrplAccount, RippleAPIWrapper, RippleAPIEvents, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -34,7 +34,7 @@ const RedeemStatus = {
 
 
 class MessageBoard {
-    constructor(configPath, dbPath, sashiCliPath, rippleServer) {
+    constructor(configPath, dbPath, sashiCliPath, rippledServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
         this.utilTable = DB_UTIL_TABLE_NAME;
@@ -46,7 +46,7 @@ class MessageBoard {
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
         this.sashiCli = new SashiCLI(sashiCliPath);
-        this.ripplAPI = new RippleAPIWarpper(rippleServer);
+        this.rippleAPI = new RippleAPIWrapper(rippledServer);
         this.db = new SqliteDatabase(dbPath);
     }
 
@@ -55,14 +55,14 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        try { await this.ripplAPI.connect(); }
+        try { await this.rippleAPI.connect(); }
         catch (e) { throw e; }
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
-            this.ripplAPI.disconnect();
+            this.rippleAPI.disconnect();
             return;
         }
 
@@ -71,7 +71,7 @@ class MessageBoard {
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerSequence = await this.ripplAPI.getLedgerVersion();
+        this.lastValidatedLedgerSequence = await this.rippleAPI.getLedgerVersion();
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -80,7 +80,7 @@ class MessageBoard {
         this.db.close();
 
         // Check for instance expiry.
-        this.ripplAPI.events.on(Events.LEDGER, async (e) => {
+        this.rippleAPI.events.on(RippleAPIEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerSequence = e.ledgerVersion;
 
             // Filter out instances which needed to be expired and destroy them.
@@ -107,10 +107,10 @@ class MessageBoard {
         // Check whether registration fee is already payed and trustline is made.
         await this.checkForRegistration();
 
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
 
         // Handle the transactions on evernode account and filter out redeem operations.
-        this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
+        this.evernodeXrplAcc.events.on(RippleAPIEvents.PAYMENT, async (data, error) => {
             if (error)
                 console.error(error);
             else if (!data)
@@ -225,7 +225,7 @@ class MessageBoard {
 
     async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
         // Verifying the pubkey.
-        if (!(await this.ripplAPI.isValidAddress(txPubkey, txAccount)))
+        if (!(await this.rippleAPI.isValidAddress(txPubkey, txAccount)))
             throw 'Invalid public key for encryption';
 
         // Encrypt response with user pubkey.
@@ -322,10 +322,10 @@ class MessageBoard {
     }
 
     async getMissedPaymentTransactions(lastWatchedLedger) {
-        return await this.ripplAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
+        return await this.rippleAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
             excludeFailures: true,
             minLedgerVersion: lastWatchedLedger,
-            types: [Events.PAYMENT]
+            types: [RippleAPIEvents.PAYMENT]
         });
     }
 }

@@ -1,14 +1,17 @@
-const { exec } = require("child_process");
-const fs = require("fs");
-const { XrplAccount, RippleAPIWarpper } = require('./ripple-wrapper');
+import fetch from "node-fetch";
+import { exec } from "child_process";
+import fs from "fs";
+import evernode from "evernode-js-client";
+const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
 const userAddr = "raFCgMEj2P7dEwVwDQD81Jj5mLKUWmxpX9";
 const userSecret = "snbqbnYaD5Kqc82nfKWo3dMieQvG9";
 const hookAddr = "rwGLw5uSGYm2couHZnrbCDKaQZQByvamj8";
+const rippledServer = 'wss://hooks-testnet.xrpl-labs.com';
 const configFile = "config.json";
 
 const config = JSON.parse(fs.readFileSync(configFile));
-const currentContract = config.contracts.filter(config.selected)[0];
+const currentContract = config.contracts.filter(c => c.name === config.selected)[0];
 if (!currentContract)
     throw "Invalid contract selected.";
 
@@ -20,13 +23,30 @@ async function createInstance(host, elem, peers, unl) {
     const acc = await getHostAccountData(host);
     await transferHostingTokens(acc.token, acc.address, acc.secret);
 
-    // Send redeem req.
-    // Get redeem resp.
+    // Redeem
+    const client = new EvernodeClient(userAddr, userSecret);
+    await client.connect();
+    const resp = await client.redeem(acc.token, acc.address, 1, {
+        image: currentContract.docker.image,
+        contract_id: currentContract.contract_id,
+        owner_pubkey: currentContract.owner_pubkey,
+        config: {
+            contract: {
+                unl: unl
+            },
+            mesh: {
+                known_peers: peers
+            }
+        }
+    });
+    await client.disconnect();
 
-    const resp = "{}";
-    const inst = JSON.parse(resp);
-    for (var k in inst)
-        elem[k] = inst[k];
+    console.log(resp);
+
+    // const resp = "{}";
+    // const inst = JSON.parse(resp);
+    // for (var k in inst)
+    //     elem[k] = inst[k];
 
     saveConfig();
 }
@@ -82,7 +102,7 @@ async function initHosts() {
 }
 
 function saveConfig() {
-    fs.writeFileSync(configFile, JSON.stringify(config));
+    fs.writeFileSync(configFile, JSON.stringify(config, null, 4));
 }
 
 function execSsh(host, command) {
@@ -110,22 +130,36 @@ async function getHostAccountData(host) {
 }
 
 // Get hosting tokens from host account to user account.
-async function transferHostingTokens(currency, hostAddr, hostSecret) {
-    const ripplAPI = new RippleAPIWarpper(rippleServer);
-    await ripplAPI.connect();
+async function transferHostingTokens(token, hostAddr, hostSecret) {
+    const rippleAPI = new RippleAPIWrapper(rippledServer);
+    await rippleAPI.connect();
 
-    const hookAcc = new XrplAccount(ripplAPI, hostAddr, hostSecret);
-    const payRes = await hookAcc.makePayment(userAddr, 99999, currency, hostAddr);
+    const userAcc = new XrplAccount(rippleAPI, userAddr, userSecret);
+    const lines = await userAcc.getTrustLines(token, hostAddr);
+    if (lines.length == 0) {
+        const trustRes = await userAcc.createTrustline(token, hostAddr, 9999999);
+        if (!trustRes) {
+            await rippleAPI.disconnect();
+            return false;
+        }
 
-    await ripplAPI.disconnect();
-    return payRes;
+        const hostAcc = new XrplAccount(rippleAPI, hostAddr, hostSecret);
+        const payRes = await hostAcc.makePayment(userAddr, 99999, token, hostAddr);
+        if (!payRes) {
+            await rippleAPI.disconnect();
+            return false;
+        }
+    }
+
+    await rippleAPI.disconnect();
+    return true;
 }
 
 function getVultrHosts(group) {
 
     return new Promise(async (resolve) => {
 
-        if (!group || group.trim().length == 0)
+        if (!group || group.trim().length === 0)
             resolve([]);
 
         const resp = await fetch(`https://api.vultr.com/v2/instances?tag=${group}`, {
@@ -144,3 +178,5 @@ function getVultrHosts(group) {
         resolve(ips);
     })
 }
+
+createInstancesSequentially();

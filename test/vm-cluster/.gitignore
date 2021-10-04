@@ -2,3 +2,4 @@ config.json
 hp.cfg
 contract_fs
 ledger_fs
+node_modules

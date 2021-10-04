@@ -17,38 +17,40 @@ if (!currentContract)
 
 async function createInstance(host, elem, peers, unl) {
 
-    if (Object.keys(elem).length > 0)
+    if (Object.keys(elem).length > 0) {
+        console.log(`Instance in host ${host} already created.`)
         return;
+    }
 
     const acc = await getHostAccountData(host);
     await transferHostingTokens(acc.token, acc.address, acc.secret);
 
+    console.log(`Creating instance in host ${host} (${acc.token} - ${acc.address})...`);
+
+    const config = {};
+    if (unl)
+        config.contract = { unl: unl };
+    if (peers)
+        config.mesg = { known_peers: peers };
+
     // Redeem
     const client = new EvernodeClient(userAddr, userSecret);
     await client.connect();
-    const resp = await client.redeem(acc.token, acc.address, 1, {
+    const instanceInfo = await client.redeem(acc.token, acc.address, 12, {
         image: currentContract.docker.image,
         contract_id: currentContract.contract_id,
         owner_pubkey: currentContract.owner_pubkey,
-        config: {
-            contract: {
-                unl: unl
-            },
-            mesh: {
-                known_peers: peers
-            }
-        }
-    });
+        config: config
+    }).catch(err => console.log(err));
     await client.disconnect();
 
-    console.log(resp);
+    if (instanceInfo) {
+        for (var k in instanceInfo)
+            elem[k] = instanceInfo[k];
 
-    // const resp = "{}";
-    // const inst = JSON.parse(resp);
-    // for (var k in inst)
-    //     elem[k] = inst[k];
-
-    saveConfig();
+        console.log(`Created instance in host ${host}.`);
+        saveConfig();
+    }
 }
 
 async function createInstancesSequentially() {
@@ -144,7 +146,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
         }
 
         const hostAcc = new XrplAccount(rippleAPI, hostAddr, hostSecret);
-        const payRes = await hostAcc.makePayment(userAddr, 99999, token, hostAddr);
+        const payRes = await hostAcc.makePayment(userAddr, 9999999, token, hostAddr);
         if (!payRes) {
             await rippleAPI.disconnect();
             return false;
@@ -179,4 +181,28 @@ function getVultrHosts(group) {
     })
 }
 
-createInstancesSequentially();
+async function main() {
+    var args = process.argv.slice(2);
+
+    const mode = args[0];
+    if (mode === "create") {
+        if (args.length == 1) {
+            await createInstancesSequentially();
+        }
+        else {
+            console.log("Invalid args for 'create'.");
+        }
+    }
+    else if (mode === "createall") {
+        const peerPort = parseInt(args[1]);
+        if (!isNaN(peerPort))
+            await createInstancesParallely(peerPort);
+        else
+            console.log("Specify peer port for 'createall'.");
+    }
+    else {
+        console.log("Specifiy args: create | createall <peerport>")
+    }
+}
+
+main();

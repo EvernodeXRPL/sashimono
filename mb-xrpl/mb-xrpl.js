@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWrapper, RippleAPIEvents, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
+const { XrplAccount, RippleAPIWrapper, RippleAPIEvents, RippleConstants, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -18,8 +18,7 @@ const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
-const REG_FEE = 5;
-const MIN_XRP = 0.000001;
+const REG_FEE = '5';
 const LEDGERS_PER_MOMENT = 72;
 const REDEEM_TIMEOUT_WINDOW = 24; // Max no. of ledgers within which a redeem operation has to be served.
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
@@ -216,7 +215,7 @@ class MessageBoard {
         // Sends evernode host de-registration transaction.
         console.log(`Performing Evernode host deregistration...`);
         const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            MIN_XRP,
+            RippleConstants.MIN_XRP_AMOUNT,
             "XRP",
             null,
             [{ type: MemoTypes.HOST_DEREG, format: MemoFormats.TEXT, data: "" }]);
@@ -234,7 +233,7 @@ class MessageBoard {
             response = await EncryptionHelper.encrypt(txPubkey, response);
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            MIN_XRP,
+            RippleConstants.MIN_XRP_AMOUNT,
             "XRP",
             null,
             [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },

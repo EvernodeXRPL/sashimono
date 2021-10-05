@@ -154,7 +154,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
             await rippleAPI.disconnect();
             return false;
         }
-        console.log(`Transfering of ${token} complete...`);
+        console.log(`Transfering of ${token} complete.`);
     }
 
     await rippleAPI.disconnect();

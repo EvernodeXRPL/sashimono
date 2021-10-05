@@ -225,10 +225,5 @@ systemctl start $mb_xrpl_service
 echo "Installed Evernode xrpl message board."
 
 echo "Sashimono installed successfully."
-if [ "$quiet"=="-q" ]; then
-    echi "Rebooting..."
-    reboot
-else
-    echo "Please reboot your server for changes to apply."
-fi
+echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

@@ -6,13 +6,15 @@ const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
 const userAddr = "raFCgMEj2P7dEwVwDQD81Jj5mLKUWmxpX9";
 const userSecret = "snbqbnYaD5Kqc82nfKWo3dMieQvG9";
-const rippledServer = 'wss://hooks-testnet.xrpl-labs.com';
 const configFile = "config.json";
 
 const config = JSON.parse(fs.readFileSync(configFile));
 const currentContract = config.contracts.filter(c => c.name === config.selected)[0];
 if (!currentContract)
     throw "Invalid contract selected.";
+
+let rippleAPI = null;
+let evernodeClient = null;
 
 async function createInstance(host, elem, peers, unl) {
 
@@ -35,15 +37,12 @@ async function createInstance(host, elem, peers, unl) {
 
     // Redeem
     console.log(`Redeeming ${acc.token}-${acc.address}...`);
-    const client = new EvernodeClient(userAddr, userSecret);
-    await client.connect();
-    const instanceInfo = await client.redeem(acc.token, acc.address, 12, {
+    const instanceInfo = await evernodeClient.redeem(acc.token, acc.address, 12, {
         image: currentContract.docker.image,
         contract_id: currentContract.contract_id,
         owner_pubkey: currentContract.owner_pubkey,
         config: config
     }).catch(err => console.log(err));
-    await client.disconnect();
 
     if (instanceInfo) {
         for (var k in instanceInfo)
@@ -61,6 +60,7 @@ async function createInstance(host, elem, peers, unl) {
 
 async function createInstancesSequentially() {
     await initHosts();
+    await createConnections();
 
     let peers = null, unl = null;
 
@@ -79,6 +79,7 @@ async function createInstancesSequentially() {
 
 async function createInstancesParallely(peerPort) {
     await initHosts();
+    await createConnections();
 
     // Create first instace and then create all other instances parallely assuming they all have the same peer port.
 
@@ -144,29 +145,23 @@ async function getHostAccountData(host) {
 async function transferHostingTokens(token, hostAddr, hostSecret) {
 
     console.log(`Checking user's ${token} balance...`);
-    const rippleAPI = new RippleAPIWrapper(rippledServer);
-    await rippleAPI.connect();
 
     const userAcc = new XrplAccount(rippleAPI, userAddr, userSecret);
     const lines = await userAcc.getTrustLines(token, hostAddr);
     if (lines.length === 0) {
         console.log(`Transfering ${token} to user...`);
         const trustRes = await userAcc.createTrustline(token, hostAddr, 9999999);
-        if (!trustRes) {
-            await rippleAPI.disconnect();
+        if (!trustRes)
             return false;
-        }
 
         const hostAcc = new XrplAccount(rippleAPI, hostAddr, hostSecret);
         const payRes = await hostAcc.makePayment(userAddr, 9999999, token, hostAddr);
-        if (!payRes) {
-            await rippleAPI.disconnect();
+        if (!payRes)
             return false;
-        }
+
         console.log(`Transfering of ${token} complete.`);
     }
 
-    await rippleAPI.disconnect();
     return true;
 }
 
@@ -194,6 +189,14 @@ function getVultrHosts(group) {
     })
 }
 
+async function createConnections() {
+    rippleAPI = new RippleAPIWrapper();
+    await rippleAPI.connect();
+
+    evernodeClient = new EvernodeClient(userAddr, userSecret, { rippleAPI: rippleAPI });
+    await evernodeClient.connect();
+}
+
 async function main() {
     var args = process.argv.slice(2);
 
@@ -216,6 +219,9 @@ async function main() {
     else {
         console.log("Specifiy args: create | createall <peerport>")
     }
+
+    if (rippleAPI)
+        await rippleAPI.disconnect();
 }
 
 main();

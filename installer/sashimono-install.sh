@@ -213,7 +213,6 @@ Group=root
 Type=simple
 WorkingDirectory=$mb_xrpl_bin
 Environment=\"MB_DATA_DIR=$mb_xrpl_data\"
-Environment=\"MB_LOG=1/\"
 ExecStart=node $mb_xrpl_bin
 Restart=on-failure
 RestartSec=5

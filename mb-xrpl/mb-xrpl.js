@@ -6,12 +6,13 @@ const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
 const IS_DEV_MODE = process.env.MB_DEV === "1";
-const LOG_ENABLED = process.env.MB_LOG === "1";
+const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
 const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
 const DATA_DIR = process.env.MB_DATA_DIR || ".";
 
 const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
+const LOG_PATH = DATA_DIR + '/log/mb-xrpl.log';
 const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
@@ -391,12 +392,10 @@ class SashiCLI {
 
 async function main() {
 
-    // This is used for logging purposes.
     // Logs are formatted with the timestamp and a log file will be created inside log directory.
-    if (LOG_ENABLED)
-        logger.init('log/mb-xrpl.log');
+    logger.init(LOG_PATH, FILE_LOG_ENABLED);
 
-    console.log('Starting the xrpl message board' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
+    console.log('Starting the Evernode xrpl message board.' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
     console.log('Data dir: ' + DATA_DIR);
     console.log('Rippled server: ' + RIPPLED_URL);
     console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);

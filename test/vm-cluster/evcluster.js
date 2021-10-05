@@ -16,14 +16,14 @@ if (!currentContract)
 let rippleAPI = null;
 let evernodeClient = null;
 
-async function createInstance(host, elem, peers, unl) {
+async function createInstance(host, hostId, elem, peers, unl) {
 
     if (Object.keys(elem).length > 0) {
-        console.log(`Instance in host ${host} already created.`)
+        console.log(`Instance in host ${hostId} already created.`)
         return;
     }
 
-    console.log(`-------Host ${host}-------`);
+    console.log(`-------Host ${hostId}-------`);
 
     const acc = await getHostAccountData(host);
     await transferHostingTokens(acc.token, acc.address, acc.secret);
@@ -48,12 +48,12 @@ async function createInstance(host, elem, peers, unl) {
         for (var k in instanceInfo)
             elem[k] = instanceInfo[k];
 
-        console.log(`Created instance in host ${host}.`);
+        console.log(`Created instance in host ${hostId}.`);
         saveConfig();
         return true;
     }
     else {
-        console.log(`Instance creation failed in host ${host}.`);
+        console.log(`Instance creation failed in host ${hostId}.`);
         return false;
     }
 }
@@ -64,8 +64,9 @@ async function createInstancesSequentially() {
 
     let peers = null, unl = null;
 
+    let idx = 1;
     for (const [host, elem] of Object.entries(currentContract.hosts)) {
-        if (await createInstance(host, elem, peers, unl) === false)
+        if (await createInstance(host, idx++, elem, peers, unl) === false)
             return;
 
         if (!unl)
@@ -87,17 +88,18 @@ async function createInstancesParallely(peerPort) {
     const peers = Object.keys(currentContract.hosts).map(h => `${h}:${peerPort}`);
     const tasks = [];
 
+    let idx = 1;
     for (const [host, elem] of Object.entries(currentContract.hosts)) {
 
         if (!unl) {
-            if (await createInstance(host, elem, peers, null) === false)
+            if (await createInstance(host, idx++, elem, peers, null) === false)
                 return;
 
             unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
         }
         else {
             // Add to parallel creation tasks.
-            tasks.push(createInstance(host, elem, peers, unl));
+            tasks.push(createInstance(host, idx++, elem, peers, unl));
         }
     }
 

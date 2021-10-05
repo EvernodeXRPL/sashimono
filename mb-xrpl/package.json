@@ -4,7 +4,7 @@
         "build": "npm install && ncc build mb-xrpl.js -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.0.8-alpha",
+        "evernode-js-client": "0.0.12-alpha",
         "sqlite3": "5.0.2"
     }
 }

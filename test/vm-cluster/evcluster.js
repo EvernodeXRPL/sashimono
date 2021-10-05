@@ -6,7 +6,6 @@ const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
 const userAddr = "raFCgMEj2P7dEwVwDQD81Jj5mLKUWmxpX9";
 const userSecret = "snbqbnYaD5Kqc82nfKWo3dMieQvG9";
-const hookAddr = "rwGLw5uSGYm2couHZnrbCDKaQZQByvamj8";
 const rippledServer = 'wss://hooks-testnet.xrpl-labs.com';
 const configFile = "config.json";
 
@@ -22,18 +21,20 @@ async function createInstance(host, elem, peers, unl) {
         return;
     }
 
+    console.log(`-------Host ${host}-------`);
+
     const acc = await getHostAccountData(host);
     await transferHostingTokens(acc.token, acc.address, acc.secret);
 
-    console.log(`Creating instance in host ${host} (${acc.token} - ${acc.address})...`);
-
-    const config = {};
+    // Copy defined config from config.json to instance requirements config.
+    const config = JSON.parse(JSON.stringify(currentContract.config)) || {};
     if (unl)
-        config.contract = { unl: unl };
+        config.contract = { ...config.contract, unl: unl };
     if (peers)
-        config.mesh = { known_peers: peers };
+        config.mesh = { ...config.mesh, known_peers: peers };
 
     // Redeem
+    console.log(`Redeeming ${acc.token}-${acc.address}...`);
     const client = new EvernodeClient(userAddr, userSecret);
     await client.connect();
     const instanceInfo = await client.redeem(acc.token, acc.address, 12, {
@@ -50,6 +51,11 @@ async function createInstance(host, elem, peers, unl) {
 
         console.log(`Created instance in host ${host}.`);
         saveConfig();
+        return true;
+    }
+    else {
+        console.log(`Instance creation failed in host ${host}.`);
+        return false;
     }
 }
 
@@ -59,7 +65,8 @@ async function createInstancesSequentially() {
     let peers = null, unl = null;
 
     for (const [host, elem] of Object.entries(currentContract.hosts)) {
-        await createInstance(host, elem, peers, unl);
+        if (await createInstance(host, elem, peers, unl) === false)
+            return;
 
         if (!unl)
             unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
@@ -82,7 +89,9 @@ async function createInstancesParallely(peerPort) {
     for (const [host, elem] of Object.entries(currentContract.hosts)) {
 
         if (!unl) {
-            await createInstance(host, elem, peers, null);
+            if (await createInstance(host, elem, peers, null) === false)
+                return;
+
             unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
         }
         else {
@@ -140,7 +149,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
 
     const userAcc = new XrplAccount(rippleAPI, userAddr, userSecret);
     const lines = await userAcc.getTrustLines(token, hostAddr);
-    if (lines.length == 0) {
+    if (lines.length === 0) {
         console.log(`Transfering ${token} to user...`);
         const trustRes = await userAcc.createTrustline(token, hostAddr, 9999999);
         if (!trustRes) {
@@ -190,7 +199,7 @@ async function main() {
 
     const mode = args[0];
     if (mode === "create") {
-        if (args.length == 1) {
+        if (args.length === 1) {
             await createInstancesSequentially();
         }
         else {

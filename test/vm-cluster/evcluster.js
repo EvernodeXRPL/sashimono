@@ -31,7 +31,7 @@ async function createInstance(host, elem, peers, unl) {
     if (unl)
         config.contract = { unl: unl };
     if (peers)
-        config.mesg = { known_peers: peers };
+        config.mesh = { known_peers: peers };
 
     // Redeem
     const client = new EvernodeClient(userAddr, userSecret);
@@ -59,7 +59,7 @@ async function createInstancesSequentially() {
     let peers = null, unl = null;
 
     for (const [host, elem] of Object.entries(currentContract.hosts)) {
-        await createInstance(host, elem, unl, peers);
+        await createInstance(host, elem, peers, unl);
 
         if (!unl)
             unl = [elem.pubkey]; // Insert first instance's pubkey into all other instance's unl.
@@ -133,12 +133,15 @@ async function getHostAccountData(host) {
 
 // Get hosting tokens from host account to user account.
 async function transferHostingTokens(token, hostAddr, hostSecret) {
+
+    console.log(`Checking user's ${token} balance...`);
     const rippleAPI = new RippleAPIWrapper(rippledServer);
     await rippleAPI.connect();
 
     const userAcc = new XrplAccount(rippleAPI, userAddr, userSecret);
     const lines = await userAcc.getTrustLines(token, hostAddr);
     if (lines.length == 0) {
+        console.log(`Transfering ${token} to user...`);
         const trustRes = await userAcc.createTrustline(token, hostAddr, 9999999);
         if (!trustRes) {
             await rippleAPI.disconnect();
@@ -151,6 +154,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
             await rippleAPI.disconnect();
             return false;
         }
+        console.log(`Transfering of ${token} complete...`);
     }
 
     await rippleAPI.disconnect();

@@ -4,6 +4,8 @@ import fs from "fs";
 import evernode from "evernode-js-client";
 const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
+const REDEEM_AMOUNT = 18000; // 18000 Moments ~ 60days
+
 const configFile = "config.json";
 const config = JSON.parse(fs.readFileSync(configFile));
 const currentContract = config.contracts.filter(c => c.name === config.selected)[0];
@@ -36,7 +38,7 @@ async function createInstance(host, hostId, elem, peers, unl) {
 
     // Redeem
     console.log(`Redeeming ${acc.token}-${acc.address}...`);
-    const instanceInfo = await evernodeClient.redeem(acc.token, acc.address, 12, {
+    const instanceInfo = await evernodeClient.redeem(acc.token, acc.address, REDEEM_AMOUNT, {
         image: currentContract.docker.image,
         contract_id: currentContract.contract_id,
         owner_pubkey: currentContract.owner_pubkey,

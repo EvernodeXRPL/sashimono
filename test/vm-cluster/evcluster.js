@@ -4,15 +4,14 @@ import fs from "fs";
 import evernode from "evernode-js-client";
 const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
-const userAddr = "raFCgMEj2P7dEwVwDQD81Jj5mLKUWmxpX9";
-const userSecret = "snbqbnYaD5Kqc82nfKWo3dMieQvG9";
 const configFile = "config.json";
-
 const config = JSON.parse(fs.readFileSync(configFile));
 const currentContract = config.contracts.filter(c => c.name === config.selected)[0];
 if (!currentContract)
     throw "Invalid contract selected.";
 
+const userAddr = config.xrpl.userAddress;
+const userSecret = config.xrpl.userSecret;
 let rippleAPI = null;
 let evernodeClient = null;
 
@@ -152,7 +151,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
     const lines = await userAcc.getTrustLines(token, hostAddr);
     if (lines.length === 0) {
         console.log(`Transfering ${token} to user...`);
-        const trustRes = await userAcc.createTrustline(token, hostAddr, 9999999);
+        const trustRes = await userAcc.createTrustLine(token, hostAddr, 9999999);
         if (!trustRes)
             return false;
 

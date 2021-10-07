@@ -42,10 +42,12 @@ if [ "$quiet" == "-q" ]; then
     xrp_address=$(jq -r '.xrpl.address' $mb_xrpl_conf)
     xrp_secret=$(jq -r '.xrpl.secret' $mb_xrpl_conf)
 
-    acc_clean_func="$func_url&action=cleanhost&hookaddr=$hook_address&addr=$xrp_address&secret=$xrp_secret"
-    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_clean_func)
-    [ "$func_code" != "200" ] && echo "Host XRP account cleanup failed. code:$func_code"
-    [ "$func_code" == "200" ] && echo "Cleaned up host XRP account."
+    if [ "$xrp_address" != "" ] && [ "$xrp_secret" != "" ]; then
+        acc_clean_func="$func_url&action=cleanhost&hookaddr=$hook_address&addr=$xrp_address&secret=$xrp_secret"
+        func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_clean_func)
+        [ "$func_code" != "200" ] && echo "Host XRP account cleanup failed. code:$func_code"
+        [ "$func_code" == "200" ] && echo "Cleaned up host XRP account."
+    fi
 fi
 
 # Deregister evernode message board host registration.

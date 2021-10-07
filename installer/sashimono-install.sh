@@ -155,7 +155,7 @@ if [ "$quiet"=="-q" ]; then
     echo "Generating XRP faucet account..."
     new_acc=$(curl -X POST $xrpl_faucet_url)
     # If result is not a json, account generation failed.
-    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl fauset account generation failed." && rollback
+    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl faucet account generation failed." && rollback
     xrp_address=$(echo $new_acc | jq -r '.address')
     xrp_secret=$(echo $new_acc | jq -r '.secret')
     ([ "$xrp_address" == "" ] || [ "$xrp_address" == "null" ] ||

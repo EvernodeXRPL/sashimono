@@ -71,7 +71,7 @@ class MessageBoard {
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerSequence = await this.rippleAPI.getLedgerVersion();
+        this.lastValidatedLedgerSequence = await this.rippleAPI.ledgerVersion;
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)

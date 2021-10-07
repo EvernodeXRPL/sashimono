@@ -1,10 +1,10 @@
 {
     "name": "mb-xrpl",
     "scripts": {
-        "build": "npm install && ncc build mb-xrpl.js -o dist"
+        "build": "ncc build mb-xrpl.js -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.0.16-alpha",
+        "evernode-js-client": "0.0.18-alpha",
         "sqlite3": "5.0.2"
     }
 }

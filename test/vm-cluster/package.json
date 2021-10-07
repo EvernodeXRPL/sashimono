@@ -2,7 +2,7 @@
     "name": "evcluster",
     "type": "module",
     "dependencies": {
-        "evernode-js-client": "0.0.16-alpha",
+        "evernode-js-client": "0.0.18-alpha",
         "node-fetch": "3.0.0"
     }
 }

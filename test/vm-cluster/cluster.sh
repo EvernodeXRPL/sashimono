@@ -612,17 +612,36 @@ if [ $mode == "sshu" ]; then
 
     function sshwithuser() {
         hostaddr=${hostaddrs[$1]}
+        execute_command=$2
         nodeno=$(expr $1 + 1)
         containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
         username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
 
-        ssh_command="cd /home/$username/$containername ; sudo -u $username bash"
-        sshskp -t $sshuser@$hostaddr $ssh_command
+        user_shell="cd /home/$username/$containername ; sudo -u $username bash"
+
+        if [ "$execute_command" == "" ]; then
+            sshskp -t $sshuser@$hostaddr $user_shell
+        else
+            echo "node"$n":" $(sshskp $sshuser@$hostaddr $user_shell -c "'$execute_command'")
+        fi
     }
 
     if [ $nodeid = -1 ]; then
-        echo "Must specify node no."
-        exit 1
+        if [ -n "$2" ]; then
+            # Interpret second arg as a command to execute on all nodes.
+            command=${*:2}
+            echo "Executing '$command' on user shell in all nodes..."
+            for i in "${!hostaddrs[@]}"; do
+                hostaddr=${hostaddrs[i]}
+                let n=$i+1
+                sshwithuser $n $command &
+            done
+            wait
+            exit 0
+        else
+            echo "Please specify node no. or command to execute on all nodes."
+            exit 1
+        fi
     else
         sshwithuser $nodeid
     fi

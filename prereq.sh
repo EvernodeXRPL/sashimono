@@ -16,13 +16,13 @@ cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
 
 apt-get update
-apt install uidmap -y
+apt-get install uidmap -y
 
-# Install node 14 if not exists.
+# Install nodejs 14 if not exists.
 if ! command -v node &>/dev/null; then
-    apt update
+    apt-get -y install ca-certificates # In case nodejs package certitficates are renewed.
     curl -sL https://deb.nodesource.com/setup_14.x | bash -
-    apt -y install nodejs
+    apt-get -y install nodejs
 else
     version=$(node -v)
     if [[ ! $version =~ v14\..* ]]; then
@@ -32,7 +32,7 @@ fi
 
 # Install slirp4netns if not exists (required for high performance rootless networking).
 if ! command -v slirp4netns &>/dev/null; then
-    apt -y install slirp4netns
+    apt-get -y install slirp4netns
 fi
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>

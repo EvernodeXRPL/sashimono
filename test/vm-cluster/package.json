@@ -1,0 +1,8 @@
+{
+    "name": "evcluster",
+    "type": "module",
+    "dependencies": {
+        "evernode-js-client": "0.0.19-alpha",
+        "node-fetch": "3.0.0"
+    }
+}

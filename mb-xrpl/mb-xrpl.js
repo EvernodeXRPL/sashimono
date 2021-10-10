@@ -1,21 +1,28 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWarpper, Events, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('./lib/ripple-handler');
+const { XrplAccount, RippleAPIWrapper, RippleAPIEvents, RippleConstants, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
-const CONFIG_PATH = 'mb-xrpl.cfg';
-const DB_PATH = 'mb-xrpl.sqlite';
+// Environment variables.
+const IS_DEV_MODE = process.env.MB_DEV === "1";
+const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
+const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
+const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
+const DATA_DIR = process.env.MB_DATA_DIR || ".";
+
+const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
+const LOG_PATH = DATA_DIR + '/log/mb-xrpl.log';
+const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
-const EVR_LIMIT = 99999999;
-const REG_FEE = 5;
-const RES_FEE = 0.000001;
+const REG_FEE = '5';
 const LEDGERS_PER_MOMENT = 72;
 const REDEEM_TIMEOUT_WINDOW = 24; // Max no. of ledgers within which a redeem operation has to be served.
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
+const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
@@ -25,11 +32,9 @@ const RedeemStatus = {
     SASHI_TIMEOUT: 'SashiTimeout',
 }
 
-const SASHI_CLI_PATH_DEV = "../build/sashi";
-const SASHI_CLI_PATH_PROD = "/usr/bin/sashi";
 
 class MessageBoard {
-    constructor(configPath, dbPath, sashiCliPath, rippleServer) {
+    constructor(configPath, dbPath, sashiCliPath, rippledServer) {
         this.configPath = configPath;
         this.redeemTable = DB_TABLE_NAME;
         this.utilTable = DB_UTIL_TABLE_NAME;
@@ -41,7 +46,7 @@ class MessageBoard {
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
         this.sashiCli = new SashiCLI(sashiCliPath);
-        this.ripplAPI = new RippleAPIWarpper(rippleServer);
+        this.rippleAPI = new RippleAPIWrapper(rippledServer);
         this.db = new SqliteDatabase(dbPath);
     }
 
@@ -50,15 +55,23 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        try { await this.ripplAPI.connect(); }
+        try { await this.rippleAPI.connect(); }
         catch (e) { throw e; }
+
+        this.xrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+
+        if (IS_DEREGISTER) {
+            await this.deregisterHost();
+            this.rippleAPI.disconnect();
+            return;
+        }
 
         this.db.open();
         // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerSequence = await this.ripplAPI.getLedgerVersion();
+        this.lastValidatedLedgerSequence = await this.rippleAPI.ledgerVersion;
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -67,7 +80,7 @@ class MessageBoard {
         this.db.close();
 
         // Check for instance expiry.
-        this.ripplAPI.events.on(Events.LEDGER, async (e) => {
+        this.rippleAPI.events.on(RippleAPIEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerSequence = e.ledgerVersion;
 
             // Filter out instances which needed to be expired and destroy them.
@@ -91,15 +104,13 @@ class MessageBoard {
             }
         });
 
-        this.xrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
-
         // Check whether registration fee is already payed and trustline is made.
         await this.checkForRegistration();
 
-        this.evernodeXrplAcc = new XrplAccount(this.ripplAPI, this.cfg.xrpl.hookAddress);
+        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
 
         // Handle the transactions on evernode account and filter out redeem operations.
-        this.evernodeXrplAcc.events.on(Events.PAYMENT, async (data, error) => {
+        this.evernodeXrplAcc.events.on(RippleAPIEvents.PAYMENT, async (data, error) => {
             if (error)
                 console.error(error);
             else if (!data)
@@ -179,20 +190,14 @@ class MessageBoard {
     }
 
     async checkForRegistration() {
-        // Create trustline with evernode account.
-        if (!this.cfg.xrpl.regTrustHash) {
-            const res = await this.xrplAcc.createTrustline(EVR_CUR_CODE, this.cfg.xrpl.hookAddress, EVR_LIMIT, false);
-            if (res) {
-                this.cfg.xrpl.regTrustHash = res.txHash;
-                this.persistConfig();
-                console.log(`Created ${EVR_CUR_CODE} trustline with evernode account.`);
-            }
-        }
+
+        // We assume host account already posseses some EVR balance along with EVR trust line.
 
         // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
             // For now we comment EVR reg fee transaction and make XRP transaction instead.
+            console.log(`Making Evernode host registration payment of ${REG_FEE} ${EVR_CUR_CODE}...`)
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
                 REG_FEE,
                 EVR_CUR_CODE,
@@ -206,9 +211,21 @@ class MessageBoard {
         }
     }
 
+    async deregisterHost() {
+        // Sends evernode host de-registration transaction.
+        console.log(`Performing Evernode host deregistration...`);
+        const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
+            RippleConstants.MIN_XRP_AMOUNT,
+            "XRP",
+            null,
+            [{ type: MemoTypes.HOST_DEREG, format: MemoFormats.TEXT, data: "" }]);
+        if (res)
+            console.log('Deregistration complete.');
+    }
+
     async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
         // Verifying the pubkey.
-        if (!(await this.ripplAPI.isValidAddress(txPubkey, txAccount)))
+        if (!(await this.rippleAPI.isValidAddress(txPubkey, txAccount)))
             throw 'Invalid public key for encryption';
 
         // Encrypt response with user pubkey.
@@ -216,7 +233,7 @@ class MessageBoard {
             response = await EncryptionHelper.encrypt(txPubkey, response);
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            RES_FEE,
+            RippleConstants.MIN_XRP_AMOUNT,
             "XRP",
             null,
             [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
@@ -305,10 +322,10 @@ class MessageBoard {
     }
 
     async getMissedPaymentTransactions(lastWatchedLedger) {
-        return await this.ripplAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
+        return await this.rippleAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
             excludeFailures: true,
             minLedgerVersion: lastWatchedLedger,
-            types: [Events.PAYMENT]
+            types: [RippleAPIEvents.PAYMENT]
         });
     }
 }
@@ -373,26 +390,16 @@ class SashiCLI {
 }
 
 async function main() {
-    const args = process.argv;
 
-    // This is used for logging purposes.
     // Logs are formatted with the timestamp and a log file will be created inside log directory.
-    if (args.includes('--enable-logging'))
-        logger.init('log/mb-xrpl.log');
+    logger.init(LOG_PATH, FILE_LOG_ENABLED);
 
-    if (args.length < 3)
-        throw "Arguments mismatch.\n Usage: node mb-xrpl <ripple server url>";
+    console.log('Starting the Evernode xrpl message board.' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
+    console.log('Data dir: ' + DATA_DIR);
+    console.log('Rippled server: ' + RIPPLED_URL);
+    console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
 
-    let sashiCliPath = SASHI_CLI_PATH_PROD;
-    // Use sashi CLI in the build folder for dev environment.
-    if (args.includes('--dev'))
-        sashiCliPath = SASHI_CLI_PATH_DEV;
-
-    console.log('Starting the xrpl message board' + (args[3] == '--dev' ? ' (in dev mode)' : ''));
-
-    // Read Ripple Server Url.
-    const rippleServer = args[2];
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, sashiCliPath, rippleServer);
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
     await mb.init();
 }
 

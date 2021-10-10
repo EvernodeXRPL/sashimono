@@ -5,14 +5,15 @@
 
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
-docker_bin=/usr/bin/sashimono-agent/dockerbin
+mb_xrpl_bin=$sashimono_bin/mb-xrpl
+docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
+mb_xrpl_data=$sashimono_data/mb-xrpl
+mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-mb_xrpl_dir="$sashimono_bin"/mb-xrpl
-mb_xrpl_conf="$mb_xrpl_dir"/mb-xrpl.cfg
-hook_xrpl_addr="rb4H5w7H1QA2qKjHCRSuUey2fnMBGbN2c"
+hook_address="rwGLw5uSGYm2couHZnrbCDKaQZQByvamj8"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -20,9 +21,6 @@ registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
 quiet=$1
-
-xrpl_server_url="wss://hooks-testnet.xrpl-labs.com"
-xrpl_fauset_url="https://hooks-testnet.xrpl-labs.com/newcreds"
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
     echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
@@ -37,6 +35,8 @@ mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
 mkdir -p $sashimono_data
 [ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
+mkdir -p $mb_xrpl_data
+[ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
 
 echo "Installing Sashimono..."
 
@@ -140,12 +140,43 @@ systemctl enable $sashimono_service
 systemctl start $sashimono_service
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
-if [ "$quiet" != "-q" ]; then
-    # Setup xrpl message board.
-    cp -r "$script_dir"/mb-xrpl $sashimono_bin
-    chmod -R +x "$sashimono_bin"/mb-xrpl
+# Setup xrpl message board.
+echo "Installing Evernode xrpl message board..."
+if [ "$quiet"=="-q" ]; then
 
-    echo "Please answer following questions to setup xrpl message board.."
+    # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
+    # (This is done for testing purposes during development)
+
+    xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
+    hook_secret="shaXJCUZeE37nCe5VpiT8xiVFjFmY"
+    func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
+    
+    # Generate new fauset account.
+    echo "Generating XRP faucet account..."
+    new_acc=$(curl -X POST $xrpl_faucet_url)
+    # If result is not a json, account generation failed.
+    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl faucet account generation failed." && rollback
+    xrp_address=$(echo $new_acc | jq -r '.address')
+    xrp_secret=$(echo $new_acc | jq -r '.secret')
+    ([ "$xrp_address" == "" ] || [ "$xrp_address" == "null" ] ||
+        [ "$xrp_secret" == "" ] || [ "$xrp_secret" == "null" ]) && echo "Invalid generated xrpl account details: $new_acc" && rollback
+
+    # Setup the host xrpl account with an EVR balance and default rippling flag.
+    echo "Setting up host XRP account..."
+    acc_setup_func="$func_url&action=setuphost&hookaddr=$hook_address&hooksecret=$hook_secret&addr=$xrp_address&secret=$xrp_secret"
+    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_setup_func)
+    [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
+
+    # Generate random details for instance size, location and token.
+    instance_size="AUTO InstSize "$(tr -dc A-Z </dev/urandom | head -c 10)
+    location="AUTO Loc "$(tr -dc A-Z </dev/urandom | head -c 5)
+    token=$(tr -dc A-Z </dev/urandom | head -c 3)
+
+    echo "Auto-generated host information."
+
+else
+
+    echo "Please answer following questions to setup Evernode xrpl message board."
     # Ask for input until a correct value is given
     while [ -z "$instance_size" ] || [[ "$instance_size" =~ .*\;.* ]]; do
         read -p "Instance size? " instance_size </dev/tty
@@ -159,40 +190,39 @@ if [ "$quiet" != "-q" ]; then
         read -p "Token name? " token </dev/tty
         [[ ! "$token" =~ ^[A-Z]{3}$ ]] && echo "Token name should be 3 UPPERCASE letters."
     done
-
-    # Generate new fauset account.
-    new_acc=$(curl -X POST $xrpl_fauset_url)
-    # If result is not a json, account generation failed.
-    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl fauset account generation failed." && rollback
-
-    address=$(echo $new_acc | jq -r '.address')
-    secret=$(echo $new_acc | jq -r '.secret')
-    ([ "$address" == "" ] || [ "$address" == "null" ] ||
-        [ "$secret" == "" ] || [ "$secret" == "null" ]) && echo "Invalid xrpl account details: $new_acc" && rollback
-
-    (! echo "{\"host\":{\"name\":\"\",\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$address\",\"secret\":\"$secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_xrpl_addr\",\"regTrustHash\":\"\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
-
-    # Install xrpl message board systemd service.
-    # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-    echo "[Unit]
-    Description=Running and monitoring evernode xrpl transactions.
-    After=network.target
-    StartLimitIntervalSec=0
-    [Service]
-    User=root
-    Group=root
-    Type=simple
-    WorkingDirectory=$mb_xrpl_dir
-    ExecStart=node $mb_xrpl_dir $xrpl_server_url --enable-logging
-    Restart=on-failure
-    RestartSec=5
-    [Install]
-    WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
-
-    # This service needed to be restarted when mb-xrpl.cfg is changed.
-    systemctl enable $mb_xrpl_service
-    systemctl start $mb_xrpl_service
+    while [[ -z "$xrp_address" ]]; do
+        read -p "XRPL account address? " xrp_address </dev/tty
+    done
+    while [[ -z "$xrp_secret" ]]; do
+        read -p "XRPL account secret? " xrp_secret </dev/tty
+    done
 fi
+
+cp -r "$script_dir"/mb-xrpl $sashimono_bin
+(! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
+
+# Install xrpl message board systemd service.
+# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+echo "[Unit]
+Description=Running and monitoring evernode xrpl transactions.
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+User=root
+Group=root
+Type=simple
+WorkingDirectory=$mb_xrpl_bin
+Environment=\"MB_DATA_DIR=$mb_xrpl_data\"
+ExecStart=node $mb_xrpl_bin
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
+
+# This service needs to be restarted when mb-xrpl.cfg is changed.
+systemctl enable $mb_xrpl_service
+systemctl start $mb_xrpl_service
+echo "Installed Evernode xrpl message board."
 
 echo "Sashimono installed successfully."
 echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."

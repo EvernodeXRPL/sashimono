@@ -496,14 +496,6 @@ namespace hp
 
         const std::string pubkey_hex = util::to_hex(pubkey);
 
-        // Default hp.cfg configs.
-        d["node"]["history_config"]["max_primary_shards"] = 2;
-        d["node"]["history_config"]["max_raw_shards"] = 2;
-        d["hpfs"]["log"]["log_level"] = "err";
-        d["log"]["log_level"] = "inf";
-        d["log"]["max_mbytes_per_file"] = 5;
-        d["log"]["max_file_count"] = 10;
-
         d["node"]["public_key"] = pubkey_hex;
         d["node"]["private_key"] = util::to_hex(seckey);
         d["contract"]["id"] = contract_id;

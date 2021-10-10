@@ -221,6 +221,12 @@ if [ $mode == "reconfig" ]; then
     if [ $nodeid = -1 ]; then
         for i in "${!hostaddrs[@]}"; do
             reconfig $i &
+
+            # In reinstall mode, leave a time gap between reinstall initiation to avoid host faucet wallet generation
+            # overload on XRPL testnet.
+            if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
+                sleep 2
+            fi
         done
         wait
     else

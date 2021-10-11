@@ -1,12 +1,7 @@
 {
     "scripts": {},
     "dependencies": {
-        "libsodium-wrappers": "0.7.6",
-        "blake3": "2.1.4",
-        "ws": "7.1.2",
-        "bson": "4.0.4"
-    },
-    "devDependencies": {
-        "terser": "5.7.0"
+        "hotpocket-js-client": "0.5.1",
+        "bson": "4.5.3"
     }
 }

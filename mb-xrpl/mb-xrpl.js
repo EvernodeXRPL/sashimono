@@ -59,6 +59,7 @@ class MessageBoard {
         catch (e) { throw e; }
 
         this.xrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.accKeyPair = this.xrplAcc.deriveKeypair();
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
@@ -136,7 +137,15 @@ class MessageBoard {
 
                             // The last validated ledger when we receive the redeem request.
                             const startingValidatedLedger = this.lastValidatedLedgerSequence;
-                            const createRes = await this.sashiCli.createInstance(JSON.parse(memo.data));
+
+                            // Decrypt redeem requirements using the decryption key derived from host secret.
+                            const instanceRequirements = await EncryptionHelper.decrypt(this.accKeyPair.privateKey, memo.data);
+                            if (!instanceRequirements) {
+                                console.log('Failed to decrypt redeem data.');
+                                break;
+                            }
+
+                            const createRes = await this.sashiCli.createInstance(instanceRequirements);
 
                             // Number of validated ledgers passed while the instance is created.
                             const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
@@ -207,6 +216,16 @@ class MessageBoard {
                 this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();
                 console.log('Registration payment made for evernode account.');
+
+                // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
+                console.log("Setting message key...");
+                if (await this.xrplAcc.setMessageKey(this.accKeyPair.publicKey))
+                    console.log("Host account message key set.");
+                else
+                    console.log("Failed to set host account message key.");
+            }
+            else {
+                console.log("Registration payment failed.");
             }
         }
     }
@@ -225,8 +244,8 @@ class MessageBoard {
 
     async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
         // Verifying the pubkey.
-        if (!(await this.rippleAPI.isValidAddress(txPubkey, txAccount)))
-            throw 'Invalid public key for encryption';
+        if (!(await this.rippleAPI.isValidKeyForAddress(txPubkey, txAccount)))
+            throw 'Invalid public key for redeem response encryption.';
 
         // Encrypt response with user pubkey.
         if (encrypt)

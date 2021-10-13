@@ -2,6 +2,7 @@ import fetch from "node-fetch";
 import { exec } from "child_process";
 import fs from "fs";
 import evernode from "evernode-js-client";
+import { exit } from "process";
 const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
 const REDEEM_AMOUNT = 18000; // 18000 Moments ~ 60days
@@ -152,7 +153,7 @@ async function initHosts() {
     await Promise.all(hosts.map(host => initHostAccountData(host)))
 
     for (const host of hosts) {
-        const { ownsTokens, acc } = hostAccounts[host];
+        const { ownsTokens, hostAccount: acc } = hostAccounts[host];
         if (!ownsTokens)
             await transferHostingTokens(acc.token, acc.address, acc.secret);
     }
@@ -250,6 +251,8 @@ async function main() {
     var args = process.argv.slice(2);
 
     process.on('SIGINT', () => {
+        if (shouldAbort)
+            exit();
         console.log('Received SIGINT. Aborting...');
         shouldAbort = true;
     });

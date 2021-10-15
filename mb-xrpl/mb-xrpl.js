@@ -9,7 +9,7 @@ const IS_DEV_MODE = process.env.MB_DEV === "1";
 const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
 const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
-const DATA_DIR = process.env.MB_DATA_DIR || ".";
+const DATA_DIR = process.env.MB_DATA_DIR || __dirname;
 
 const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
 const LOG_PATH = DATA_DIR + '/log/mb-xrpl.log';
@@ -172,7 +172,7 @@ class MessageBoard {
                         }
                         catch (e) {
                             console.error(e);
-                            await this.sendRedeemResponse(txHash, txPubKey, txAccount, ErrorCodes.REDEEM_ERR, false);
+                            await this.sendRedeemResponse(txHash, txPubKey, txAccount, { type: ErrorCodes.REDEEM_ERR, reason: e.content ? e.content : undefined }, true);
                             // Update the redeem response for failures.
                             await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
                         }
@@ -249,21 +249,26 @@ class MessageBoard {
             console.log('Deregistration complete.');
     }
 
-    async sendRedeemResponse(txHash, txPubkey, txAccount, response, encrypt = true) {
+    async sendRedeemResponse(txHash, txPubkey, txAccount, response, isError = false) {
         // Verifying the pubkey.
         if (!(await this.rippleAPI.isValidKeyForAddress(txPubkey, txAccount)))
             throw 'Invalid public key for redeem response encryption.';
 
-        // Encrypt response with user pubkey.
-        if (encrypt)
+        let memos = [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash }];
+        if (isError) {
+            // Send redeem response with error.
+            memos.push({ type: MemoTypes.REDEEM_RESP, format: MemoFormats.JSON, data: response });
+        } else {
+            // Encrypt response with user pubkey.
             response = await EncryptionHelper.encrypt(txPubkey, response);
+            memos.push({ type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: response });
+        }
 
         return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
             RippleConstants.MIN_XRP_AMOUNT,
             "XRP",
             null,
-            [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash },
-            { type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: response }]));
+            memos));
     }
 
     addToExpiryList(txHash, containerName, expiryLedger) {
@@ -366,7 +371,7 @@ class SashiCLI {
             requirements.type = 'create';
 
         const res = await this.execSashiCli(requirements);
-        if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
+        if (res.type === 'create_error')
             throw res;
 
         return res;

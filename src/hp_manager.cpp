@@ -37,6 +37,12 @@ namespace hp
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
 
+    // Error codes used in create and initiate instance.
+    constexpr const char *INTERNAL_ERROR = "internal_error";
+    constexpr const char *MAX_ALLOCATION_REACHED = "max_alloc_reached";
+    constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
+    constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
+
     /**
      * Initialize hp related environment.
     */
@@ -76,23 +82,26 @@ namespace hp
 
     /**
      * Create a new instance of hotpocket. A new contract is created with docker image.
+     * @param error_msg Error message if any.
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
      * @param image_key Docker image name to use (must exist in the config iamge list).
      * @return 0 on success and -1 on error.
     */
-    int create_new_instance(instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
         // If the max alloved instance count is already allocated. We won't allow more.
         const int allocated_count = sqlite::get_allocated_instance_count(db);
         if (allocated_count == -1)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error getting allocated instance count from db.";
             return -1;
         }
         else if (allocated_count >= conf::cfg.system.max_instance_count)
         {
+            error_msg = MAX_ALLOCATION_REACHED;
             LOG_ERROR << "Max instance count is reached.";
             return -1;
         }
@@ -102,6 +111,7 @@ namespace hp
         // First check whether contract_id is valid uuid.
         if (!crypto::verify_uuid(contract_id))
         {
+            error_msg = CONTRACT_ID_INVALID;
             LOG_ERROR << "Provided contract id is not a valid uuid.";
             return -1;
         }
@@ -109,6 +119,7 @@ namespace hp
         const auto img_itr = conf::cfg.docker.images.find(image_key);
         if (img_itr == conf::cfg.docker.images.end())
         {
+            error_msg = DOCKER_IMAGE_INVALID;
             LOG_ERROR << "Provided docker image is not allowed.";
             return -1;
         }
@@ -122,6 +133,7 @@ namespace hp
         {
             if (retries >= MAX_UNIQUE_NAME_RETRIES)
             {
+                error_msg = INTERNAL_ERROR;
                 LOG_ERROR << "Could not find a unique container name. Threshold of " << MAX_UNIQUE_NAME_RETRIES << " exceeded";
                 return -1;
             }
@@ -149,13 +161,17 @@ namespace hp
         int user_id;
         std::string username;
         if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name) == -1)
+        {
+            error_msg = INTERNAL_ERROR;
             return -1;
+        }
 
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
             create_container(username, image_name, container_name, contract_dir, instance_ports, info) == -1)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
             uninstall_user(username);
@@ -164,7 +180,8 @@ namespace hp
 
         if (sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
+            error_msg = INTERNAL_ERROR;
+            LOG_ERROR << "Error inserting instance data into db for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
             docker_remove(username, container_name);
             uninstall_user(username);
@@ -181,21 +198,24 @@ namespace hp
 
     /**
      * Initiate the instance. The config will be updated and container will be started.
+     * @param error_msg Error message if any.
      * @param container_name Name of the container.
      * @param config_msg Config values for the hp instance.
      * @return 0 on success and -1 on error.
     */
-    int initiate_instance(std::string_view container_name, const msg::initiate_msg &config_msg)
+    int initiate_instance(std::string &error_msg, std::string_view container_name, const msg::initiate_msg &config_msg)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
         else if (info.status != CONTAINER_STATES[STATES::CREATED])
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Given container is already initiated. name: " << container_name;
             return -1;
         }
@@ -207,7 +227,8 @@ namespace hp
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
         if (config_fd == -1)
         {
-            LOG_ERROR << errno << ": Error opening hp config file " << config_file_path;
+            error_msg = INTERNAL_ERROR;
+            LOG_ERROR << errno << ": Error opening config file " << config_file_path;
             return -1;
         }
 
@@ -221,6 +242,7 @@ namespace hp
             hpfs::update_service_conf(info.username, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_hpfs_systemd(info.username) == -1)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error when setting up container. name: " << container_name;
             close(config_fd);
             return -1;
@@ -229,6 +251,7 @@ namespace hp
 
         if (docker_start(info.username, container_name) == -1)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started hpfs processes if starting instance failed.
             hpfs::stop_hpfs_systemd(info.username);
@@ -237,6 +260,7 @@ namespace hp
 
         if (sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
+            error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started docker and hpfs processes if database update fails.
             docker_stop(info.username, container_name);

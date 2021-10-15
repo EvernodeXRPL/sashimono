@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWrapper, RippleAPIEvents, RippleConstants, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
+const { XrplAccount, RippleAPIWrapper, EvernodeHook, RippleAPIEvents, RippleConstants, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -18,9 +18,6 @@ const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const EVR_CUR_CODE = 'EVR';
-const REG_FEE = '5';
-const LEDGERS_PER_MOMENT = 72;
-const REDEEM_TIMEOUT_WINDOW = 24; // Max no. of ledgers within which a redeem operation has to be served.
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
 const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
@@ -67,6 +64,13 @@ class MessageBoard {
             return;
         }
 
+        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
+        this.evernodeHook = new EvernodeHook(this.evernodeXrplAcc);
+        this.evernodeHookConf = await this.evernodeHook.getConfig();
+
+        // Check whether registration fee is already payed and trustline is made.
+        await this.checkForRegistration();
+
         this.db.open();
         // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
@@ -104,11 +108,6 @@ class MessageBoard {
                 this.db.close();
             }
         });
-
-        // Check whether registration fee is already payed and trustline is made.
-        await this.checkForRegistration();
-
-        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
 
         // Handle the transactions on evernode account and filter out redeem operations.
         this.evernodeXrplAcc.events.on(RippleAPIEvents.PAYMENT, async (data, error) => {
@@ -151,7 +150,7 @@ class MessageBoard {
                             const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
 
                             // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
-                            const threshold = REDEEM_TIMEOUT_WINDOW * REDEEM_TIMEOUT_THRESHOLD;
+                            const threshold = this.evernodeHookConf.redeemWindow * REDEEM_TIMEOUT_THRESHOLD;
                             if (diff > threshold) {
                                 console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                                 // Update the redeem status of the request to 'SashiTimeout'.
@@ -206,9 +205,9 @@ class MessageBoard {
         if (!this.cfg.xrpl.regFeeHash) {
             const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
             // For now we comment EVR reg fee transaction and make XRP transaction instead.
-            console.log(`Making Evernode host registration payment of ${REG_FEE} ${EVR_CUR_CODE}...`)
+            console.log(`Making Evernode host registration payment of ${this.evernodeHookConf.hostRegFee} ${EVR_CUR_CODE}...`)
             const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                REG_FEE,
+                this.evernodeHookConf.hostRegFee.toString(),
                 EVR_CUR_CODE,
                 this.cfg.xrpl.hookAddress,
                 [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
@@ -334,7 +333,7 @@ class MessageBoard {
     }
 
     getExpiryLedger(createdOnLedger, moments) {
-        return createdOnLedger + (moments * LEDGERS_PER_MOMENT);
+        return createdOnLedger + (moments * this.evernodeHookConf.momentSize);
     }
 
     readConfig() {

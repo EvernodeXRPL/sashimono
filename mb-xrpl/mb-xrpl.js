@@ -65,8 +65,8 @@ class MessageBoard {
         }
 
         this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
-
-        await this.initHookConfigValues();
+        this.evernodeHook = new EvernodeHook(this.evernodeXrplAcc);
+        this.evernodeHookConf = await this.evernodeHook.getConfig();
 
         // Check whether registration fee is already payed and trustline is made.
         await this.checkForRegistration();
@@ -182,14 +182,6 @@ class MessageBoard {
             }
         });
         this.evernodeXrplAcc.subscribe();
-    }
-
-    async initHookConfigValues() {
-        this.evernodeHook = new EvernodeHook(this.evernodeXrplAcc);
-        this.evernodeHookConf = await this.evernodeHook.getConfig();
-
-        console.log('Hook state configurations are loaded.');
-        console.log(JSON.stringify(this.evernodeHookConf).replace('\\', ''));
     }
 
     isRedeem(transaction) {

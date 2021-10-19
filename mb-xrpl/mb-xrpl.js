@@ -1,7 +1,8 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWrapper, EvernodeHook, RippleAPIEvents, RippleConstants, MemoFormats, MemoTypes, ErrorCodes, EncryptionHelper } = require('evernode-js-client');
+const { XrplAccount, RippleAPIWrapper, EvernodeHook, RippleAPIEvents, RippleConstants,
+    MemoFormats, MemoTypes, ErrorCodes, HookEvents, EncryptionHelper } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -28,7 +29,6 @@ const RedeemStatus = {
     EXPIRED: 'Expired',
     SASHI_TIMEOUT: 'SashiTimeout',
 }
-
 
 class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath, rippledServer) {
@@ -64,11 +64,10 @@ class MessageBoard {
             return;
         }
 
-        this.evernodeXrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.hookAddress);
-        this.evernodeHook = new EvernodeHook(this.evernodeXrplAcc);
+        this.evernodeHook = new EvernodeHook(this.rippleAPI, this.cfg.xrpl.hookAddress);
         this.evernodeHookConf = await this.evernodeHook.getConfig();
 
-        // Check whether registration fee is already payed and trustline is made.
+        // Check whether registration fee is already paid and trustline is made.
         await this.checkForRegistration();
 
         this.db.open();
@@ -109,92 +108,75 @@ class MessageBoard {
             }
         });
 
-        // Handle the transactions on evernode account and filter out redeem operations.
-        this.evernodeXrplAcc.events.on(RippleAPIEvents.PAYMENT, async (data, error) => {
-            if (error)
-                console.error(error);
-            else if (!data)
-                console.log('Invalid transaction.');
-            else if (data) {
-                this.db.open();
-                // Update last watched ledger sequence number regardless the transaction is redeem or not.
-                await this.updateLastIndexRecord(data.LastLedgerSequence);
+        this.evernodeHook.events.on(HookEvents.Redeem, r => this.handleRedeem(r));
 
-                if (this.isRedeem(data)) {
-                    const txHash = data.hash;
-                    const txAccount = data.Account;
-                    const txPubKey = data.SigningPubKey;
-                    const amount = parseInt(data.Amount.value);
-                    // Filter the memo feilds with redeem type and binary format.
-                    const memos = data.Memos.filter(m => m.data && m.type === MemoTypes.REDEEM && m.format === MemoFormats.BINARY);
-
-                    for (let memo of memos) {
-
-                        try {
-                            console.log(`Received redeem from ${txAccount}`);
-                            await this.createRedeemRecord(txHash, txAccount, amount);
-
-                            // The last validated ledger when we receive the redeem request.
-                            const startingValidatedLedger = this.lastValidatedLedgerSequence;
-
-                            // Decrypt redeem requirements using the decryption key derived from host secret.
-                            const instanceRequirements = await EncryptionHelper.decrypt(this.accKeyPair.privateKey, memo.data);
-                            if (!instanceRequirements) {
-                                console.log('Failed to decrypt redeem data.');
-                                break;
-                            }
-
-                            const createRes = await this.sashiCli.createInstance(instanceRequirements);
-
-                            // Number of validated ledgers passed while the instance is created.
-                            const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
-
-                            // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
-                            const threshold = this.evernodeHookConf.redeemWindow * REDEEM_TIMEOUT_THRESHOLD;
-                            if (diff > threshold) {
-                                console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
-                                // Update the redeem status of the request to 'SashiTimeout'.
-                                await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
-                                // Destroy the instance.
-                                await this.sashiCli.destroyInstance(createRes.content.name);
-                            } else {
-                                console.log(`Instance created for ${txAccount}`);
-                                // Send the redeem response with created instance info.
-                                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
-
-                                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
-                                const current_ledger_seq = this.lastValidatedLedgerSequence;
-                                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(current_ledger_seq, amount));
-                                // Update the database for redeemed record.
-                                await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
-                            }
-                        }
-                        catch (e) {
-                            console.error(e);
-                            await this.sendRedeemResponse(txHash, txPubKey, txAccount, { type: ErrorCodes.REDEEM_ERR, reason: e.content ? e.content : undefined }, true);
-                            // Update the redeem response for failures.
-                            await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
-                        }
-                    }
-                }
-                this.db.close();
-            }
-        });
-        this.evernodeXrplAcc.subscribe();
+        this.evernodeHook.subscribe();
     }
 
-    isRedeem(transaction) {
-        // Check whether an issued currency.
-        const isIssuedCurrency = (typeof transaction.Amount === "object");
-        // Check whether an incomming transaction to the hook.
-        const isToHook = transaction.Destination === this.cfg.xrpl.hookAddress;
-        if (isIssuedCurrency && isToHook) {
-            const token = transaction.Amount.currency;
-            const issuer = transaction.Amount.issuer;
-            return (token === this.cfg.xrpl.token && issuer === this.cfg.xrpl.address && transaction.Memos && transaction.Memos.length);
+    async handleRedeem(r) {
+
+        if (r.token !== this.cfg.xrpl.token || r.host !== this.cfg.xrpl.address)
+            return;
+
+        this.db.open();
+
+        // Update last watched ledger sequence number.
+        await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
+
+        const txHash = r.transaction.hash;
+        const txAccount = r.user;
+        const txPubKey = r.transaction.SigningPubKey;
+        const amount = parseInt(r.transaction.Amount.value);
+        const encryptedInstanceReq = r.payload;
+
+        try {
+            console.log(`Received redeem from ${txAccount}`);
+            await this.createRedeemRecord(txHash, txAccount, amount);
+
+            // The last validated ledger when we receive the redeem request.
+            const startingValidatedLedger = this.lastValidatedLedgerSequence;
+
+            // Decrypt redeem requirements using the decryption key derived from host secret.
+            const instanceRequirements = await EncryptionHelper.decrypt(this.accKeyPair.privateKey, encryptedInstanceReq);
+            if (!instanceRequirements) {
+                console.log('Failed to decrypt redeem data.');
+                return;
+            }
+
+            const createRes = await this.sashiCli.createInstance(instanceRequirements);
+
+            // Number of validated ledgers passed while the instance is created.
+            const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+
+            // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
+            const threshold = this.evernodeHookConf.redeemWindow * REDEEM_TIMEOUT_THRESHOLD;
+            if (diff > threshold) {
+                console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                // Update the redeem status of the request to 'SashiTimeout'.
+                await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
+                // Destroy the instance.
+                await this.sashiCli.destroyInstance(createRes.content.name);
+            } else {
+                console.log(`Instance created for ${txAccount}`);
+                // Send the redeem response with created instance info.
+                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+
+                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
+                const current_ledger_seq = this.lastValidatedLedgerSequence;
+                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(current_ledger_seq, amount));
+                // Update the database for redeemed record.
+                await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
+            }
         }
-        return false;
+        catch (e) {
+            console.error(e);
+            await this.sendRedeemResponse(txHash, txPubKey, txAccount, { type: ErrorCodes.REDEEM_ERR, reason: e.content ? e.content : undefined }, true);
+            // Update the redeem response for failures.
+            await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+        }
+
+        this.db.close();
     }
 
     async checkForRegistration() {

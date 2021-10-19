@@ -13,7 +13,7 @@ mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="rwGLw5uSGYm2couHZnrbCDKaQZQByvamj8"
+hook_address="rK4qxNScYAz6rw7rv3tbktMn4Qr2VBLCM9"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -148,7 +148,7 @@ if [ "$quiet"=="-q" ]; then
     # (This is done for testing purposes during development)
 
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="shaXJCUZeE37nCe5VpiT8xiVFjFmY"
+    hook_secret="snVCiKRox58HokST4YBEETw6w57oW"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
     
     # Generate new fauset account.
@@ -164,7 +164,7 @@ if [ "$quiet"=="-q" ]; then
     # Setup the host xrpl account with an EVR balance and default rippling flag.
     echo "Setting up host XRP account..."
     acc_setup_func="$func_url&action=setuphost&hookaddr=$hook_address&hooksecret=$hook_secret&addr=$xrp_address&secret=$xrp_secret"
-    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_setup_func)
+    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST "$acc_setup_func")
     [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
 
     # Generate random details for instance size, location and token.

@@ -59,7 +59,7 @@ async function issueRedeem(host, hostId, elem, peers, unl) {
 }
 
 async function processRedeemResponse(hostId, redeemOp, elem) {
-    const instanceInfo = await redeemOp;
+    const instanceInfo = await redeemOp.catch(err => console.log(`Host ${hostId} redeem error: ${err.reason}`));
     if (instanceInfo) {
         for (var k in instanceInfo)
             elem[k] = instanceInfo[k];

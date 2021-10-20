@@ -161,6 +161,9 @@ if [ "$quiet"=="-q" ]; then
     ([ "$xrp_address" == "" ] || [ "$xrp_address" == "null" ] ||
         [ "$xrp_secret" == "" ] || [ "$xrp_secret" == "null" ]) && echo "Invalid generated xrpl account details: $new_acc" && rollback
 
+    # Wait a small interval so the XRP account gets replicated in the testnet (otherwise we may get 'Account not found' errors).
+    sleep 4
+
     # Setup the host xrpl account with an EVR balance and default rippling flag.
     echo "Setting up host XRP account..."
     acc_setup_func="$func_url&action=setuphost&hookaddr=$hook_address&hooksecret=$hook_secret&addr=$xrp_address&secret=$xrp_secret"

@@ -1,8 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { XrplAccount, RippleAPIWrapper, EvernodeHook, RippleAPIEvents, RippleConstants,
-    MemoFormats, MemoTypes, ErrorCodes, HookEvents, EncryptionHelper } = require('evernode-js-client');
+const { RippleAPIWrapper, EvernodeClient, EvernodeHook, RippleAPIEvents, HookEvents } = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -18,7 +17,6 @@ const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
-const EVR_CUR_CODE = 'EVR';
 const REDEEM_TIMEOUT_THRESHOLD = 0.8;
 const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
@@ -55,8 +53,10 @@ class MessageBoard {
         try { await this.rippleAPI.connect(); }
         catch (e) { throw e; }
 
-        this.xrplAcc = new XrplAccount(this.rippleAPI, this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        this.accKeyPair = this.xrplAcc.deriveKeypair();
+        this.evernodeClient = new EvernodeClient(this.cfg.xrpl.address, this.cfg.xrpl.secret, {
+            rippleAPI: this.rippleAPI
+        })
+        await this.evernodeClient.connect();
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
@@ -124,25 +124,18 @@ class MessageBoard {
         await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
 
         const txHash = r.transaction.hash;
-        const txAccount = r.user;
-        const txPubKey = r.transaction.SigningPubKey;
+        const userAddress = r.user;
+        const userPubKey = r.transaction.SigningPubKey;
         const amount = parseInt(r.transaction.Amount.value);
-        const encryptedInstanceReq = r.payload;
 
         try {
-            console.log(`Received redeem from ${txAccount}`);
-            await this.createRedeemRecord(txHash, txAccount, amount);
+            console.log(`Received redeem from ${userAddress}`);
+            await this.createRedeemRecord(txHash, userAddress, amount);
 
             // The last validated ledger when we receive the redeem request.
             const startingValidatedLedger = this.lastValidatedLedgerSequence;
 
-            // Decrypt redeem requirements using the decryption key derived from host secret.
-            const instanceRequirements = await EncryptionHelper.decrypt(this.accKeyPair.privateKey, encryptedInstanceReq);
-            if (!instanceRequirements) {
-                console.log('Failed to decrypt redeem data.');
-                return;
-            }
-
+            const instanceRequirements = await this.evernodeClient.getRedeemRequirements(r.payload);
             const createRes = await this.sashiCli.createInstance(instanceRequirements);
 
             // Number of validated ledgers passed while the instance is created.
@@ -157,9 +150,10 @@ class MessageBoard {
                 // Destroy the instance.
                 await this.sashiCli.destroyInstance(createRes.content.name);
             } else {
-                console.log(`Instance created for ${txAccount}`);
+                console.log(`Instance created for ${userAddress}`);
+
                 // Send the redeem response with created instance info.
-                const data = await this.sendRedeemResponse(txHash, txPubKey, txAccount, createRes);
+                await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
 
                 // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
                 const current_ledger_seq = this.lastValidatedLedgerSequence;
@@ -171,7 +165,9 @@ class MessageBoard {
         }
         catch (e) {
             console.error(e);
-            await this.sendRedeemResponse(txHash, txPubKey, txAccount, { type: ErrorCodes.REDEEM_ERR, reason: e.content ? e.content : undefined }, true);
+
+            await this.evernodeClient.redeemError(txHash, e.content);
+
             // Update the redeem response for failures.
             await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
         }
@@ -185,14 +181,8 @@ class MessageBoard {
 
         // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
-            const memoData = `${this.cfg.xrpl.token};${this.cfg.host.instanceSize};${this.cfg.host.location}`
-            // For now we comment EVR reg fee transaction and make XRP transaction instead.
-            console.log(`Making Evernode host registration payment of ${this.evernodeHookConf.hostRegFee} ${EVR_CUR_CODE}...`)
-            const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-                this.evernodeHookConf.hostRegFee.toString(),
-                EVR_CUR_CODE,
-                this.cfg.xrpl.hookAddress,
-                [{ type: MemoTypes.HOST_REG, format: MemoFormats.TEXT, data: memoData }]);
+            console.log(`Performing Evernode host registration payment...`)
+            const res = await this.evernodeClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location);
             if (res) {
                 this.cfg.xrpl.regFeeHash = res.txHash;
                 this.persistConfig();
@@ -200,7 +190,7 @@ class MessageBoard {
 
                 // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
                 console.log("Setting message key...");
-                if (await this.xrplAcc.setMessageKey(this.accKeyPair.publicKey))
+                if (await this.evernodeClient.xrplAcc.setMessageKey(this.evernodeClient.accKeyPair.publicKey))
                     console.log("Host account message key set.");
                 else
                     console.log("Failed to set host account message key.");
@@ -214,35 +204,9 @@ class MessageBoard {
     async deregisterHost() {
         // Sends evernode host de-registration transaction.
         console.log(`Performing Evernode host deregistration...`);
-        const res = await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            RippleConstants.MIN_XRP_AMOUNT,
-            "XRP",
-            null,
-            [{ type: MemoTypes.HOST_DEREG, format: MemoFormats.TEXT, data: "" }]);
+        const res = await this.evernodeClient.deregisterHost();
         if (res)
             console.log('Deregistration complete.');
-    }
-
-    async sendRedeemResponse(txHash, txPubkey, txAccount, response, isError = false) {
-        // Verifying the pubkey.
-        if (!(await this.rippleAPI.isValidKeyForAddress(txPubkey, txAccount)))
-            throw 'Invalid public key for redeem response encryption.';
-
-        let memos = [{ type: MemoTypes.REDEEM_REF, format: MemoFormats.BINARY, data: txHash }];
-        if (isError) {
-            // Send redeem response with error.
-            memos.push({ type: MemoTypes.REDEEM_RESP, format: MemoFormats.JSON, data: response });
-        } else {
-            // Encrypt response with user pubkey.
-            response = await EncryptionHelper.encrypt(txPubkey, response);
-            memos.push({ type: MemoTypes.REDEEM_RESP, format: MemoFormats.BINARY, data: response });
-        }
-
-        return (await this.xrplAcc.makePayment(this.cfg.xrpl.hookAddress,
-            RippleConstants.MIN_XRP_AMOUNT,
-            "XRP",
-            null,
-            memos));
     }
 
     addToExpiryList(txHash, containerName, expiryLedger) {

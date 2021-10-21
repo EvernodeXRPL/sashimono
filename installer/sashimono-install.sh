@@ -171,8 +171,8 @@ if [ "$quiet"=="-q" ]; then
     [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
 
     # Generate random details for instance size, location and token.
-    instance_size="AUTO InstSize "$(tr -dc A-Z </dev/urandom | head -c 10)
-    location="AUTO Loc "$(tr -dc A-Z </dev/urandom | head -c 5)
+    instance_size="AUTO "$(tr -dc A-Z </dev/urandom | head -c 10)
+    location="AUTO "$(tr -dc A-Z </dev/urandom | head -c 5)
     token=$(tr -dc A-Z </dev/urandom | head -c 3)
 
     echo "Auto-generated host information."

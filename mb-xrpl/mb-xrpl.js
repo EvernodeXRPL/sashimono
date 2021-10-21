@@ -50,17 +50,15 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
-        try { await this.rippleAPI.connect(); }
-        catch (e) { throw e; }
+        this.evernodeClient = new EvernodeClient(this.cfg.xrpl.address, this.cfg.xrpl.secret, { hookAddress: this.cfg.xrpl.hookAddress })
+        this.rippleAPI = this.evernodeClient.rippleAPI;
 
-        this.evernodeClient = new EvernodeClient(this.cfg.xrpl.address, this.cfg.xrpl.secret, {
-            rippleAPI: this.rippleAPI
-        })
-        await this.evernodeClient.connect();
+        try { await this.evernodeClient.connect(); }
+        catch (e) { throw e; }
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
-            this.rippleAPI.disconnect();
+            this.evernodeClient.disconnect();
             return;
         }
 
@@ -181,22 +179,27 @@ class MessageBoard {
 
         // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
-            console.log(`Performing Evernode host registration payment...`)
-            const res = await this.evernodeClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location);
-            if (res) {
-                this.cfg.xrpl.regFeeHash = res.txHash;
-                this.persistConfig();
-                console.log('Registration payment made for evernode account.');
 
-                // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
-                console.log("Setting message key...");
-                if (await this.evernodeClient.xrplAcc.setMessageKey(this.evernodeClient.accKeyPair.publicKey))
-                    console.log("Host account message key set.");
-                else
-                    console.log("Failed to set host account message key.");
+            // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
+            console.log("Setting message key...");
+            if (!await this.evernodeClient.xrplAcc.setMessageKey(this.evernodeClient.accKeyPair.publicKey)) {
+                console.log("Failed to set host account message key.");
+                return;
             }
-            else {
-                console.log("Registration payment failed.");
+            console.log("Host account message key set.");
+
+            console.log(`Performing Evernode host registration...`)
+
+            const tx = await this.evernodeClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location)
+                .catch(errtx => {
+                    console.log("Registration failed.");
+                    console.log(errtx);
+                });
+
+            if (tx) {
+                this.cfg.xrpl.regFeeHash = tx.id;
+                this.persistConfig();
+                console.log('Registration complete. ' + tx.id);
             }
         }
     }
@@ -204,9 +207,11 @@ class MessageBoard {
     async deregisterHost() {
         // Sends evernode host de-registration transaction.
         console.log(`Performing Evernode host deregistration...`);
-        const res = await this.evernodeClient.deregisterHost();
-        if (res)
-            console.log('Deregistration complete.');
+        const tx = await this.evernodeClient.deregisterHost()
+            .catch(errtx => console.log("Deregistration failed."));
+
+        if (tx)
+            console.log('Deregistration complete. ' + tx.id);
     }
 
     addToExpiryList(txHash, containerName, expiryLedger) {

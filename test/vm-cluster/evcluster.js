@@ -5,7 +5,7 @@ import evernode from "evernode-js-client";
 import { exit } from "process";
 const { EvernodeClient, XrplAccount, RippleAPIWrapper } = evernode;
 
-const REDEEM_AMOUNT = 18000; // 18000 Moments ~ 60days
+const REDEEM_AMOUNT = "18000"; // 18000 Moments ~ 60days
 const PEER_SUBSET_SIZE = 5;
 
 const configFile = "config.json";
@@ -47,10 +47,10 @@ async function issueRedeem(host, hostId, elem, peers, unl) {
         contract_id: currentContract.contract_id,
         owner_pubkey: currentContract.owner_pubkey,
         config: config
-    }).catch(err => console.log(err));
+    }).catch(errtx => console.log(errtx));
 
     if (!res) {
-        console.log(`Redeem issuing failued for host ${hostId}.`);
+        console.log(`Redeem issuing failed for host ${hostId}.`);
         return [false]
     }
     else {
@@ -59,10 +59,10 @@ async function issueRedeem(host, hostId, elem, peers, unl) {
 }
 
 async function processRedeemResponse(hostId, redeemOp, elem) {
-    const instanceInfo = await redeemOp;
-    if (instanceInfo) {
-        for (var k in instanceInfo)
-            elem[k] = instanceInfo[k];
+    const response = await redeemOp.catch(err => console.log(`Host ${hostId} redeem error: ${err.reason}`));
+    if (response && response.instance) {
+        for (var k in response.instance)
+            elem[k] = response.instance[k];
 
         console.log(`Created instance in host ${hostId}.`);
         saveConfig();
@@ -185,13 +185,19 @@ async function initHostAccountData(host) {
 async function transferHostingTokens(token, hostAddr, hostSecret) {
 
     console.log(`Transfering ${token} to user...`);
-    const trustRes = await userAcc.createTrustLine(token, hostAddr, 9999999);
-    if (!trustRes)
+    const trustTx = await userAcc.setTrustLine(token, hostAddr, "9999999").catch(errtx => {
+        console.log("Trust line failed.");
+        console.log(errtx);
+    });
+    if (!trustTx)
         return false;
 
     const hostAcc = new XrplAccount(rippleAPI, hostAddr, hostSecret);
-    const payRes = await hostAcc.makePayment(userAddr, 9999999, token, hostAddr);
-    if (!payRes)
+    const payTx = await hostAcc.makePayment(userAddr, "9999999", token, hostAddr).catch(errtx => {
+        console.log("Transfer failed.")
+        console.log(errtx);
+    });
+    if (!payTx)
         return false;
 
     console.log(`Transfering of ${token} complete.`);

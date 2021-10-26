@@ -13,7 +13,7 @@ mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="rK4qxNScYAz6rw7rv3tbktMn4Qr2VBLCM9"
+hook_address="rpTA2MtFV7L6hLzjSBYc1FBgYqTs6APVdz"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -146,7 +146,7 @@ if [ "$quiet"=="-q" ]; then
     # (This is done for testing purposes during development)
 
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="snVCiKRox58HokST4YBEETw6w57oW"
+    hook_secret="spAhiYQMb71CyEHU4zAA5Q2PSiUkN"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
     
     # Generate new fauset account.

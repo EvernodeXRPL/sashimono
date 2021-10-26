@@ -81,10 +81,8 @@ cp "$script_dir"/sashi $user_bin
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
-# This will be commented and self ip will be hardcoded since the interface differs from machine to machine.
-# This needs to be fixed later.
-# selfip=$(ip -4 a l ens3 | awk '/inet/ {print $2}' | cut -d/ -f1)
-selfip="127.0.0.1"
+# Detect self host address
+selfip=$(hostname -I)
 
 # Install private docker registry.
 # (Disabled until secure registry configuration)

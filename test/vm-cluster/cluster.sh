@@ -42,14 +42,14 @@ PRINTFORMAT="Node %2s: %s\n"
 mode=$1
 
 if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
-   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] ||
+   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] || [ "$mode" == "destroy-all" ] ||
    [ "$mode" == "ssh" ] || [ "$mode" == "sshu" ] || [ "$mode" == "attach" ] || [ "$mode" == "ip" ] || [ "$mode" == "updatecfg" ] ||
    [ "$mode" == "statefile" ] || [ "$mode" == "umount" ] || [ "$mode" == "backup" ] || [ "$mode" == "restore" ] || [ "$mode" == "syncwith" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
     echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] |"
-    echo " destroy [N] | ssh <N>or<command> | sshu <N> | attach <N> | ip [N] | updatecfg [N] | statefile [N] <file> | umount [N] | backup <N> | restore [N] | syncwith <N>"
+    echo " destroy [N] | destroy-all [N] | ssh <N>or<command> | sshu <N> | attach <N> | ip [N] | updatecfg [N] | statefile [N] <file> | umount [N] | backup <N> | restore [N] | syncwith <N>"
     echo " [N]: Optional node no.   <N>: Required node no.   [R]: 'R' If sashimono needed to reinstall."
     exit 1
 fi
@@ -586,6 +586,36 @@ if [ $mode == "destroy" ]; then
         wait
     else
         destroyinstance $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "destroy-all" ]; then
+    # Destroy all instances of given host.
+    function destroyallinstances() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+
+        while :
+        do
+            containername=$(sshskp $sshuser@$hostaddr sashi list | tail +3 | head -1 | awk '{ print $1 }')
+            if [ "$containername" != "" ]; then
+                echo "Node$nodeno. Destroying $containername..."
+                result=$(sshskp $sshuser@$hostaddr sashi destroy -n $containername)
+                echo "Node$nodeno. $containername: $result"
+            else
+                break
+            fi
+        done
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            destroyallinstances $i &
+        done
+        wait
+    else
+        destroyallinstances $nodeid
     fi
     exit 0
 fi

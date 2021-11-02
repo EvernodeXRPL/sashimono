@@ -4,7 +4,7 @@
         "build": "ncc build mb-xrpl.js --minify -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.2.2",
+        "evernode-js-client": "0.2.5",
         "sqlite3": "5.0.2"
     }
 }

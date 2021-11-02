@@ -35,7 +35,7 @@ if [ "$quiet" == "-q" ]; then
     # We only perform this for our testing setup during development.
     echo "Cleaning up host XRP account..."
 
-    hook_address="rK4qxNScYAz6rw7rv3tbktMn4Qr2VBLCM9"
+    hook_address="rpTA2MtFV7L6hLzjSBYc1FBgYqTs6APVdz"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
 
     mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg

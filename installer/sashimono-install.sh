@@ -13,7 +13,7 @@ mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="rK4qxNScYAz6rw7rv3tbktMn4Qr2VBLCM9"
+hook_address="rpTA2MtFV7L6hLzjSBYc1FBgYqTs6APVdz"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -81,10 +81,8 @@ cp "$script_dir"/sashi $user_bin
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
-# This will be commented and self ip will be hardcoded since the interface differs from machine to machine.
-# This needs to be fixed later.
-# selfip=$(ip -4 a l ens3 | awk '/inet/ {print $2}' | cut -d/ -f1)
-selfip="127.0.0.1"
+# Detect self host address
+selfip=$(hostname -I)
 
 # Install private docker registry.
 # (Disabled until secure registry configuration)
@@ -148,7 +146,7 @@ if [ "$quiet"=="-q" ]; then
     # (This is done for testing purposes during development)
 
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="snVCiKRox58HokST4YBEETw6w57oW"
+    hook_secret="spAhiYQMb71CyEHU4zAA5Q2PSiUkN"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
     
     # Generate new fauset account.

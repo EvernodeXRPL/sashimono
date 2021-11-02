@@ -264,7 +264,11 @@ async function main() {
     });
 
     const mode = args[0];
-    if (mode === "create") {
+    if (mode === "init") {
+        await createEvernodeConnections();
+        await initHosts();
+    }
+    else if (mode === "create") {
         if (args.length === 1) {
             await createInstancesSequentially();
         }
@@ -280,7 +284,7 @@ async function main() {
             console.log("Specify peer port for 'createall'.");
     }
     else {
-        console.log("Specifiy args: create | createall <peerport>")
+        console.log("Specifiy args: init | create | createall <peerport>")
     }
 
     if (rippleAPI)

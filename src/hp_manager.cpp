@@ -447,6 +447,7 @@ namespace hp
             return -1;
         }
 
+        LOG_INFO << "Destroying container " << container_name;
         if (docker_remove(info.username, container_name) == -1 ||
             sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
         {

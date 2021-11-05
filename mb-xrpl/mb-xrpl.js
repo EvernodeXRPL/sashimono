@@ -50,6 +50,7 @@ class MessageBoard {
         if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
+        console.log("Using hook " + this.cfg.xrpl.hookAddress);
         this.evernodeClient = new EvernodeClient(this.cfg.xrpl.address, this.cfg.xrpl.secret, { hookAddress: this.cfg.xrpl.hookAddress })
         this.rippleAPI = this.evernodeClient.rippleAPI;
 
@@ -77,7 +78,7 @@ class MessageBoard {
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
-            this.addToExpiryList(redeem.tx_hash, redeem.container_name, this.getExpiryLedger(redeem.created_on_ledger, redeem.h_token_amount));
+            this.addToExpiryList(redeem.tx_hash, redeem.container_name, await this.getExpiryMoment(redeem.created_on_ledger, redeem.h_token_amount));
 
         this.db.close();
 
@@ -86,14 +87,15 @@ class MessageBoard {
             this.lastValidatedLedgerSequence = e.ledgerVersion;
 
             // Filter out instances which needed to be expired and destroy them.
-            const expired = this.expiryList.filter(x => x.expiryLedger <= e.ledgerVersion);
+            const currentMoment = await this.evernodeHook.getMoment(e.ledgerVersion);
+            const expired = this.expiryList.filter(x => x.expiryMoment < currentMoment);
             if (expired && expired.length) {
-                this.expiryList = this.expiryList.filter(x => x.expiryLedger > e.ledgerVersion);
+                this.expiryList = this.expiryList.filter(x => x.expiryMoment >= currentMoment);
 
                 this.db.open();
                 for (const x of expired) {
                     try {
-                        console.log(`Moments exceeded. Destroying ${x.containerName}`);
+                        console.log(`Moments exceeded (current:${currentMoment}, expiry:${x.expiryMoment}). Destroying ${x.containerName}`);
                         await this.sashiCli.destroyInstance(x.containerName);
                         await this.updateRedeemStatus(x.txHash, RedeemStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
@@ -150,13 +152,15 @@ class MessageBoard {
             } else {
                 console.log(`Instance created for ${userAddress}`);
 
+                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
+                const current_ledger_seq = this.lastValidatedLedgerSequence;
+
+                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(current_ledger_seq, amount));
+
                 // Send the redeem response with created instance info.
                 await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
 
-                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
-                const current_ledger_seq = this.lastValidatedLedgerSequence;
-                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                this.addToExpiryList(txHash, createRes.content.name, this.getExpiryLedger(current_ledger_seq, amount));
                 // Update the database for redeemed record.
                 await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
             }
@@ -214,12 +218,13 @@ class MessageBoard {
             console.log('Deregistration complete. ' + tx.id);
     }
 
-    addToExpiryList(txHash, containerName, expiryLedger) {
+    addToExpiryList(txHash, containerName, expiryMoment) {
         this.expiryList.push({
             txHash: txHash,
             containerName: containerName,
-            expiryLedger: expiryLedger,
+            expiryMoment: expiryMoment,
         });
+        console.log(`Container ${containerName} expiry set at ${expiryMoment}`);
     }
 
     async createRedeemTableIfNotExists() {
@@ -283,8 +288,8 @@ class MessageBoard {
         await this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
     }
 
-    getExpiryLedger(createdOnLedger, moments) {
-        return createdOnLedger + (moments * this.evernodeHookConf.momentSize);
+    async getExpiryMoment(createdOnLedger, moments) {
+        return (await this.evernodeHook.getMoment(createdOnLedger)) + moments;
     }
 
     readConfig() {

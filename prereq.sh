@@ -88,6 +88,7 @@ fi
 # -------------------------------
 
 # Check fuse config exists.
+apt-get install -y fuse3
 [ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse."
 
 # Set user_allow_other if not already configured

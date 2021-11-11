@@ -70,7 +70,7 @@ cgdelete -g cpu:$user$cgroupsuffix
 cgdelete -g memory:$user$cgroupsuffix
 
 # Removing applied disk quota of the user before deleting.
-setquota -u -F vfsv0 "$user" 0 0 0 0 /
+setquota -g -F vfsv0 "$user" 0 0 0 0 /
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"

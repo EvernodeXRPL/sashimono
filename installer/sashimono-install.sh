@@ -8,7 +8,6 @@ sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl
 docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
-sashimono_conf=$sashimono_data/sa.cfg
 mb_xrpl_data=$sashimono_data/mb-xrpl
 mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"

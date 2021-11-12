@@ -87,6 +87,11 @@ namespace conf
         std::unordered_map<std::string, std::string> images;
     };
 
+    struct service_config
+    {
+        std::string cgrulesengd; // Cgroup rule generator service.
+    };
+
     struct sa_config
     {
         std::string version;
@@ -94,6 +99,7 @@ namespace conf
         system_config system;
         docker_config docker;
         log_config log;
+        service_config service;
     };
 
     struct sa_context
@@ -123,7 +129,7 @@ namespace conf
 
     int init();
 
-    int create(std::string_view host_addr, std::string_view registry_addr);
+    int create(std::string_view cgrulesengd_service, std::string_view host_addr, std::string_view registry_addr);
 
     void set_dir_paths(std::string exepath, std::string datadir);
 

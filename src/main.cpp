@@ -13,15 +13,15 @@
 #include "util/util.hpp"
 #include "killswitch/killswitch.h"
 
-#define PARSE_ERROR                                          \
-    {                                                        \
-        std::cerr << "Arguments mismatch.\n";                \
-        std::cerr << "Usage:\n";                             \
-        std::cerr << "sagent version\n";                     \
-        std::cerr << "sagent new [data_dir] [host_addr] [registry_addr]\n";  \
-        std::cerr << "sagent run [data_dir]\n";              \
-        std::cerr << "Example: sagent run /etc/sashimono\n"; \
-        return -1;                                           \
+#define PARSE_ERROR                                                                               \
+    {                                                                                             \
+        std::cerr << "Arguments mismatch.\n";                                                     \
+        std::cerr << "Usage:\n";                                                                  \
+        std::cerr << "sagent version\n";                                                          \
+        std::cerr << "sagent new [data_dir] [cgrulesengd_service] [host_addr] [registry_addr]\n"; \
+        std::cerr << "sagent run [data_dir]\n";                                                   \
+        std::cerr << "Example: sagent run /etc/sashimono\n";                                      \
+        return -1;                                                                                \
     }
 
 /**
@@ -36,7 +36,7 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 5) ||
+        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 6) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2))
             return 0;
@@ -107,7 +107,6 @@ int main(int argc, char **argv)
     signal(SIGSEGV, &segfault_handler);
     signal(SIGABRT, &segfault_handler);
 
-
     // Disable SIGPIPE to avoid crashing on broken pipe IO.
     {
         sigset_t mask;
@@ -130,9 +129,10 @@ int main(int argc, char **argv)
         conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
 
         // This will create a new config.
-        const std::string host_addr = (argc >= 4) ? argv[3] : "";
-        const std::string registry_addr = (argc >= 5) ? argv[4] : "";
-        if (conf::create(host_addr, registry_addr) != 0)
+        const std::string cgrulesengd_service = (argc >= 4) ? argv[3] : "";
+        const std::string host_addr = (argc >= 5) ? argv[4] : "";
+        const std::string registry_addr = (argc >= 6) ? argv[5] : "";
+        if (conf::create(cgrulesengd_service, host_addr, registry_addr) != 0)
             return -1;
     }
     else if (conf::ctx.command == "run")

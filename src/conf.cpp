@@ -33,7 +33,7 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create(std::string_view host_addr, std::string_view registry_addr)
+    int create(std::string_view cgrulesengd_service, std::string_view host_addr, std::string_view registry_addr)
     {
         if (util::is_file_exists(ctx.config_file))
         {
@@ -76,6 +76,8 @@ namespace conf
             cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
             cfg.log.loggers.emplace("console");
+
+            cfg.service.cgrulesengd = cgrulesengd_service;
 
             // We don't enable file logging by default because Sashimono running as a systemd service
             // would automatically log console output to journal log.
@@ -299,6 +301,22 @@ namespace conf
             }
         }
 
+        // service
+        {
+            jpath = "service";
+
+            try
+            {
+                const jsoncons::ojson &service = d["service"];
+                cfg.service.cgrulesengd = service["cgrulesengd"].as<std::string>();
+            }
+            catch (const std::exception &e)
+            {
+                print_missing_field_error(jpath, e);
+                return -1;
+            }
+        }
+
         return 0;
     }
 
@@ -363,6 +381,15 @@ namespace conf
             }
             log_config.insert_or_assign("loggers", loggers);
             d.insert_or_assign("log", log_config);
+        }
+
+        // Service configs.
+        {
+            jsoncons::ojson service_config;
+
+            service_config.insert_or_assign("cgrulesengd", cfg.service.cgrulesengd);
+
+            d.insert_or_assign("service", service_config);
         }
 
         return write_json_file(ctx.config_file, d);

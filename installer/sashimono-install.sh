@@ -92,57 +92,12 @@ selfip=$(hostname -I)
 # [ "$?" == "1" ] && rollback
 # registry_addr=$selfip:$registryport
 
-# Setting up cgroup rules.
-! groupadd $group && echo "Group creation failed." && rollback
-! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
-
 # Setting up Sashimono admin group.
 ! groupadd $admin_group && echo "Admin group creation failed." && rollback
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data
-# Rollback if 'sagent new' failed.
-$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr || rollback
 
-# Install Sashimono Agent cgcreate service.
-# This is a onshot service which runs only once.
-echo "[Unit]
-Description=Sashimono cgroup creation service.
-After=network.target
-[Service]
-User=root
-Group=root
-Type=oneshot
-ExecStart=$sashimono_bin/user-cgcreate.sh $sashimono_data
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
-
-# Install Sashimono Agent systemd service.
-# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-echo "[Unit]
-Description=Running and monitoring sashimono agent.
-After=network.target
-StartLimitIntervalSec=0
-[Service]
-User=root
-Group=root
-Type=simple
-WorkingDirectory=$sashimono_bin
-ExecStart=$sashimono_bin/sagent run $sashimono_data
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
-
-systemctl daemon-reload
-systemctl enable $cgcreate_service
-systemctl start $cgcreate_service
-systemctl enable $sashimono_service
-systemctl start $sashimono_service
-# Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
-
-# Setup xrpl message board.
-echo "Installing Evernode xrpl message board..."
 if [ "$quiet" == "-q" ]; then
 
     # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
@@ -219,13 +174,62 @@ if [[ -z "$cgrulesengd_service" ]]; then
     [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "$cgrulesengd_service systemd service does not exist." && rollback
 fi
 
-# Save the cgrules service in the config.
-jq --arg cgrulesengd "$cgrulesengd_service" '.service.cgrulesengd = $cgrulesengd' $sashimono_conf >$sashimono_conf.tmp && mv $sashimono_conf.tmp $sashimono_conf || rollback
+# Setting up cgroup rules.
+echo "Creating cgroup rules..."
+! groupadd $group && echo "Group creation failed." && rollback
+! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+# Restart the service to apply the cgrules config.
+echo "Restarting the $cgrulesengd_service.service."
+systemctl restart $cgrulesengd_service || rollback
+
+# Install Sashimono Agent cgcreate service.
+# This is a onshot service which runs only once.
+echo "[Unit]
+Description=Sashimono cgroup creation service.
+After=network.target
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=$sashimono_bin/user-cgcreate.sh $sashimono_data
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
+
+# Install xrpl message board systemd service.
+echo "Initiating the sashimono agent..."
+# Rollback if 'sagent new' failed.
+$sashimono_bin/sagent new $sashimono_data $cgrulesengd_service $selfip $registry_addr || rollback
+
+# Install Sashimono Agent systemd service.
+# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+echo "[Unit]
+Description=Running and monitoring sashimono agent.
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+User=root
+Group=root
+Type=simple
+WorkingDirectory=$sashimono_bin
+ExecStart=$sashimono_bin/sagent run $sashimono_data
+Restart=on-failure
+RestartSec=5
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
+
+systemctl daemon-reload
+systemctl enable $cgcreate_service
+systemctl start $cgcreate_service
+systemctl enable $sashimono_service
+systemctl start $sashimono_service
+# Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
+
+# Install xrpl message board systemd service.
+echo "Installing Evernode xrpl message board..."
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
 (! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
 
-# Install xrpl message board systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]
 Description=Running and monitoring evernode xrpl transactions.
@@ -247,10 +251,6 @@ WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
 systemctl enable $mb_xrpl_service
 systemctl start $mb_xrpl_service
 echo "Installed Evernode xrpl message board."
-
-# Restart the service to apply the cgrules config.
-echo "Restarting the $cgrulesengd_service.service."
-systemctl restart $cgrulesengd_service || rollback
 
 echo "Sashimono installed successfully."
 exit 0

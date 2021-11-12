@@ -7,6 +7,7 @@ sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl
 docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
+sashimono_conf=$sashimono_data/sa.cfg
 mb_xrpl_data=$sashimono_data/mb-xrpl
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
@@ -21,8 +22,16 @@ quiet=$1
 
 if [ "$quiet" != "-q" ]; then
     echo "Are you sure you want to uninstall Sashimono?"
-    read -p "Type 'yes' to confirm uninstall: " confirmation < /dev/tty
+    read -p "Type 'yes' to confirm uninstall: " confirmation </dev/tty
     [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
+fi
+
+# Get the cgrules service from the config, Terminate the uninstall if service does not exist.
+cgrulesengd_service=$(jq -r '.service.cgrulesengd' $sashimono_conf | awk '{print tolower($0)}' | sed 's/\.service$//')
+if [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ]; then
+    echo "$cgrulesengd_service systemd service does not exist. Aborting uninstall."
+    echo "Update the correct service name in $sashimono_conf and try again."
+    exit 1
 fi
 
 # Remove xrpl message board service if exists.
@@ -66,7 +75,7 @@ done
 
 ucount=${#validusers[@]}
 if [ $ucount -gt 0 ]; then
-    
+
     echo "Detected $ucount Sashimono contract instances."
     for user in "${validusers[@]}"; do
         echo "$user"
@@ -74,7 +83,7 @@ if [ $ucount -gt 0 ]; then
 
     if [ "$quiet" != "-q" ]; then
         echo "Are you sure you want to delete all $ucount Sashimono contract instances?"
-        read -p "Type $ucount to confirm deletion:" confirmation < /dev/tty
+        read -p "Type $ucount to confirm deletion:" confirmation </dev/tty
     else
         confirmation="$ucount"
     fi
@@ -113,9 +122,14 @@ rm $user_bin/sashi
 echo "Deleting data folder..."
 rm -r $sashimono_data
 
+# When removing the cgrule,
+# We first edit the config and restart the service to apply the config.
+# Then we remove the attached group.
 echo "Deleting cgroup rules..."
-groupdel $group
 sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
+echo "Restarting the $cgrulesengd_service.service."
+systemctl restart $cgrulesengd_service
+groupdel $group
 
 groupdel $admin_group
 

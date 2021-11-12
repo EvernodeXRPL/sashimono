@@ -8,6 +8,7 @@ sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl
 docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
+sashimono_conf=$sashimono_data/sa.cfg
 mb_xrpl_data=$sashimono_data/mb-xrpl
 mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
@@ -20,6 +21,7 @@ cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
+def_cgrulesengd_service="cgrulesengdsvc"
 quiet=$1
 
 [ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
@@ -99,7 +101,8 @@ selfip=$(hostname -I)
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data
-$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr
+# Rollback if 'sagent new' failed.
+$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr || rollback
 
 # Install Sashimono Agent cgcreate service.
 # This is a onshot service which runs only once.
@@ -140,7 +143,7 @@ systemctl start $sashimono_service
 
 # Setup xrpl message board.
 echo "Installing Evernode xrpl message board..."
-if [ "$quiet"=="-q" ]; then
+if [ "$quiet" == "-q" ]; then
 
     # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
     # (This is done for testing purposes during development)
@@ -148,7 +151,7 @@ if [ "$quiet"=="-q" ]; then
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
     hook_secret="sh77XLdVqt4tKwoHknkHijiEjenJb"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
-    
+
     # Generate new fauset account.
     echo "Generating XRP faucet account..."
     new_acc=$(curl -X POST $xrpl_faucet_url)
@@ -197,7 +200,27 @@ else
     while [[ -z "$xrp_secret" ]]; do
         read -p "XRPL account secret? " xrp_secret </dev/tty
     done
+    # Ask for cgroup rule generator service until a valid service provided.
+    while true; do
+        read -p "Enter your cgroup rule generator service name (default: $def_cgrulesengd_service)? " cgrulesengd_service </dev/tty
+        # Set service name to default if user input is empty.
+        [ -z "$cgrulesengd_service" ] && cgrulesengd_service="$def_cgrulesengd_service"
+        # Remove '.service' if user has given the full name.
+        cgrulesengd_service=$(echo $cgrulesengd_service | awk '{print tolower($0)}' | sed 's/\.service$//')
+        # Break the loop if service is valid and exist.
+        [ -f /etc/systemd/system/"$cgrulesengd_service".service ] && break
+        echo "$cgrulesengd_service systemd service does not exist."
+    done
 fi
+
+# Set cgrulesengd_service to default if it's still empty.
+if [[ -z "$cgrulesengd_service" ]]; then
+    cgrulesengd_service="$def_cgrulesengd_service"
+    [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "$cgrulesengd_service systemd service does not exist." && rollback
+fi
+
+# Save the cgrules service in the config.
+jq --arg cgrulesengd "$cgrulesengd_service" '.service.cgrulesengd = $cgrulesengd' $sashimono_conf >$sashimono_conf.tmp && mv $sashimono_conf.tmp $sashimono_conf || rollback
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
 (! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
@@ -225,6 +248,9 @@ systemctl enable $mb_xrpl_service
 systemctl start $mb_xrpl_service
 echo "Installed Evernode xrpl message board."
 
+# Restart the service to apply the cgrules config.
+echo "Restarting the $cgrulesengd_service.service."
+systemctl restart $cgrulesengd_service || rollback
+
 echo "Sashimono installed successfully."
-echo "Please restart your cgroup rule generator service or reboot your server for changes to apply."
 exit 0

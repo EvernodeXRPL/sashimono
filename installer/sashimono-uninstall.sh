@@ -26,13 +26,9 @@ if [ "$quiet" != "-q" ]; then
     [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
 fi
 
-# Get the cgrules service from the config, Terminate the uninstall if service does not exist.
+# Get the cgrules service from the config.
 cgrulesengd_service=$(jq -r '.service.cgrulesengd' $sashimono_conf | awk '{print tolower($0)}' | sed 's/\.service$//')
-if [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ]; then
-    echo "$cgrulesengd_service systemd service does not exist. Aborting uninstall."
-    echo "Update the correct service name in $sashimono_conf and try again."
-    exit 1
-fi
+[ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "Warning: $cgrulesengd_service systemd service does not exist."
 
 # Remove xrpl message board service if exists.
 if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then

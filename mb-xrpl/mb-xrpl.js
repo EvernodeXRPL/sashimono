@@ -17,8 +17,8 @@ const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
-const REDEEM_CREAT_TIMEOUT_THRESHOLD = 0.8;
-const REDEEM_REQ_TIMEOUT_THRESHOLD = 0.5;
+const REDEEM_CREATE_TIMEOUT_THRESHOLD = 0.8;
+const REDEEM_WAIT_TIMEOUT_THRESHOLD = 0.4;
 const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
 const RedeemStatus = {
@@ -141,7 +141,7 @@ class MessageBoard {
             // Number of validated ledgers passed while processing the last request.
             let diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
             // Give-up the redeeming porocess if the last request takes more than 50% of allowed window.
-            let threshold = this.evernodeHookConf.redeemWindow * REDEEM_REQ_TIMEOUT_THRESHOLD;
+            let threshold = this.evernodeHookConf.redeemWindow * REDEEM_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the redeem status of the request to 'SashiTimeout'.
@@ -154,7 +154,7 @@ class MessageBoard {
                 // Number of validated ledgers passed while the instance is created.
                 diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
                 // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
-                threshold = this.evernodeHookConf.redeemWindow * REDEEM_CREAT_TIMEOUT_THRESHOLD;
+                threshold = this.evernodeHookConf.redeemWindow * REDEEM_CREATE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the redeem status of the request to 'SashiTimeout'.

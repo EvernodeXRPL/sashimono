@@ -30,8 +30,8 @@ namespace hp
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
     // For the local log driver compression, minimum max-file should be 2. So we keep two logs each max-size is 5mb
-    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s \
-                                            --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
+    constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout --foreground -v -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local \
+                                            --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -288,7 +288,7 @@ namespace hp
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
         const std::string timeout = std::to_string(DOCKER_CREATE_TIMEOUT_SECS);
-        const int len = 351 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
+        const int len = 367 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
                 user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());

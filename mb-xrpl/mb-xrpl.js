@@ -170,21 +170,21 @@ class MessageBoard {
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                     this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(current_ledger_seq, amount));
 
-                    // Send the redeem response with created instance info.
-                    await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
-
                     // Update the database for redeemed record.
                     await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
+
+                    // Send the redeem response with created instance info.
+                    await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
                 }
             }
         }
         catch (e) {
             console.error(e);
 
-            await this.evernodeClient.redeemError(txHash, e.content);
-
             // Update the redeem response for failures.
             await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+
+            await this.evernodeClient.redeemError(txHash, e.content);
         }
 
         this.db.close();

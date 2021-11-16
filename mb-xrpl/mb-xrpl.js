@@ -136,11 +136,12 @@ class MessageBoard {
             // The last validated ledger when we receive the redeem request.
             const startingValidatedLedger = this.lastValidatedLedgerSequence;
 
+            // Wait until the sashi cli is available.
             await this.sashiCli.wait();
 
             // Number of validated ledgers passed while processing the last request.
             let diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
-            // Give-up the redeeming porocess if the last request takes more than 50% of allowed window.
+            // Give-up the redeeming porocess if processing the last request takes more than 40% of allowed window.
             let threshold = this.evernodeHookConf.redeemWindow * REDEEM_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);

@@ -17,7 +17,8 @@ const DB_PATH = DATA_DIR + '/mb-xrpl.sqlite';
 const DB_TABLE_NAME = 'redeem_ops';
 const DB_UTIL_TABLE_NAME = 'util_data';
 const LAST_WATCHED_LEDGER = 'last_watched_ledger';
-const REDEEM_TIMEOUT_THRESHOLD = 0.8;
+const REDEEM_CREAT_TIMEOUT_THRESHOLD = 0.8;
+const REDEEM_REQ_TIMEOUT_THRESHOLD = 0.5;
 const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
 
 const RedeemStatus = {
@@ -135,34 +136,46 @@ class MessageBoard {
             // The last validated ledger when we receive the redeem request.
             const startingValidatedLedger = this.lastValidatedLedgerSequence;
 
-            const instanceRequirements = await this.evernodeClient.getRedeemRequirements(r.payload);
-            const createRes = await this.sashiCli.createInstance(instanceRequirements);
+            await this.sashiCli.wait();
 
-            // Number of validated ledgers passed while the instance is created.
-            const diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
-
-            // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
-            const threshold = this.evernodeHookConf.redeemWindow * REDEEM_TIMEOUT_THRESHOLD;
+            // Number of validated ledgers passed while processing the last request.
+            let diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+            // Give-up the redeeming porocess if the last request takes more than 50% of allowed window.
+            let threshold = this.evernodeHookConf.redeemWindow * REDEEM_REQ_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
-                console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the redeem status of the request to 'SashiTimeout'.
                 await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
-                // Destroy the instance.
-                await this.sashiCli.destroyInstance(createRes.content.name);
-            } else {
-                console.log(`Instance created for ${userAddress}`);
+            }
+            else {
+                const instanceRequirements = await this.evernodeClient.getRedeemRequirements(r.payload);
+                const createRes = await this.sashiCli.createInstance(instanceRequirements);
 
-                // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
-                const current_ledger_seq = this.lastValidatedLedgerSequence;
+                // Number of validated ledgers passed while the instance is created.
+                diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+                // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
+                threshold = this.evernodeHookConf.redeemWindow * REDEEM_CREAT_TIMEOUT_THRESHOLD;
+                if (diff > threshold) {
+                    console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                    // Update the redeem status of the request to 'SashiTimeout'.
+                    await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
+                    // Destroy the instance.
+                    await this.sashiCli.destroyInstance(createRes.content.name);
+                } else {
+                    console.log(`Instance created for ${userAddress}`);
 
-                // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(current_ledger_seq, amount));
+                    // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
+                    const current_ledger_seq = this.lastValidatedLedgerSequence;
 
-                // Send the redeem response with created instance info.
-                await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
+                    // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
+                    this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(current_ledger_seq, amount));
 
-                // Update the database for redeemed record.
-                await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
+                    // Send the redeem response with created instance info.
+                    await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
+
+                    // Update the database for redeemed record.
+                    await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
+                }
             }
         }
         catch (e) {
@@ -310,6 +323,9 @@ class MessageBoard {
 }
 
 class SashiCLI {
+
+    #waiting = false;
+
     constructor(cliPath) {
         this.cliPath = cliPath;
     }
@@ -337,9 +353,24 @@ class SashiCLI {
         return res;
     }
 
+    wait() {
+        return new Promise(resolve => {
+            // Wait until waiting sashi cli requests are completed..
+            let waitCheck = setInterval(() => {
+                if (!this.#waiting) {
+                    clearInterval(waitCheck);
+                    resolve(true);
+                }
+            }, 100);
+        })
+    }
+
     execSashiCli(msg) {
+        this.#waiting = true;
         return new Promise((resolve, reject) => {
             exec(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' }, (err, stdout, stderr) => {
+                this.#waiting = false;
+
                 if (err || stderr) {
                     reject(err || stderr);
                     return;
@@ -352,8 +383,11 @@ class SashiCLI {
     }
 
     checkStatus() {
+        this.#waiting = true;
         return new Promise((resolve, reject) => {
             exec(`${this.cliPath} status`, { stdio: 'pipe' }, (err, stdout, stderr) => {
+                this.#waiting = false;
+
                 if (err || stderr) {
                     reject(err || stderr);
                     return;

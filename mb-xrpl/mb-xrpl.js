@@ -357,7 +357,7 @@ class SashiCLI {
     wait() {
         return new Promise(resolve => {
             // Wait until incompleted sashi cli requests are completed..
-            let waitCheck = setInterval(() => {
+            const waitCheck = setInterval(() => {
                 if (!this.#waiting) {
                     clearInterval(waitCheck);
                     resolve(true);

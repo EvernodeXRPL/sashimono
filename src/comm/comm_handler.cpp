@@ -20,6 +20,20 @@ namespace comm
     msg::msg_parser msg_parser;
     std::vector<uint8_t> read_buffer(BUFFER_SIZE, 0); // Global buffer storing the current message.
 
+    constexpr const char *FORMAT_ERROR = "format_error";
+    constexpr const char *TYPE_ERROR = "type_error";
+    constexpr const char *INIT_ERROR = "init_error";
+    constexpr const char *START_ERROR = "start_error";
+    constexpr const char *STOP_ERROR = "stop_error";
+    constexpr const char *DESTROY_ERROR = "destroy_error";
+
+    struct Callback
+{
+    double execTime;
+    void (*func)();
+};
+
+
     comm_ctx ctx;
 
     int init()
@@ -173,7 +187,7 @@ namespace comm
         if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
         {
             read_buffer.clear();
-            __HANDLE_RESPONSE("error", "format_error", -1);
+            __HANDLE_RESPONSE("error", FORMAT_ERROR, -1);
         }
 
         // Clear the buffer after the message is parsed.
@@ -193,7 +207,7 @@ namespace comm
             msg::initiate_msg init_msg;
             if (msg_parser.extract_create_message(msg) == -1 ||
                 msg_parser.extract_initiate_message(init_msg) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, FORMAT_ERROR, -1);
 
             hp::instance_info info;
             std::string error_msg;
@@ -211,10 +225,10 @@ namespace comm
         // {
         //     msg::initiate_msg msg;
         //     if (msg_parser.extract_initiate_message(msg) == -1)
-        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "format_error", -1);
+        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, FORMAT_ERROR, -1);
 
         //     if (hp::initiate_instance(msg.container_name, msg) == -1)
-        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "init_error", -1);
+        //         __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, INIT_ERROR, -1);
 
         //     __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_RES, "initiated", 0);
         // }
@@ -222,10 +236,10 @@ namespace comm
         {
             msg::destroy_msg msg;
             if (msg_parser.extract_destroy_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, FORMAT_ERROR, -1);
 
             if (hp::destroy_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "destroy_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, DESTROY_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "destroyed", 0);
         }
@@ -233,10 +247,10 @@ namespace comm
         {
             msg::start_msg msg;
             if (msg_parser.extract_start_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, FORMAT_ERROR, -1);
 
             if (hp::start_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "start_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, START_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "started", 0);
         }
@@ -244,15 +258,15 @@ namespace comm
         {
             msg::stop_msg msg;
             if (msg_parser.extract_stop_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "format_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, FORMAT_ERROR, -1);
 
             if (hp::stop_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stop_error", -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, STOP_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stopped", 0);
         }
         else
-            __HANDLE_RESPONSE("error", "type_error", -1);
+            __HANDLE_RESPONSE("error", TYPE_ERROR, -1);
 
         return 0;
     }

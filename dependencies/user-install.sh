@@ -24,6 +24,7 @@ cgroupsuffix="-cg"
 user_dir=/home/$user
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
+docker_service="docker.service"
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -96,8 +97,11 @@ done
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
-svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active docker.service)
+svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active $docker_service)
 [ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"
+
+mkdir "$user_dir"/.config/systemd/user/$docker_service.d && echo "[Service]
+Environment='DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns'" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
 
 echo "Installed rootless dockerd."
 
@@ -130,5 +134,6 @@ RestartSec=5
 WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

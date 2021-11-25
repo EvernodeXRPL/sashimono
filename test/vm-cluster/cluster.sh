@@ -16,6 +16,10 @@
 # select - Sets the currently active contract from the list of contracts defined in config.json file.
 # reconfig - Re configure the sashimono with given "max_instance_count" in all the hosts (Only update the sa.cfg, Reinstall the sashimono if "R" option is given).
 # lcl - Get lcl of the hosts.
+# peers - Get the cfg peer list of the hosts.
+# logs - Get the log lines grep by a given keywords.
+# replacebin - Replaces a given file to /usr/bin/sashimono-agent dir and keep a backup of existing file.
+
 # create - Create new sashimono hotpocket instance in each node.
 # createall - Create sashimono hotpocket instances in all nodes parallely.
 # get-unl - Construct the UNL of all the nodes (Useful when creating cfg for contract upload).
@@ -38,19 +42,20 @@ LOCKFILE="/tmp/sashiclusercfg.lock"
 trap "rm -f $LOCKFILE" EXIT
 
 PRINTFORMAT="Node %2s: %s\n"
+PRINTFORMATNL="Node %2s:\n%s\n"
 
 mode=$1
 
-if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
-   [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] || [ "$mode" == "destroy-all" ] ||
-   [ "$mode" == "ssh" ] || [ "$mode" == "sshu" ] || [ "$mode" == "attach" ] || [ "$mode" == "ip" ] || [ "$mode" == "updatecfg" ] ||
-   [ "$mode" == "statefile" ] || [ "$mode" == "umount" ] || [ "$mode" == "backup" ] || [ "$mode" == "restore" ] || [ "$mode" == "syncwith" ]; then
+if [ "$mode" == "select" ] || [ "$mode" == "reconfig" ] || [ "$mode" == "lcl" ] || [ "$mode" == "peers" ] || [ "$mode" == "logs" ] || [ "$mode" == "replacebin" ] || [ "$mode" == "get-unl" ] || [ "$mode" == "docker-pull" ] ||
+    [ "$mode" == "create" ] || [ "$mode" == "createall" ] || [ "$mode" == "start" ] || [ "$mode" == "stop" ] || [ "$mode" == "destroy" ] || [ "$mode" == "destroy-all" ] ||
+    [ "$mode" == "ssh" ] || [ "$mode" == "sshu" ] || [ "$mode" == "attach" ] || [ "$mode" == "ip" ] || [ "$mode" == "updatecfg" ] ||
+    [ "$mode" == "statefile" ] || [ "$mode" == "umount" ] || [ "$mode" == "backup" ] || [ "$mode" == "restore" ] || [ "$mode" == "syncwith" ]; then
     echo "mode: $mode"
 else
     echo "Invalid command."
-    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] |"
+    echo " Expected: select <contract name> | reconfig [N] [R] | lcl [N] | peers [N] | logs [N] [C] | replacebin [N] <filepath> | get-unl | docker-pull [N] | create [N] | createall <peerport> | start [N] | stop [N] |"
     echo " destroy [N] | destroy-all [N] | ssh <N>or<command> | sshu <N> | attach <N> | ip [N] | updatecfg [N] | statefile [N] <file> | umount [N] | backup <N> | restore [N] | syncwith <N>"
-    echo " [N]: Optional node no.   <N>: Required node no.   [R]: 'R' If sashimono needed to reinstall."
+    echo " [N]: Optional node no.   <N>: Required node no.   [R]: 'R' If sashimono needed to reinstall.   [C]: Print line count."
     exit 1
 fi
 
@@ -262,6 +267,93 @@ if [ $mode == "lcl" ]; then
         wait
     else
         getlcl $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "peers" ]; then
+    # Get peers for given host.
+    function getpeers() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
+            printf "$PRINTFORMAT" "$nodeno" "Host info is empty."
+            exit 1
+        fi
+
+        cpath="contdir=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
+        peers="jq -r '.mesh.known_peers' \$contdir/cfg/hp.cfg"
+        command="$cpath && $peers"
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        printf "$PRINTFORMAT" "$nodeno" "$output"
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            getpeers $i &
+        done
+        wait
+    else
+        getpeers $nodeid
+    fi
+    exit 0
+fi
+
+if [ $mode == "logs" ]; then
+    # Get logs for given host.
+    function getlogs() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        containername=$(echo $continfo | jq -r ".hosts.\"$hostaddr\".name")
+
+        if [ "$containername" == "" ] || [ "$containername" == "null" ]; then
+            printf "$PRINTFORMAT" "$nodeno" "Host info is empty."
+            exit 1
+        fi
+
+        linec=5
+        [ ! -z $3 ] && linec=$3
+        cpath="contdir=\$(find / -type d -path '/home/sashi*/$containername' 2>/dev/null) || [ ! -z \$contdir ]"
+        logs="cat \$contdir/log/hp.log | grep $2 | head -n $linec"
+        command="$cpath && $logs"
+        output=$(sshskp $sshuser@$hostaddr $command 2>&1 | tr '\0' '\n')
+        printf "$PRINTFORMATNL" "$nodeno" "$output"
+    }
+
+    if [ $nodeid = -1 ]; then
+        for i in "${!hostaddrs[@]}"; do
+            getlogs $i $2 $3 &
+        done
+        wait
+    else
+        getlogs $nodeid $3 $4
+    fi
+    exit 0
+fi
+
+if [ $mode == "replacebin" ]; then
+    function replacebin() {
+        hostaddr=${hostaddrs[$1]}
+        nodeno=$(expr $1 + 1)
+        replace=$2
+        filename=$(basename $replace)
+        original="/usr/bin/sashimono-agent/$filename"
+        backup="/usr/bin/sashimono-agent/$filename.bk"
+        sshskp $sshuser@$hostaddr "mv $original $backup" && scpskp -q $replace $sshuser@$hostaddr:$original
+        echo "node$nodeno: Updated $original, Kept backup $backup"
+    }
+
+    if [ $nodeid = -1 ]; then
+        [ -z $2 ] && echo "Replace file path is not specified." && exit 1
+        for i in "${!hostaddrs[@]}"; do
+            replacebin $i $2 &
+        done
+        wait
+    else
+        [ -z $3 ] && echo "Replace file path is not specified." && exit 1
+        replacebin $nodeid $3
     fi
     exit 0
 fi
@@ -596,8 +688,7 @@ if [ $mode == "destroy-all" ]; then
         hostaddr=${hostaddrs[$1]}
         nodeno=$(expr $1 + 1)
 
-        while :
-        do
+        while :; do
             containername=$(sshskp $sshuser@$hostaddr sashi list | tail +3 | head -1 | awk '{ print $1 }')
             if [ "$containername" != "" ]; then
                 echo "Node$nodeno. Destroying $containername..."
@@ -727,7 +818,7 @@ if [ $mode == "updatecfg" ]; then
 
         username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
         originalcfg="/home/$username/$containername/cfg/hp.cfg"
-        
+
         scpskp -q hp.cfg $sshuser@$hostaddr:~/
         sshskp $sshuser@$hostaddr "jq -s '.[0] * .[1]' $originalcfg ~/hp.cfg > ~/merged.cfg && mv ~/merged.cfg $originalcfg && chown $username:$username $originalcfg && rm ~/hp.cfg"
         echo "node$nodeno: Updated $originalcfg"
@@ -756,7 +847,7 @@ if [ $mode == "statefile" ]; then
         username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
         fspath="/home/$username/$containername/contract_fs"
         seedpath="$fspath/seed/state"
-        
+
         scpskp -q $localfilepath $sshuser@$hostaddr:$seedpath/
         sshskp $sshuser@$hostaddr "chown $username:$username $seedpath/$filename && rm -r $fspath/hmap && rm $fspath/log.hpfs"
         echo "node$nodeno: Transferred to $seedpath/$filename"
@@ -783,7 +874,7 @@ if [ $mode == "umount" ]; then
         username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
         contractmnt="/home/$username/$containername/contract_fs/mnt"
         ledgermnt="/home/$username/$containername/ledger_fs/mnt"
-        
+
         sshskp $sshuser@$hostaddr "fusermount -u $contractmnt ; fusermount -u $ledgermnt"
         echo "node$nodeno: Unmount complete."
     }
@@ -807,13 +898,13 @@ function downloadNode() {
     username=$(sshskp $sshuser@$hostaddr "sashi list | grep $containername | awk '{ print \$2 }'")
     contractfs="/home/$username/$containername/contract_fs"
     ledgerfs="/home/$username/$containername/ledger_fs"
-    
+
     echo "Downloading from node$nodeno"
-    rm -r contract_fs > /dev/null 2>&1
+    rm -r contract_fs >/dev/null 2>&1
     mkdir contract_fs
     scpskp -r -q $sshuser@$hostaddr:$contractfs/seed contract_fs/
 
-    rm -r ledger_fs > /dev/null 2>&1
+    rm -r ledger_fs >/dev/null 2>&1
     mkdir ledger_fs
     scpskp -r -q $sshuser@$hostaddr:$ledgerfs/seed ledger_fs/
     echo "Download complete."

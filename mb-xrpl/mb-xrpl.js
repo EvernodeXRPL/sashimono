@@ -1,7 +1,7 @@
 const fs = require('fs');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
-const { RippleAPIWrapper, EvernodeClient, EvernodeHook, RippleAPIEvents, HookEvents } = require('evernode-js-client');
+const evernode = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
 
 // Environment variables.
@@ -35,6 +35,7 @@ class MessageBoard {
         this.redeemTable = DB_TABLE_NAME;
         this.utilTable = DB_UTIL_TABLE_NAME;
         this.expiryList = [];
+        this.rippledServer = rippledServer;
 
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
@@ -42,7 +43,6 @@ class MessageBoard {
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
         this.sashiCli = new SashiCLI(sashiCliPath);
-        this.rippleAPI = new RippleAPIWrapper(rippledServer);
         this.db = new SqliteDatabase(dbPath);
     }
 
@@ -52,20 +52,25 @@ class MessageBoard {
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
-        this.evernodeClient = new EvernodeClient(this.cfg.xrpl.address, this.cfg.xrpl.secret, { hookAddress: this.cfg.xrpl.hookAddress })
-        this.rippleAPI = this.evernodeClient.rippleAPI;
+        evernode.Defaults.set({
+            hookAddress: this.cfg.xrpl.hookAddress,
+            rippledServer: rippledServer
+        })
 
-        try { await this.evernodeClient.connect(); }
+        this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.xrplApi = this.hostClient.xrplApi;
+
+        try { await this.hostClient.connect(); }
         catch (e) { throw e; }
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
-            this.evernodeClient.disconnect();
+            this.hostClient.disconnect();
             return;
         }
 
-        this.evernodeHook = new EvernodeHook(this.rippleAPI, this.cfg.xrpl.hookAddress);
-        this.evernodeHookConf = await this.evernodeHook.getConfig();
+        this.hookClient = new evernode.HookClient({ xrplApi: this.xrplApi });
+        this.evernodeHookConf = this.hostClient.hookConfig;
 
         // Check whether registration fee is already paid and trustline is made.
         await this.checkForRegistration();
@@ -75,7 +80,7 @@ class MessageBoard {
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerSequence = await this.rippleAPI.ledgerVersion;
+        this.lastValidatedLedgerIndex = await this.xrplApi.ledgerIndex;
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -84,11 +89,11 @@ class MessageBoard {
         this.db.close();
 
         // Check for instance expiry.
-        this.rippleAPI.events.on(RippleAPIEvents.LEDGER, async (e) => {
-            this.lastValidatedLedgerSequence = e.ledgerVersion;
+        this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
+            this.lastValidatedLedgerIndex = e.ledger_index;
 
             // Filter out instances which needed to be expired and destroy them.
-            const currentMoment = await this.evernodeHook.getMoment(e.ledgerVersion);
+            const currentMoment = await this.hookClient.getMoment(e.ledger_index);
             const expired = this.expiryList.filter(x => x.expiryMoment < currentMoment);
             if (expired && expired.length) {
                 this.expiryList = this.expiryList.filter(x => x.expiryMoment >= currentMoment);
@@ -109,9 +114,7 @@ class MessageBoard {
             }
         });
 
-        this.evernodeHook.events.on(HookEvents.Redeem, r => this.handleRedeem(r));
-
-        this.evernodeHook.subscribe();
+        this.hostClient.on(evernode.HostEvents.Redeem, r => this.handleRedeem(r));
     }
 
     async handleRedeem(r) {
@@ -134,13 +137,13 @@ class MessageBoard {
             await this.createRedeemRecord(txHash, userAddress, amount);
 
             // The last validated ledger when we receive the redeem request.
-            const startingValidatedLedger = this.lastValidatedLedgerSequence;
+            const startingValidatedLedger = this.lastValidatedLedgerIndex;
 
             // Wait until the sashi cli is available.
             await this.sashiCli.wait();
 
             // Number of validated ledgers passed while processing the last request.
-            let diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+            let diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
             // Give-up the redeeming porocess if processing the last request takes more than 40% of allowed window.
             let threshold = this.evernodeHookConf.redeemWindow * REDEEM_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
@@ -149,11 +152,11 @@ class MessageBoard {
                 await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
             }
             else {
-                const instanceRequirements = await this.evernodeClient.getRedeemRequirements(r.payload);
+                const instanceRequirements = r.payload;
                 const createRes = await this.sashiCli.createInstance(instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
-                diff = this.lastValidatedLedgerSequence - startingValidatedLedger;
+                diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
                 // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
                 threshold = this.evernodeHookConf.redeemWindow * REDEEM_CREATE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
@@ -166,16 +169,16 @@ class MessageBoard {
                     console.log(`Instance created for ${userAddress}`);
 
                     // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
-                    const current_ledger_seq = this.lastValidatedLedgerSequence;
+                    const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(current_ledger_seq, amount));
+                    this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(currentLedgerIndex, amount));
 
                     // Update the database for redeemed record.
-                    await this.updateRedeemedRecord(txHash, createRes.content.name, current_ledger_seq);
+                    await this.updateRedeemedRecord(txHash, createRes.content.name, currentLedgerIndex);
 
                     // Send the redeem response with created instance info.
-                    await this.evernodeClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
+                    await this.hostClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
                 }
             }
         }
@@ -185,7 +188,7 @@ class MessageBoard {
             // Update the redeem response for failures.
             await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
 
-            await this.evernodeClient.redeemError(txHash, e.content);
+            await this.hostClient.redeemError(txHash, e.content);
         }
 
         this.db.close();
@@ -200,7 +203,7 @@ class MessageBoard {
 
             // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
             console.log("Setting message key...");
-            if (!await this.evernodeClient.xrplAcc.setMessageKey(this.evernodeClient.accKeyPair.publicKey)) {
+            if (!await this.hostClient.xrplAcc.setMessageKey(this.hostClient.accKeyPair.publicKey)) {
                 console.log("Failed to set host account message key.");
                 return;
             }
@@ -208,7 +211,7 @@ class MessageBoard {
 
             console.log(`Performing Evernode host registration...`)
 
-            const tx = await this.evernodeClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location)
+            const tx = await this.hostClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location)
                 .catch(errtx => {
                     console.log("Registration failed.");
                     console.log(errtx);
@@ -225,7 +228,7 @@ class MessageBoard {
     async deregisterHost() {
         // Sends evernode host de-registration transaction.
         console.log(`Performing Evernode host deregistration...`);
-        const tx = await this.evernodeClient.deregisterHost()
+        const tx = await this.hostClient.deregisterHost()
             .catch(errtx => console.log("Deregistration failed."));
 
         if (tx)
@@ -290,10 +293,10 @@ class MessageBoard {
         }, { name: LAST_WATCHED_LEDGER });
     }
 
-    async updateRedeemedRecord(txHash, containerName, ledgerVersion) {
+    async updateRedeemedRecord(txHash, containerName, ledgerIndex) {
         await this.db.updateValue(this.redeemTable, {
             container_name: containerName,
-            created_on_ledger: ledgerVersion,
+            created_on_ledger: ledgerIndex,
             status: RedeemStatus.REDEEMED
         }, { tx_hash: txHash });
     }
@@ -303,7 +306,7 @@ class MessageBoard {
     }
 
     async getExpiryMoment(createdOnLedger, moments) {
-        return (await this.evernodeHook.getMoment(createdOnLedger)) + moments;
+        return (await this.hookClient.getMoment(createdOnLedger)) + moments;
     }
 
     readConfig() {
@@ -312,14 +315,6 @@ class MessageBoard {
 
     persistConfig() {
         fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
-    }
-
-    async getMissedPaymentTransactions(lastWatchedLedger) {
-        return await this.rippleAPI.api.getTransactions(this.cfg.xrpl.hookAddress, {
-            excludeFailures: true,
-            minLedgerVersion: lastWatchedLedger,
-            types: [RippleAPIEvents.PAYMENT]
-        });
     }
 }
 

@@ -228,6 +228,8 @@ echo "Installing Evernode xrpl message board..."
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
 (! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
+# Removing read access from the others to the config file.
+chmod o-r $mb_xrpl_conf
 
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]

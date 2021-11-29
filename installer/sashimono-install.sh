@@ -56,6 +56,11 @@ if [ ! -f /usr/local/lib/libblake3.so ]; then
     cp "$script_dir"/libblake3.so /usr/local/lib/
 fi
 
+# jq command is used for json manipulation.
+if ! command -v jq &>/dev/null; then
+    apt-get install -y jq
+fi
+
 # Libfuse
 apt-get install -y fuse3
 

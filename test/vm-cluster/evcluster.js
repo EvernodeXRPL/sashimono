@@ -3,9 +3,9 @@ import { exec } from "child_process";
 import fs from "fs";
 import evernode from "evernode-js-client";
 import { exit } from "process";
-const { UserClient, XrplAccount, XrplApi } = evernode;
+const { UserClient, XrplAccount, XrplApi, Defaults } = evernode;
 
-const REDEEM_AMOUNT = "18000"; // 18000 Moments ~ 60days
+const REDEEM_AMOUNT = "12"; // 18000 Moments ~ 60days
 const PEER_SUBSET_SIZE = 5;
 
 const configFile = "config.json";
@@ -16,6 +16,7 @@ if (!currentContract)
 
 const userAddr = config.xrpl.userAddress;
 const userSecret = config.xrpl.userSecret;
+const hookAddress = config.xrpl.hookAddress;
 let xrplApi = null;
 let userClient = null;
 let userAcc = null;
@@ -42,12 +43,13 @@ async function issueRedeem(host, hostId, elem, peers, unl) {
     // Redeem
     const acc = hostAccounts[host].hostAccount;
     console.log(`------Host ${hostId} (${host}): Redeeming ${acc.token}-${acc.address}...`);
-    const res = await userClient.redeemSubmit(acc.token, acc.address, REDEEM_AMOUNT, {
+    const req = {
         image: currentContract.docker.image,
         contract_id: currentContract.contract_id,
         owner_pubkey: currentContract.owner_pubkey,
         config: config
-    }).catch(errtx => console.log(errtx));
+    };
+    const res = await userClient.redeemSubmit(acc.token, acc.address, REDEEM_AMOUNT, req).catch(errtx => console.log(errtx));
 
     if (!res) {
         console.log(`Redeem issuing failed for host ${hostId}.`);
@@ -141,6 +143,8 @@ async function createInstancesParallely(peerPort) {
 
 async function initHosts() {
 
+    await userClient.prepareAccount();
+
     if (Object.keys(currentContract.hosts).length == 0) {
         const ips = await getVultrHosts(currentContract.vultr_group);
         ips.forEach(ip => currentContract.hosts[ip] = {});
@@ -192,7 +196,7 @@ async function transferHostingTokens(token, hostAddr, hostSecret) {
     if (!trustTx)
         return false;
 
-    const hostAcc = new XrplAccount(xrplApi, hostAddr, hostSecret);
+    const hostAcc = new XrplAccount(hostAddr, hostSecret);
     const payTx = await hostAcc.makePayment(userAddr, "9999999", token, hostAddr).catch(errtx => {
         console.log("Transfer failed.")
         console.log(errtx);
@@ -231,13 +235,20 @@ function getVultrHosts(group) {
 }
 
 async function createEvernodeConnections() {
+
     xrplApi = new XrplApi();
+
+    Defaults.set({
+        hookAddress: hookAddress,
+        xrplApi: xrplApi
+    })
+
     await xrplApi.connect();
 
-    userClient = new UserClient(userAddr, userSecret, { xrplApi: xrplApi });
+    userClient = new UserClient(userAddr, userSecret);
     await userClient.connect();
 
-    userAcc = new XrplAccount(xrplApi, userAddr, userSecret);
+    userAcc = new XrplAccount(userAddr, userSecret);
 }
 
 function saveConfig() {

@@ -1,4 +1,6 @@
 const fs = require('fs');
+const process = require('process');
+const { Buffer } = require('buffer');
 const { exec } = require("child_process");
 const logger = require('./lib/logger');
 const evernode = require('evernode-js-client');
@@ -52,25 +54,29 @@ class MessageBoard {
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
+
+
+        this.xrplApi = new evernode.XrplApi();
         evernode.Defaults.set({
             hookAddress: this.cfg.xrpl.hookAddress,
-            rippledServer: this.rippledServer
+            rippledServer: this.rippledServer,
+            xrplApi: this.xrplApi
         })
+        await this.xrplApi.connect();
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        this.xrplApi = this.hostClient.xrplApi;
-
-        try { await this.hostClient.connect(); }
-        catch (e) { throw e; }
+        await this.hostClient.connect();
+        this.evernodeHookConf = this.hostClient.hookConfig;
 
         if (IS_DEREGISTER) {
             await this.deregisterHost();
-            this.hostClient.disconnect();
+            await this.hostClient.disconnect();
+            await this.xrplApi.disconnect();
             return;
         }
 
-        this.hookClient = new evernode.HookClient({ xrplApi: this.xrplApi });
-        this.evernodeHookConf = this.hostClient.hookConfig;
+        this.hookClient = new evernode.HookClient();
+        await this.hookClient.connect();
 
         // Check whether registration fee is already paid and trustline is made.
         await this.checkForRegistration();
@@ -127,14 +133,13 @@ class MessageBoard {
         // Update last watched ledger sequence number.
         await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
 
-        const txHash = r.transaction.hash;
+        const redeemRefId = r.redeemRefId; // Redeem tx hash.
         const userAddress = r.user;
-        const userPubKey = r.transaction.SigningPubKey;
-        const amount = parseInt(r.transaction.Amount.value);
+        const amount = r.moments;
 
         try {
             console.log(`Received redeem from ${userAddress}`);
-            await this.createRedeemRecord(txHash, userAddress, amount);
+            await this.createRedeemRecord(redeemRefId, userAddress, amount);
 
             // The last validated ledger when we receive the redeem request.
             const startingValidatedLedger = this.lastValidatedLedgerIndex;
@@ -149,7 +154,7 @@ class MessageBoard {
             if (diff > threshold) {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the redeem status of the request to 'SashiTimeout'.
-                await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
+                await this.updateRedeemStatus(redeemRefId, RedeemStatus.SASHI_TIMEOUT);
             }
             else {
                 const instanceRequirements = r.payload;
@@ -162,7 +167,7 @@ class MessageBoard {
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the redeem status of the request to 'SashiTimeout'.
-                    await this.updateRedeemStatus(txHash, RedeemStatus.SASHI_TIMEOUT);
+                    await this.updateRedeemStatus(redeemRefId, RedeemStatus.SASHI_TIMEOUT);
                     // Destroy the instance.
                     await this.sashiCli.destroyInstance(createRes.content.name);
                 } else {
@@ -172,13 +177,13 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(txHash, createRes.content.name, await this.getExpiryMoment(currentLedgerIndex, amount));
+                    this.addToExpiryList(redeemRefId, createRes.content.name, await this.getExpiryMoment(currentLedgerIndex, amount));
 
                     // Update the database for redeemed record.
-                    await this.updateRedeemedRecord(txHash, createRes.content.name, currentLedgerIndex);
+                    await this.updateRedeemedRecord(redeemRefId, createRes.content.name, currentLedgerIndex);
 
                     // Send the redeem response with created instance info.
-                    await this.hostClient.redeemSuccess(txHash, userAddress, userPubKey, createRes);
+                    await this.hostClient.redeemSuccess(redeemRefId, userAddress, createRes);
                 }
             }
         }
@@ -186,41 +191,28 @@ class MessageBoard {
             console.error(e);
 
             // Update the redeem response for failures.
-            await this.updateRedeemStatus(txHash, RedeemStatus.FAILED);
+            await this.updateRedeemStatus(redeemRefId, RedeemStatus.FAILED);
 
-            await this.hostClient.redeemError(txHash, e.content);
+            await this.hostClient.redeemError(redeemRefId, e.content);
         }
 
         this.db.close();
     }
 
     async checkForRegistration() {
-
-        // We assume host account already posseses some EVR balance along with EVR trust line.
-
-        // Make registration fee evernode account.
         if (!this.cfg.xrpl.regFeeHash) {
-
-            // Set the encryption key to be used when sending encrypted redeem requirements (MessageKey account field).
-            console.log("Setting message key...");
-            if (!await this.hostClient.xrplAcc.setMessageKey(this.hostClient.accKeyPair.publicKey)) {
-                console.log("Failed to set host account message key.");
-                return;
-            }
-            console.log("Host account message key set.");
-
             console.log(`Performing Evernode host registration...`)
 
-            const tx = await this.hostClient.registerHost(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location)
-                .catch(errtx => {
-                    console.log("Registration failed.");
-                    console.log(errtx);
-                });
+            try {
+                await this.hostClient.prepareAccount();
+                const tx = await this.hostClient.register(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location);
 
-            if (tx) {
                 this.cfg.xrpl.regFeeHash = tx.id;
                 this.persistConfig();
                 console.log('Registration complete. ' + tx.id);
+            }
+            catch (err) {
+                console.log("Registration failed.", err);
             }
         }
     }
@@ -228,11 +220,14 @@ class MessageBoard {
     async deregisterHost() {
         // Sends evernode host de-registration transaction.
         console.log(`Performing Evernode host deregistration...`);
-        const tx = await this.hostClient.deregisterHost()
-            .catch(errtx => console.log("Deregistration failed."));
 
-        if (tx)
+        try {
+            const tx = await this.hostClient.deregister();
             console.log('Deregistration complete. ' + tx.id);
+        }
+        catch (err) {
+            console.log("Deregistration failed.", err)
+        }
     }
 
     addToExpiryList(txHash, containerName, expiryMoment) {

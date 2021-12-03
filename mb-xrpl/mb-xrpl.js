@@ -201,15 +201,16 @@ class MessageBoard {
 
     async checkForRegistration() {
         if (!this.cfg.xrpl.regFeeHash) {
-            console.log(`Performing Evernode host registration...`)
 
             try {
+                console.log('Preparing host account...')
                 await this.hostClient.prepareAccount();
+                console.log('Registering host...')
                 const tx = await this.hostClient.register(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location);
 
                 this.cfg.xrpl.regFeeHash = tx.id;
                 this.persistConfig();
-                console.log('Registration complete. ' + tx.id);
+                console.log('Registration complete. Tx hash: ' + tx.id);
             }
             catch (err) {
                 console.log("Registration failed.", err);

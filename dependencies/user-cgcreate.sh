@@ -15,11 +15,6 @@ if [ ! -f "$saconfig" ]; then
 fi
 
 # Calculate resourses
-# jq command is used for json manipulation.
-if ! command -v jq &>/dev/null; then
-    echo "jq utility not found. Installing.."
-    apt-get install -y jq >/dev/null 2>&1
-fi
 
 # Read config values
 max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)

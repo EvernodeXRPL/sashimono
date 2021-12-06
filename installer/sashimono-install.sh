@@ -13,7 +13,7 @@ mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="r3q12vGjcvXXEvRvcDwczesmG2jR81tvsE"
+hook_address="r4GTJAzJJnn4WxTiYc7PGZKBQmhkgTaou9"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -54,6 +54,11 @@ fi
 # Blake3
 if [ ! -f /usr/local/lib/libblake3.so ]; then
     cp "$script_dir"/libblake3.so /usr/local/lib/
+fi
+
+# jq command is used for json manipulation.
+if ! command -v jq &>/dev/null; then
+    apt-get install -y jq
 fi
 
 # Libfuse
@@ -103,7 +108,7 @@ if [ "$quiet" == "-q" ]; then
     # (This is done for testing purposes during development)
 
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="sh77XLdVqt4tKwoHknkHijiEjenJb"
+    hook_secret="saf4Q6SWBAKZy66Js33jFAaJ4FzoA"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
 
     # Generate new fauset account.

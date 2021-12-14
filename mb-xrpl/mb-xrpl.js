@@ -56,7 +56,7 @@ class MessageBoard {
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
 
 
-        this.xrplApi = new evernode.XrplApi();
+        this.xrplApi = new evernode.XrplApi(this.rippledServer);
         evernode.Defaults.set({
             hookAddress: this.cfg.xrpl.hookAddress,
             rippledServer: this.rippledServer,

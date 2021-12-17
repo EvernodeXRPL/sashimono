@@ -30,7 +30,7 @@ class TestUser {
 
     async init() {
         if (!fs.existsSync(this.configPath)) {
-            this.cfg = { xrpl: { address: "", secret: "", hookAddress: "", hostAddress: "", hostToken: "" } }
+            this.cfg = { version: '1.0.0', xrpl: { address: "", secret: "", hookAddress: "", hostAddress: "", hostToken: "" } }
             const newAcc = await createXrplAccount();
             this.cfg.xrpl.address = newAcc.address;
             this.cfg.xrpl.secret = newAcc.secret;
@@ -42,7 +42,7 @@ class TestUser {
             this.readConfig();
         }
 
-        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hostAddress || !this.cfg.xrpl.hostToken || !this.cfg.xrpl.hookAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.hostAddress || !this.cfg.xrpl.hostToken || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
         try { await this.rippleAPI.connect(); }

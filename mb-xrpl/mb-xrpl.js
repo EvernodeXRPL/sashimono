@@ -48,9 +48,16 @@ class MessageBoard {
         this.db = new SqliteDatabase(dbPath);
     }
 
+    version() {
+        this.readConfig();
+        if (!this.cfg.version)
+            throw "Version not found in config.";
+        console.log(`Message Board version: ${this.cfg.version}`);  
+    }
+
     async init() {
         this.readConfig();
-        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
@@ -395,6 +402,13 @@ class SashiCLI {
 }
 
 async function main() {
+    
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
+    if (process.argv.length === 3 && process.argv[2] === 'version') {
+
+        mb.version();
+        process.exit(0);
+    }
 
     // Logs are formatted with the timestamp and a log file will be created inside log directory.
     logger.init(LOG_PATH, FILE_LOG_ENABLED);
@@ -404,7 +418,6 @@ async function main() {
     console.log('Rippled server: ' + RIPPLED_URL);
     console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
 
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
     await mb.init();
 }
 

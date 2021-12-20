@@ -11,6 +11,7 @@ sashimono_data=/etc/sashimono
 mb_xrpl_data=$sashimono_data/mb-xrpl
 mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
+sashimono_version="1.0.0"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
 hook_address="r4GTJAzJJnn4WxTiYc7PGZKBQmhkgTaou9"
@@ -235,7 +236,7 @@ cp -r "$script_dir"/mb-xrpl $sashimono_bin
 touch $mb_xrpl_conf
 # Removing read access from the others to the config file.
 chmod o-r $mb_xrpl_conf
-(! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
+(! echo "{\"version\":\"$sashimono_version\",\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
 
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]

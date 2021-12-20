@@ -408,6 +408,13 @@ class SashiCLI {
 }
 
 async function main() {
+    
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
+    if (process.argv.length === 3 && process.argv[2] === 'version') {
+
+        mb.version();
+        process.exit(0);
+    }
 
     if (process.argv.length === 3) {
         if (process.argv[2] === 'version') {
@@ -424,7 +431,6 @@ async function main() {
         }
     }
 
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
     if (process.argv.length >= 3 && process.argv[2] === 'new') {
         mb.new(process.argv[3], process.argv[4], process.argv[5], process.argv[6], process.argv[7], process.argv[8]);
         process.exit(0);

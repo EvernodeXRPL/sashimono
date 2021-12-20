@@ -122,10 +122,7 @@ int main(int argc, char **argv)
 
     if (conf::ctx.command == "version")
     {
-        conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
-        if (conf::init() != 0)
-            return -1;
-        std::cout << "Sashimono Agent version " << conf::cfg.version << "\n";
+        std::cout << "Sashimono Agent version " << version::AGENT_VERSION << "\n";
     }
     if (conf::ctx.command == "new")
     {
@@ -156,7 +153,7 @@ int main(int argc, char **argv)
         if (crypto::init() == -1)
             return -1;
 
-        LOG_INFO << "Sashimono agent (version " << conf::cfg.version << ")";
+        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ")";
         LOG_INFO << "Log level: " << conf::cfg.log.log_level;
         LOG_INFO << "Data dir: " << conf::ctx.data_dir;
 

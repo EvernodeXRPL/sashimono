@@ -22,6 +22,7 @@ const LAST_WATCHED_LEDGER = 'last_watched_ledger';
 const REDEEM_CREATE_TIMEOUT_THRESHOLD = 0.8;
 const REDEEM_WAIT_TIMEOUT_THRESHOLD = 0.4;
 const SASHI_CLI_PATH = IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi";
+const MB_VERSION = '1.0.0';
 
 const RedeemStatus = {
     REDEEMING: 'Redeeming',
@@ -39,18 +40,30 @@ class MessageBoard {
         this.expiryList = [];
         this.rippledServer = rippledServer;
 
-        if (!fs.existsSync(this.configPath))
-            throw `${this.configPath} does not exist.`;
-        else if (!fs.existsSync(sashiCliPath))
+        if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
         this.sashiCli = new SashiCLI(sashiCliPath);
         this.db = new SqliteDatabase(dbPath);
     }
 
+    new(address = "", secret = "", hostAddress = "", token = "", location = "", instanceSize = "") {
+        if (fs.existsSync(CONFIG_PATH))
+            throw `Config file already exists at ${CONFIG_PATH}`;
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify({
+            version: MB_VERSION,
+            host: { location: location, instanceSize: instanceSize },
+            xrpl: { address: address, secret: secret, hookAddress: hostAddress, token: token }
+        }, null, 2));
+        console.log(`Config file created at ${CONFIG_PATH}`);
+    }
+
     async init() {
+        if (!fs.existsSync(this.configPath))
+            throw `${this.configPath} does not exist.`;
+
         this.readConfig();
-        if (!this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
@@ -395,6 +408,27 @@ class SashiCLI {
 }
 
 async function main() {
+    if (process.argv.length === 3) {
+        if (process.argv[2] === 'version') {
+            console.log(`Message board version: ${MB_VERSION}`);
+            process.exit(0);
+        }
+        else if (process.argv[2] === 'help') {
+            console.log(`Usage:
+        node index.js - Run message board.
+        node index.js version - Print version.
+        node index.js new [address] [secret] [hookAddress] [token] [location] [instanceSize] - Create new config file.
+        node index.js help - Print help.`);
+            process.exit(0);
+        }
+    }
+
+    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
+
+    if (process.argv.length >= 3 && process.argv[2] === 'new') {
+        mb.new(process.argv[3], process.argv[4], process.argv[5], process.argv[6], process.argv[7], process.argv[8]);
+        process.exit(0);
+    }
 
     // Logs are formatted with the timestamp and a log file will be created inside log directory.
     logger.init(LOG_PATH, FILE_LOG_ENABLED);
@@ -404,7 +438,6 @@ async function main() {
     console.log('Rippled server: ' + RIPPLED_URL);
     console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
 
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
     await mb.init();
 }
 

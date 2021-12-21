@@ -57,7 +57,7 @@ class MessageBoard {
             xrpl: { address: address, secret: secret, hookAddress: hostAddress, token: token, regFeeHash: "" }
         }, null, 2);
         fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
-        
+
         console.log(`Config file created at ${CONFIG_PATH}`);
     }
 
@@ -118,8 +118,19 @@ class MessageBoard {
             // Sending recharges every CONF_HOST_HEARTBEAT_FREQ moments.
             if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
                 this.lastRechargedMoment = currentMoment;
-                await this.hostClient.recharge();
-                console.log(`Sent a recharge at ${this.lastRechargedMoment} moment.`);
+
+                console.log(`Recharding at Moment ${this.lastRechargedMoment}...`)
+
+                try {
+                    await this.hostClient.recharge();
+                    console.log(`Recharge successful at Moment ${this.lastRechargedMoment}.`);
+                }
+                catch (err) {
+                    if (err.code === 'tecHOOK_REJECTED')
+                        console.log("Recarge rejected by the hook.");
+                    else
+                        console.log("Recharge tx error", err);
+                }
             }
 
             // Filter out instances which needed to be expired and destroy them.

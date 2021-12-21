@@ -114,16 +114,9 @@ class MessageBoard {
 
             const currentMoment = await this.hookClient.getMoment(e.ledger_index);
             // Sending recharges every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (!this.lastRechargedMoment || (currentMoment - this.lastRechargedMoment >= this.hostClient.hookConfig.hostHeartbeatFreq)) {
+            if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
                 this.lastRechargedMoment = currentMoment;
-                try {
-                    await this.hostClient.recharge();
-                }
-                catch {
-                    const amount = this.hostClient.hookConfig.minRedeem * (this.hostClient.hookConfig.hostHeartbeatFreq + 1);
-                    console.log(`Retrying recharge with '${amount}'' tokens..`)
-                    await this.hostClient.recharge(amount);
-                }
+                await this.hostClient.recharge();
                 console.log(`Sent a recharge at ${this.lastRechargedMoment} moment.`);
             }
 

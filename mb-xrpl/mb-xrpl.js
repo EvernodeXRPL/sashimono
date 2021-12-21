@@ -39,6 +39,7 @@ class MessageBoard {
         this.utilTable = DB_UTIL_TABLE_NAME;
         this.expiryList = [];
         this.rippledServer = rippledServer;
+        this.lastRechargedMoment = null;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -111,8 +112,15 @@ class MessageBoard {
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
 
-            // Filter out instances which needed to be expired and destroy them.
             const currentMoment = await this.hookClient.getMoment(e.ledger_index);
+            // Sending recharges every CONF_HOST_HEARTBEAT_FREQ moments.
+            if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
+                this.lastRechargedMoment = currentMoment;
+                await this.hostClient.recharge();
+                console.log(`Sent a recharge at ${this.lastRechargedMoment} moment.`);
+            }
+
+            // Filter out instances which needed to be expired and destroy them.
             const expired = this.expiryList.filter(x => x.expiryMoment < currentMoment);
             if (expired && expired.length) {
                 this.expiryList = this.expiryList.filter(x => x.expiryMoment >= currentMoment);

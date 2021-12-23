@@ -122,7 +122,7 @@ int main(int argc, char **argv)
 
     if (conf::ctx.command == "version")
     {
-        std::cout << "Sashimono Agent version " << version::AGENT_VERSION << "\n";
+        std::cout << version::AGENT_VERSION << "\n";
     }
     if (conf::ctx.command == "new")
     {

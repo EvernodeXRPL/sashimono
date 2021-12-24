@@ -4,13 +4,14 @@
 evernode="Evernode beta"
 sashimono_data="/etc/sashimono"
 mb_data="$sashimono_data_dir/mb-xrpl"
+maxmind_creds="653000:0yB7wwsBqCiPO2m6"
 
 [ "$1" == "-q" ] && interactive=false || interactive=true
 [ -f $sashimono_data/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 [ -f $mb_data/mb-xrpl.cfg ] && mb_installed=true || mb_installed=false
 
-inetaddr=$2
-countrycode=$3
+inetaddr=$2 # Can be IP or DNS address
+countrycode=$3 # 2-letter country code
 
 function confirm() {
     echo -en $1" [y/n] "
@@ -64,15 +65,23 @@ function set_inet_addr() {
     fi
 
     [ -z "$inetaddr" ] && echo "Invalid IP or DNS address '$inetaddr'" && exit 0
+
+    # Attempt to resolve ip (in case inetaddr is a DNS address)
+    ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+    [ -z "$ipaddr" ] && echo "Failed to resolve IP address of '$inetaddr'" && exit 0
 }
 
 function set_country_code() {
     # Attempt to auto-detect if not already specified via cli args.
     if [ -z "$countrycode" ]; then
         echo "Checking country code..."
-        # TODO:Get country code from geo-ip service api.
+        echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
-        if [ -n "$countrycode" ] && $interactive && ! confirm "Based on the internet address '$inetaddr' we have detected your country
+        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$ipaddr?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
+        countrycode=${detected:1:2}
+        [ -z $countrycode ] && echo "Could not detect country code."
+
+        if [ -n "$countrycode" ] && $interactive && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
                                                               code is '$countrycode'. Do you want to specify a different country code" ; then
             return 0
         fi
@@ -81,7 +90,7 @@ function set_country_code() {
         $interactive && read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode
     fi
 
-    [[ $countrycode =~ ^[A-Za-z][A-Za-z]$ ]] || (echo "Invalid country code '$countrycode'" && exit 0)
+    ! [[ $countrycode =~ ^[A-Za-z][A-Za-z]$ ]] && echo "Invalid country code '$countrycode'" && exit 0
     countrycode=$(echo $countrycode | tr 'a-z' 'A-Z')
 }
 

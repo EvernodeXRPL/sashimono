@@ -13,7 +13,7 @@ mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="r4GTJAzJJnn4WxTiYc7PGZKBQmhkgTaou9"
+hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
 group="sashimonousers"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
@@ -108,7 +108,7 @@ if [ "$quiet" == "-q" ]; then
     # (This is done for testing purposes during development)
 
     xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="saf4Q6SWBAKZy66Js33jFAaJ4FzoA"
+    hook_secret="shgNKT14iCV6S4HdT9r7mgqyx94Xt"
     func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
 
     # Generate new fauset account.
@@ -130,9 +130,7 @@ if [ "$quiet" == "-q" ]; then
     func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST "$acc_setup_func")
     [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
 
-    # Generate random details for instance size, location and token.
-    instance_size="AUTO "$(tr -dc A-Z </dev/urandom | head -c 10)
-    location="AUTO "$(tr -dc A-Z </dev/urandom | head -c 5)
+    # Generate random hosting token.
     token=$(tr -dc A-Z </dev/urandom | head -c 3)
 
     echo "Auto-generated host information."
@@ -141,14 +139,6 @@ else
 
     echo "Please answer following questions to setup Evernode xrpl message board."
     # Ask for input until a correct value is given
-    while [ -z "$instance_size" ] || [[ "$instance_size" =~ .*\;.* ]]; do
-        read -p "Instance size? " instance_size </dev/tty
-        ([ -z "$instance_size" ] && echo "Instance size cannot be empty.") || ([[ "$instance_size" =~ .*\;.* ]] && echo "Instance size cannot include ';'.")
-    done
-    while [ -z "$location" ] || [[ "$location" =~ .*\;.* ]]; do
-        read -p "Location? " location </dev/tty
-        ([ -z "$location" ] && echo "Location cannot be empty.") || ([[ "$location" =~ .*\;.* ]] && echo "Location cannot include ';'.")
-    done
     while [[ ! "$token" =~ ^[A-Z]{3}$ ]]; do
         read -p "Token name? " token </dev/tty
         [[ ! "$token" =~ ^[A-Z]{3}$ ]] && echo "Token name should be 3 UPPERCASE letters."
@@ -232,10 +222,9 @@ systemctl start $sashimono_service
 echo "Installing Evernode xrpl message board..."
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
-touch $mb_xrpl_conf
-# Removing read access from the others to the config file.
-chmod o-r $mb_xrpl_conf
-(! echo "{\"host\":{\"location\":\"$location\",\"instanceSize\":\"$instance_size\"},\"xrpl\":{\"address\":\"$xrp_address\",\"secret\":\"$xrp_secret\",\"token\":\"$token\",\"hookAddress\":\"$hook_address\",\"regFeeHash\":\"\"}}" | jq . >$mb_xrpl_conf) && rollback
+
+# Populate the message board config file.
+MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin new $xrp_address $xrp_secret $hook_address $token
 
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]

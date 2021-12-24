@@ -48,14 +48,16 @@ class MessageBoard {
         this.db = new SqliteDatabase(dbPath);
     }
 
-    new(address = "", secret = "", hostAddress = "", token = "", location = "", instanceSize = "") {
+    new(address = "", secret = "", hostAddress = "", token = "") {
         if (fs.existsSync(CONFIG_PATH))
             throw `Config file already exists at ${CONFIG_PATH}`;
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify({
+
+        const configJson = JSON.stringify({
             version: MB_VERSION,
-            host: { location: location, instanceSize: instanceSize },
-            xrpl: { address: address, secret: secret, hookAddress: hostAddress, token: token }
-        }, null, 2));
+            xrpl: { address: address, secret: secret, hookAddress: hostAddress, token: token, regFeeHash: "" }
+        }, null, 2);
+        fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
+
         console.log(`Config file created at ${CONFIG_PATH}`);
     }
 
@@ -116,8 +118,19 @@ class MessageBoard {
             // Sending recharges every CONF_HOST_HEARTBEAT_FREQ moments.
             if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
                 this.lastRechargedMoment = currentMoment;
-                await this.hostClient.recharge();
-                console.log(`Sent a recharge at ${this.lastRechargedMoment} moment.`);
+
+                console.log(`Recharding at Moment ${this.lastRechargedMoment}...`)
+
+                try {
+                    await this.hostClient.recharge();
+                    console.log(`Recharge successful at Moment ${this.lastRechargedMoment}.`);
+                }
+                catch (err) {
+                    if (err.code === 'tecHOOK_REJECTED')
+                        console.log("Recarge rejected by the hook.");
+                    else
+                        console.log("Recharge tx error", err);
+                }
             }
 
             // Filter out instances which needed to be expired and destroy them.
@@ -227,7 +240,7 @@ class MessageBoard {
                 console.log('Preparing host account...')
                 await this.hostClient.prepareAccount();
                 console.log('Registering host...')
-                const tx = await this.hostClient.register(this.cfg.xrpl.token, this.cfg.host.instanceSize, this.cfg.host.location);
+                const tx = await this.hostClient.register(this.cfg.xrpl.token, "AU", 1000, 1024, 4096, "AUTO test Sashimono");
 
                 this.cfg.xrpl.regFeeHash = tx.id;
                 this.persistConfig();
@@ -418,14 +431,14 @@ class SashiCLI {
 async function main() {
     if (process.argv.length === 3) {
         if (process.argv[2] === 'version') {
-            console.log(`Message board version: ${MB_VERSION}`);
+            console.log(MB_VERSION);
             process.exit(0);
         }
         else if (process.argv[2] === 'help') {
             console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [hookAddress] [token] [location] [instanceSize] - Create new config file.
+        node index.js new [address] [secret] [hookAddress] [token] - Create new config file.
         node index.js help - Print help.`);
             process.exit(0);
         }
@@ -434,7 +447,7 @@ async function main() {
     const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
 
     if (process.argv.length >= 3 && process.argv[2] === 'new') {
-        mb.new(process.argv[3], process.argv[4], process.argv[5], process.argv[6], process.argv[7], process.argv[8]);
+        mb.new(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
         process.exit(0);
     }
 

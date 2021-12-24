@@ -42,12 +42,12 @@ mkdir -p $mb_xrpl_data
 echo "Installing Sashimono..."
 
 # Install curl if not exists (required to download installation artifacts).
-if ! command -v curl &>/dev/null; then
+if [ ! command -v curl &>/dev/null ]; then
     apt-get install -y curl
 fi
 
 # Install openssl if not exists (required by Sashimono agent to create contract tls certs).
-if ! command -v openssl &>/dev/null; then
+if [ ! command -v openssl &>/dev/null ]; then
     apt-get install -y openssl
 fi
 
@@ -57,7 +57,7 @@ if [ ! -f /usr/local/lib/libblake3.so ]; then
 fi
 
 # jq command is used for json manipulation.
-if ! command -v jq &>/dev/null; then
+if [ ! command -v jq &>/dev/null ]; then
     apt-get install -y jq
 fi
 

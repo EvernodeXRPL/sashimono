@@ -65,7 +65,7 @@ namespace conf
             cfg.system.max_instance_count = 3;
             cfg.system.max_mem_kbytes = 1048576;     // Total 1GB RAM
             cfg.system.max_swap_kbytes = 3145728;    // Total 3GB swap.
-            cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
+            cfg.system.max_cpu_us = 900000;          // Total CPU allocation out of 1000000 microsec (1 sec).
             cfg.system.max_storage_kbytes = 5242880; // Total 5GB disk storage.
 
             const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);

@@ -68,6 +68,7 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
 # Setup user cgroup.
 ! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
     echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
 ! (cgcreate -g memory:$user$cgroupsuffix &&
     echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&

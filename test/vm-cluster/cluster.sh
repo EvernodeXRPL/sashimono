@@ -186,7 +186,7 @@ if [ $mode == "reconfig" ]; then
         max_instance_count=-1
     fi
 
-    cgrulesengd_service="cgrulesengdsvc"
+    cgrulesengd_service="cgrulesengd"
     sashimono_service="sashimono-agent"
     saconfig="/etc/sashimono/sa.cfg"
 

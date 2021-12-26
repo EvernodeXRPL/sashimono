@@ -3,6 +3,8 @@
 # This must be executed with root privileges.
 # -q for non-interactive (quiet) mode (This will skip the installation of xrpl message board)
 
+echo "---Sashimono installer---"
+
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl
@@ -20,11 +22,8 @@ cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
-def_cgrulesengd_service="cgrulesengdsvc"
+def_cgrulesengd_service="cgrulesengd"
 quiet=$1
-
-[ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
-    echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -40,32 +39,6 @@ mkdir -p $mb_xrpl_data
 [ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
 
 echo "Installing Sashimono..."
-
-# Install curl if not exists (required to download installation artifacts).
-if [ ! command -v curl &>/dev/null ]; then
-    apt-get install -y curl
-fi
-
-# Install openssl if not exists (required by Sashimono agent to create contract tls certs).
-if [ ! command -v openssl &>/dev/null ]; then
-    apt-get install -y openssl
-fi
-
-# Blake3
-if [ ! -f /usr/local/lib/libblake3.so ]; then
-    cp "$script_dir"/libblake3.so /usr/local/lib/
-fi
-
-# jq command is used for json manipulation.
-if [ ! command -v jq &>/dev/null ]; then
-    apt-get install -y jq
-fi
-
-# Libfuse
-apt-get install -y fuse3
-
-# Update linker library cache.
-sudo ldconfig
 
 function rollback() {
     echo "Rolling back sashimono installation."

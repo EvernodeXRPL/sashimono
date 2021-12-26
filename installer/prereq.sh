@@ -1,22 +1,24 @@
 #!/bin/bash
 # Sashimono Ubuntu prerequisites installation script.
 # This must be executed with root privileges.
-# -q for non-interactive (quiet) mode
-
-quiet=$1
 
 # Adding user disk quota limitation capability
 # Enable user quota in fstab for root mount.
-# We do not edit original file, instead we create a temp file with original and edit it.
-# Replace temp file with original only if success.
-tmp=$(mktemp -d) 
+# Enable cgroup memory and swapaccount capability.
+# Setup cgroups rules engine service.
+
+echo "---Sashimono prerequisites installer---"
+
+[ -z "$1" ] && echo "cgrules engine service name not specified." && exit 1
+
+tmp=$(mktemp -d)
 tmpfstab=$tmp.tmp
 originalfstab=/etc/fstab
 cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
+cgrulesengd_service=$1 # cgroups rules engine service name
 
 apt-get update
-apt-get install uidmap -y
 
 # Install nodejs 14 if not exists.
 if ! command -v node &>/dev/null; then
@@ -30,10 +32,43 @@ else
     fi
 fi
 
+apt-get install -y uidmap
+
 # Install slirp4netns if not exists (required for high performance rootless networking).
-if ! command -v slirp4netns &>/dev/null; then
-    apt-get -y install slirp4netns
+if [ ! command -v slirp4netns &>/dev/null ]; then
+    apt-get install -y slirp4netns
 fi
+
+# Install curl if not exists (required to download installation artifacts).
+if [ ! command -v curl &>/dev/null ]; then
+    apt-get install -y curl
+fi
+
+# Install openssl if not exists (required by Sashimono agent to create contract tls certs).
+if [ ! command -v openssl &>/dev/null ]; then
+    apt-get install -y openssl
+fi
+
+# Blake3
+if [ ! -f /usr/local/lib/libblake3.so ]; then
+    cp "$script_dir"/libblake3.so /usr/local/lib/
+fi
+
+# jq command is used for json manipulation.
+if [ ! command -v jq &>/dev/null ]; then
+    apt-get install -y jq
+fi
+
+# Libfuse
+apt-get install -y fuse3
+
+# Update linker library cache.
+sudo ldconfig
+
+# -------------------------------
+# fstab changes
+# We do not edit original file, instead we create a temp file with original and edit it.
+# Replace temp file with original only if success.
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
@@ -47,7 +82,7 @@ if [ $res -eq 0 ]; then
     updated=1
 fi
 
-# If the res is not success(0) or alredy exist(100).
+# If the res is not success(0) or already exist(100).
 [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
 
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
@@ -88,7 +123,6 @@ fi
 # -------------------------------
 
 # Check fuse config exists.
-apt-get install -y fuse3
 [ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse."
 
 # Set user_allow_other if not already configured
@@ -150,25 +184,25 @@ fi
 # Create new cgrules.conf if not exists to setup control groups.
 [ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
 
-# Setup a service to run cgroup rules generator.
-cgrulesengd_service=cgrulesengdsvc
+# Setup a service if not exists to run cgroup rules generator.
+cgrulessvc_existing=$(systemctl --type=service --no-pager | grep $cgrulesengd_service)
+if [ -z "$cgrulessvc_existing" ]; then
+    echo "[Unit]
+    Description=cgroup rules generator
+    After=network.target
 
-echo "[Unit]
-Description=cgroup rules generator
-After=network.target
+    [Service]
+    User=root
+    Group=root
+    Type=forking
+    EnvironmentFile=-/etc/cgred.conf
+    ExecStart=/usr/sbin/cgrulesengd
+    Restart=on-failure
 
-[Service]
-User=root
-Group=root
-Type=forking
-EnvironmentFile=-/etc/cgred.conf
-ExecStart=/usr/sbin/cgrulesengd
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesengd_service.service
-
-systemctl daemon-reload
+    [Install]
+    WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesengd_service.service
+    systemctl daemon-reload
+fi
 systemctl enable $cgrulesengd_service
 systemctl start $cgrulesengd_service
 
@@ -238,15 +272,6 @@ if [ $updated -eq 1 ]; then
         exit 1
     fi 
     echo "Updated grub. System needs to be rebooted to apply grub changes."
-
-    if [ "$quiet" != "-q" ]; then
-        read -p "Type 'yes' to reboot: " confirmation < /dev/tty
-        [ "$confirmation" != "yes" ] && echo "Rebooting cancelled." && exit 0
-    fi
-
-    echo "Rebooting..."
-    reboot
-
 else
     rm -r "$tmp"
     echo "Grub already configured."

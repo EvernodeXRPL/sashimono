@@ -23,14 +23,16 @@ memKB_per_instance=819200
 [ -f $sashimono_data/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 [ -f $mb_data/mb-xrpl.cfg ] && mb_installed=true || mb_installed=false
 
-inetaddr=${3}           # IP or DNS address.
-countrycode=${4}        # 2-letter country code.
-cgrulessvc=${5}         # cgroups rules engine service name.
-alloc_cpu=${6}          # CPU microsec to allocate for contract instances.
-alloc_ramKB=${7}        # RAM to allocate for contract instances.
-alloc_swapKB=${8}       # Swap to allocate for contract instances.
-alloc_diskKB=${9}       # Disk space to allocate for contract instances.
-alloc_instcount=${10}   # Total contract instance count.
+if ! $interactive ; then
+    inetaddr=${3}           # IP or DNS address.
+    countrycode=${4}        # 2-letter country code.
+    cgrulessvc=${5}         # cgroups rules engine service name.
+    alloc_cpu=${6}          # CPU microsec to allocate for contract instances.
+    alloc_ramKB=${7}        # RAM to allocate for contract instances.
+    alloc_swapKB=${8}       # Swap to allocate for contract instances.
+    alloc_diskKB=${9}       # Disk space to allocate for contract instances.
+    alloc_instcount=${10}   # Total contract instance count.
+fi
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -41,7 +43,12 @@ function echomult() {
 function confirm() {
     echo -en $1" [y/n] "
     local yn=""
+
     read yn </dev/tty
+    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
+        read -p "'y' or 'n' expected: " yn </dev/tty
+    done
+
     echo "" # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
 }
@@ -83,51 +90,82 @@ function check_sys_req() {
     echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
+function resolve_ip_addr() {
+    # Attempt to resolve ip (in case inetaddr is a DNS address)
+    # This will resolve correctly if inetaddr is a valid ip or dns address.
+    ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+
+    # If invalid, reset inetaddr and return with non-zero code.
+    if [ -z "$ipaddr" ] ; then
+        inetaddr=""
+        return 1
+    fi
+}
+
 function set_inet_addr() {
 
-    # Attempt to auto-detect if not already specified via cli args.
-    if [ -z "$inetaddr" ]; then
-        inetaddr=$(hostname -I | awk '{print $1}')
+    # Attempt to auto-detect in interactive mode or if 'auto' is specified.
+    ([[ "$inetaddr"=="auto" ]] || $interactive) && inetaddr=$(hostname -I | awk '{print $1}')
+    resolve_ip_addr
 
-        if [ -n "$inetaddr" ] && $interactive && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
-                                                  on your host. Do you want to specify a different IP or DNS address?" ; then
+    if $interactive ; then
+        
+        if [ -n "$inetaddr" ] && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
+                                                on your host. Do you want to specify a different IP or DNS address?" ; then
             return 0
         fi
 
-        # This will be asked if auto-detection fails or if user wants to specify manually.
-        $interactive && read -p "Please specify the IP or DNS address your server is reachable at: " inetaddr </dev/tty
-    fi
+        inetaddr=""
+        while [ -z "$inetaddr" ]; do
+            # This will be asked if auto-detection fails or if user wants to specify manually.
+            read -p "Please specify the IP or DNS address your server is reachable at: " inetaddr </dev/tty
+            resolve_ip_addr || echo "Invalid IP or DNS address."
+        done
 
-    [ -z "$inetaddr" ] && echo "Invalid IP or DNS address '$inetaddr'" && exit 1
+    else
+        [ -z "$inetaddr" ] && echo "Invalid IP or DNS address '$inetaddr'" && exit 1
+    fi
 }
 
-function resolve_ip_addr() {
-    # Attempt to resolve ip (in case inetaddr is a DNS address)
-    ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
-    [ -z "$ipaddr" ] && echo "Failed to resolve IP address of '$inetaddr'" && exit 1
+# Validate country code amd convert to uppercase if valid.
+function resolve_countrycode() {
+    # If invalid, reset countrycode and return with non-zero code.
+    if ! [[ $countrycode =~ ^[A-Za-z][A-Za-z]$ ]] ; then
+        countrycode=""
+        return 1
+    else
+        countrycode=$(echo $countrycode | tr 'a-z' 'A-Z')
+    fi
 }
 
 function set_country_code() {
-    # Attempt to auto-detect if not already specified via cli args.
-    if [ -z "$countrycode" ]; then
+    
+    # Attempt to auto-detect in interactive mode or if 'auto' is specified.
+    if [[ "$countrycode"=="auto" ]] || $interactive ; then
         echo "Checking country code..."
         echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
         local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$ipaddr?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
         countrycode=${detected:1:2}
-        [ -z $countrycode ] && echo "Could not detect country code."
+        resolve_countrycode || echo "Could not detect country code."
+    fi
 
-        if [ -n "$countrycode" ] && $interactive && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
-                                                              code is '$countrycode'. Do you want to specify a different country code" ; then
+    if $interactive ; then
+        if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
+                                                code is '$countrycode'. Do you want to specify a different country code" ; then
             return 0
         fi
 
-        # This will be asked if auto-detection fails or if user wants to specify manually.
-        $interactive && read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
-    fi
+        countrycode=""
+        while [ -z "$countrycode" ]; do
+            # This will be asked if auto-detection fails or if user wants to specify manually.
+            read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
+            resolve_countrycode || echo "Invalid country code."
+        done
 
-    ! [[ $countrycode =~ ^[A-Za-z][A-Za-z]$ ]] && echo "Invalid country code '$countrycode'" && exit 1
-    countrycode=$(echo $countrycode | tr 'a-z' 'A-Z')
+    else
+        resolve_countrycode || echo "Invalid country code '$countrycode'" && exit 1
+    fi
 }
 
 function set_cgrules_svc() {
@@ -241,17 +279,16 @@ if [ "$mode"=="install" ]; then
                 \nThis is beta software, so there's a chance things can go wrong. Continue?" && exit 1
 
         set_inet_addr
-        resolve_ip_addr
-        echo "Using '$inetaddr' as host internet address."
+        echo -e "Using '$inetaddr' as host internet address.\n"
 
         set_country_code
-        echo "Using '$countrycode' as country code."
+        echo -e "Using '$countrycode' as country code.\n"
 
         set_cgrules_svc
-        echo "Using '$cgrulessvc' as cgrules engine service."
+        echo -e "Using '$cgrulessvc' as cgrules engine service.\n"
 
         set_instance_alloc
-        echo "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances."
+        echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
         install_sashimono
         

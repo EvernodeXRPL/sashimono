@@ -188,7 +188,7 @@ fi
 cgrulessvc_existing=$(systemctl --type=service --no-pager | grep $cgrulesengd_service)
 if [ -z "$cgrulessvc_existing" ]; then
     echo "[Unit]
-    Description=cgroup rules generator
+    Description=cgroups rules generator
     After=network.target
 
     [Service]

@@ -85,8 +85,6 @@ function check_sys_req() {
             \nYour system does not meet some of the requirements. Aborting."
         exit 1
     fi
-
-    echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
 function resolve_ip_addr() {
@@ -240,7 +238,7 @@ function install_sashimono() {
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl $installer --output installer.tgz
+    curl -s $installer --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
@@ -257,7 +255,7 @@ function uninstall_sashimono() {
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl $installer --output installer.tgz
+    curl -s $installer --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
@@ -265,6 +263,16 @@ function uninstall_sashimono() {
     echo "Uninstalling Sashimono..."
     ! ./sashimono-uninstall.sh -q >> $logfile && uninstall_failure
     rm -r $tmp
+}
+
+function is_reboot_pending() {
+    if [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
+        echo "Your system needs to be rebooted in order to complete Sashimono installation."
+        $interactive && confirm "Reboot now?" && reboot
+        return 0
+    else
+        return 1
+    fi
 }
 
 # Begin setup execution flow --------------------
@@ -283,6 +291,7 @@ if [ "$mode"=="auto" ]; then
                 \nContinue?" && exit 1
         
         check_sys_req
+        echo "System check complete. Your system is capable of becoming an $evernode host."
         $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
                 to you since we will be making modifications to your system configuration.
                 \nThis is beta software, so there's a chance things can go wrong. Continue?" && exit 1
@@ -300,8 +309,12 @@ if [ "$mode"=="auto" ]; then
         echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
         install_sashimono
-        
+
+        echo "Sashimono installation succesful!"
     fi
+
+    is_reboot_pending
+
 elif [ "$mode"=="uninstall" ]; then
     uninstall_sashimono
 fi

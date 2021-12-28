@@ -51,6 +51,11 @@ function rollback() {
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
 chmod -R +x $sashimono_bin
 
+# Blake3
+[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/
+# Update linker library cache.
+ldconfig
+
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $user_bin
 
@@ -150,7 +155,7 @@ echo "Restarting the $cgrulesengd_service.service."
 systemctl restart $cgrulesengd_service || rollback
 
 # Install Sashimono Agent cgcreate service.
-# This is a onshot service which runs only once.
+# This is a oneshot service which runs only once.
 echo "[Unit]
 Description=Sashimono cgroup creation service.
 After=network.target

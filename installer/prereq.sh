@@ -49,11 +49,6 @@ if [ ! command -v openssl &>/dev/null ]; then
     apt-get install -y openssl
 fi
 
-# Blake3
-if [ ! -f /usr/local/lib/libblake3.so ]; then
-    cp "$script_dir"/libblake3.so /usr/local/lib/
-fi
-
 # jq command is used for json manipulation.
 if [ ! command -v jq &>/dev/null ]; then
     apt-get install -y jq
@@ -61,9 +56,6 @@ fi
 
 # Libfuse
 apt-get install -y fuse3
-
-# Update linker library cache.
-sudo ldconfig
 
 # -------------------------------
 # fstab changes
@@ -186,7 +178,7 @@ fi
 
 # Setup a service if not exists to run cgroup rules generator.
 cgrulesengd_file="/etc/systemd/system/$cgrulesengd_service.service"
-if ! [ -f "$cgrulesengd_file" ];
+if ! [ -f "$cgrulesengd_file" ]; then
     echo "[Unit]
     Description=cgroups rules generator
     After=network.target
@@ -270,7 +262,13 @@ if [ $updated -eq 1 ]; then
         mv $grub_backup /etc/default/grub
         echo "Grub update failed."
         exit 1
-    fi 
+    fi
+
+    # Indicate pending reboot in the standard reboot required file.
+    touch /run/reboot-required
+    rebootpkgs=/run/reboot-required.pkgs
+    (! [ -f $rebootpkgs ] || [ -z "$(grep sashimono $rebootpkgs)" ]) && echo "sashimono" >>$rebootpkgs
+
     echo "Updated grub. System needs to be rebooted to apply grub changes."
 else
     rm -r "$tmp"

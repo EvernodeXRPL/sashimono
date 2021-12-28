@@ -2,10 +2,10 @@
 # Evernode host setup tool to manage Sashimono installation and host registration.
 # usage:
 # ./setup.sh
-# ./setup.sh install -q
+# ./setup.sh auto -q
 # ./setup.sh uninstall
 
-[ -n "$1" ] && [ "$1" != "install" ] && [ "$1" != "uninstall" ] && echo "First arg must be 'install' or 'uninstall'" && exit 1
+[ -n "$1" ] && [ "$1" != "auto" ] && [ "$1" != "uninstall" ] && echo "First arg must be 'auto' or 'uninstall'" && exit 1
 [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
 mode=$2
 
@@ -127,7 +127,7 @@ function set_inet_addr() {
     fi
 }
 
-# Validate country code amd convert to uppercase if valid.
+# Validate country code and convert to uppercase if valid.
 function resolve_countrycode() {
     # If invalid, reset countrycode and return with non-zero code.
     if ! [[ $countrycode =~ ^[A-Za-z][A-Za-z]$ ]] ; then
@@ -171,8 +171,11 @@ function set_country_code() {
 function set_cgrules_svc() {
     if [ -z "$cgrulessvc" ]; then
         if $interactive && confirm "Do you have Linux cgroups rules engine service installed already?" ; then
-            read -p "Please specify your cgroups rules engine service name: " cgrulessvc </dev/tty
-            ! systemctl is-active --quiet $cgrulessvc && echo "$cgrulessvc service does not exist or is not active." && exit 1
+        
+            while [ -z "$cgrulessvc" ] ; do
+                read -p "Please specify your cgroups rules engine service name: " cgrulessvc </dev/tty
+                ! [ systemctl is-active --quiet $cgrulessvc ] && cgrulessvc="" && echo "'$cgrulessvc' service does not exist or is not active."
+            done
         else
             cgrulessvc=$cgrulessvc_default
         fi
@@ -196,14 +199,26 @@ function set_instance_alloc() {
                               Do you wish to change this allocation?" && return 0
 
         local ramMB=0 swapMB=0 diskMB=0
-        read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
-        ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." && exit 1
-        read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-        ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." && exit 1
-        read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-        ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." && exit 1
-        read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-        ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." && exit 1
+
+        while true ; do
+            read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
+            ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
+        done
+        
+        while true ; do
+            read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
+        done
+
+        while true ; do
+            read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
+            ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." || break
+        done
+
+        while true ; do
+            read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
+            ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
+        done
 
         alloc_ramKB=$(( ramMB * 1024 ))
         alloc_swapKB=$(( swapMB * 1024 ))
@@ -262,7 +277,7 @@ function uninstall_sashimono() {
 
 echo "Thank you for trying out $evernode!"
 
-if [ "$mode"=="install" ]; then
+if [ "$mode"=="auto" ]; then
     if ! $sashimono_installed ; then
 
         $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,

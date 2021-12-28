@@ -12,7 +12,8 @@ mode=$2
 evernode="Evernode beta"
 installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
 sashimono_data="/etc/sashimono"
-install_log="evernode-beta-host.log"
+install_log="evernode-beta-install.log"
+uninstall_log="evernode-beta-uninstall.log"
 mb_data="$sashimono_data_dir/mb-xrpl"
 maxmind_creds="653000:0yB7wwsBqCiPO2m6"
 cgrulesengd_default="cgrulesengd"
@@ -166,9 +167,8 @@ function set_country_code() {
 }
 
 function set_cgrules_svc() {
-    local filepath=$(grep -w "/usr/sbin/cgrulesengd" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    local filename=$(basename $filepath)
-    [ -z "$cgrulesengd_file" ] && cgrulesengd_service="${filename%.*}"
+    local filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
+    cgrulesengd_service="${filename%.*}"
     # If service not detected, use the default name.
     [ -z "$cgrulesengd_service" ] && cgrulesengd_service=$cgrulesengd_default || echo "cgroups rules engine service found: '$cgrulesengd_service'"
 }
@@ -244,9 +244,9 @@ function install_sashimono() {
 
     logfile=$(mktemp -d)/$install_log
     echo "Installing prerequisites..."
-    ! ./prereq.sh $cgrulesengd_service >> $logfile && install_failure
+    ! ./prereq.sh $cgrulesengd_service >> $logfile 2>&1 && install_failure
     echo "Installing Sashimono..."
-    ! ./sashimono-install.sh -q >> $logfile && install_failure
+    ! ./sashimono-install.sh -q >> $logfile 2>&1 && install_failure
     rm -r $tmp
 }
 
@@ -259,14 +259,14 @@ function uninstall_sashimono() {
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
-    logfile=$(mktemp -d)/$install_log
+    logfile=$(mktemp -d)/$uninstall_log
     echo "Uninstalling Sashimono..."
-    ! ./sashimono-uninstall.sh -q >> $logfile && uninstall_failure
+    ! ./sashimono-uninstall.sh -q >> $logfile 2>&1 && uninstall_failure
     rm -r $tmp
 }
 
 function is_reboot_pending() {
-    if [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
+    if [ -f /run/reboot-required.pkgs ] && [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
         echo "Your system needs to be rebooted in order to complete Sashimono installation."
         $interactive && confirm "Reboot now?" && reboot
         return 0
@@ -311,12 +311,14 @@ if [ "$mode"=="auto" ]; then
         install_sashimono
 
         echo "Sashimono installation succesful!"
+        echo "Installation log can be found at $logfile"
     fi
 
     is_reboot_pending
 
 elif [ "$mode"=="uninstall" ]; then
     uninstall_sashimono
-fi
 
-echo "Success! Log file: $logfile"
+    echo "Sashimono installation complete!"
+    echo "Uninstallation log can be found at $logfile"
+fi

@@ -19,6 +19,15 @@ backup=$originalfstab.sashi.bk
 cgrulesengd_service=$1 # cgroups rules engine service name
 
 apt-get update
+apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
+# uidmap        # Required for rootless docker.
+# slirp4netns   # Required for high performance rootless networking.
+# fuse3         # Required for hpfs.
+# cgroup-tools  # Required to setup contract instances resource limits.
+# quota         # Required for disk space group quota.
+# curl          # Required to download installation artifacts.
+# openssl       # Required by Sashimono agent to create contract tls certs.
+# jq            # Used for json config file manipulation.
 
 # Install nodejs 14 if not exists.
 if ! command -v node &>/dev/null; then
@@ -31,31 +40,6 @@ else
         echo "Found node $version, recommended node v14.x.x"
     fi
 fi
-
-apt-get install -y uidmap
-
-# Install slirp4netns if not exists (required for high performance rootless networking).
-if [ ! command -v slirp4netns &>/dev/null ]; then
-    apt-get install -y slirp4netns
-fi
-
-# Install curl if not exists (required to download installation artifacts).
-if [ ! command -v curl &>/dev/null ]; then
-    apt-get install -y curl
-fi
-
-# Install openssl if not exists (required by Sashimono agent to create contract tls certs).
-if [ ! command -v openssl &>/dev/null ]; then
-    apt-get install -y openssl
-fi
-
-# jq command is used for json manipulation.
-if [ ! command -v jq &>/dev/null ]; then
-    apt-get install -y jq
-fi
-
-# Libfuse
-apt-get install -y fuse3
 
 # -------------------------------
 # fstab changes
@@ -104,10 +88,6 @@ fi
 
 # Check and turn on group quota if not enabled.
 if [ ! -f /aquota.group ]; then
-    # quota package is not installed.
-    if ! command -v quota &>/dev/null; then
-        apt-get install -y quota
-    fi
     quotacheck -ugm /
     quotaon -v /
 fi
@@ -161,11 +141,6 @@ else
 fi
 
 # -------------------------------
-
-# Install cgroup-tools if not exists (required to setup resource control groups).
-if ! command -v /usr/sbin/cgconfigparser >/dev/null || ! command -v /usr/sbin/cgrulesengd >/dev/null; then
-    apt-get install -y cgroup-tools
-fi
 
 # Copy cgred.conf from examples if not exists to setup control groups.
 [ ! -f /etc/cgred.conf ] && cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
@@ -227,7 +202,7 @@ if [ $res -eq 100 ]; then
         sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
         res=$?
         if [ $res -eq 0 ]; then
-            # Check whether there's swapaccount value other that 1, If so replace value with 1.
+            # Check whether there's swapaccount value other than 1, If so replace value with 1.
             # Otherwise add swapaccount=1 after cgroup_enable=memory.
             sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" "$tmpgrub"
             res=$?

@@ -22,7 +22,6 @@ cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
 script_dir=$(dirname "$(realpath "$0")")
-def_cgrulesengd_service="cgrulesengd"
 quiet=$1
 
 # Check cgroup rule config exists.
@@ -127,31 +126,19 @@ else
     while [[ -z "$xrp_secret" ]]; do
         read -p "XRPL account secret? " xrp_secret </dev/tty
     done
-    # Ask for cgroup rule generator service until a valid service provided.
-    while true; do
-        read -p "Enter your cgroup rule generator service name (default: $def_cgrulesengd_service)? " cgrulesengd_service </dev/tty
-        # Set service name to default if user input is empty.
-        [ -z "$cgrulesengd_service" ] && cgrulesengd_service="$def_cgrulesengd_service"
-        # Remove '.service' if user has given the full name.
-        cgrulesengd_service=$(echo $cgrulesengd_service | awk '{print tolower($0)}' | sed 's/\.service$//')
-        # Break the loop if service is valid and exist.
-        [ -f /etc/systemd/system/"$cgrulesengd_service".service ] && break
-        echo "$cgrulesengd_service systemd service does not exist."
-    done
 fi
 
-# Set cgrulesengd_service to default if it's still empty.
-if [[ -z "$cgrulesengd_service" ]]; then
-    cgrulesengd_service="$def_cgrulesengd_service"
-    [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "$cgrulesengd_service systemd service does not exist." && rollback
-fi
+# Find the cgroups rules engine service.
+cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
+cgrulesengd_service="${cgrulesengd_filename%.*}"
+[ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && rollback
 
 # Setting up cgroup rules.
 echo "Creating cgroup rules..."
 ! groupadd $group && echo "Group creation failed." && rollback
 ! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 # Restart the service to apply the cgrules config.
-echo "Restarting the $cgrulesengd_service.service."
+echo "Restarting the '$cgrulesengd_service' service."
 systemctl restart $cgrulesengd_service || rollback
 
 # Install Sashimono Agent cgcreate service.
@@ -170,7 +157,7 @@ WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
 # Install xrpl message board systemd service.
 echo "Initiating the sashimono agent..."
 # Rollback if 'sagent new' failed.
-$sashimono_bin/sagent new $sashimono_data $cgrulesengd_service $selfip $registry_addr || rollback
+$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr || rollback
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.

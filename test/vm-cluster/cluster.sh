@@ -59,11 +59,6 @@ else
     exit 1
 fi
 
-# jq command is used for json manipulation.
-if ! command -v jq &>/dev/null; then
-    sudo apt-get install -y jq
-fi
-
 configfile=config.json
 if [ ! -f $configfile ]; then
     # Create default config file.

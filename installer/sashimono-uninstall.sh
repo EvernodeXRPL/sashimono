@@ -7,7 +7,6 @@ sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl
 docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
-sashimono_conf=$sashimono_data/sa.cfg
 mb_xrpl_data=$sashimono_data/mb-xrpl
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
@@ -26,9 +25,10 @@ if [ "$quiet" != "-q" ]; then
     [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
 fi
 
-# Get the cgrules service from the config.
-cgrulesengd_service=$(jq -r '.service.cgrulesengd' $sashimono_conf | awk '{print tolower($0)}' | sed 's/\.service$//')
-[ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "Warning: $cgrulesengd_service systemd service does not exist."
+# Find the cgroups rules engine service.
+cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
+cgrulesengd_service="${cgrulesengd_filename%.*}"
+[ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
 
 # Remove xrpl message board service if exists.
 if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then
@@ -123,7 +123,7 @@ rm -r $sashimono_data
 # Then we remove the attached group.
 echo "Deleting cgroup rules..."
 sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
-echo "Restarting the $cgrulesengd_service.service."
+echo "Restarting the '$cgrulesengd_service' service..."
 systemctl restart $cgrulesengd_service
 groupdel $group
 

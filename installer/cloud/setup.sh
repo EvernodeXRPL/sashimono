@@ -7,22 +7,20 @@
 
 [ -n "$1" ] && [ "$1" != "auto" ] && [ "$1" != "uninstall" ] && echo "First arg must be 'auto' or 'uninstall'" && exit 1
 [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
-mode=$2
 
 evernode="Evernode beta"
 installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
 sashimono_data="/etc/sashimono"
-install_log="evernode-beta-install.log"
-uninstall_log="evernode-beta-uninstall.log"
-mb_data="$sashimono_data_dir/mb-xrpl"
+mb_data="$sashimono_data/mb-xrpl"
 maxmind_creds="653000:0yB7wwsBqCiPO2m6"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 memKB_per_instance=819200
+install_log="evernode-beta-install.log"
 
+[ -n "$1" ] && mode=$1 || mode="auto"
 [ "$2" == "-q" ] && interactive=false || interactive=true
 [ -f $sashimono_data/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
-[ -f $mb_data/mb-xrpl.cfg ] && mb_installed=true || mb_installed=false
 
 if ! $interactive ; then
     inetaddr=${3}           # IP or DNS address.
@@ -229,7 +227,7 @@ function install_failure() {
 }
 
 function uninstall_failure() {
-    echo "There was an error during Sashimono uninstallation. Please provide the file $logfile to Evernode team. Thank you."
+    echo "There was an error during Sashimono uninstallation."
     exit 1
 }
 
@@ -261,7 +259,7 @@ function uninstall_sashimono() {
 
     logfile=$(mktemp -d)/$uninstall_log
     echo "Uninstalling Sashimono..."
-    ! ./sashimono-uninstall.sh -q >> $logfile 2>&1 && uninstall_failure
+    ! ./sashimono-uninstall.sh && uninstall_failure
     rm -r $tmp
 }
 
@@ -269,9 +267,25 @@ function is_reboot_pending() {
     if [ -f /run/reboot-required.pkgs ] && [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
         echo "Your system needs to be rebooted in order to complete Sashimono installation."
         $interactive && confirm "Reboot now?" && reboot
+        ! $interactive && echo "Rebooting..." && reboot
         return 0
     else
         return 1
+    fi
+}
+
+function reg_info() {
+    local cfg=$mb_data/mb-xrpl.cfg
+    if [ -f $cfg ] ; then
+        xrpaddr=$(jq -r '.xrpl.address' $cfg)
+        token=$(jq -r '.xrpl.token' $cfg)
+        echomult "\nYour Evernode registration info:\n
+                XRPL Account address: $xrpaddr\n
+                Hosting token: $token\n
+                Hooks testnet: https://hooks-testnet.xrpl-labs.com
+                \n\nYou will receive $evernode rewards to the account '$xrpaddr'. The account secret is stored in $cfg"
+    else
+        echo "Could not find Evernode registration info."
     fi
 }
 
@@ -279,7 +293,7 @@ function is_reboot_pending() {
 
 echo "Thank you for trying out $evernode!"
 
-if [ "$mode"=="auto" ]; then
+if [ "$mode" == "auto" ]; then
     if ! $sashimono_installed ; then
 
         $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -309,16 +323,17 @@ if [ "$mode"=="auto" ]; then
         echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
         install_sashimono
-
-        echo "Sashimono installation succesful!"
+        echo "Sashimono installation successful!"
         echo "Installation log can be found at $logfile"
+    else
+        echo "Sashimono has been installed on your system."
     fi
+
+    reg_info
 
     is_reboot_pending
 
-elif [ "$mode"=="uninstall" ]; then
+elif [ "$mode" == "uninstall" ]; then
     uninstall_sashimono
-
-    echo "Sashimono installation complete!"
-    echo "Uninstallation log can be found at $logfile"
+    echo "Sashimono uninstallation complete!"
 fi

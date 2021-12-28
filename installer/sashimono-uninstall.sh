@@ -2,6 +2,8 @@
 # Sashimono agent uninstall script.
 # -q for non-interactive (quiet) mode
 
+echo "---Sashimono uninstaller---"
+
 user_bin=/usr/bin
 sashimono_bin=/usr/bin/sashimono-agent
 mb_xrpl_bin=$sashimono_bin/mb-xrpl

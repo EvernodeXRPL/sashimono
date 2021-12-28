@@ -185,8 +185,8 @@ fi
 [ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
 
 # Setup a service if not exists to run cgroup rules generator.
-cgrulessvc_existing=$(systemctl --type=service --no-pager | grep $cgrulesengd_service)
-if [ -z "$cgrulessvc_existing" ]; then
+cgrulesengd_file="/etc/systemd/system/$cgrulesengd_service.service"
+if ! [ -f "$cgrulesengd_file" ];
     echo "[Unit]
     Description=cgroups rules generator
     After=network.target
@@ -200,7 +200,7 @@ if [ -z "$cgrulessvc_existing" ]; then
     Restart=on-failure
 
     [Install]
-    WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesengd_service.service
+    WantedBy=multi-user.target" >$cgrulesengd_file
     systemctl daemon-reload
 fi
 systemctl enable $cgrulesengd_service

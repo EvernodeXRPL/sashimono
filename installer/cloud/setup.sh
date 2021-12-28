@@ -15,7 +15,7 @@ sashimono_data="/etc/sashimono"
 install_log="evernode-beta-host.log"
 mb_data="$sashimono_data_dir/mb-xrpl"
 maxmind_creds="653000:0yB7wwsBqCiPO2m6"
-cgrulessvc_default="cgrulesengd"
+cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 memKB_per_instance=819200
 
@@ -26,12 +26,11 @@ memKB_per_instance=819200
 if ! $interactive ; then
     inetaddr=${3}           # IP or DNS address.
     countrycode=${4}        # 2-letter country code.
-    cgrulessvc=${5}         # cgroups rules engine service name.
-    alloc_cpu=${6}          # CPU microsec to allocate for contract instances.
-    alloc_ramKB=${7}        # RAM to allocate for contract instances.
-    alloc_swapKB=${8}       # Swap to allocate for contract instances.
-    alloc_diskKB=${9}       # Disk space to allocate for contract instances.
-    alloc_instcount=${10}   # Total contract instance count.
+    alloc_cpu=${5}          # CPU microsec to allocate for contract instances.
+    alloc_ramKB=${6}        # RAM to allocate for contract instances.
+    alloc_swapKB=${7}       # Swap to allocate for contract instances.
+    alloc_diskKB=${8}       # Disk space to allocate for contract instances.
+    alloc_instcount=${9}    # Total contract instance count.
 fi
 
 # Helper to print multi line text.
@@ -151,12 +150,12 @@ function set_country_code() {
     fi
 
     if $interactive ; then
-        if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
-                                                code is '$countrycode'. Do you want to specify a different country code" ; then
-            return 0
-        fi
+        # if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
+        #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
+        #     return 0
+        # fi
+        # countrycode=""
 
-        countrycode=""
         while [ -z "$countrycode" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
             read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
@@ -169,19 +168,11 @@ function set_country_code() {
 }
 
 function set_cgrules_svc() {
-    if [ -z "$cgrulessvc" ]; then
-        if $interactive && confirm "Do you have Linux cgroups rules engine service installed already?" ; then
-        
-            while [ -z "$cgrulessvc" ] ; do
-                read -p "Please specify your cgroups rules engine service name: " cgrulessvc </dev/tty
-                ! [ systemctl is-active --quiet $cgrulessvc ] && cgrulessvc="" && echo "'$cgrulessvc' service does not exist or is not active."
-            done
-        else
-            cgrulessvc=$cgrulessvc_default
-        fi
-    fi
-
-    [ -z "$cgrulessvc" ] && echo "Invalid cgrules engine service name '$cgrulessvc'" && exit 1
+    local filepath=$(grep -w "/usr/sbin/cgrulesengd" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+    local filename=$(basename $filepath)
+    [ -z "$cgrulesengd_file" ] && cgrulesengd_service="${filename%.*}"
+    # If service not detected, use the default name.
+    [ -z "$cgrulesengd_service" ] && cgrulesengd_service=$cgrulesengd_default || echo "cgroups rules engine service found: '$cgrulesengd_service'"
 }
 
 function set_instance_alloc() {
@@ -194,9 +185,12 @@ function set_instance_alloc() {
     [ -z $alloc_instcount ] && alloc_instcount=$(( (alloc_ramKB + alloc_swapKB) / memKB_per_instance ))
 
     if $interactive; then
-        ! confirm "Based on your system resources, we will allocate $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap
-                              and $(GB $alloc_diskKB) disk space to be distributed among $alloc_instcount contract instances.
-                              Do you wish to change this allocation?" && return 0
+        echomult "Based on your system resources, we have chosen the following allocation:\n
+                $(GB $alloc_ramKB) RAM\n
+                $(GB $alloc_swapKB) Swap\n
+                $(GB $alloc_diskKB) disk space\n
+                Distributed among $alloc_instcount contract instances"
+        ! confirm "Do you wish to change this allocation?" && return 0
 
         local ramMB=0 swapMB=0 diskMB=0
 
@@ -204,7 +198,7 @@ function set_instance_alloc() {
             read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
             ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
         done
-        
+
         while true ; do
             read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
             ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
@@ -252,7 +246,7 @@ function install_sashimono() {
 
     logfile=$(mktemp -d)/$install_log
     echo "Installing prerequisites..."
-    ! ./prereq.sh $cgrulessvc >> $logfile && install_failure
+    ! ./prereq.sh $cgrulesengd_service >> $logfile && install_failure
     echo "Installing Sashimono..."
     ! ./sashimono-install.sh -q >> $logfile && install_failure
     rm -r $tmp
@@ -300,7 +294,7 @@ if [ "$mode"=="auto" ]; then
         echo -e "Using '$countrycode' as country code.\n"
 
         set_cgrules_svc
-        echo -e "Using '$cgrulessvc' as cgrules engine service.\n"
+        echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
 
         set_instance_alloc
         echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"

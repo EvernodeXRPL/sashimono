@@ -14,7 +14,8 @@ sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
 registryuser="sashidockerreg"
-group="sashimonousers"
+mb_user="sashimbxrpl"
+group="sashiuser"
 admin_group="sashiadmin"
 cgroupsuffix="-cg"
 quiet=$1
@@ -32,11 +33,14 @@ cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/system
 cgrulesengd_service="${cgrulesengd_filename%.*}"
 [ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
 
+# Message board user.
+mb_user_dir=/home/"$mb_user"
+mb_user_id=$(id -u "$mb_user")
+mb_user_runtime_dir="/run/user/$mb_user_id"
 # Remove xrpl message board service if exists.
-if [ -f /etc/systemd/system/$mb_xrpl_service.service ]; then
-    systemctl stop $mb_xrpl_service
-    systemctl disable $mb_xrpl_service
-    rm /etc/systemd/system/$mb_xrpl_service.service
+if [ -f "$mb_user_dir"/.config/systemd/user/$mb_xrpl_service.service ]; then
+    sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $mb_xrpl_service
+    sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $mb_xrpl_service
 fi
 if [ "$quiet" == "-q" ]; then
     # We only perform this for our testing setup during development.
@@ -59,7 +63,12 @@ fi
 
 # Deregister evernode message board host registration.
 echo "Attempting Evernode xrpl message board host deregistration..."
-MB_DATA_DIR=$mb_xrpl_data MB_LOG=1 MB_DEREGISTER=1 node $mb_xrpl_bin
+sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data MB_LOG=1 MB_DEREGISTER=1 node $mb_xrpl_bin
+
+echo "Deleting message board user..."
+killall -u $mb_user # Kill any running processes.
+userdel -f "$mb_user"
+rm -r /home/"${mb_user:?}"
 
 # Uninstall all contract instance users
 prefix="sashi"

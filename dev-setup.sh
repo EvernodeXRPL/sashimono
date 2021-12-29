@@ -93,7 +93,7 @@ popd > /dev/null 2>&1
 sudo rm -r $workdir
 
 # Setting up cgroup rules.
-group="sashimonousers"
+group="sashiuser"
 cgroupsuffix="-cg"
 ! sudo groupadd $group && echo "Group creation failed."
 ! sudo echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed."

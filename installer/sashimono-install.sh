@@ -9,13 +9,13 @@ mb_xrpl_bin=$sashimono_bin/mb-xrpl
 docker_bin=$sashimono_bin/dockerbin
 sashimono_data=/etc/sashimono
 mb_xrpl_data=$sashimono_data/mb-xrpl
-mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
 sashimono_service="sashimono-agent"
 cgcreate_service="sashimono-cgcreate"
 mb_xrpl_service="sashimono-mb-xrpl"
 hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
-group="sashimonousers"
+group="sashiuser"
 admin_group="sashiadmin"
+mb_user="sashimbxrpl"
 cgroupsuffix="-cg"
 registryuser="sashidockerreg"
 registryport=4444
@@ -36,8 +36,6 @@ mkdir -p $docker_bin
 [ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
 mkdir -p $sashimono_data
 [ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
-mkdir -p $mb_xrpl_data
-[ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
 
 echo "Installing Sashimono..."
 
@@ -223,8 +221,42 @@ echo "Installing Evernode xrpl message board..."
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
 
+
+# Creating message board user.
+useradd --shell /usr/sbin/nologin -m "$mb_user"
+usermod --lock "$mb_user"
+usermod -a -G $admin_group "$mb_user"
+loginctl enable-linger "$mb_user" # Enable lingering to support service installation.
+
+# First create the folder from root and then transfer ownership to the user
+# since the folder is created in /etc/sashimono directory.
+mkdir -p $mb_xrpl_data
+[ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
+# Change ownership to message board user.
+chown "$mb_user":"$mb_user" $mb_xrpl_data
+
+mb_user_dir=/home/"$mb_user"
+mb_user_id=$(id -u "$mb_user")
+mb_user_runtime_dir="/run/user/$mb_user_id"
+
+# Setup env variable for the message board user.
+echo "
+export XDG_RUNTIME_DIR=$mb_user_runtime_dir" >>"$mb_user_dir"/.bashrc
+echo "Updated mb user .bashrc."
+
+user_systemd=""
+for ((i = 0; i < 30; i++)); do
+    sleep 0.1
+    user_systemd=$(sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
+    [ "$user_systemd" == "running" ] && break
+done
+[ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
+
 # Populate the message board config file.
-MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin new $xrp_address $xrp_secret $hook_address $token
+# Run as the message board user.
+sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin new "$xrp_address" "$xrp_secret" $hook_address "$token"
+
+! (sudo -u $mb_user mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "user systemd folder creation failed" && rollback
 
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]
@@ -232,20 +264,18 @@ Description=Running and monitoring evernode xrpl transactions.
 After=network.target
 StartLimitIntervalSec=0
 [Service]
-User=root
-Group=root
 Type=simple
 WorkingDirectory=$mb_xrpl_bin
 Environment=\"MB_DATA_DIR=$mb_xrpl_data\"
-ExecStart=node $mb_xrpl_bin
+ExecStart=/usr/bin/node $mb_xrpl_bin
 Restart=on-failure
 RestartSec=5
 [Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$mb_xrpl_service.service
+WantedBy=default.target" | sudo -u $mb_user tee "$mb_user_dir"/.config/systemd/user/$mb_xrpl_service.service > /dev/null
 
 # This service needs to be restarted when mb-xrpl.cfg is changed.
-systemctl enable $mb_xrpl_service
-systemctl start $mb_xrpl_service
+sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $mb_xrpl_service
+sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $mb_xrpl_service
 echo "Installed Evernode xrpl message board."
 
 echo "Sashimono installed successfully."

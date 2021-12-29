@@ -10,7 +10,6 @@ const https = require('https');
 // Environment variables.
 const IS_DEV_MODE = process.env.MB_DEV === "1";
 const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
-const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
 const DATA_DIR = process.env.MB_DATA_DIR || __dirname;
 const FAUCET_URL = process.env.MB_FAUCET_URL || "https://hooks-testnet.xrpl-labs.com/newcreds"
@@ -73,18 +72,8 @@ class MessageBoard {
         await this.hostClient.connect();
         this.evernodeHookConf = this.hostClient.hookConfig;
 
-        if (IS_DEREGISTER) {
-            await this.deregisterHost();
-            await this.hostClient.disconnect();
-            await this.xrplApi.disconnect();
-            return;
-        }
-
         this.hookClient = new evernode.HookClient();
         await this.hookClient.connect();
-
-        // Check whether registration fee is already paid and trustline is made.
-        await this.checkForRegistration();
 
         this.db.open();
         // Create redeem table if not exist.
@@ -220,38 +209,6 @@ class MessageBoard {
         }
 
         this.db.close();
-    }
-
-    async checkForRegistration() {
-        if (!this.cfg.xrpl.regFeeHash) {
-
-            try {
-                console.log('Preparing host account...')
-                await this.hostClient.prepareAccount();
-                console.log('Registering host...')
-                const tx = await this.hostClient.register(this.cfg.xrpl.token, "AU", 1000, 1024, 4096, "AUTO test Sashimono");
-
-                this.cfg.xrpl.regFeeHash = tx.id;
-                this.persistConfig();
-                console.log('Registration complete. Tx hash: ' + tx.id);
-            }
-            catch (err) {
-                console.log("Registration failed.", err);
-            }
-        }
-    }
-
-    async deregisterHost() {
-        // Sends evernode host de-registration transaction.
-        console.log(`Performing Evernode host deregistration...`);
-
-        try {
-            const tx = await this.hostClient.deregister();
-            console.log('Deregistration complete. ' + tx.id);
-        }
-        catch (err) {
-            console.log("Deregistration failed.", err)
-        }
     }
 
     addToExpiryList(txHash, containerName, expiryMoment) {
@@ -421,7 +378,7 @@ class Setup {
 
     async #httpPost(url) {
         return new Promise(resolve => {
-            https.post(url, (resp) => {
+            const req = https.request(url, { method: 'POST' }, (resp) => {
                 let data = '';
                 resp.on('data', (chunk) => data += chunk);
                 resp.on('end', () => resolve(data));
@@ -429,24 +386,32 @@ class Setup {
                 console.log(err);
                 resolve(null);
             });
+
+            req.on('error', (err) => {
+                console.log(err);
+                resolve(null);
+            })
+
+            req.on('timeout', () => {
+                console.log('Request timed out.');
+                resolve(null);
+            })
+
+            req.end()
         })
     }
 
     async #generateFaucetAccount() {
-        try {
-            const resp = await this.#httpPost(FAUCET_URL);
-            if (!resp)
-                throw "Faucet generation error.";
+        console.log("Generating faucet account...");
+        const resp = await this.#httpPost(FAUCET_URL);
+        if (!resp)
+            throw "Faucet generation error.";
 
-            const json = JSON.parse(resp);
-            return {
-                address: json.xrp_address,
-                secret: json.xrp_secret
-            };
-        }
-        catch {
-            throw "JSON parse error in faucet account generation.";
-        }
+        const json = JSON.parse(resp);
+        return {
+            address: json.address,
+            secret: json.secret
+        };
     }
 
     #getRandomToken() {
@@ -458,36 +423,44 @@ class Setup {
         return result;
     }
 
+    #getConfigAccount() {
+        if (!fs.existsSync(CONFIG_PATH))
+            throw `Config file does not exist at ${CONFIG_PATH}`;
+        return JSON.parse(fs.readFileSync(CONFIG_PATH).toString()).xrpl;
+    }
+
     async #sendEversFromHook(hostAddress) {
+        console.log("Sending EVRs...");
         const resp = await this.#httpPost(EVR_SEND_URL + hostAddress);
         if (!resp)
             throw "EVR send error.";
     }
 
     async generateBetaHostAccount(hookAddress) {
+
+        evernode.Defaults.set({
+            hookAddress: hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
         const acc = await this.#generateFaucetAccount();
         acc.token = this.#getRandomToken();
 
+        // Wait few seconds until the entire xrpl cluster catches up with new account.
+        await new Promise(resolve => setTimeout(resolve, 4000));
+
         // Prepare host account.
         {
-            const xrplApi = new evernode.XrplApi(RIPPLED_URL);
-            evernode.Defaults.set({
-                hookAddress: hookAddress,
-                rippledServer: RIPPLED_URL,
-                xrplApi: xrplApi
-            })
-            await xrplApi.connect();
-
+            console.log("Preparing host account...");
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
             await hostClient.prepareAccount();
             await hostClient.disconnect();
-            await xrplApi.disconnect();
         }
 
         // Send EVRs from hook to host account.
         {
-            this.#sendEversFromHook(acc.address);
+            await this.#sendEversFromHook(acc.address);
         }
 
         return acc;
@@ -499,37 +472,93 @@ class Setup {
 
         const configJson = JSON.stringify({
             version: MB_VERSION,
-            xrpl: { address: address, secret: secret, hookAddress: hookAddress, token: token, regFeeHash: "" }
+            xrpl: { address: address, secret: secret, hookAddress: hookAddress, token: token }
         }, null, 2);
         fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
 
         console.log(`Config file created at ${CONFIG_PATH}`);
     }
+
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, description) {
+        console.log("Registering host...");
+        const acc = this.#getConfigAccount();
+        evernode.Defaults.set({
+            hookAddress: acc.hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+        await hostClient.register(acc.token, countryCode, cpuMicroSec,
+            Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), description.replace('_', ' '));
+        await hostClient.disconnect();
+    }
+
+    async deregister() {
+        console.log("Deregistering host...");
+        const acc = this.#getConfigAccount();
+        evernode.Defaults.set({
+            hookAddress: acc.hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+        await hostClient.deregister();
+        await hostClient.disconnect();
+    }
+
+    async regInfo() {
+        const acc = this.#getConfigAccount();
+        console.log(`Host account address: ${acc.address}`);
+        console.log(`Hosting token: ${acc.token}`);
+        console.log(`Hook address: ${acc.hookAddress}`);
+        await Promise.resolve(); // TODO: Get EVR balance.
+    }
 }
 
 async function main() {
-    try {
-        if (process.argv.length === 3) {
 
-            if (process.argv[2] === 'version') {
-                console.log(MB_VERSION);
-            }
+    if (process.argv[2] === 'version') {
+        console.log(MB_VERSION);
+    }
+
+    try {
+        if (process.argv.length >= 3) {
+            console.log('Evernode xrpl message board setup');
+
             if (process.argv.length >= 3 && process.argv[2] === 'new') {
-                const setup = new Setup();
-                setup.newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
+                new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'betagen') {
+                const hookAddress = process.argv[3];
                 const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(process.argv[3]);
-                console.log(acc);
+                const acc = await setup.generateBetaHostAccount(hookAddress);
+                await setup.newConfig(acc.address, acc.secret, hookAddress, acc.token);
+            }
+            else if (process.argv.length === 9 && process.argv[2] === 'register') {
+                await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), process.argv[8]);
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
+                await new Setup().deregister();
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'reginfo') {
+                await new Setup().regInfo();
             }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [hookAddress] [token] - Create new config file.
-        node index.js betagen [hookAddress] - Generate beta host account.
+        node index.js betagen [hookAddress] - Generate beta host account and populate config.
+        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [description] - Register the host on Evernode.
+        node index.js deregister - Deregister the host from Evernode.
+        node index.js reginfo - Display Evernode registration info.
         node index.js help - Print help.`);
+            }
+            else {
+                throw "Invalid args.";
             }
         }
         else {
@@ -548,6 +577,7 @@ async function main() {
     }
     catch (err) {
         console.log(err);
+        console.log("Evernode xrpl message board exiting with error.");
         process.exit(1);
     }
 

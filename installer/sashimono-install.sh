@@ -1,28 +1,19 @@
 #!/bin/bash
 # Sashimono agent installation script.
 # This must be executed with root privileges.
-# -q for non-interactive (quiet) mode (This will skip the installation of xrpl message board)
 
 echo "---Sashimono installer---"
 
-user_bin=/usr/bin
-sashimono_bin=/usr/bin/sashimono-agent
-mb_xrpl_bin=$sashimono_bin/mb-xrpl
-docker_bin=$sashimono_bin/dockerbin
-sashimono_data=/etc/sashimono
-mb_xrpl_data=$sashimono_data/mb-xrpl
-sashimono_service="sashimono-agent"
-cgcreate_service="sashimono-cgcreate"
-mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
-group="sashiuser"
-admin_group="sashiadmin"
-mb_user="sashimbxrpl"
-cgroupsuffix="-cg"
-registryuser="sashidockerreg"
-registryport=4444
+inetaddr=$1
+countrycode=$2
+inst_count=$3
+cpuMicroSec=$4
+ramKB=$5
+swapKB=$6
+diskKB=$7
+description=$8
+
 script_dir=$(dirname "$(realpath "$0")")
-quiet=$1
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -39,7 +30,7 @@ echo "Installing Sashimono..."
 
 function rollback() {
     echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh -q # Quiet uninstall.
+    "$script_dir"/sashimono-uninstall.sh
     echo "Rolled back the installation."
     exit 1
 }
@@ -62,69 +53,17 @@ cp "$script_dir"/sashi $user_bin
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
-# Detect self host address
-selfip=$(hostname -I)
-
 # Install private docker registry.
 # (Disabled until secure registry configuration)
 # ./registry-install.sh $docker_bin $registryuser $registryport
 # [ "$?" == "1" ] && rollback
-# registry_addr=$selfip:$registryport
+# registry_addr=$inetaddr:$registryport
 
 # Setting up Sashimono admin group.
 ! groupadd $admin_group && echo "Admin group creation failed." && rollback
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $sashimono_data
-
-if [ "$quiet" == "-q" ]; then
-
-    # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
-    # (This is done for testing purposes during development)
-
-    xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="shgNKT14iCV6S4HdT9r7mgqyx94Xt"
-    func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
-
-    # Generate new fauset account.
-    echo "Generating XRP faucet account..."
-    new_acc=$(curl -X POST $xrpl_faucet_url)
-    # If result is not a json, account generation failed.
-    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl faucet account generation failed." && rollback
-    xrp_address=$(echo $new_acc | jq -r '.address')
-    xrp_secret=$(echo $new_acc | jq -r '.secret')
-    ([ "$xrp_address" == "" ] || [ "$xrp_address" == "null" ] ||
-        [ "$xrp_secret" == "" ] || [ "$xrp_secret" == "null" ]) && echo "Invalid generated xrpl account details: $new_acc" && rollback
-
-    # Wait a small interval so the XRP account gets replicated in the testnet (otherwise we may get 'Account not found' errors).
-    sleep 4
-
-    # Setup the host xrpl account with an EVR balance and default rippling flag.
-    echo "Setting up host XRP account..."
-    acc_setup_func="$func_url&action=setuphost&hookaddr=$hook_address&hooksecret=$hook_secret&addr=$xrp_address&secret=$xrp_secret"
-    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST "$acc_setup_func")
-    [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
-
-    # Generate random hosting token.
-    token=$(tr -dc A-Z </dev/urandom | head -c 3)
-
-    echo "Auto-generated host information."
-
-else
-
-    echo "Please answer following questions to setup Evernode xrpl message board."
-    # Ask for input until a correct value is given
-    while [[ ! "$token" =~ ^[A-Z]{3}$ ]]; do
-        read -p "Token name? " token </dev/tty
-        [[ ! "$token" =~ ^[A-Z]{3}$ ]] && echo "Token name should be 3 UPPERCASE letters."
-    done
-    while [[ -z "$xrp_address" ]]; do
-        read -p "XRPL account address? " xrp_address </dev/tty
-    done
-    while [[ -z "$xrp_secret" ]]; do
-        read -p "XRPL account secret? " xrp_secret </dev/tty
-    done
-fi
 
 # Find the cgroups rules engine service.
 cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
@@ -155,7 +94,7 @@ WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
 # Install xrpl message board systemd service.
 echo "Initiating the sashimono agent..."
 # Rollback if 'sagent new' failed.
-$sashimono_bin/sagent new $sashimono_data $selfip $registry_addr || rollback
+$sashimono_bin/sagent new $sashimono_data $inetaddr $registry_addr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -185,7 +124,6 @@ systemctl start $sashimono_service
 echo "Installing Evernode xrpl message board..."
 
 cp -r "$script_dir"/mb-xrpl $sashimono_bin
-
 
 # Creating message board user.
 useradd --shell /usr/sbin/nologin -m "$mb_user"
@@ -217,11 +155,13 @@ for ((i = 0; i < 30; i++)); do
 done
 [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
-# Populate the message board config file.
-# Run as the message board user.
-sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin new "$xrp_address" "$xrp_secret" $hook_address "$token"
+# Generate beta host account.
+! sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin betagen $hook_address && echo "ACCGEN_FAILURE" && rollback
+# Register the host on Evernode.
+! sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin register \
+    $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
 
-! (sudo -u $mb_user mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "user systemd folder creation failed" && rollback
+! (sudo -u $mb_user mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
 
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]

@@ -1,23 +1,34 @@
 #!/bin/bash
 # Evernode host setup tool to manage Sashimono installation and host registration.
 # usage:
-# ./setup.sh
-# ./setup.sh auto -q
-# ./setup.sh uninstall
+# ./setup.sh install
 
 evernode="Evernode beta"
-installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
-mb_xrpl_bin=/usr/bin/sashimono-agent/mb-xrpl
-sashimono_data="/etc/sashimono"
-mb_data="$sashimono_data/mb-xrpl"
 maxmind_creds="653000:0yB7wwsBqCiPO2m6"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 memKB_per_instance=819200
-hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
 evernode_alias=/usr/bin/evernode
 install_log="evernode-beta-install.log"
 script_url="https://sthotpocket.blob.core.windows.net/evernode/setup.sh"
+installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
+
+export user_bin=/usr/bin
+export sashimono_bin=/usr/bin/sashimono
+export mb_xrpl_bin=$sashimono_bin/mb-xrpl
+export docker_bin=$sashimono_bin/dockerbin
+export sashimono_data=/etc/sashimono
+export mb_xrpl_data=$sashimono_data/mb-xrpl
+export sashimono_service="sashimono-agent"
+export cgcreate_service="sashimono-cgcreate"
+export mb_xrpl_service="sashimono-mb-xrpl"
+export group="sashiuser"
+export admin_group="sashiadmin"
+export mb_user="sashimbxrpl"
+export registryuser="sashidockerreg"
+export cgroupsuffix="-cg"
+export registryport=4444
+export hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
 
 [ -f $sashimono_data/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 
@@ -256,7 +267,8 @@ function install_sashimono() {
     echo "Installing prerequisites..."
     ! ./prereq.sh $cgrulesengd_service >> $logfile 2>&1 && install_failure
     echo "Installing Sashimono..."
-    ! ./sashimono-install.sh -q >> $logfile 2>&1 && install_failure
+    ! ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description >> $logfile 2>&1 && install_failure
+            
     rm -r $tmp
 }
 
@@ -273,18 +285,6 @@ function uninstall_sashimono() {
     echo "Uninstalling Sashimono..."
     ! ./sashimono-uninstall.sh && uninstall_failure
     rm -r $tmp
-}
-
-function prepare_host_account() {
-    echo "Generating host account on XRPL hooks testnet..."
-    local acc=$(node $mb_xrpl_bin betagen $hook_address)
-    local xrp_addr=$(jq -r '.xrpl.address' $cfg)
-    local xrp_secret=$(jq -r '.xrpl.secret' $cfg)
-    local token=$(jq -r '.xrpl.token' $cfg)
-    ([ -z "$xrp_addr" ] || [ -z "$xrp_secret" ] || [ -z "$token" ]) && echo "Host account genertion failure." >> $logfile && install_failure
-    
-    # Create message board config file with generated account info.
-    MB_DATA_DIR=$mb_data node $mb_xrpl_bin new $xrp_address $xrp_secret $hook_address $token >> $logfile 2>&1 && install_failure
 }
 
 # Create a copy of this same script as a command.
@@ -309,17 +309,9 @@ function check_reboot_pending() {
 }
 
 function reg_info() {
-    local cfg=$mb_data/mb-xrpl.cfg
-    if [ -f $cfg ] ; then
-        local xrpaddr=$(jq -r '.xrpl.address' $cfg)
-        local token=$(jq -r '.xrpl.token' $cfg)
-        echomult "\nYour $evernode registration info:\n
-                XRPL account address: $xrpaddr\n
-                Hosting token: $token\n
-                Hooks testnet: https://hooks-testnet.xrpl-labs.com
-                \n\nYou will receive $evernode rewards to the account '$xrpaddr'. The account secret is stored in $cfg"
-    else
-        echo "Could not find $evernode registration info."
+    echo "Your $evernode registration info:"
+    if sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin reginfo ; then
+        echo "You are receiving $evernode rewards to the above account. The account secret is stored in $cfg"
     fi
 }
 
@@ -339,6 +331,9 @@ if [ "$mode" == "install" ]; then
             alloc_swapKB=${7}       # Swap to allocate for contract instances.
             alloc_diskKB=${8}       # Disk space to allocate for contract instances.
             alloc_instcount=${9}    # Total contract instance count.
+            description=${10}       # Registration description (underscore for spaces).
+        else
+            description="Evernode_host"
         fi
 
         $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -368,7 +363,6 @@ if [ "$mode" == "install" ]; then
         echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
         install_sashimono
-        prepare_host_account
         create_evernode_alias
 
         echomult "Installation successful! Installation log can be found at $logfile

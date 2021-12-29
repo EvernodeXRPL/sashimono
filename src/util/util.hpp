@@ -49,6 +49,8 @@ namespace util
 
     int stoul(const std::string &str, uint16_t &result);
 
+    int stoull(const std::string &str, uint64_t &result);
+
     const std::string get_user_contract_dir(const std::string &username, std::string_view container_name);
 
     int get_system_user_info(std::string_view username, user_info &user_info);

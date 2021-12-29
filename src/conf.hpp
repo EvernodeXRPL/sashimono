@@ -123,7 +123,8 @@ namespace conf
 
     int init();
 
-    int create(std::string_view host_addr, std::string_view registry_addr);
+    int create(std::string_view host_addr, std::string_view registry_addr, const size_t inst_count,
+               const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes);
 
     void set_dir_paths(std::string exepath, std::string datadir);
 

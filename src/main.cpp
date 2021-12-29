@@ -13,15 +13,15 @@
 #include "util/util.hpp"
 #include "killswitch/killswitch.h"
 
-#define PARSE_ERROR                                                                               \
-    {                                                                                             \
-        std::cerr << "Arguments mismatch.\n";                                                     \
-        std::cerr << "Usage:\n";                                                                  \
-        std::cerr << "sagent version\n";                                                          \
-        std::cerr << "sagent new [data_dir] [host_addr] [registry_addr]\n"; \
-        std::cerr << "sagent run [data_dir]\n";                                                   \
-        std::cerr << "Example: sagent run /etc/sashimono\n";                                      \
-        return -1;                                                                                \
+#define PARSE_ERROR                                                                                                                        \
+    {                                                                                                                                      \
+        std::cerr << "Arguments mismatch.\n";                                                                                              \
+        std::cerr << "Usage:\n";                                                                                                           \
+        std::cerr << "sagent version\n";                                                                                                   \
+        std::cerr << "sagent new [data_dir] [host_addr] [registry_addr] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n"; \
+        std::cerr << "sagent run [data_dir]\n";                                                                                            \
+        std::cerr << "Example: sagent run /etc/sashimono\n";                                                                               \
+        return -1;                                                                                                                         \
     }
 
 /**
@@ -36,7 +36,7 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 6) ||
+        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 10) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2))
             return 0;
@@ -118,7 +118,7 @@ int main(int argc, char **argv)
     // Extract the CLI args
     // This call will populate conf::ctx
     if (parse_cmd(argc, argv) != 0)
-        return -1;
+        return 1;
 
     if (conf::ctx.command == "version")
     {
@@ -131,8 +131,15 @@ int main(int argc, char **argv)
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
         const std::string registry_addr = (argc >= 5) ? argv[4] : "";
-        if (conf::create(host_addr, registry_addr) != 0)
-            return -1;
+        size_t inst_count, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
+
+        if (((argc >= 6) && util::stoull(argv[5], inst_count) != 0) ||
+            ((argc >= 7) && util::stoull(argv[6], cpu_us) != 0) ||
+            ((argc >= 8) && util::stoull(argv[7], ram_kbytes) != 0) ||
+            ((argc >= 9) && util::stoull(argv[8], swap_kbytes) != 0) ||
+            ((argc >= 10) && util::stoull(argv[9], disk_kbytes) != 0) ||
+            conf::create(host_addr, registry_addr, inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
+            return 1;
     }
     else if (conf::ctx.command == "run")
     {
@@ -141,16 +148,16 @@ int main(int argc, char **argv)
         if (kill_switch(util::get_epoch_milliseconds()))
         {
             std::cerr << "Sashimono Agent usage limit failure.\n";
-            return -1;
+            return 1;
         }
 
         if (conf::init() != 0)
-            return -1;
+            return 1;
 
         salog::init(); // Initialize logger for SA.
 
         if (crypto::init() == -1)
-            return -1;
+            return 1;
 
         LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ")";
         LOG_INFO << "Log level: " << conf::cfg.log.log_level;
@@ -159,7 +166,7 @@ int main(int argc, char **argv)
         if (comm::init() == -1 || hp::init() == -1)
         {
             deinit();
-            return -1;
+            return 1;
         }
 
         // After initializing primary subsystems, register the exit handler.

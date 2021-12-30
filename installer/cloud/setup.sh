@@ -1,7 +1,6 @@
 #!/bin/bash
 # Evernode host setup tool to manage Sashimono installation and host registration.
-# usage:
-# ./setup.sh install
+# usage: ./setup.sh install
 
 evernode="Evernode beta"
 maxmind_creds="653000:0yB7wwsBqCiPO2m6"
@@ -13,6 +12,7 @@ install_log="evernode-beta-install.log"
 script_url="https://sthotpocket.blob.core.windows.net/evernode/setup.sh"
 installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
 
+# export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
 export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
@@ -24,6 +24,7 @@ export CGCREATE_SERVICE="sashimono-cgcreate"
 export MB_XRPL_SERVICE="sashimono-mb-xrpl"
 export SASHIADMIN_GROUP="sashiadmin"
 export SASHIUSER_GROUP="sashiuser"
+export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export REGISTRY_USER="sashidockerreg"
 export CG_SUFFIX="-cg"
@@ -272,7 +273,24 @@ function install_sashimono() {
     rm -r $tmp
 }
 
+function check_uninstall_users() {
+    # Uninstall all contract instance users
+    local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+    readarray -t userarr <<<"$users"
+    local sashiusers=()
+    for user in "${userarr[@]}"; do
+        [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+        sashiusers+=("$user")
+    done
+    local ucount=${#sashiusers[@]}
+
+    $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
+}
+
 function uninstall_sashimono() {
+
+    check_uninstall_users
+
     echo "Starting Sashimono uninstallation..."
 
     local tmp=$(mktemp -d)
@@ -378,6 +396,9 @@ else
     ! $sashimono_installed && echo "Could not find a Sashimono installation on your system." && exit 1
 
     if [ "$mode" == "uninstall" ]; then
+
+        $interactive && ! confirm "Are you sure want to uninstall Sashimono and deregister from $evernode?" && exit 1
+
         uninstall_sashimono
         remove_evernode_alias
         echo "Uninstallation complete!"

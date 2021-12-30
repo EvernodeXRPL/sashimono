@@ -31,25 +31,24 @@ userdel -f "$MB_XRPL_USER"
 rm -r /home/"${MB_XRPL_USER:?}"
 
 # Uninstall all contract instance users
-prefix="sashi"
-users=$(cut -d: -f1 /etc/passwd | grep "^$prefix" | sort)
+users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
 readarray -t userarr <<<"$users"
-validusers=()
+sashiusers=()
 for user in "${userarr[@]}"; do
-    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && continue
-    validusers+=("$user")
+    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+    sashiusers+=("$user")
 done
 
-ucount=${#validusers[@]}
+ucount=${#sashiusers[@]}
 if [ $ucount -gt 0 ]; then
 
-    echo "Detected $ucount Sashimono contract instances."
-    for user in "${validusers[@]}"; do
+    echo "Detected $ucount contract instances."
+    for user in "${sashiusers[@]}"; do
         echo "$user"
     done
 
     echo "Deleting $ucount contract instances..."
-    for user in "${validusers[@]}"; do
+    for user in "${sashiusers[@]}"; do
         output=$($SASHIMONO_BIN/user-uninstall.sh $user | tee /dev/stderr)
         [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
     done

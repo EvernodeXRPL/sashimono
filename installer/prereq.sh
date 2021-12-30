@@ -18,6 +18,12 @@ cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
 cgrulesengd_service=$1 # cgroups rules engine service name
 
+function stage() {
+    echo "STAGE $1" # This is picked up by the setup console output filter.
+}
+
+stage "Installing dependencies"
+
 apt-get update
 apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 # uidmap        # Required for rootless docker.
@@ -31,6 +37,7 @@ apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 
 # Install nodejs 14 if not exists.
 if ! command -v node &>/dev/null; then
+    stage "Installing nodejs"
     apt-get -y install ca-certificates # In case nodejs package certitficates are renewed.
     curl -sL https://deb.nodesource.com/setup_14.x | bash -
     apt-get -y install nodejs
@@ -49,6 +56,7 @@ fi
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
 # If not add groupquota to the options.
+stage "Updating fstab"
 updated=0
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
 res=$?
@@ -93,9 +101,10 @@ if [ ! -f /aquota.group ]; then
 fi
 
 # -------------------------------
+stage "Configuring fuse"
 
 # Check fuse config exists.
-[ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse."
+[ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse." && exit 1
 
 # Set user_allow_other if not already configured
 # We create a temp of the config file and replace with original file only if success.
@@ -141,6 +150,7 @@ else
 fi
 
 # -------------------------------
+stage "Configuring cgroup rules engine"
 
 # Copy cgred.conf from examples if not exists to setup control groups.
 [ ! -f /etc/cgred.conf ] && cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
@@ -174,6 +184,7 @@ systemctl enable $cgrulesengd_service
 systemctl start $cgrulesengd_service
 
 # -------------------------------
+stage "Configuring grub"
 
 # Enable cgroup memory and swapaccount if not already configured
 # We create a temp of the grub file and replace with original file only if success.

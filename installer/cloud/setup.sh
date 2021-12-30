@@ -264,11 +264,16 @@ function install_sashimono() {
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
+    set -o pipefail # We need installer exit code to detect failures (ignore the tee pipe exit code).
     logfile=$(mktemp -d)/$install_log
     echo "Installing prerequisites..."
-    ! ./prereq.sh $cgrulesengd_service >> $logfile 2>&1 && install_failure
+    ! ./prereq.sh $cgrulesengd_service 2>&1 \
+                            | tee $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     echo "Installing Sashimono..."
-    ! ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description >> $logfile 2>&1 && install_failure
+    ! ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
+                            | tee $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+    set +o pipefail
             
     rm -r $tmp
 }

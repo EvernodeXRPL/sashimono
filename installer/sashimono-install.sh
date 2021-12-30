@@ -15,6 +15,10 @@ description=$8
 
 script_dir=$(dirname "$(realpath "$0")")
 
+function stage() {
+    echo "STAGE $1" # This is picked up by the setup console output filter.
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -25,8 +29,6 @@ mkdir -p $DOCKER_BIN
 [ "$?" == "1" ] && echo "Could not create '$DOCKER_BIN'. Make sure you are running as sudo." && exit 1
 mkdir -p $SASHIMONO_DATA
 [ "$?" == "1" ] && echo "Could not create '$SASHIMONO_DATA'. Make sure you are running as sudo." && exit 1
-
-echo "Installing Sashimono..."
 
 function rollback() {
     echo "Rolling back sashimono installation."
@@ -48,12 +50,14 @@ ldconfig
 cp "$script_dir"/sashi $USER_BIN
 
 # Download and install rootless dockerd.
+stage "Installing docker packages"
 "$script_dir"/docker-install.sh $DOCKER_BIN
 
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Install private docker registry.
+# stage "Installing private docker registry"
 # (Disabled until secure registry configuration)
 # ./registry-install.sh $DOCKER_BIN $REGISTRY_USER $REGISTRY_PORT
 # [ "$?" == "1" ] && rollback
@@ -64,6 +68,8 @@ cp "$script_dir"/sashi $USER_BIN
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $SASHIMONO_DATA
+
+stage "Configuring Sashimono services"
 
 # Find the cgroups rules engine service.
 cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
@@ -92,7 +98,7 @@ ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
 WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 
 # Install xrpl message board systemd service.
-echo "Initiating the sashimono agent..."
+echo "Configuring sashimono agent service..."
 # Rollback if 'sagent new' failed.
 $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $registry_addr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
 
@@ -156,13 +162,16 @@ done
 [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
 # Generate beta host account.
+stage "Configuring host xrpl account"
 ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $HOOK_ADDRESS && echo "XRPLACC_FAILURE" && rollback
 # Register the host on Evernode.
+stage "Registering host on Evernode"
 ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
     $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
 
 ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
 
+stage "Configuring xrpl message board service"
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]
 Description=Running and monitoring evernode xrpl transactions.

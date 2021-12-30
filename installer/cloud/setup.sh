@@ -13,24 +13,24 @@ install_log="evernode-beta-install.log"
 script_url="https://sthotpocket.blob.core.windows.net/evernode/setup.sh"
 installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
 
-export user_bin=/usr/bin
-export sashimono_bin=/usr/bin/sashimono
-export mb_xrpl_bin=$sashimono_bin/mb-xrpl
-export docker_bin=$sashimono_bin/dockerbin
-export sashimono_data=/etc/sashimono
-export mb_xrpl_data=$sashimono_data/mb-xrpl
-export sashimono_service="sashimono-agent"
-export cgcreate_service="sashimono-cgcreate"
-export mb_xrpl_service="sashimono-mb-xrpl"
-export group="sashiuser"
-export admin_group="sashiadmin"
-export mb_user="sashimbxrpl"
-export registryuser="sashidockerreg"
-export cgroupsuffix="-cg"
-export registryport=4444
-export hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
+export USER_BIN=/usr/bin
+export SASHIMONO_BIN=/usr/bin/sashimono
+export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
+export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
+export SASHIMONO_DATA=/etc/sashimono
+export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
+export SASHIMONO_SERVICE="sashimono-agent"
+export CGCREATE_SERVICE="sashimono-cgcreate"
+export MB_XRPL_SERVICE="sashimono-mb-xrpl"
+export SASHIADMIN_GROUP="sashiadmin"
+export SASHIUSER_GROUP="sashiuser"
+export MB_XRPL_USER="sashimbxrpl"
+export REGISTRY_USER="sashidockerreg"
+export CG_SUFFIX="-cg"
+export REGISTRY_PORT=4444
+export HOOK_ADDRESS="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
 
-[ -f $sashimono_data/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
+[ -f $SASHIMONO_DATA/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -310,8 +310,8 @@ function check_reboot_pending() {
 
 function reg_info() {
     echo -e "Your $evernode registration info:\n"
-    if sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin reginfo ; then
-        echo -e "\nYou are receiving $evernode rewards to the Host account. The account secret is stored in $mb_xrpl_data/mb-xrpl.cfg"
+    if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
+        echo -e "\nYou are receiving $evernode rewards to the Host account. The account secret is stored in $MB_XRPL_DATA/mb-xrpl.cfg"
     fi
 }
 

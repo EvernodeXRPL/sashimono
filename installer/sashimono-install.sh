@@ -100,7 +100,7 @@ WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 # Install xrpl message board systemd service.
 echo "Configuring sashimono agent service..."
 # Rollback if 'sagent new' failed.
-$SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $registry_addr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
+$SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.

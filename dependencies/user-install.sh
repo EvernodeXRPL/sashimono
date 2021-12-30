@@ -39,6 +39,19 @@ function rollback() {
     echo "$1,INST_ERR" && exit 1
 }
 
+# Waits until a service becomes ready up to 3 seconds.
+function service_ready() {
+    local svcstat=""
+    for ((i = 0; i < 30; i++)); do
+        sleep 0.1
+        svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active $1)
+        if [ "$svcstat" == "active" ] ; then
+            return 0    # Success
+        fi
+    done
+    return 1 # Error
+}
+
 # Setup user and dockerd service.
 useradd --shell /usr/sbin/nologin -m "$user"
 usermod --lock "$user"
@@ -98,11 +111,11 @@ done
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
-svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active $docker_service)
-[ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"
-
-mkdir "$user_dir"/.config/systemd/user/$docker_service.d && echo "[Service]
-Environment='DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns'" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
+mkdir "$user_dir"/.config/systemd/user/$docker_service.d
+echo "[Service]
+    Environment='DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns'" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
+service_ready $docker_service || rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd."
 
@@ -135,6 +148,6 @@ RestartSec=5
 WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
-sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
+
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

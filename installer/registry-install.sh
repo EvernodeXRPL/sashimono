@@ -8,6 +8,19 @@ hubacc="hotpocketdev"
 images=("sashimono:hp.latest-ubt.20.04" "sashimono:hp.latest-ubt.20.04-njs.14")
 user_dir=/home/$user
 
+# Waits until a service becomes ready up to 3 seconds.
+function service_ready() {
+    local svcstat=""
+    for ((i = 0; i < 30; i++)); do
+        sleep 0.1
+        svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active $1)
+        if [ "$svcstat" == "active" ] ; then
+            return 0    # Success
+        fi
+    done
+    return 1 # Error
+}
+
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "$user already exists." && exit 1
 
@@ -39,9 +52,7 @@ done
 
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
-
-svcstat=$(sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user is-active docker.service)
-[ "$svcstat" != "active" ] && rollback "NO_DOCKERSVC"
+service_ready "docker.service" || rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd for docker registry."
 

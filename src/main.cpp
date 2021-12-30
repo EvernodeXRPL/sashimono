@@ -130,15 +130,14 @@ int main(int argc, char **argv)
 
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
-        const std::string registry_addr = (argc >= 5) ? argv[4] : "";
         size_t inst_count, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
-        if (((argc >= 6) && util::stoull(argv[5], inst_count) != 0) ||
-            ((argc >= 7) && util::stoull(argv[6], cpu_us) != 0) ||
-            ((argc >= 8) && util::stoull(argv[7], ram_kbytes) != 0) ||
-            ((argc >= 9) && util::stoull(argv[8], swap_kbytes) != 0) ||
-            ((argc >= 10) && util::stoull(argv[9], disk_kbytes) != 0) ||
-            conf::create(host_addr, registry_addr, inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
+        if (((argc >= 5) && util::stoull(argv[4], inst_count) != 0) ||
+            ((argc >= 6) && util::stoull(argv[5], cpu_us) != 0) ||
+            ((argc >= 7) && util::stoull(argv[6], ram_kbytes) != 0) ||
+            ((argc >= 8) && util::stoull(argv[7], swap_kbytes) != 0) ||
+            ((argc >= 9) && util::stoull(argv[8], disk_kbytes) != 0) ||
+            conf::create(host_addr, "", inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
             return 1;
     }
     else if (conf::ctx.command == "run")

@@ -309,9 +309,9 @@ function check_reboot_pending() {
 }
 
 function reg_info() {
-    echo "Your $evernode registration info:"
+    echo -e "Your $evernode registration info:\n"
     if sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin reginfo ; then
-        echo "You are receiving $evernode rewards to the above account. The account secret is stored in $cfg"
+        echo -e "\nYou are receiving $evernode rewards to the Host account. The account secret is stored in $mb_xrpl_data/mb-xrpl.cfg"
     fi
 }
 

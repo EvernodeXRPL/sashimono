@@ -156,7 +156,7 @@ done
 [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
 # Generate beta host account.
-! sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin betagen $hook_address && echo "ACCGEN_FAILURE" && rollback
+! sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin betagen $hook_address && echo "XRPLACC_FAILURE" && rollback
 # Register the host on Evernode.
 ! sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin register \
     $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback

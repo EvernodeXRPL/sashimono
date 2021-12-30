@@ -13,7 +13,7 @@ const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
 const DATA_DIR = process.env.MB_DATA_DIR || __dirname;
 const FAUCET_URL = process.env.MB_FAUCET_URL || "https://hooks-testnet.xrpl-labs.com/newcreds"
-const EVR_SEND_URL = process.env.MB_EVR_SEND_URL || "https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ==&action=fundHost&hostAddr="
+const EVR_SEND_URL = process.env.MB_EVR_SEND_URL || "https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ==&action=fundhost&hostaddr="
 
 const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
 const LOG_PATH = DATA_DIR + '/log/mb-xrpl.log';
@@ -376,27 +376,17 @@ class SashiCLI {
 
 class Setup {
 
-    async #httpPost(url) {
-        return new Promise(resolve => {
+    #httpPost(url) {
+        return new Promise((resolve, reject) => {
             const req = https.request(url, { method: 'POST' }, (resp) => {
                 let data = '';
                 resp.on('data', (chunk) => data += chunk);
                 resp.on('end', () => resolve(data));
-            }).on("error", (err) => {
-                console.log(err);
-                resolve(null);
-            });
-
-            req.on('error', (err) => {
-                console.log(err);
-                resolve(null);
             })
 
-            req.on('timeout', () => {
-                console.log('Request timed out.');
-                resolve(null);
-            })
-
+            req.on("error", reject);
+            req.on('error', reject)
+            req.on('timeout', () => reject('Request timed out.'))
             req.end()
         })
     }
@@ -404,9 +394,6 @@ class Setup {
     async #generateFaucetAccount() {
         console.log("Generating faucet account...");
         const resp = await this.#httpPost(FAUCET_URL);
-        if (!resp)
-            throw "Faucet generation error.";
-
         const json = JSON.parse(resp);
         return {
             address: json.address,
@@ -431,9 +418,7 @@ class Setup {
 
     async #sendEversFromHook(hostAddress) {
         console.log("Sending EVRs...");
-        const resp = await this.#httpPost(EVR_SEND_URL + hostAddress);
-        if (!resp)
-            throw "EVR send error.";
+        await this.#httpPost(EVR_SEND_URL + hostAddress);
     }
 
     async generateBetaHostAccount(hookAddress) {
@@ -451,7 +436,8 @@ class Setup {
 
         // Prepare host account.
         {
-            console.log("Preparing host account...");
+            console.log(`Preparing host account - ${acc.address} (${acc.token})`);
+            console.log(`Hook address: ${hookAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
             await hostClient.prepareAccount();
@@ -475,8 +461,6 @@ class Setup {
             xrpl: { address: address, secret: secret, hookAddress: hookAddress, token: token }
         }, null, 2);
         fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
-
-        console.log(`Config file created at ${CONFIG_PATH}`);
     }
 
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, description) {
@@ -525,8 +509,6 @@ async function main() {
 
     try {
         if (process.argv.length >= 3) {
-            console.log('Evernode xrpl message board setup');
-
             if (process.argv.length >= 3 && process.argv[2] === 'new') {
                 new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
             }

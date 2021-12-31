@@ -43,12 +43,14 @@ function echomult() {
 if ! $sashimono_installed ; then
     [ "$1" != "install" ] \
         && echomult "$evernode host management tool
+                \nYour system is not registered on $evernode.
                 \nSupported commands:
                 \ninstall - Install Sashimono and register on $evernode" \
         && exit 1
 else
     [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] \
         && echomult "$evernode host management tool
+                \nYour system is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
@@ -90,7 +92,7 @@ function check_sys_req() {
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 
-    [ "$SKIP_SYSREQ" == "1" ] && return 0
+    [ "$SKIP_SYSREQ" == "1" ] && echo "System requirements check skipped." && return 0
 
     local proc1=$(ps --no-headers -o comm 1)
     if [ "$proc1" != "systemd" ]; then
@@ -110,6 +112,8 @@ function check_sys_req() {
             \nYour system does not meet some of the requirements. Aborting."
         exit 1
     fi
+
+    echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
 function resolve_ip_addr() {
@@ -127,7 +131,7 @@ function resolve_ip_addr() {
 function set_inet_addr() {
 
     # Attempt to auto-detect in interactive mode or if 'auto' is specified.
-    ([[ "$inetaddr"=="auto" ]] || $interactive) && inetaddr=$(hostname -I | awk '{print $1}')
+    ([ "$inetaddr" == "auto" ] || $interactive) && inetaddr=$(hostname -I | awk '{print $1}')
     resolve_ip_addr
 
     if $interactive ; then
@@ -157,13 +161,14 @@ function resolve_countrycode() {
         return 1
     else
         countrycode=$(echo $countrycode | tr 'a-z' 'A-Z')
+        return 0
     fi
 }
 
 function set_country_code() {
-    
+
     # Attempt to auto-detect in interactive mode or if 'auto' is specified.
-    if [[ "$countrycode"=="auto" ]] || $interactive ; then
+    if [ "$countrycode" == "auto" ] || $interactive ; then
         echo "Checking country code..."
         echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
@@ -188,7 +193,7 @@ function set_country_code() {
         done
 
     else
-        resolve_countrycode || echo "Invalid country code '$countrycode'" && exit 1
+        resolve_countrycode || (echo "Invalid country code '$countrycode'" && exit 1)
     fi
 }
 
@@ -335,75 +340,63 @@ echo "Thank you for trying out $evernode!"
 
 if [ "$mode" == "install" ]; then
 
-    if ! $sashimono_installed ; then
-
-        if ! $interactive ; then
-            inetaddr=${3}           # IP or DNS address.
-            countrycode=${4}        # 2-letter country code.
-            alloc_cpu=${5}          # CPU microsec to allocate for contract instances.
-            alloc_ramKB=${6}        # RAM to allocate for contract instances.
-            alloc_swapKB=${7}       # Swap to allocate for contract instances.
-            alloc_diskKB=${8}       # Disk space to allocate for contract instances.
-            alloc_instcount=${9}    # Total contract instance count.
-            description=${10}       # Registration description (underscore for spaces).
-        else
-            description="Evernode_host"
-        fi
-
-        $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-                and register your system as an $evernode host on the public XRPL hooks testnet.\n
-                \nThe setup will go through the following steps:\n
-                - Check your system compatibility for $evernode.\n
-                - Collect information about your system to be published to users.\n
-                - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
-                \nContinue?" && exit 1
-        
-        check_sys_req
-        echo "System check complete. Your system is capable of becoming an $evernode host."
-        $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
-                to you since we will be making modifications to your system configuration.
-                \nThis is beta software, so there's a chance things can go wrong. Continue?" && exit 1
-
-        set_inet_addr
-        echo -e "Using '$inetaddr' as host internet address.\n"
-
-        set_country_code
-        echo -e "Using '$countrycode' as country code.\n"
-
-        set_cgrules_svc
-        echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
-
-        set_instance_alloc
-        echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
-
-        install_sashimono
-        create_evernode_alias
-
-        echomult "Installation successful! Installation log can be found at $logfile
-                \n\nYour system is now registered on $evernode. You can check system status with 'evernode status' command."
+    if ! $interactive ; then
+        inetaddr=${3}           # IP or DNS address.
+        countrycode=${4}        # 2-letter country code.
+        alloc_cpu=${5}          # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${6}        # RAM to allocate for contract instances.
+        alloc_swapKB=${7}       # Swap to allocate for contract instances.
+        alloc_diskKB=${8}       # Disk space to allocate for contract instances.
+        alloc_instcount=${9}    # Total contract instance count.
+        description=${10}       # Registration description (underscore for spaces).
     else
-        echo "Your system is already registered on $evernode. You can check system status with 'evernode status' command."
+        description="Evernode_host"
     fi
 
-    check_reboot_pending
+    $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
+            and register your system as an $evernode host on the public XRPL hooks testnet.\n
+            \nThe setup will go through the following steps:\n
+            - Check your system compatibility for $evernode.\n
+            - Collect information about your system to be published to users.\n
+            - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
+            \nContinue?" && exit 1
+    
+    check_sys_req
+    $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
+            to you since we will be making modifications to your system configuration.
+            \nThis is beta software, so there's a chance things can go wrong. Continue?" && exit 1
 
-else
+    set_inet_addr
+    echo -e "Using '$inetaddr' as host internet address.\n"
 
-    ! $sashimono_installed && echo "Could not find a Sashimono installation on your system." && exit 1
+    set_country_code
+    echo -e "Using '$countrycode' as country code.\n"
 
-    if [ "$mode" == "uninstall" ]; then
+    set_cgrules_svc
+    echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
 
-        $interactive && ! confirm "Are you sure want to uninstall Sashimono and deregister from $evernode?" && exit 1
+    set_instance_alloc
+    echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
-        uninstall_sashimono
-        remove_evernode_alias
-        echo "Uninstallation complete!"
+    install_sashimono
+    create_evernode_alias
 
-    elif [ "$mode" == "status" ]; then
-        reg_info
+    echomult "Installation successful! Installation log can be found at $logfile
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
 
-    elif [ "$mode" == "list" ]; then
-        sashi list
-    fi
+elif [ "$mode" == "uninstall" ]; then
 
+    $interactive && ! confirm "Are you sure you want to uninstall Sashimono and deregister from $evernode?" && exit 1
+
+    uninstall_sashimono
+    remove_evernode_alias
+    echo "Uninstallation complete!"
+
+elif [ "$mode" == "status" ]; then
+    reg_info
+
+elif [ "$mode" == "list" ]; then
+    sashi list
 fi
+
+[ "$mode" != "uninstall" ] && check_reboot_pending

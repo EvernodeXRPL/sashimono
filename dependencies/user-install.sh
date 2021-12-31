@@ -53,10 +53,10 @@ function service_ready() {
 }
 
 # Setup user and dockerd service.
-useradd --shell /usr/sbin/nologin -m "$user"
-usermod --lock "$user"
-usermod -a -G $group "$user"
-loginctl enable-linger "$user" # Enable lingering to support rootless dockerd service installation.
+useradd --shell /usr/sbin/nologin -m $user
+usermod --lock $user
+usermod -a -G $group $user
+loginctl enable-linger $user # Enable lingering to support rootless dockerd service installation.
 chmod o-rwx "$user_dir"
 echo "Created '$user' user."
 

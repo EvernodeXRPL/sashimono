@@ -431,16 +431,31 @@ class Setup {
         const acc = await this.#generateFaucetAccount();
         acc.token = this.#getRandomToken();
 
-        // Wait few seconds until the entire xrpl cluster catches up with new account.
-        await new Promise(resolve => setTimeout(resolve, 4000));
-
         // Prepare host account.
         {
-            console.log(`Preparing host account - ${acc.address} (${acc.token})`);
-            console.log(`Hook address: ${hookAddress})`);
+            console.log(`Preparing host account:${acc.address} (token:${acc.token} hook:${hookAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
-            await hostClient.prepareAccount();
+
+            // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
+            // haven't still updated the ledger. In such cases, we retry account preparation several times before giving up.
+            let attempts = 0;
+            while (++attempts <= 5) {
+                try {
+                    await hostClient.prepareAccount();
+                    break;
+                }
+                catch (err) {
+                    if (err.data.error === 'actNotFound') {
+                        console.log("actNotFound - retrying...")
+                        // Wait and retry.
+                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+
             await hostClient.disconnect();
         }
 

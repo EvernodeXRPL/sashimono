@@ -22,14 +22,6 @@ function stage() {
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
-# Create bin dirs first so it automatically checks for privileged access.
-mkdir -p $SASHIMONO_BIN
-[ "$?" == "1" ] && echo "Could not create '$SASHIMONO_BIN'. Make sure you are running as sudo." && exit 1
-mkdir -p $DOCKER_BIN
-[ "$?" == "1" ] && echo "Could not create '$DOCKER_BIN'. Make sure you are running as sudo." && exit 1
-mkdir -p $SASHIMONO_DATA
-[ "$?" == "1" ] && echo "Could not create '$SASHIMONO_DATA'. Make sure you are running as sudo." && exit 1
-
 function rollback() {
     echo "Rolling back sashimono installation."
     "$script_dir"/sashimono-uninstall.sh
@@ -37,8 +29,12 @@ function rollback() {
     exit 1
 }
 
+mkdir -p $SASHIMONO_BIN
+mkdir -p $DOCKER_BIN
+mkdir -p $SASHIMONO_DATA
+
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,sashimono-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Blake3
@@ -65,6 +61,8 @@ stage "Installing docker packages"
 
 # Setting up Sashimono admin group.
 ! groupadd $SASHIADMIN_GROUP && echo "Admin group creation failed." && rollback
+# Add current user to Sashimono admin group.
+usermod -a -G $SASHIADMIN_GROUP "$USER"
 
 # Setup Sashimono data dir.
 cp -r "$script_dir"/contract_template $SASHIMONO_DATA

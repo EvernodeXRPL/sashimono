@@ -60,6 +60,8 @@ mode=$1
 if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
+
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
 function confirm() {
@@ -171,6 +173,8 @@ function set_country_code() {
     fi
 
     if $interactive ; then
+
+        # Uncomment this if we want the user to manually change the auto-detected country code.
         # if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
         #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
         #     return 0
@@ -278,36 +282,23 @@ function install_sashimono() {
     rm -r $tmp
 }
 
-function check_uninstall_users() {
-    # Uninstall all contract instance users
-    local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
-    readarray -t userarr <<<"$users"
-    local sashiusers=()
-    for user in "${userarr[@]}"; do
-        [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
-        sashiusers+=("$user")
-    done
-    local ucount=${#sashiusers[@]}
-
-    $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
-}
-
 function uninstall_sashimono() {
 
-    check_uninstall_users
+    if $interactive; then
+        # Check for existing contract instances.
+        local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+        readarray -t userarr <<<"$users"
+        local sashiusers=()
+        for user in "${userarr[@]}"; do
+            [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+            sashiusers+=("$user")
+        done
+        local ucount=${#sashiusers[@]}
+        [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
+    fi
 
-    echo "Starting Sashimono uninstallation..."
-
-    local tmp=$(mktemp -d)
-    cd $tmp
-    curl -s $installer --output installer.tgz
-    tar zxf $tmp/installer.tgz --strip-components=1
-    rm installer.tgz
-
-    logfile=$(mktemp -d)/$uninstall_log
     echo "Uninstalling Sashimono..."
-    ! ./sashimono-uninstall.sh && uninstall_failure
-    rm -r $tmp
+    ! $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
 }
 
 # Create a copy of this same script as a command.

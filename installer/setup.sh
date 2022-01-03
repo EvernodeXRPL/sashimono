@@ -317,14 +317,22 @@ function remove_evernode_alias() {
     rm $evernode_alias
 }
 
-function check_reboot_pending() {
+function check_installer_pending_finish() {
     if [ -f /run/reboot-required.pkgs ] && [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
         echo "Your system needs to be rebooted in order to complete Sashimono installation."
         $interactive && confirm "Reboot now?" && reboot
         ! $interactive && echo "Rebooting..." && reboot
         return 0
     else
-        return 1
+        # If reboot not required, check whether re-login is required in case the setup was run with sudo.
+        # This is because the user account gets added to sashiadmin group and re-login is needed for group permission to apply.
+        # without this, user cannot run "sashi" cli commands without sudo.
+        if [ "$mode" == "install" ] && [ -n "$SUDO_USER" ] ; then
+            echo "You need to logout and log back in, to complete Sashimono installation."
+            return 0
+        else
+            return 1
+        fi
     fi
 }
 
@@ -400,4 +408,4 @@ elif [ "$mode" == "list" ]; then
     sashi list
 fi
 
-[ "$mode" != "uninstall" ] && check_reboot_pending
+[ "$mode" != "uninstall" ] && check_installer_pending_finish

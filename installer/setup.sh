@@ -103,12 +103,13 @@ function check_sys_req() {
     local os=$(grep -ioP '^ID=\K.+' /etc/os-release)
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
-    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $diskKB -lt 4194304 ]; then
+    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $swapKB -lt 2000000 ] || [ $diskKB -lt 4194304 ]; then
         echomult "Your system specs are:
             \n OS: $os $osversion
             \n RAM: $(GB $ramKB)
+            \n Swap: $(GB $swapKB)
             \n Disk space (/home): $(GB $diskKB)
-            \n$evernode host registration requires Ubuntu 20.04 with 2GB RAM and 4GB free disk space for /home.
+            \n$evernode host registration requires Ubuntu 20.04 with 2 GB RAM, 2 GB Swap and 4 GB free disk space for /home.
             \nYour system does not meet some of the requirements. Aborting."
         exit 1
     fi

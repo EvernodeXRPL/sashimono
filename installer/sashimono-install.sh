@@ -1,181 +1,89 @@
 #!/bin/bash
 # Sashimono agent installation script.
 # This must be executed with root privileges.
-# -q for non-interactive (quiet) mode (This will skip the installation of xrpl message board)
 
-user_bin=/usr/bin
-sashimono_bin=/usr/bin/sashimono-agent
-mb_xrpl_bin=$sashimono_bin/mb-xrpl
-docker_bin=$sashimono_bin/dockerbin
-sashimono_data=/etc/sashimono
-mb_xrpl_data=$sashimono_data/mb-xrpl
-sashimono_service="sashimono-agent"
-cgcreate_service="sashimono-cgcreate"
-mb_xrpl_service="sashimono-mb-xrpl"
-hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
-group="sashiuser"
-admin_group="sashiadmin"
-mb_user="sashimbxrpl"
-cgroupsuffix="-cg"
-registryuser="sashidockerreg"
-registryport=4444
+echo "---Sashimono installer---"
+
+inetaddr=$1
+countrycode=$2
+inst_count=$3
+cpuMicroSec=$4
+ramKB=$5
+swapKB=$6
+diskKB=$7
+description=$8
+
 script_dir=$(dirname "$(realpath "$0")")
-def_cgrulesengd_service="cgrulesengdsvc"
-quiet=$1
 
-[ -d $sashimono_bin ] && [ -n "$(ls -A $sashimono_bin)" ] &&
-    echo "Aborting installation. Previous Sashimono installation detected at $sashimono_bin" && exit 1
+function stage() {
+    echo "STAGE $1" # This is picked up by the setup console output filter.
+}
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
-# Create bin dirs first so it automatically checks for privileged access.
-mkdir -p $sashimono_bin
-[ "$?" == "1" ] && echo "Could not create '$sashimono_bin'. Make sure you are running as sudo." && exit 1
-mkdir -p $docker_bin
-[ "$?" == "1" ] && echo "Could not create '$docker_bin'. Make sure you are running as sudo." && exit 1
-mkdir -p $sashimono_data
-[ "$?" == "1" ] && echo "Could not create '$sashimono_data'. Make sure you are running as sudo." && exit 1
-
-echo "Installing Sashimono..."
-
-# Install curl if not exists (required to download installation artifacts).
-if ! command -v curl &>/dev/null; then
-    apt-get install -y curl
-fi
-
-# Install openssl if not exists (required by Sashimono agent to create contract tls certs).
-if ! command -v openssl &>/dev/null; then
-    apt-get install -y openssl
-fi
-
-# Blake3
-if [ ! -f /usr/local/lib/libblake3.so ]; then
-    cp "$script_dir"/libblake3.so /usr/local/lib/
-fi
-
-# jq command is used for json manipulation.
-if ! command -v jq &>/dev/null; then
-    apt-get install -y jq
-fi
-
-# Libfuse
-apt-get install -y fuse3
-
-# Update linker library cache.
-sudo ldconfig
-
 function rollback() {
     echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh -q # Quiet uninstall.
+    "$script_dir"/sashimono-uninstall.sh
     echo "Rolled back the installation."
     exit 1
 }
 
+mkdir -p $SASHIMONO_BIN
+mkdir -p $DOCKER_BIN
+mkdir -p $SASHIMONO_DATA
+
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $sashimono_bin
-chmod -R +x $sashimono_bin
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,sashimono-uninstall.sh} $SASHIMONO_BIN
+chmod -R +x $SASHIMONO_BIN
+
+# Blake3
+[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/
+# Update linker library cache.
+ldconfig
 
 # Install Sashimono CLI binaries into user bin dir.
-cp "$script_dir"/sashi $user_bin
+cp "$script_dir"/sashi $USER_BIN
 
 # Download and install rootless dockerd.
-"$script_dir"/docker-install.sh $docker_bin
+stage "Installing docker packages"
+"$script_dir"/docker-install.sh $DOCKER_BIN
 
 # Check whether docker installation dir is still empty.
-[ -z "$(ls -A $docker_bin 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
-
-# Detect self host address
-selfip=$(hostname -I)
+[ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Install private docker registry.
+# stage "Installing private docker registry"
 # (Disabled until secure registry configuration)
-# ./registry-install.sh $docker_bin $registryuser $registryport
+# ./registry-install.sh $DOCKER_BIN $REGISTRY_USER $REGISTRY_PORT
 # [ "$?" == "1" ] && rollback
-# registry_addr=$selfip:$registryport
+# registry_addr=$inetaddr:$REGISTRY_PORT
 
 # Setting up Sashimono admin group.
-! groupadd $admin_group && echo "Admin group creation failed." && rollback
+! groupadd $SASHIADMIN_GROUP && echo "Admin group creation failed." && rollback
+# If installing with sudo, add current logged-in user to Sashimono admin group.
+[ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
 # Setup Sashimono data dir.
-cp -r "$script_dir"/contract_template $sashimono_data
+cp -r "$script_dir"/contract_template $SASHIMONO_DATA
 
-if [ "$quiet" == "-q" ]; then
+stage "Configuring Sashimono services"
 
-    # We are in the quiet mode. Hence we auto-generate an XRPL test account and token details for the host.
-    # (This is done for testing purposes during development)
-
-    xrpl_faucet_url="https://hooks-testnet.xrpl-labs.com/newcreds"
-    hook_secret="shgNKT14iCV6S4HdT9r7mgqyx94Xt"
-    func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
-
-    # Generate new fauset account.
-    echo "Generating XRP faucet account..."
-    new_acc=$(curl -X POST $xrpl_faucet_url)
-    # If result is not a json, account generation failed.
-    [[ ! "$new_acc" =~ \{.+\} ]] && echo "Xrpl faucet account generation failed." && rollback
-    xrp_address=$(echo $new_acc | jq -r '.address')
-    xrp_secret=$(echo $new_acc | jq -r '.secret')
-    ([ "$xrp_address" == "" ] || [ "$xrp_address" == "null" ] ||
-        [ "$xrp_secret" == "" ] || [ "$xrp_secret" == "null" ]) && echo "Invalid generated xrpl account details: $new_acc" && rollback
-
-    # Wait a small interval so the XRP account gets replicated in the testnet (otherwise we may get 'Account not found' errors).
-    sleep 4
-
-    # Setup the host xrpl account with an EVR balance and default rippling flag.
-    echo "Setting up host XRP account..."
-    acc_setup_func="$func_url&action=setuphost&hookaddr=$hook_address&hooksecret=$hook_secret&addr=$xrp_address&secret=$xrp_secret"
-    func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST "$acc_setup_func")
-    [ "$func_code" != "200" ] && echo "Host XRP account setup failed. code:$func_code" && rollback
-
-    # Generate random hosting token.
-    token=$(tr -dc A-Z </dev/urandom | head -c 3)
-
-    echo "Auto-generated host information."
-
-else
-
-    echo "Please answer following questions to setup Evernode xrpl message board."
-    # Ask for input until a correct value is given
-    while [[ ! "$token" =~ ^[A-Z]{3}$ ]]; do
-        read -p "Token name? " token </dev/tty
-        [[ ! "$token" =~ ^[A-Z]{3}$ ]] && echo "Token name should be 3 UPPERCASE letters."
-    done
-    while [[ -z "$xrp_address" ]]; do
-        read -p "XRPL account address? " xrp_address </dev/tty
-    done
-    while [[ -z "$xrp_secret" ]]; do
-        read -p "XRPL account secret? " xrp_secret </dev/tty
-    done
-    # Ask for cgroup rule generator service until a valid service provided.
-    while true; do
-        read -p "Enter your cgroup rule generator service name (default: $def_cgrulesengd_service)? " cgrulesengd_service </dev/tty
-        # Set service name to default if user input is empty.
-        [ -z "$cgrulesengd_service" ] && cgrulesengd_service="$def_cgrulesengd_service"
-        # Remove '.service' if user has given the full name.
-        cgrulesengd_service=$(echo $cgrulesengd_service | awk '{print tolower($0)}' | sed 's/\.service$//')
-        # Break the loop if service is valid and exist.
-        [ -f /etc/systemd/system/"$cgrulesengd_service".service ] && break
-        echo "$cgrulesengd_service systemd service does not exist."
-    done
-fi
-
-# Set cgrulesengd_service to default if it's still empty.
-if [[ -z "$cgrulesengd_service" ]]; then
-    cgrulesengd_service="$def_cgrulesengd_service"
-    [ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "$cgrulesengd_service systemd service does not exist." && rollback
-fi
+# Find the cgroups rules engine service.
+cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
+cgrulesengd_service="${cgrulesengd_filename%.*}"
+[ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && rollback
 
 # Setting up cgroup rules.
 echo "Creating cgroup rules..."
-! groupadd $group && echo "Group creation failed." && rollback
-! echo "@$group       cpu,memory              %u$cgroupsuffix" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+! groupadd $SASHIUSER_GROUP && echo "Group creation failed." && rollback
+! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
 # Restart the service to apply the cgrules config.
-echo "Restarting the $cgrulesengd_service.service."
+echo "Restarting the '$cgrulesengd_service' service."
 systemctl restart $cgrulesengd_service || rollback
 
 # Install Sashimono Agent cgcreate service.
-# This is a onshot service which runs only once.
+# This is a oneshot service which runs only once.
 echo "[Unit]
 Description=Sashimono cgroup creation service.
 After=network.target
@@ -183,14 +91,14 @@ After=network.target
 User=root
 Group=root
 Type=oneshot
-ExecStart=$sashimono_bin/user-cgcreate.sh $sashimono_data
+ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
 [Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgcreate_service.service
+WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 
 # Install xrpl message board systemd service.
-echo "Initiating the sashimono agent..."
+echo "Configuring sashimono agent service..."
 # Rollback if 'sagent new' failed.
-$sashimono_bin/sagent new $sashimono_data $cgrulesengd_service $selfip $registry_addr || rollback
+$SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -202,41 +110,40 @@ StartLimitIntervalSec=0
 User=root
 Group=root
 Type=simple
-WorkingDirectory=$sashimono_bin
-ExecStart=$sashimono_bin/sagent run $sashimono_data
+WorkingDirectory=$SASHIMONO_BIN
+ExecStart=$SASHIMONO_BIN/sagent run $SASHIMONO_DATA
 Restart=on-failure
 RestartSec=5
 [Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$sashimono_service.service
+WantedBy=multi-user.target" >/etc/systemd/system/$SASHIMONO_SERVICE.service
 
 systemctl daemon-reload
-systemctl enable $cgcreate_service
-systemctl start $cgcreate_service
-systemctl enable $sashimono_service
-systemctl start $sashimono_service
+systemctl enable $CGCREATE_SERVICE
+systemctl start $CGCREATE_SERVICE
+systemctl enable $SASHIMONO_SERVICE
+systemctl start $SASHIMONO_SERVICE
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
 # Install xrpl message board systemd service.
 echo "Installing Evernode xrpl message board..."
 
-cp -r "$script_dir"/mb-xrpl $sashimono_bin
-
+cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
 # Creating message board user.
-useradd --shell /usr/sbin/nologin -m "$mb_user"
-usermod --lock "$mb_user"
-usermod -a -G $admin_group "$mb_user"
-loginctl enable-linger "$mb_user" # Enable lingering to support service installation.
+useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+usermod --lock $MB_XRPL_USER
+usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
 
 # First create the folder from root and then transfer ownership to the user
 # since the folder is created in /etc/sashimono directory.
-mkdir -p $mb_xrpl_data
-[ "$?" == "1" ] && echo "Could not create '$mb_xrpl_data'. Make sure you are running as sudo." && exit 1
+mkdir -p $MB_XRPL_DATA
+[ "$?" == "1" ] && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
 # Change ownership to message board user.
-chown "$mb_user":"$mb_user" $mb_xrpl_data
+chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
-mb_user_dir=/home/"$mb_user"
-mb_user_id=$(id -u "$mb_user")
+mb_user_dir=/home/"$MB_XRPL_USER"
+mb_user_id=$(id -u "$MB_XRPL_USER")
 mb_user_runtime_dir="/run/user/$mb_user_id"
 
 # Setup env variable for the message board user.
@@ -247,17 +154,22 @@ echo "Updated mb user .bashrc."
 user_systemd=""
 for ((i = 0; i < 30; i++)); do
     sleep 0.1
-    user_systemd=$(sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
+    user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
     [ "$user_systemd" == "running" ] && break
 done
 [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
-# Populate the message board config file.
-# Run as the message board user.
-sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data node $mb_xrpl_bin new "$xrp_address" "$xrp_secret" $hook_address "$token"
+# Generate beta host account.
+stage "Configuring host xrpl account"
+! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $HOOK_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+# Register the host on Evernode.
+stage "Registering host on Evernode"
+! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+    $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
 
-! (sudo -u $mb_user mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "user systemd folder creation failed" && rollback
+! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
 
+stage "Configuring xrpl message board service"
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
 echo "[Unit]
 Description=Running and monitoring evernode xrpl transactions.
@@ -265,17 +177,17 @@ After=network.target
 StartLimitIntervalSec=0
 [Service]
 Type=simple
-WorkingDirectory=$mb_xrpl_bin
-Environment=\"MB_DATA_DIR=$mb_xrpl_data\"
-ExecStart=/usr/bin/node $mb_xrpl_bin
+WorkingDirectory=$MB_XRPL_BIN
+Environment=\"MB_DATA_DIR=$MB_XRPL_DATA\"
+ExecStart=/usr/bin/node $MB_XRPL_BIN
 Restart=on-failure
 RestartSec=5
 [Install]
-WantedBy=default.target" | sudo -u $mb_user tee "$mb_user_dir"/.config/systemd/user/$mb_xrpl_service.service > /dev/null
+WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service > /dev/null
 
 # This service needs to be restarted when mb-xrpl.cfg is changed.
-sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $mb_xrpl_service
-sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $mb_xrpl_service
+sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
+sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
 echo "Installed Evernode xrpl message board."
 
 echo "Sashimono installed successfully."

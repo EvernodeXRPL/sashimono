@@ -168,7 +168,7 @@ async function initHosts() {
 async function initHostAccountData(host) {
     const output = await execSsh(host, "cat /etc/sashimono/mb-xrpl/mb-xrpl.cfg");
     if (!output || output.trim() === "") {
-        console.log("ERROR: No output from mb-xrpl config read.")
+        console.log(host, "ERROR: No output from mb-xrpl config read.")
         return;
     }
 

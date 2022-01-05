@@ -33,7 +33,8 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create(std::string_view cgrulesengd_service, std::string_view host_addr, std::string_view registry_addr)
+    int create(std::string_view host_addr, std::string_view registry_addr, const size_t inst_count,
+               const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes)
     {
         if (util::is_file_exists(ctx.config_file))
         {
@@ -42,7 +43,7 @@ namespace conf
         }
         else
         {
-            // Recursivly create contract directory. Return an error if unable to create
+            // Recursively create contract directory. Return an error if unable to create
             if (util::create_dir_tree_recursive(ctx.log_dir) == -1 ||
                 util::create_dir_tree_recursive(ctx.data_dir) == -1)
             {
@@ -62,11 +63,11 @@ namespace conf
             cfg.hp.init_peer_port = 22861;
             cfg.hp.init_user_port = 8081;
 
-            cfg.system.max_instance_count = 3;
-            cfg.system.max_mem_kbytes = 1048576;     // Total 1GB RAM
-            cfg.system.max_swap_kbytes = 3145728;    // Total 3GB swap.
-            cfg.system.max_cpu_us = 5000000;         // CPU cfs period cannot be less than 1ms (i.e. 1000) or larger than 1s (i.e. 1000000) per instance.
-            cfg.system.max_storage_kbytes = 5242880; // Total 5GB disk storage.
+            cfg.system.max_instance_count = !inst_count ? 3 : inst_count;
+            cfg.system.max_mem_kbytes = !ram_kbytes ? 1048576 : ram_kbytes;
+            cfg.system.max_swap_kbytes = !swap_kbytes ? 3145728 : swap_kbytes;
+            cfg.system.max_cpu_us = !cpu_us ? 900000 : cpu_us; // Total CPU allocation out of 1000000 microsec (1 sec).
+            cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
             const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);
             cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
@@ -76,8 +77,6 @@ namespace conf
             cfg.log.max_mbytes_per_file = 10;
             cfg.log.log_level = "inf";
             cfg.log.loggers.emplace("console");
-
-            cfg.service.cgrulesengd = cgrulesengd_service;
 
             // We don't enable file logging by default because Sashimono running as a systemd service
             // would automatically log console output to journal log.
@@ -301,22 +300,6 @@ namespace conf
             }
         }
 
-        // service
-        {
-            jpath = "service";
-
-            try
-            {
-                const jsoncons::ojson &service = d["service"];
-                cfg.service.cgrulesengd = service["cgrulesengd"].as<std::string>();
-            }
-            catch (const std::exception &e)
-            {
-                print_missing_field_error(jpath, e);
-                return -1;
-            }
-        }
-
         return 0;
     }
 
@@ -381,15 +364,6 @@ namespace conf
             }
             log_config.insert_or_assign("loggers", loggers);
             d.insert_or_assign("log", log_config);
-        }
-
-        // Service configs.
-        {
-            jsoncons::ojson service_config;
-
-            service_config.insert_or_assign("cgrulesengd", cfg.service.cgrulesengd);
-
-            d.insert_or_assign("service", service_config);
         }
 
         return write_json_file(ctx.config_file, d);

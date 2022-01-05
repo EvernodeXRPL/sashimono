@@ -5,13 +5,15 @@ const { exec } = require("child_process");
 const logger = require('./lib/logger');
 const evernode = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./lib/sqlite-handler');
+const https = require('https');
 
 // Environment variables.
 const IS_DEV_MODE = process.env.MB_DEV === "1";
 const FILE_LOG_ENABLED = process.env.MB_FILE_LOG === "1";
-const IS_DEREGISTER = process.env.MB_DEREGISTER === "1";
 const RIPPLED_URL = process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com";
 const DATA_DIR = process.env.MB_DATA_DIR || __dirname;
+const FAUCET_URL = process.env.MB_FAUCET_URL || "https://hooks-testnet.xrpl-labs.com/newcreds"
+const EVR_SEND_URL = process.env.MB_EVR_SEND_URL || "https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ==&action=fundhost&hostaddr="
 
 const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
 const LOG_PATH = DATA_DIR + '/log/mb-xrpl.log';
@@ -48,19 +50,6 @@ class MessageBoard {
         this.db = new SqliteDatabase(dbPath);
     }
 
-    new(address = "", secret = "", hostAddress = "", token = "") {
-        if (fs.existsSync(CONFIG_PATH))
-            throw `Config file already exists at ${CONFIG_PATH}`;
-
-        const configJson = JSON.stringify({
-            version: MB_VERSION,
-            xrpl: { address: address, secret: secret, hookAddress: hostAddress, token: token, regFeeHash: "" }
-        }, null, 2);
-        fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
-
-        console.log(`Config file created at ${CONFIG_PATH}`);
-    }
-
     async init() {
         if (!fs.existsSync(this.configPath))
             throw `${this.configPath} does not exist.`;
@@ -70,7 +59,6 @@ class MessageBoard {
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using hook " + this.cfg.xrpl.hookAddress);
-
 
         this.xrplApi = new evernode.XrplApi(this.rippledServer);
         evernode.Defaults.set({
@@ -84,25 +72,15 @@ class MessageBoard {
         await this.hostClient.connect();
         this.evernodeHookConf = this.hostClient.hookConfig;
 
-        if (IS_DEREGISTER) {
-            await this.deregisterHost();
-            await this.hostClient.disconnect();
-            await this.xrplApi.disconnect();
-            return;
-        }
-
         this.hookClient = new evernode.HookClient();
         await this.hookClient.connect();
-
-        // Check whether registration fee is already paid and trustline is made.
-        await this.checkForRegistration();
 
         this.db.open();
         // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerIndex = await this.xrplApi.ledgerIndex;
+        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -119,7 +97,7 @@ class MessageBoard {
             if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
                 this.lastRechargedMoment = currentMoment;
 
-                console.log(`Recharding at Moment ${this.lastRechargedMoment}...`)
+                console.log(`Recharging at Moment ${this.lastRechargedMoment}...`)
 
                 try {
                     await this.hostClient.recharge();
@@ -231,38 +209,6 @@ class MessageBoard {
         }
 
         this.db.close();
-    }
-
-    async checkForRegistration() {
-        if (!this.cfg.xrpl.regFeeHash) {
-
-            try {
-                console.log('Preparing host account...')
-                await this.hostClient.prepareAccount();
-                console.log('Registering host...')
-                const tx = await this.hostClient.register(this.cfg.xrpl.token, "AU", 1000, 1024, 4096, "AUTO test Sashimono");
-
-                this.cfg.xrpl.regFeeHash = tx.id;
-                this.persistConfig();
-                console.log('Registration complete. Tx hash: ' + tx.id);
-            }
-            catch (err) {
-                console.log("Registration failed.", err);
-            }
-        }
-    }
-
-    async deregisterHost() {
-        // Sends evernode host de-registration transaction.
-        console.log(`Performing Evernode host deregistration...`);
-
-        try {
-            const tx = await this.hostClient.deregister();
-            console.log('Deregistration complete. ' + tx.id);
-        }
-        catch (err) {
-            console.log("Deregistration failed.", err)
-        }
     }
 
     addToExpiryList(txHash, containerName, expiryMoment) {
@@ -428,38 +374,262 @@ class SashiCLI {
     }
 }
 
-async function main() {
-    if (process.argv.length === 3) {
-        if (process.argv[2] === 'version') {
-            console.log(MB_VERSION);
-            process.exit(0);
+class Setup {
+
+    #httpPost(url) {
+        return new Promise((resolve, reject) => {
+            const req = https.request(url, { method: 'POST' }, (resp) => {
+                let data = '';
+                resp.on('data', (chunk) => data += chunk);
+                resp.on('end', () => {
+                    if (resp.statusCode == 200)
+                        resolve(data);
+                    else
+                        reject(data);
+                });
+            })
+
+            req.on("error", reject);
+            req.on('timeout', () => reject('Request timed out.'))
+            req.end()
+        })
+    }
+
+    async #generateFaucetAccount() {
+        console.log("Generating faucet account...");
+        const resp = await this.#httpPost(FAUCET_URL);
+        const json = JSON.parse(resp);
+        return {
+            address: json.address,
+            secret: json.secret
+        };
+    }
+
+    #getRandomToken() {
+        const randomChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        let result = '';
+        for (var i = 0; i < 3; i++) {
+            result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
         }
-        else if (process.argv[2] === 'help') {
-            console.log(`Usage:
+        return result;
+    }
+
+    #getConfigAccount() {
+        if (!fs.existsSync(CONFIG_PATH))
+            throw `Config file does not exist at ${CONFIG_PATH}`;
+        return JSON.parse(fs.readFileSync(CONFIG_PATH).toString()).xrpl;
+    }
+
+    async #sendEversFromHook(hostAddress) {
+        console.log("Sending EVRs...");
+
+        // Sometimes we may get error from func execution when some rippled servers in the testnet cluster
+        // haven't still updated the ledger. In such cases, we retry several times before giving up.
+        let attempts = 0;
+        while (attempts >= 0) {
+            try {
+                await this.#httpPost(EVR_SEND_URL + hostAddress);
+                break;
+            }
+            catch (err) {
+                if (++attempts <= 5)
+                    continue;
+
+                throw err;
+            }
+        }
+    }
+
+    async generateBetaHostAccount(hookAddress) {
+
+        evernode.Defaults.set({
+            hookAddress: hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        const acc = await this.#generateFaucetAccount();
+        acc.token = this.#getRandomToken();
+
+        // Prepare host account.
+        {
+            console.log(`Preparing host account:${acc.address} (token:${acc.token} hook:${hookAddress})`);
+            const hostClient = new evernode.HostClient(acc.address, acc.secret);
+            await hostClient.connect();
+
+            // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
+            // haven't still updated the ledger. In such cases, we retry several times before giving up.
+            let attempts = 0;
+            while (attempts >= 0) {
+                try {
+                    await hostClient.prepareAccount();
+                    break;
+                }
+                catch (err) {
+                    if (err.data.error === 'actNotFound' && ++attempts <= 5) {
+                        console.log("actNotFound - retrying...")
+                        // Wait and retry.
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        continue;
+                    }
+                    throw err;
+                }
+            }
+
+            await hostClient.disconnect();
+        }
+
+        // Send EVRs from hook to host account.
+        {
+            await this.#sendEversFromHook(acc.address);
+        }
+
+        return acc;
+    }
+
+    newConfig(address = "", secret = "", hookAddress = "", token = "") {
+        if (fs.existsSync(CONFIG_PATH))
+            throw `Config file already exists at ${CONFIG_PATH}`;
+
+        const configJson = JSON.stringify({
+            version: MB_VERSION,
+            xrpl: { address: address, secret: secret, hookAddress: hookAddress, token: token }
+        }, null, 2);
+        fs.writeFileSync(CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
+    }
+
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, description) {
+        console.log("Registering host...");
+        const acc = this.#getConfigAccount();
+        evernode.Defaults.set({
+            hookAddress: acc.hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
+        // haven't still updated the ledger. In such cases, we retry several times before giving up.
+        let attempts = 0;
+        while (attempts >= 0) {
+            try {
+                await hostClient.register(acc.token, countryCode, cpuMicroSec,
+                    Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), description.replace('_', ' '));
+                break;
+            }
+            catch (err) {
+                if (err.code === 'tecPATH_DRY' && ++attempts <= 5) {
+                    console.log("tecPATH_DRY - retrying...")
+                    // Wait and retry.
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    continue;
+                }
+                throw err;
+            }
+        }
+
+        await hostClient.disconnect();
+    }
+
+    async deregister() {
+        console.log("Deregistering host...");
+        const acc = this.#getConfigAccount();
+        evernode.Defaults.set({
+            hookAddress: acc.hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+        await hostClient.deregister();
+        await hostClient.disconnect();
+    }
+
+    async regInfo() {
+        const acc = this.#getConfigAccount();
+        evernode.Defaults.set({
+            hookAddress: acc.hookAddress,
+            rippledServer: RIPPLED_URL
+        });
+
+        console.log(`Host account address: ${acc.address}`);
+        console.log(`Hosting token: ${acc.token}`);
+        try {
+            const hostClient = new evernode.HostClient(acc.address, acc.secret);
+            console.log('Retrieving EVR balance...')
+            await hostClient.connect();
+            const evrBalance = await hostClient.getEVRBalance();
+            console.log(`EVR balance: ${evrBalance}`);
+            await hostClient.disconnect();
+        }
+        catch {
+            console.log('EVR balance: [Error occured when retrieving EVR balance]');
+        }
+        console.log(`Hook address: ${acc.hookAddress}`);
+    }
+}
+
+async function main() {
+
+    if (process.argv[2] === 'version') {
+        console.log(MB_VERSION);
+    }
+
+    try {
+        if (process.argv.length >= 3) {
+            if (process.argv.length >= 3 && process.argv[2] === 'new') {
+                new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'betagen') {
+                const hookAddress = process.argv[3];
+                const setup = new Setup();
+                const acc = await setup.generateBetaHostAccount(hookAddress);
+                setup.newConfig(acc.address, acc.secret, hookAddress, acc.token);
+            }
+            else if (process.argv.length === 9 && process.argv[2] === 'register') {
+                await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), process.argv[8]);
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
+                await new Setup().deregister();
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'reginfo') {
+                await new Setup().regInfo();
+            }
+            else if (process.argv[2] === 'help') {
+                console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [hookAddress] [token] - Create new config file.
+        node index.js betagen [hookAddress] - Generate beta host account and populate config.
+        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [description] - Register the host on Evernode.
+        node index.js deregister - Deregister the host from Evernode.
+        node index.js reginfo - Display Evernode registration info.
         node index.js help - Print help.`);
-            process.exit(0);
+            }
+            else {
+                throw "Invalid args.";
+            }
         }
+        else {
+            // Logs are formatted with the timestamp and a log file will be created inside log directory.
+            logger.init(LOG_PATH, FILE_LOG_ENABLED);
+
+            console.log('Starting the Evernode xrpl message board.' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
+            console.log('Data dir: ' + DATA_DIR);
+            console.log('Rippled server: ' + RIPPLED_URL);
+            console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
+
+            const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
+            await mb.init();
+        }
+
     }
-
-    const mb = new MessageBoard(CONFIG_PATH, DB_PATH, SASHI_CLI_PATH, RIPPLED_URL);
-
-    if (process.argv.length >= 3 && process.argv[2] === 'new') {
-        mb.new(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
-        process.exit(0);
+    catch (err) {
+        console.log(err);
+        console.log("Evernode xrpl message board exiting with error.");
+        process.exit(1);
     }
-
-    // Logs are formatted with the timestamp and a log file will be created inside log directory.
-    logger.init(LOG_PATH, FILE_LOG_ENABLED);
-
-    console.log('Starting the Evernode xrpl message board.' + (IS_DEV_MODE ? ' (in dev mode)' : ''));
-    console.log('Data dir: ' + DATA_DIR);
-    console.log('Rippled server: ' + RIPPLED_URL);
-    console.log('Using Sashimono cli: ' + SASHI_CLI_PATH);
-
-    await mb.init();
 }
 
 main().catch(console.error);

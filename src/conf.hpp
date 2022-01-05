@@ -75,21 +75,16 @@ namespace conf
 
     struct system_config
     {
-        size_t max_cpu_us = 0;         // Max CPU time the agent process can consume.
-        size_t max_mem_kbytes = 0;     // Max memory the agent process can allocate in KB.
-        size_t max_swap_kbytes = 0;    // Max swap memory the agent process can allocate in KB.
-        size_t max_storage_kbytes = 0; // Max physical storage the agent process can allocate in KB.
+        size_t max_cpu_us = 0;         // Max CPU time allocated to all instances (out of 1000000 microsec).
+        size_t max_mem_kbytes = 0;     // Max memory allocated to all instances in KB.
+        size_t max_swap_kbytes = 0;    // Max swap memory allocated to all instances in KB.
+        size_t max_storage_kbytes = 0; // Max physical storage  allocated to all instances in KB.
         size_t max_instance_count = 0; // Max number of instances that can be created.
     };
 
     struct docker_config
     {
         std::unordered_map<std::string, std::string> images;
-    };
-
-    struct service_config
-    {
-        std::string cgrulesengd; // Cgroup rule generator service.
     };
 
     struct sa_config
@@ -99,7 +94,6 @@ namespace conf
         system_config system;
         docker_config docker;
         log_config log;
-        service_config service;
     };
 
     struct sa_context
@@ -129,7 +123,8 @@ namespace conf
 
     int init();
 
-    int create(std::string_view cgrulesengd_service, std::string_view host_addr, std::string_view registry_addr);
+    int create(std::string_view host_addr, std::string_view registry_addr, const size_t inst_count,
+               const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes);
 
     void set_dir_paths(std::string exepath, std::string datadir);
 

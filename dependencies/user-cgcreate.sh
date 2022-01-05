@@ -54,6 +54,7 @@ for user in "${validusers[@]}"; do
     # Setup user cgroup.
     if  [ $instance_cpu_us -gt 0 ] &&
         ! (cgcreate -g cpu:$user$cgroupsuffix &&
+        echo "1000000" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
         echo "$instance_cpu_us" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us); then
         echo "CPU cgroup creation for $user failed."
         has_err=1

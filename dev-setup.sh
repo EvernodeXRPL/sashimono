@@ -71,12 +71,13 @@ popd > /dev/null 2>&1
 popd > /dev/null 2>&1
 rm v2.0.0.tar.gz && sudo rm -r CLI11-2.0.0
 
-# Library dependencies.
+# Library and tools dependencies.
 sudo apt-get install -y \
     libsodium-dev \
     sqlite3 libsqlite3-dev \
     libboost-stacktrace-dev \
     fuse3
+    jq
 
 sudo cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
 

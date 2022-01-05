@@ -1,142 +1,91 @@
 #!/bin/bash
 # Sashimono agent uninstall script.
-# -q for non-interactive (quiet) mode
+# This must be executed with root privileges.
 
-user_bin=/usr/bin
-sashimono_bin=/usr/bin/sashimono-agent
-mb_xrpl_bin=$sashimono_bin/mb-xrpl
-docker_bin=$sashimono_bin/dockerbin
-sashimono_data=/etc/sashimono
-sashimono_conf=$sashimono_data/sa.cfg
-mb_xrpl_data=$sashimono_data/mb-xrpl
-sashimono_service="sashimono-agent"
-cgcreate_service="sashimono-cgcreate"
-mb_xrpl_service="sashimono-mb-xrpl"
-registryuser="sashidockerreg"
-mb_user="sashimbxrpl"
-group="sashiuser"
-admin_group="sashiadmin"
-cgroupsuffix="-cg"
-quiet=$1
+echo "---Sashimono uninstaller---"
 
-[ ! -d $sashimono_bin ] && echo "$sashimono_bin does not exist. Aborting uninstall." && exit 1
+[ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
 
-if [ "$quiet" != "-q" ]; then
-    echo "Are you sure you want to uninstall Sashimono?"
-    read -p "Type 'yes' to confirm uninstall: " confirmation </dev/tty
-    [ "$confirmation" != "yes" ] && echo "Uninstall cancelled." && exit 0
-fi
-
-# Get the cgrules service from the config.
-cgrulesengd_service=$(jq -r '.service.cgrulesengd' $sashimono_conf | awk '{print tolower($0)}' | sed 's/\.service$//')
-[ ! -f /etc/systemd/system/"$cgrulesengd_service".service ] && echo "Warning: $cgrulesengd_service systemd service does not exist."
+# Find the cgroups rules engine service.
+cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
+cgrulesengd_service="${cgrulesengd_filename%.*}"
+[ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
 
 # Message board user.
-mb_user_dir=/home/"$mb_user"
-mb_user_id=$(id -u "$mb_user")
+mb_user_dir=/home/"$MB_XRPL_USER"
+mb_user_id=$(id -u "$MB_XRPL_USER")
 mb_user_runtime_dir="/run/user/$mb_user_id"
 # Remove xrpl message board service if exists.
-if [ -f "$mb_user_dir"/.config/systemd/user/$mb_xrpl_service.service ]; then
-    sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $mb_xrpl_service
-    sudo -u "$mb_user" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $mb_xrpl_service
-fi
-if [ "$quiet" == "-q" ]; then
-    # We only perform this for our testing setup during development.
-    echo "Cleaning up host XRP account..."
-
-    hook_address="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
-    func_url="https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ=="
-
-    mb_xrpl_conf=$mb_xrpl_data/mb-xrpl.cfg
-    xrp_address=$(jq -r '.xrpl.address' $mb_xrpl_conf)
-    xrp_secret=$(jq -r '.xrpl.secret' $mb_xrpl_conf)
-
-    if [ "$xrp_address" != "" ] && [ "$xrp_secret" != "" ]; then
-        acc_clean_func="$func_url&action=cleanhost&hookaddr=$hook_address&addr=$xrp_address&secret=$xrp_secret"
-        func_code=$(curl -o /dev/null -s -w "%{http_code}\n" -d "" -X POST $acc_clean_func)
-        [ "$func_code" != "200" ] && echo "Host XRP account cleanup failed. code:$func_code"
-        [ "$func_code" == "200" ] && echo "Cleaned up host XRP account."
-    fi
+if [ -f "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service ]; then
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $MB_XRPL_SERVICE
 fi
 
 # Deregister evernode message board host registration.
 echo "Attempting Evernode xrpl message board host deregistration..."
-sudo -u $mb_user MB_DATA_DIR=$mb_xrpl_data MB_LOG=1 MB_DEREGISTER=1 node $mb_xrpl_bin
+sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister
 
 echo "Deleting message board user..."
-killall -u $mb_user # Kill any running processes.
-userdel -f "$mb_user"
-rm -r /home/"${mb_user:?}"
+killall -u $MB_XRPL_USER # Kill any running processes.
+userdel -f "$MB_XRPL_USER"
+rm -r /home/"${MB_XRPL_USER:?}"
 
 # Uninstall all contract instance users
-prefix="sashi"
-users=$(cut -d: -f1 /etc/passwd | grep "^$prefix" | sort)
+users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
 readarray -t userarr <<<"$users"
-validusers=()
+sashiusers=()
 for user in "${userarr[@]}"; do
-    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && continue
-    validusers+=("$user")
+    [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+    sashiusers+=("$user")
 done
 
-ucount=${#validusers[@]}
+ucount=${#sashiusers[@]}
 if [ $ucount -gt 0 ]; then
 
-    echo "Detected $ucount Sashimono contract instances."
-    for user in "${validusers[@]}"; do
+    echo "Detected $ucount contract instances."
+    for user in "${sashiusers[@]}"; do
         echo "$user"
     done
 
-    if [ "$quiet" != "-q" ]; then
-        echo "Are you sure you want to delete all $ucount Sashimono contract instances?"
-        read -p "Type $ucount to confirm deletion:" confirmation </dev/tty
-    else
-        confirmation="$ucount"
-    fi
-
-    if [ "$confirmation" == "$ucount" ]; then
-        echo "Deleting $ucount contract instances..."
-        for user in "${validusers[@]}"; do
-            output=$($sashimono_bin/user-uninstall.sh $user | tee /dev/stderr)
-            [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
-        done
-    else
-        echo "Uninstall cancelled."
-        exit 0
-    fi
+    echo "Deleting $ucount contract instances..."
+    for user in "${sashiusers[@]}"; do
+        output=$($SASHIMONO_BIN/user-uninstall.sh $user | tee /dev/stderr)
+        [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
+    done
 fi
 
 echo "Removing Sashimono cgroup creation service..."
-systemctl stop $cgcreate_service
-systemctl disable $cgcreate_service
-rm /etc/systemd/system/$cgcreate_service.service
+systemctl stop $CGCREATE_SERVICE
+systemctl disable $CGCREATE_SERVICE
+rm /etc/systemd/system/$CGCREATE_SERVICE.service
 
 echo "Removing Sashimono service..."
-systemctl stop $sashimono_service
-systemctl disable $sashimono_service
-rm /etc/systemd/system/$sashimono_service.service
+systemctl stop $SASHIMONO_SERVICE
+systemctl disable $SASHIMONO_SERVICE
+rm /etc/systemd/system/$SASHIMONO_SERVICE.service
 
 # echo "Removing Sashimono private docker registry..."
-# ./registry-uninstall.sh $docker_bin $registryuser
+# ./registry-uninstall.sh $DOCKER_BIN $REGISTRY_USER
 
 echo "Deleting binaries..."
-rm -r $sashimono_bin
+rm -r $SASHIMONO_BIN
 
 echo "Deleting Sashimono CLI..."
-rm $user_bin/sashi
+rm $USER_BIN/sashi
 
 echo "Deleting data folder..."
-rm -r $sashimono_data
+rm -r $SASHIMONO_DATA
 
 # When removing the cgrule,
 # We first edit the config and restart the service to apply the config.
 # Then we remove the attached group.
 echo "Deleting cgroup rules..."
-sed -i -r "/^@$group\s+cpu,memory\s+%u$cgroupsuffix/d" /etc/cgrules.conf
-echo "Restarting the $cgrulesengd_service.service."
+sed -i -r "/^@$SASHIUSER_GROUP\s+cpu,memory\s+%u$CG_SUFFIX/d" /etc/cgrules.conf
+echo "Restarting the '$cgrulesengd_service' service..."
 systemctl restart $cgrulesengd_service
-groupdel $group
+groupdel $SASHIUSER_GROUP
 
-groupdel $admin_group
+groupdel $SASHIADMIN_GROUP
 
 echo "Sashimono uninstalled successfully."
 exit 0

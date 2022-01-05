@@ -1,25 +1,43 @@
 #!/bin/bash
 # Sashimono Ubuntu prerequisites installation script.
 # This must be executed with root privileges.
-# -q for non-interactive (quiet) mode
-
-quiet=$1
 
 # Adding user disk quota limitation capability
 # Enable user quota in fstab for root mount.
-# We do not edit original file, instead we create a temp file with original and edit it.
-# Replace temp file with original only if success.
-tmp=$(mktemp -d) 
+# Enable cgroup memory and swapaccount capability.
+# Setup cgroups rules engine service.
+
+echo "---Sashimono prerequisites installer---"
+
+[ -z "$1" ] && echo "cgrules engine service name not specified." && exit 1
+
+tmp=$(mktemp -d)
 tmpfstab=$tmp.tmp
 originalfstab=/etc/fstab
 cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
+cgrulesengd_service=$1 # cgroups rules engine service name
+
+function stage() {
+    echo "STAGE $1" # This is picked up by the setup console output filter.
+}
+
+stage "Installing dependencies"
 
 apt-get update
-apt-get install uidmap -y
+apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
+# uidmap        # Required for rootless docker.
+# slirp4netns   # Required for high performance rootless networking.
+# fuse3         # Required for hpfs.
+# cgroup-tools  # Required to setup contract instances resource limits.
+# quota         # Required for disk space group quota.
+# curl          # Required to download installation artifacts.
+# openssl       # Required by Sashimono agent to create contract tls certs.
+# jq            # Used for json config file manipulation.
 
 # Install nodejs 14 if not exists.
 if ! command -v node &>/dev/null; then
+    stage "Installing nodejs"
     apt-get -y install ca-certificates # In case nodejs package certitficates are renewed.
     curl -sL https://deb.nodesource.com/setup_14.x | bash -
     apt-get -y install nodejs
@@ -30,14 +48,15 @@ else
     fi
 fi
 
-# Install slirp4netns if not exists (required for high performance rootless networking).
-if ! command -v slirp4netns &>/dev/null; then
-    apt-get -y install slirp4netns
-fi
+# -------------------------------
+# fstab changes
+# We do not edit original file, instead we create a temp file with original and edit it.
+# Replace temp file with original only if success.
 
 # Check for pattern <Not starting with a comment><Not whitespace(Device)><Whitespace></><Whitespace><Not whitespace(FS type)><Whitespace><No whitespace(Options)><Whitespace><Number(Dump)><Whitespace><Number(Pass)>
 # And whether Options is <Not whitespace>*grpjquota=aquota.group or jqfmt=vfsv0<Not whitespace>*
 # If not add groupquota to the options.
+stage "Configuring fstab"
 updated=0
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
 res=$?
@@ -47,7 +66,7 @@ if [ $res -eq 0 ]; then
     updated=1
 fi
 
-# If the res is not success(0) or alredy exist(100).
+# If the res is not success(0) or already exist(100).
 [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
 
 sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
@@ -77,19 +96,15 @@ fi
 
 # Check and turn on group quota if not enabled.
 if [ ! -f /aquota.group ]; then
-    # quota package is not installed.
-    if ! command -v quota &>/dev/null; then
-        apt-get install -y quota
-    fi
     quotacheck -ugm /
     quotaon -v /
 fi
 
 # -------------------------------
+stage "Configuring fuse"
 
 # Check fuse config exists.
-apt-get install -y fuse3
-[ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse."
+[ ! -f /etc/fuse.conf ] && echo "Fuse config does not exist, Make sure you've installed fuse." && exit 1
 
 # Set user_allow_other if not already configured
 # We create a temp of the config file and replace with original file only if success.
@@ -135,11 +150,7 @@ else
 fi
 
 # -------------------------------
-
-# Install cgroup-tools if not exists (required to setup resource control groups).
-if ! command -v /usr/sbin/cgconfigparser >/dev/null || ! command -v /usr/sbin/cgrulesengd >/dev/null; then
-    apt-get install -y cgroup-tools
-fi
+stage "Configuring cgroup rules engine"
 
 # Copy cgred.conf from examples if not exists to setup control groups.
 [ ! -f /etc/cgred.conf ] && cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
@@ -150,29 +161,30 @@ fi
 # Create new cgrules.conf if not exists to setup control groups.
 [ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
 
-# Setup a service to run cgroup rules generator.
-cgrulesengd_service=cgrulesengdsvc
+# Setup a service if not exists to run cgroup rules generator.
+cgrulesengd_file="/etc/systemd/system/$cgrulesengd_service.service"
+if ! [ -f "$cgrulesengd_file" ]; then
+    echo "[Unit]
+    Description=cgroups rules generator
+    After=network.target
 
-echo "[Unit]
-Description=cgroup rules generator
-After=network.target
+    [Service]
+    User=root
+    Group=root
+    Type=forking
+    EnvironmentFile=-/etc/cgred.conf
+    ExecStart=/usr/sbin/cgrulesengd
+    Restart=on-failure
 
-[Service]
-User=root
-Group=root
-Type=forking
-EnvironmentFile=-/etc/cgred.conf
-ExecStart=/usr/sbin/cgrulesengd
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$cgrulesengd_service.service
-
-systemctl daemon-reload
+    [Install]
+    WantedBy=multi-user.target" >$cgrulesengd_file
+    systemctl daemon-reload
+fi
 systemctl enable $cgrulesengd_service
 systemctl start $cgrulesengd_service
 
 # -------------------------------
+stage "Configuring grub"
 
 # Enable cgroup memory and swapaccount if not already configured
 # We create a temp of the grub file and replace with original file only if success.
@@ -201,7 +213,7 @@ if [ $res -eq 100 ]; then
         sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
         res=$?
         if [ $res -eq 0 ]; then
-            # Check whether there's swapaccount value other that 1, If so replace value with 1.
+            # Check whether there's swapaccount value other than 1, If so replace value with 1.
             # Otherwise add swapaccount=1 after cgroup_enable=memory.
             sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" "$tmpgrub"
             res=$?
@@ -236,17 +248,14 @@ if [ $updated -eq 1 ]; then
         mv $grub_backup /etc/default/grub
         echo "Grub update failed."
         exit 1
-    fi 
-    echo "Updated grub. System needs to be rebooted to apply grub changes."
-
-    if [ "$quiet" != "-q" ]; then
-        read -p "Type 'yes' to reboot: " confirmation < /dev/tty
-        [ "$confirmation" != "yes" ] && echo "Rebooting cancelled." && exit 0
     fi
 
-    echo "Rebooting..."
-    reboot
+    # Indicate pending reboot in the standard reboot required file.
+    touch /run/reboot-required
+    rebootpkgs=/run/reboot-required.pkgs
+    (! [ -f $rebootpkgs ] || [ -z "$(grep sashimono $rebootpkgs)" ]) && echo "sashimono" >>$rebootpkgs
 
+    echo "Updated grub. System needs to be rebooted to apply grub changes."
 else
     rm -r "$tmp"
     echo "Grub already configured."

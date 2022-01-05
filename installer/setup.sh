@@ -8,7 +8,7 @@ cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 memKB_per_instance=819200
 evernode_alias=/usr/bin/evernode
-install_log="evernode-beta-install.log"
+log_dir=/tmp/evernode-beta
 script_url="https://sthotpocket.blob.core.windows.net/evernode/setup.sh"
 installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
 
@@ -29,7 +29,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export REGISTRY_USER="sashidockerreg"
 export CG_SUFFIX="-cg"
 export REGISTRY_PORT=4444
-export HOOK_ADDRESS="rntPzkVidFxnymL98oF3RAFhhBSmsyB5HP"
+export HOOK_ADDRESS="rKt4W57Rmh8k9HNCYLc2AvFD9rAEkF5RKP"
 
 [ -f $SASHIMONO_DATA/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 
@@ -275,14 +275,15 @@ function install_sashimono() {
     rm installer.tgz
 
     set -o pipefail # We need installer exit code to detect failures (ignore the tee pipe exit code).
-    logfile=$(mktemp -d)/$install_log
+    mkdir -p $log_dir
+    logfile="$log_dir/installer-$(date +%s).log"
     echo "Installing prerequisites..."
     ! ./prereq.sh $cgrulesengd_service 2>&1 \
-                            | tee $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     echo "Installing Sashimono..."
     ! ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
-                            | tee $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     set +o pipefail
             
     rm -r $tmp
@@ -290,18 +291,18 @@ function install_sashimono() {
 
 function uninstall_sashimono() {
 
-    if $interactive; then
-        # Check for existing contract instances.
-        local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
-        readarray -t userarr <<<"$users"
-        local sashiusers=()
-        for user in "${userarr[@]}"; do
-            [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
-            sashiusers+=("$user")
-        done
-        local ucount=${#sashiusers[@]}
-        [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
-    fi
+    # Check for existing contract instances.
+    local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+    readarray -t userarr <<<"$users"
+    local sashiusers=()
+    for user in "${userarr[@]}"; do
+        [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+        sashiusers+=("$user")
+    done
+    local ucount=${#sashiusers[@]}
+
+    $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
+    ! $interactive && echo "$ucount contract instances will be deleted."
 
     echo "Uninstalling Sashimono..."
     ! $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
@@ -409,3 +410,5 @@ elif [ "$mode" == "list" ]; then
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish
+
+exit 0

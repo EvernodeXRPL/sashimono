@@ -80,7 +80,7 @@ class MessageBoard {
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerIndex = await this.xrplApi.ledgerIndex;
+        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         const redeems = await this.getRedeemedRecords();
         for (const redeem of redeems)
@@ -97,7 +97,7 @@ class MessageBoard {
             if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
                 this.lastRechargedMoment = currentMoment;
 
-                console.log(`Recharding at Moment ${this.lastRechargedMoment}...`)
+                console.log(`Recharging at Moment ${this.lastRechargedMoment}...`)
 
                 try {
                     await this.hostClient.recharge();
@@ -381,11 +381,15 @@ class Setup {
             const req = https.request(url, { method: 'POST' }, (resp) => {
                 let data = '';
                 resp.on('data', (chunk) => data += chunk);
-                resp.on('end', () => resolve(data));
+                resp.on('end', () => {
+                    if (resp.statusCode == 200)
+                        resolve(data);
+                    else
+                        reject(data);
+                });
             })
 
             req.on("error", reject);
-            req.on('error', reject)
             req.on('timeout', () => reject('Request timed out.'))
             req.end()
         })
@@ -418,7 +422,22 @@ class Setup {
 
     async #sendEversFromHook(hostAddress) {
         console.log("Sending EVRs...");
-        await this.#httpPost(EVR_SEND_URL + hostAddress);
+
+        // Sometimes we may get error from func execution when some rippled servers in the testnet cluster
+        // haven't still updated the ledger. In such cases, we retry several times before giving up.
+        let attempts = 0;
+        while (attempts >= 0) {
+            try {
+                await this.#httpPost(EVR_SEND_URL + hostAddress);
+                break;
+            }
+            catch (err) {
+                if (++attempts <= 5)
+                    continue;
+
+                throw err;
+            }
+        }
     }
 
     async generateBetaHostAccount(hookAddress) {
@@ -438,18 +457,18 @@ class Setup {
             await hostClient.connect();
 
             // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
-            // haven't still updated the ledger. In such cases, we retry account preparation several times before giving up.
+            // haven't still updated the ledger. In such cases, we retry several times before giving up.
             let attempts = 0;
-            while (++attempts <= 5) {
+            while (attempts >= 0) {
                 try {
                     await hostClient.prepareAccount();
                     break;
                 }
                 catch (err) {
-                    if (err.data.error === 'actNotFound') {
+                    if (err.data.error === 'actNotFound' && ++attempts <= 5) {
                         console.log("actNotFound - retrying...")
                         // Wait and retry.
-                        await new Promise(resolve => setTimeout(resolve, 2000));
+                        await new Promise(resolve => setTimeout(resolve, 3000));
                         continue;
                     }
                     throw err;
@@ -488,8 +507,27 @@ class Setup {
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
-        await hostClient.register(acc.token, countryCode, cpuMicroSec,
-            Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), description.replace('_', ' '));
+
+        // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
+        // haven't still updated the ledger. In such cases, we retry several times before giving up.
+        let attempts = 0;
+        while (attempts >= 0) {
+            try {
+                await hostClient.register(acc.token, countryCode, cpuMicroSec,
+                    Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), description.replace('_', ' '));
+                break;
+            }
+            catch (err) {
+                if (err.code === 'tecPATH_DRY' && ++attempts <= 5) {
+                    console.log("tecPATH_DRY - retrying...")
+                    // Wait and retry.
+                    await new Promise(resolve => setTimeout(resolve, 3000));
+                    continue;
+                }
+                throw err;
+            }
+        }
+
         await hostClient.disconnect();
     }
 
@@ -546,7 +584,7 @@ async function main() {
                 const hookAddress = process.argv[3];
                 const setup = new Setup();
                 const acc = await setup.generateBetaHostAccount(hookAddress);
-                await setup.newConfig(acc.address, acc.secret, hookAddress, acc.token);
+                setup.newConfig(acc.address, acc.secret, hookAddress, acc.token);
             }
             else if (process.argv.length === 9 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
@@ -592,8 +630,6 @@ async function main() {
         console.log("Evernode xrpl message board exiting with error.");
         process.exit(1);
     }
-
-    process.exit(0);
 }
 
 main().catch(console.error);

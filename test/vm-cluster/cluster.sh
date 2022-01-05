@@ -18,7 +18,7 @@
 # lcl - Get lcl of the hosts.
 # peers - Get the cfg peer list of the hosts.
 # logs - Get the log lines grep by a given keywords.
-# replacebin - Replaces a given file to /usr/bin/sashimono-agent dir and keep a backup of existing file.
+# replacebin - Replaces a given file to /usr/bin/sashimono dir and keep a backup of existing file.
 
 # create - Create new sashimono hotpocket instance in each node.
 # createall - Create sashimono hotpocket instances in all nodes parallely.
@@ -185,8 +185,8 @@ if [ $mode == "reconfig" ]; then
     sashimono_service="sashimono-agent"
     saconfig="/etc/sashimono/sa.cfg"
 
-    uninstall="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/uninstall.sh | bash -s -- -q"
-    install="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/install.sh | bash -s -- -q"
+    uninstall="evernode uninstall -q"
+    install="curl -fsSL https://sthotpocket.blob.core.windows.net/evernode/setup.sh | cat  | SKIP_SYSREQ=1 bash -s install -q auto auto 1000000 1000000 2097152 3145728 3 Auto_host"
 
     restartcgrs="systemctl restart $cgrulesengd_service.service"
     restartsas="systemctl restart $sashimono_service.service"
@@ -202,12 +202,12 @@ if [ $mode == "reconfig" ]; then
 
         # Reinstall sashimono only if reinstall specified.
         if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
-            command="$uninstall && $install && $changecfg && $restartcgrs && $restartsas"
+            command="$uninstall &>/dev/null && echo 'Sashimono uninstalled.' && $install &>/dev/null && echo 'Sashimono installed.' && $changecfg && $restartcgrs && $restartsas"
         else
             command="$changecfg && $restartsas"
         fi
 
-        if ! sshskp $sshuser@$hostaddr $command &>/dev/null; then
+        if ! sshskp $sshuser@$hostaddr $command ; then
             printf "$PRINTFORMAT" "$nodeno" "Error occured reconfiguring sashimono."
         else
             # Remove host info if reinstall.
@@ -334,8 +334,8 @@ if [ $mode == "replacebin" ]; then
         nodeno=$(expr $1 + 1)
         replace=$2
         filename=$(basename $replace)
-        original="/usr/bin/sashimono-agent/$filename"
-        backup="/usr/bin/sashimono-agent/$filename.bk"
+        original="/usr/bin/sashimono/$filename"
+        backup="/usr/bin/sashimono/$filename.bk"
         sshskp $sshuser@$hostaddr "mv $original $backup" && scpskp -q $replace $sshuser@$hostaddr:$original
         echo "node$nodeno: Updated $original, Kept backup $backup"
     }
@@ -354,7 +354,7 @@ if [ $mode == "replacebin" ]; then
 fi
 
 if [ $mode == "docker-pull" ]; then
-    dockerbin=/usr/bin/sashimono-agent/dockerbin/docker
+    dockerbin=/usr/bin/sashimono/dockerbin/docker
     repo=$(echo $continfo | jq -r '.docker.repo')
     if [ "$repo" == "" ] || [ "$repo" == "null" ]; then
         echo "repo not specified."

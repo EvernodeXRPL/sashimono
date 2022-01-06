@@ -91,5 +91,7 @@ namespace hp
 
     void get_instance_list(std::vector<hp::instance_info> &instances);
 
+    bool system_ready();
+
 } // namespace hp
 #endif

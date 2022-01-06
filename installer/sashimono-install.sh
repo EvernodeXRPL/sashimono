@@ -121,7 +121,7 @@ systemctl daemon-reload
 systemctl enable $CGCREATE_SERVICE
 systemctl start $CGCREATE_SERVICE
 systemctl enable $SASHIMONO_SERVICE
-systemctl start $SASHIMONO_SERVICE
+# We only enable this service, so it'll automatically start on the next boot.
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
 # Install xrpl message board systemd service.
@@ -183,12 +183,18 @@ ExecStart=/usr/bin/node $MB_XRPL_BIN
 Restart=on-failure
 RestartSec=5
 [Install]
-WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service > /dev/null
+WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
 
 # This service needs to be restarted when mb-xrpl.cfg is changed.
 sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
-sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+# We only enable this service, so it'll automatically start on the next boot.
 echo "Installed Evernode xrpl message board."
+
+# If there's no pending reboot, start the sashimono and message board services.
+if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
+    systemctl start $SASHIMONO_SERVICE
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+fi
 
 echo "Sashimono installed successfully."
 exit 0

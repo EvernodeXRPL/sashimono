@@ -63,6 +63,8 @@ namespace util
 
     int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params = {});
 
+    int execute_bash_cmd(const char *command, char *output, const int output_len);
+
 } // namespace util
 
 #endif

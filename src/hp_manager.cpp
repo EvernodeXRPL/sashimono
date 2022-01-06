@@ -46,11 +46,24 @@ namespace hp
     constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
 
+    // Cgrules check related constants.
+    constexpr const char *CGRULE_ACTIVE = "systemctl is-active $(basename $(grep \"ExecStart.*=.*/cgrulesengd$\" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))";
+    constexpr const char *CGRULE_CPU_DIR = "/sys/fs/cgroup/cpu";
+    constexpr const char *CGRULE_MEM_DIR = "/sys/fs/cgroup/memory";
+    constexpr const char *CGRULE_CONF = "/etc/cgrules.conf";
+    constexpr const char *CGRULE_REGEXP = "(^|\n)(\\s*)@sashiuser(\\s+)cpu,memory(\\s+)\%u-cg(\\s*)($|\n)";
+    constexpr const char *REBOOT_FILE = "/run/reboot-required.pkgs";
+    constexpr const char *REBOOT_REGEXP = "(^|\n)(\\s*)sashimono(\\s*)($|\n)";
+
     /**
      * Initialize hp related environment.
     */
     int init()
     {
+        // First, check whether system is ready to start.
+        if (!system_ready())
+            return -1;
+
         const std::string db_path = conf::ctx.data_dir + "/sa.sqlite";
         if (sqlite::open_db(db_path, &db, true) == -1 ||
             sqlite::initialize_hp_db(db) == -1)
@@ -600,24 +613,15 @@ namespace hp
         char command[len];
         sprintf(command, DOCKER_STATUS, username.data(), conf::ctx.exe_dir.data(), container_name.data());
 
-        FILE *fpipe = popen(command, "r");
-
-        if (fpipe == NULL)
-        {
-            LOG_ERROR << "Error on popen for command " << std::string(command);
-            return -1;
-        }
         char buffer[20];
 
-        fgets(buffer, 20, fpipe);
+        if (util::execute_bash_cmd(command, buffer, 20) == -1)
+            return -1;
 
         status = buffer;
         status = status.substr(1, status.length() - 3);
 
-        if (pclose(fpipe) == 0)
-            return 0;
-        else
-            return -1;
+        return 0;
     }
 
     /**
@@ -923,4 +927,81 @@ namespace hp
         sqlite::get_instance_list(db, instances);
     }
 
+    /**
+     * Check whether there's a pending reboot and cgrules service is running and configured.
+     * @return true if active and configured otherwise false.
+    */
+    bool system_ready()
+    {
+        char buffer[20];
+
+        if (util::execute_bash_cmd(CGRULE_ACTIVE, buffer, 20) == -1)
+            return false;
+
+        // Check cgrules service status is active.
+        if (strncmp(buffer, "active", 6) != 0)
+        {
+            LOG_ERROR << "Cgrules service is inactive.";
+            return false;
+        }
+
+        // Check cgrules cpu and memory mounts exist.
+        if (!util::is_dir_exists(CGRULE_CPU_DIR) || !util::is_dir_exists(CGRULE_MEM_DIR))
+        {
+            LOG_ERROR << "Cgrules cpu or memory mounts does not exist.";
+            return false;
+        }
+
+        // Check cgrules config exist and configured.
+        int fd = open(CGRULE_CONF, O_RDONLY);
+        if (fd == -1)
+        {
+            LOG_ERROR << errno << ": Error opening the cgrules config file.";
+            return false;
+        }
+
+        std::string buf;
+        if (util::read_from_fd(fd, buf, 0) == -1)
+        {
+            LOG_ERROR << errno << ": Error reading the cgrules config file.";
+            close(fd);
+            return false;
+        }
+
+        close(fd);
+
+        if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
+        {
+            LOG_ERROR << "Cgrules config entry does not exist.";
+            return false;
+        }
+
+        // Check there's a pending reboot.
+        if (util::is_file_exists(REBOOT_FILE))
+        {
+            fd = open(REBOOT_FILE, O_RDONLY);
+            if (fd == -1)
+            {
+                LOG_ERROR << errno << ": Error opening the reboot file.";
+                return false;
+            }
+
+            if (util::read_from_fd(fd, buf, 0) == -1)
+            {
+                LOG_ERROR << errno << ": Error reading the reboot file.";
+                close(fd);
+                return false;
+            }
+
+            close(fd);
+
+            if (std::regex_search(buf, std::regex(REBOOT_REGEXP)))
+            {
+                LOG_ERROR << "There's a pending reboot.";
+                return false;
+            }
+        }
+
+        return true;
+    }
 } // namespace hp

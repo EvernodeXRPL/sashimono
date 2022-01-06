@@ -425,7 +425,6 @@ namespace util
             params.append(*itr);
             if (std::next(itr) != input_params.end())
                 params.append(" ");
-            ;
         }
         const int len = 23 + (file_name.length() * 2) + params.length();
         char command[len];
@@ -456,6 +455,34 @@ namespace util
 
         pclose(fpipe);
         util::split_string(output_params, output, ",");
+        return 0;
+    }
+
+    /**
+     * Execute bash command and take the output.
+     * @param command Command to execute.
+     * @param output Pointer to populate output.
+     * @param output_len Length of the output.
+     * @return 0 on success and -1 on error.
+    */
+    int execute_bash_cmd(const char *command, char *output, const int output_len)
+    {
+        FILE *fpipe = popen(command, "r");
+
+        if (fpipe == NULL)
+        {
+            LOG_ERROR << "Error on popen for command " << std::string(command);
+            return -1;
+        }
+
+        fgets(output, output_len, fpipe);
+
+        if (pclose(fpipe) < 0)
+        {
+            LOG_ERROR << "Error on pclose for command " << std::string(command);
+            return -1;
+        }
+
         return 0;
     }
 

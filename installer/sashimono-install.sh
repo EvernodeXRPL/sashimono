@@ -192,6 +192,7 @@ echo "Installed Evernode xrpl message board."
 
 # If there's no pending reboot, start the sashimono and message board services.
 if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
+    echo "Starting the sashimono and message board services."
     systemctl start $SASHIMONO_SERVICE
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
 fi

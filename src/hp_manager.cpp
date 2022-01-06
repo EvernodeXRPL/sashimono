@@ -60,12 +60,9 @@ namespace hp
     */
     int init()
     {
-        // First, check whether cgrules service is running and group rules are applied.
+        // First, check whether system is ready to start.
         if (!system_ready())
-        {
-            LOG_ERROR << "Cgrules aren't active and applied for the system.";
             return -1;
-        }
 
         const std::string db_path = conf::ctx.data_dir + "/sa.sqlite";
         if (sqlite::open_db(db_path, &db, true) == -1 ||
@@ -944,14 +941,14 @@ namespace hp
         // Check cgrules service status is active.
         if (strncmp(buffer, "active", 6) != 0)
         {
-            LOG_DEBUG << "Cgrules service is inactive.";
+            LOG_ERROR << "Cgrules service is inactive.";
             return false;
         }
 
         // Check cgrules cpu and memory mounts exist.
         if (!util::is_dir_exists(CGRULE_CPU_DIR) || !util::is_dir_exists(CGRULE_MEM_DIR))
         {
-            LOG_DEBUG << "Cgrules cpu or memory mounts does not exist.";
+            LOG_ERROR << "Cgrules cpu or memory mounts does not exist.";
             return false;
         }
 
@@ -959,14 +956,14 @@ namespace hp
         int fd = open(CGRULE_CONF, O_RDONLY);
         if (fd == -1)
         {
-            LOG_DEBUG << errno << ": Error opening the cgrules config file.";
+            LOG_ERROR << errno << ": Error opening the cgrules config file.";
             return false;
         }
 
         std::string buf;
         if (util::read_from_fd(fd, buf, 0) == -1)
         {
-            LOG_DEBUG << errno << ": Error reading the cgrules config file.";
+            LOG_ERROR << errno << ": Error reading the cgrules config file.";
             close(fd);
             return false;
         }
@@ -975,7 +972,7 @@ namespace hp
 
         if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
         {
-            LOG_DEBUG << "Cgrules config entry does not exist.";
+            LOG_ERROR << "Cgrules config entry does not exist.";
             return false;
         }
 
@@ -985,13 +982,13 @@ namespace hp
             fd = open(REBOOT_FILE, O_RDONLY);
             if (fd == -1)
             {
-                LOG_DEBUG << errno << ": Error opening the reboot file.";
+                LOG_ERROR << errno << ": Error opening the reboot file.";
                 return false;
             }
 
             if (util::read_from_fd(fd, buf, 0) == -1)
             {
-                LOG_DEBUG << errno << ": Error reading the reboot file.";
+                LOG_ERROR << errno << ": Error reading the reboot file.";
                 close(fd);
                 return false;
             }
@@ -1000,7 +997,7 @@ namespace hp
 
             if (std::regex_search(buf, std::regex(REBOOT_REGEXP)))
             {
-                LOG_DEBUG << "There's a pending reboot.";
+                LOG_ERROR << "There's a pending reboot.";
                 return false;
             }
         }

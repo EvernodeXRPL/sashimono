@@ -47,7 +47,7 @@ namespace hp
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
 
     // Cgrules check related constants.
-    constexpr const char *CGRULE_ACTIVE = "systemctl is-active $(basename $(grep \"ExecStart.*=.*/cgrulesengd$\" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))";
+    constexpr const char *CGRULE_ACTIVE = "service=$(grep \"ExecStart.*=.*/cgrulesengd$\" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ') && [ ! -z $service ] && systemctl is-active $(basename $service)";
     constexpr const char *CGRULE_CPU_DIR = "/sys/fs/cgroup/cpu";
     constexpr const char *CGRULE_MEM_DIR = "/sys/fs/cgroup/memory";
     constexpr const char *CGRULE_CONF = "/etc/cgrules.conf";

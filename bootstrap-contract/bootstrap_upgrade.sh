@@ -64,6 +64,7 @@ function upgrade() {
         fi
 
         bin_args=$(jq '.bin_args' $contract_config)
+        environment=$(jq '.environment' $contract_config)
 
         roundtime=$(jq '.roundtime' $contract_config)
         if [ "$roundtime" -le 0 ] || [ "$roundtime" -gt 3600000 ]; then
@@ -115,6 +116,7 @@ function upgrade() {
         version:$version,\
         bin_path:$bin_path,\
         bin_args:$bin_args,\
+        environment:$environment,\
         unl: $unl,\
         roundtime:$roundtime,\
         stage_slice:$stage_slice,\

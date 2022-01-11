@@ -9,8 +9,8 @@ alloc_ratio=80
 memKB_per_instance=819200
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-script_url="https://sthotpocket.blob.core.windows.net/evernode/setup.sh"
-installer="https://sthotpocket.blob.core.windows.net/evernode/sashimono-installer.tar.gz"
+script_url="https://sthotpocket.blob.core.windows.net/sashimono/setup.sh"
+installer="https://sthotpocket.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -29,7 +29,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export REGISTRY_USER="sashidockerreg"
 export CG_SUFFIX="-cg"
 export REGISTRY_PORT=4444
-export HOOK_ADDRESS="rKt4W57Rmh8k9HNCYLc2AvFD9rAEkF5RKP"
+export HOOK_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
 [ -f $SASHIMONO_DATA/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 
@@ -199,8 +199,11 @@ function set_country_code() {
 }
 
 function set_cgrules_svc() {
-    local filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
-    cgrulesengd_service="${filename%.*}"
+    local filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+    if [ -n "$filepath" ] ; then
+        local filename=$(basename $filepath)
+        cgrulesengd_service="${filename%.*}"
+    fi
     # If service not detected, use the default name.
     [ -z "$cgrulesengd_service" ] && cgrulesengd_service=$cgrulesengd_default || echo "cgroups rules engine service found: '$cgrulesengd_service'"
 }

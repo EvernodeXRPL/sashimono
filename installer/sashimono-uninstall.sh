@@ -7,8 +7,11 @@ echo "---Sashimono uninstaller---"
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
 
 # Find the cgroups rules engine service.
-cgrulesengd_filename=$(basename $(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } '))
-cgrulesengd_service="${cgrulesengd_filename%.*}"
+cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+if [ -n "$cgrulesengd_filepath" ] ; then
+    cgrulesengd_filename=$(basename $cgrulesengd_filepath)
+    cgrulesengd_service="${cgrulesengd_filename%.*}"
+fi
 [ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
 
 # Message board user.

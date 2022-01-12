@@ -106,7 +106,7 @@ namespace cli
     */
     int get_bin_path(std::string &bin_path)
     {
-        // Check whether socket exists in exec path.
+        // Check whether binary exists in exec path.
         std::string path = ctx.sashi_dir + std::string("/") + SAGENT_BIN_NAME;
         struct stat st;
         if (stat(path.data(), &st) == 0 && S_ISREG(st.st_mode))

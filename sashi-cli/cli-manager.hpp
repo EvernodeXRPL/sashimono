@@ -5,9 +5,10 @@ namespace cli
 {
     struct cli_context
     {
-        std::string sashi_dir;   // Path of the Sashi CLI executable.
-        std::string socket_path; // Path of the sashimono socket.
-        int socket_fd = -1;      // File descriptor of the socket.
+        std::string sashi_dir;     // Path of the Sashi CLI executable.
+        std::string sashimono_dir; // Path of the Sashimono executable.
+        std::string socket_path;   // Path of the sashimono socket.
+        int socket_fd = -1;        // File descriptor of the socket.
     };
 
     extern cli_context ctx;
@@ -15,6 +16,8 @@ namespace cli
     int init(std::string_view sashi_dir);
 
     int get_socket_path(std::string &socket_path);
+
+    int get_bin_path(std::string &bin_path);
 
     int write_to_socket(std::string_view message);
 

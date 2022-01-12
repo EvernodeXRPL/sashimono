@@ -254,7 +254,7 @@ namespace cli
     }
 
     /**
-     * Execute and dokcer command in a givent container.
+     * Execute and docker command in a givent container.
      * @param type Type of the command.
      * @param container_name Name of the contract.
      * @return 0 on success, -1 on error.

@@ -929,7 +929,7 @@ namespace hp
     }
 
     /**
-     * Get the instance with given name from the database skip if destroyed.
+     * Get the instance with given name from the database, skip if destroyed.
      * @param error_msg Error message if any.
      * @param container_name Name of the instance
      * @param instance Instance info ref to be populated.

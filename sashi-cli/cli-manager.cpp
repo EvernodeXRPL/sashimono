@@ -11,6 +11,8 @@ namespace cli
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
     constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
 
+    constexpr const char *DOCKER_ATTACH = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker attach %s";
+
     cli_context ctx;
 
     bool init_success = false;
@@ -207,6 +209,74 @@ namespace cli
         catch (const std::exception &e)
         {
             std::cerr << "JSON message parsing failed. " << e.what() << std::endl;
+            return -1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Execute and dokcer command in a givent container.
+     * @param type Type of the command.
+     * @param container_name Name of the contract.
+     * @return 0 on success, -1 on error.
+    */
+    int docker_exec(std::string_view type, std::string_view container_name)
+    {
+        std::string msg, output;
+        msg.resize(38 + container_name.size());
+        sprintf(msg.data(), MSG_BASIC, "inspect", container_name.data());
+
+        const int ret = get_json_output(msg, output);
+        if (ret == -1)
+        {
+            std::cout << output << std::endl;
+            std::cerr << "Error inspecting the container." << std::endl;
+            return -1;
+        }
+
+        std::string user;
+        try
+        {
+            jsoncons::json d = jsoncons::json::parse(output, jsoncons::strict_json_parsing());
+            if (!d.contains("type") ||
+                !d.contains("content") ||
+                !((d["type"].as<std::string>() == "inspect_res" && d["content"].is_object()) || (d["type"].as<std::string>() == "inspect_error" && !d["content"].is_object())))
+            {
+                std::cerr << "Invalid inspect response. " << jsoncons::pretty_print(d) << std::endl;
+                return -1;
+            }
+
+            if (d["type"].as<std::string>() == "inspect_error")
+            {
+                std::cerr << output << std::endl;
+                return -1;
+            }
+
+            user = d["content"]["user"].as<std::string>();
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "JSON message parsing failed. " << e.what() << std::endl;
+            return -1;
+        }
+
+        if (user.empty())
+        {
+            std::cerr << "Invalid user." << std::endl;
+            return -1;
+        }
+
+        if (type == "attach")
+        {
+            const int len = 75 + user.length() + ctx.sashi_dir.length() + container_name.length();
+            char command[len];
+            sprintf(command, DOCKER_ATTACH, user.data(), ctx.sashi_dir.data(), container_name.data());
+            return system(command) == 0 ? 0 : -1;
+        }
+        else
+        {
+            std::cerr << "Invalid docker command type." << std::endl;
             return -1;
         }
 

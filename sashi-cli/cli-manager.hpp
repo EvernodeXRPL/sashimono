@@ -28,6 +28,8 @@ namespace cli
 
     int list();
 
+    int docker_exec(std::string_view type, std::string_view container_name);
+
     void deinit();
 }
 

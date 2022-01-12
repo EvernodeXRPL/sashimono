@@ -45,6 +45,7 @@ namespace hp
     constexpr const char *MAX_ALLOCATION_REACHED = "max_alloc_reached";
     constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
+    constexpr const char *DOCKER_CONTAINER_NOT_FOUND = "container_not_found";
 
     // Cgrules check related constants.
     constexpr const char *CGRULE_ACTIVE = "service=$(grep \"ExecStart.*=.*/cgrulesengd$\" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ') && [ ! -z $service ] && systemctl is-active $(basename $service)";
@@ -925,6 +926,25 @@ namespace hp
     void get_instance_list(std::vector<hp::instance_info> &instances)
     {
         sqlite::get_instance_list(db, instances);
+    }
+
+    /**
+     * Get the instance with given name from the database skip if destroyed.
+     * @param error_msg Error message if any.
+     * @param container_name Name of the instance
+     * @param instance Instance info ref to be populated.
+     * @return 0 on success and -1 on error.
+    */
+    int get_instance(std::string &error_msg, std::string_view container_name, hp::instance_info &instance)
+    {
+        if (sqlite::get_instance(db, container_name, instance) == -1)
+        {
+            error_msg = DOCKER_CONTAINER_NOT_FOUND;
+            LOG_ERROR << "No instace with name: " << container_name << ".";
+            return -1;
+        }
+
+        return 0;
     }
 
     /**

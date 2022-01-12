@@ -83,6 +83,7 @@ int parse_cmd(int argc, char **argv)
     CLI::App *start = app.add_subcommand("start", "Starts an instance.");
     CLI::App *stop = app.add_subcommand("stop", "Stops an instance.");
     CLI::App *destroy = app.add_subcommand("destroy", "Destroys an instance.");
+    CLI::App *attach = app.add_subcommand("attach", "Attachs to the bash of a instance.");
 
     // Initialize options.
     std::string json_message;
@@ -97,6 +98,7 @@ int parse_cmd(int argc, char **argv)
     start->add_option("-n,--name", container_name, "Instance name");
     stop->add_option("-n,--name", container_name, "Instance name");
     destroy->add_option("-n,--name", container_name, "Instance name");
+    attach->add_option("-n,--name", container_name, "Instance name");
 
     CLI11_PARSE(app, argc, argv);
 
@@ -163,6 +165,11 @@ int parse_cmd(int argc, char **argv)
     {
         return execute_cli([&]()
                            { return cli::execute_basic("destroy", container_name); });
+    }
+    else if (attach->parsed() && !container_name.empty())
+    {
+        return execute_cli([&]()
+                           { return cli::docker_exec("attach", container_name); });
     }
 
     std::cout << app.help();

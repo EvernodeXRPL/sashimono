@@ -24,11 +24,15 @@ namespace msg::json
 
     int extract_stop_message(stop_msg &msg, const jsoncons::json &d);
 
+    int extract_inspect_message(inspect_msg &msg, const jsoncons::json &d);
+
     void build_response(std::string &msg, std::string_view response_type, std::string_view content, const bool json_content = false);
 
     void build_create_response(std::string &msg, const hp::instance_info &info);
 
     void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances);
+
+    void build_inspect_response(std::string &msg, const hp::instance_info &instance);
 
 } // namespace msg::json
 

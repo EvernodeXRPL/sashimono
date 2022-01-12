@@ -38,6 +38,11 @@ namespace msg
         return json::extract_stop_message(msg, jdoc);
     }
 
+    int msg_parser::extract_inspect_message(inspect_msg &msg) const
+    {
+        return json::extract_inspect_message(msg, jdoc);
+    }
+
     void msg_parser::build_response(std::string &msg, std::string_view response_type, std::string_view content, const bool json_content) const
     {
         json::build_response(msg, response_type, content, json_content);
@@ -51,6 +56,11 @@ namespace msg
     void msg_parser::build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances) const
     {
         json::build_list_response(msg, instances);
+    }
+
+    void msg_parser::build_inspect_response(std::string &msg, const hp::instance_info &instance) const
+    {
+        json::build_inspect_response(msg, instance);
     }
 
 } // namespace msg

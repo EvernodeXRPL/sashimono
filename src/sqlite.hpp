@@ -77,6 +77,8 @@ namespace sqlite
 
     void get_instance_list(sqlite3 *db, std::vector<hp::instance_info> &instances);
 
+    int get_instance(sqlite3 *db, std::string_view container_name, hp::instance_info &instance);
+
     int get_allocated_instance_count(sqlite3 *db);
 }
 #endif

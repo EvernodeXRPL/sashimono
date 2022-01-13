@@ -41,6 +41,8 @@ namespace sqlite
 
     constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE status != ?";
 
+    constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
+
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
     /**
@@ -497,6 +499,40 @@ namespace sqlite
 
         // Finalize and distroys the statement.
         sqlite3_finalize(stmt);
+    }
+
+    /**
+     * Populate the given instace ref with the container info of given name only if not destroyed.
+     * @param db Database connection.
+     * @param container_name Container name.
+     * @param instance Instance details.
+     * @return 0 on if exist otherwise -1.
+    */
+    int get_instance(sqlite3 *db, std::string_view container_name, hp::instance_info &instance)
+    {
+        sqlite3_stmt *stmt;
+        std::string_view destroy_status(hp::CONTAINER_STATES[hp::STATES::DESTROYED]);
+
+        if (sqlite3_prepare_v2(db, GET_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 2, destroy_status.data(), destroy_status.length(), SQLITE_STATIC) == SQLITE_OK &&
+            (stmt != NULL && sqlite3_step(stmt) == SQLITE_ROW))
+        {
+            instance.container_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 0));
+            instance.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
+            instance.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
+            instance.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
+            instance.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+            instance.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+
+            // Finalize and distroys the statement.
+            sqlite3_finalize(stmt);
+            return 0;
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+        return -1;
     }
 
     /**

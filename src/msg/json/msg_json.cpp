@@ -517,6 +517,38 @@ namespace msg::json
     }
 
     /**
+     * Extracts inspect message from msg.
+     * @param msg Populated msg object.
+     * @param d The json document holding the message.
+     *          Accepted signed input container format:
+     *          {
+     *            "type": "inspect",
+     *            "container_name": "<container_name>", 
+     *          }
+     * @return 0 on successful extraction. -1 for failure.
+     */
+    int extract_inspect_message(inspect_msg &msg, const jsoncons::json &d)
+    {
+        if (extract_type(msg.type, d) == -1)
+            return -1;
+
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
+        {
+            LOG_ERROR << "Field container_name is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
+        {
+            LOG_ERROR << "Invalid container_name value.";
+            return -1;
+        }
+
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
+        return 0;
+    }
+
+    /**
      * Constructs a generic json response.
      * @param msg Buffer to construct the generated json message string into.
      *            Message format:
@@ -647,4 +679,48 @@ namespace msg::json
         msg += "]";
     }
 
+    /**
+     * Constructs the response message for inspect message.
+     * @param msg Buffer to construct the generated json message string into.
+     *           Message format:
+     *             {
+     *              "name": "<instance name>",
+     *              "user": "<instance user name>",
+     *              "image": "<docker image name>",
+     *              "status": "<status of the instance>",
+     *              "peer_port": "<peer port of the instance>",
+     *              "user_port": "<user port of the instance>"
+     *             }
+     * @param instance Instance info.
+     * 
+     */
+    void build_inspect_response(std::string &msg, const hp::instance_info &instance)
+    {
+        msg.reserve(1024);
+        msg += "{\"";
+        msg += "name";
+        msg += SEP_COLON;
+        msg += instance.container_name;
+        msg += SEP_COMMA;
+        msg += "user";
+        msg += SEP_COLON;
+        msg += instance.username;
+        msg += SEP_COMMA;
+        msg += "image";
+        msg += SEP_COLON;
+        msg += instance.image_name;
+        msg += SEP_COMMA;
+        msg += "status";
+        msg += SEP_COLON;
+        msg += instance.status;
+        msg += SEP_COMMA;
+        msg += "peer_port";
+        msg += SEP_COLON_NOQUOTE;
+        msg += std::to_string(instance.assigned_ports.peer_port);
+        msg += SEP_COMMA_NOQUOTE;
+        msg += "user_port";
+        msg += SEP_COLON_NOQUOTE;
+        msg += std::to_string(instance.assigned_ports.user_port);
+        msg += "}";
+    }
 } // namespace msg::json

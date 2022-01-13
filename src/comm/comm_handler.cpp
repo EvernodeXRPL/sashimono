@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../conf.hpp"
 
-#define __HANDLE_RESPONSE(type, content, ret)                                                                                          \
-    {                                                                                                                                  \
-        std::string res;                                                                                                               \
-        msg_parser.build_response(res, type, content, (type == msg::MSGTYPE_CREATE_RES || type == msg::MSGTYPE_LIST_RES) && ret == 0); \
-        send(res);                                                                                                                     \
-        return ret;                                                                                                                    \
+#define __HANDLE_RESPONSE(type, content, ret)                                                                                                                              \
+    {                                                                                                                                                                      \
+        std::string res;                                                                                                                                                   \
+        msg_parser.build_response(res, type, content, (type == msg::MSGTYPE_CREATE_RES || type == msg::MSGTYPE_LIST_RES || type == msg::MSGTYPE_INSPECT_RES) && ret == 0); \
+        send(res);                                                                                                                                                         \
+        return ret;                                                                                                                                                        \
     }
 
 namespace comm
@@ -28,11 +28,10 @@ namespace comm
     constexpr const char *DESTROY_ERROR = "destroy_error";
 
     struct Callback
-{
-    double execTime;
-    void (*func)();
-};
-
+    {
+        double execTime;
+        void (*func)();
+    };
 
     comm_ctx ctx;
 
@@ -264,6 +263,21 @@ namespace comm
                 __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, STOP_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stopped", 0);
+        }
+        else if (type == msg::MSGTYPE_INSPECT)
+        {
+            msg::inspect_msg msg;
+            if (msg_parser.extract_inspect_message(msg))
+                __HANDLE_RESPONSE(msg::MSGTYPE_INSPECT_ERROR, FORMAT_ERROR, -1);
+
+            hp::instance_info instance;
+            std::string error_msg;
+            if (hp::get_instance(error_msg, msg.container_name, instance) == -1)
+                __HANDLE_RESPONSE(msg::MSGTYPE_INSPECT_ERROR, error_msg, -1);
+
+            std::string inspect_res;
+            msg_parser.build_inspect_response(inspect_res, instance);
+            __HANDLE_RESPONSE(msg::MSGTYPE_INSPECT_RES, inspect_res, 0);
         }
         else
             __HANDLE_RESPONSE("error", TYPE_ERROR, -1);

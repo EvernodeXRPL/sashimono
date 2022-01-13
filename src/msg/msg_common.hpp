@@ -129,6 +129,12 @@ namespace msg
         std::string container_name;
     };
 
+    struct inspect_msg
+    {
+        std::string type;
+        std::string container_name;
+    };
+
     // Message field names
     constexpr const char *FLD_TYPE = "type";
     constexpr const char *FLD_CONTENT = "content";
@@ -181,6 +187,7 @@ namespace msg
     constexpr const char *MSGTYPE_START = "start";
     constexpr const char *MSGTYPE_STOP = "stop";
     constexpr const char *MSGTYPE_LIST = "list";
+    constexpr const char *MSGTYPE_INSPECT = "inspect";
 
     // Message res types
     constexpr const char *MSGTYPE_CREATE_RES = "create_res";
@@ -190,6 +197,8 @@ namespace msg
     constexpr const char *MSGTYPE_START_RES = "start_res";
     constexpr const char *MSGTYPE_STOP_RES = "stop_res";
     constexpr const char *MSGTYPE_LIST_RES = "list_res";
+    constexpr const char *MSGTYPE_INSPECT_RES = "inspect_res";
+    constexpr const char *MSGTYPE_INSPECT_ERROR = "inspect_error";
 
 } // namespace msg
 

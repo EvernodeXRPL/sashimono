@@ -4,12 +4,16 @@
 namespace cli
 {
     constexpr const char *SOCKET_NAME = "sa.sock";     // Name of the sashimono socket.
+    constexpr const char *SAGENT_BIN_NAME = "sagent";  // Name of the sashimono agent bin.
     constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
+    constexpr const char *BIN_DIR = "/bin/sashimono";  // Sashimono data directory.
     constexpr const int BUFFER_SIZE = 4096;            // Max read buffer size.
     constexpr const char *LIST_FORMATTER_STR = "%-38s%-27s%-10s%-10s%-10s%s\n";
     constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
     constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
+
+    constexpr const char *DOCKER_ATTACH = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker attach %s";
 
     cli_context ctx;
 
@@ -25,6 +29,10 @@ namespace cli
 
         // Get the socket path from available location.
         if (get_socket_path(ctx.socket_path) == -1)
+            return -1;
+
+        // Get the sashimono binary path from available location.
+        if (get_bin_path(ctx.sashimono_dir) == -1)
             return -1;
 
         // Create the seq paket socket.
@@ -85,6 +93,38 @@ namespace cli
         }
 
         std::cerr << SOCKET_NAME << " is not found.\n";
+        return -1;
+    }
+
+    /**
+     * Locate and return the sashimono agent binary path according predefined rules.
+     * If sagent found on the same path as the binary, use that. (to support dev testing)
+     * Else sagent found on /bin/sashimono, use that.
+     * Else show error.
+     * @param bin_path Binary path to be populated.
+     * @return 0 on success, -1 on error.
+    */
+    int get_bin_path(std::string &bin_path)
+    {
+        // Check whether binary exists in exec path.
+        std::string path = ctx.sashi_dir + std::string("/") + SAGENT_BIN_NAME;
+        struct stat st;
+        if (stat(path.data(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            bin_path = ctx.sashi_dir;
+            return 0;
+        }
+
+        // Otherwise check in the bin dir.
+        path = BIN_DIR + std::string("/") + SAGENT_BIN_NAME;
+        memset(&st, 0, sizeof(struct stat));
+        if (stat(path.data(), &st) == 0 && S_ISREG(st.st_mode))
+        {
+            bin_path = BIN_DIR;
+            return 0;
+        }
+
+        std::cerr << SAGENT_BIN_NAME << " is not found.\n";
         return -1;
     }
 
@@ -207,6 +247,74 @@ namespace cli
         catch (const std::exception &e)
         {
             std::cerr << "JSON message parsing failed. " << e.what() << std::endl;
+            return -1;
+        }
+
+        return 0;
+    }
+
+    /**
+     * Execute and docker command in a givent container.
+     * @param type Type of the command.
+     * @param container_name Name of the contract.
+     * @return 0 on success, -1 on error.
+    */
+    int docker_exec(std::string_view type, std::string_view container_name)
+    {
+        std::string msg, output;
+        msg.resize(38 + container_name.size());
+        sprintf(msg.data(), MSG_BASIC, "inspect", container_name.data());
+
+        const int ret = get_json_output(msg, output);
+        if (ret == -1)
+        {
+            std::cout << output << std::endl;
+            std::cerr << "Error inspecting the container." << std::endl;
+            return -1;
+        }
+
+        std::string user;
+        try
+        {
+            jsoncons::json d = jsoncons::json::parse(output, jsoncons::strict_json_parsing());
+            if (!d.contains("type") ||
+                !d.contains("content") ||
+                !((d["type"].as<std::string>() == "inspect_res" && d["content"].is_object()) || (d["type"].as<std::string>() == "inspect_error" && !d["content"].is_object())))
+            {
+                std::cerr << "Invalid inspect response. " << jsoncons::pretty_print(d) << std::endl;
+                return -1;
+            }
+
+            if (d["type"].as<std::string>() == "inspect_error")
+            {
+                std::cerr << output << std::endl;
+                return -1;
+            }
+
+            user = d["content"]["user"].as<std::string>();
+        }
+        catch (const std::exception &e)
+        {
+            std::cerr << "JSON message parsing failed. " << e.what() << std::endl;
+            return -1;
+        }
+
+        if (user.empty())
+        {
+            std::cerr << "Invalid user." << std::endl;
+            return -1;
+        }
+
+        if (type == "attach")
+        {
+            const int len = 75 + user.length() + ctx.sashimono_dir.length() + container_name.length();
+            char command[len];
+            sprintf(command, DOCKER_ATTACH, user.data(), ctx.sashimono_dir.data(), container_name.data());
+            return system(command) == 0 ? 0 : -1;
+        }
+        else
+        {
+            std::cerr << "Invalid docker command type." << std::endl;
             return -1;
         }
 

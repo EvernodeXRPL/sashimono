@@ -96,8 +96,6 @@ function upgrade() {
             return 1
         fi
 
-        appbill_mode=$(jq '.appbill.mode' $contract_config)
-        appbill_bin_args=$(jq '.appbill.bin_args' $contract_config)
         r_user_input_bytes=$(jq '.round_limits.user_input_bytes' $contract_config)
         r_user_output_bytes=$(jq '.round_limits.user_output_bytes' $contract_config)
         r_npl_output_bytes=$(jq '.round_limits.npl_output_bytes' $contract_config)
@@ -123,7 +121,6 @@ function upgrade() {
         consensus: $consensus,\
         npl: $npl,\
         max_input_ledger_offset: $max_input_ledger_offset,\
-        appbill: {mode: $appbill_mode, bin_args: $appbill_bin_args},\
         round_limits: {user_input_bytes: $r_user_input_bytes,\
                     user_output_bytes: $r_user_output_bytes,\
                     npl_output_bytes: $r_npl_output_bytes,\

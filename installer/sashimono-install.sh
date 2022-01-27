@@ -98,7 +98,6 @@ ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
 [Install]
 WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 
-# Install xrpl message board systemd service.
 echo "Configuring sashimono agent service..."
 # Rollback if 'sagent new' failed.
 $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
@@ -127,77 +126,83 @@ systemctl enable $SASHIMONO_SERVICE
 # We only enable this service, so it'll automatically start on the next boot.
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
-# Install xrpl message board systemd service.
-echo "Installing Evernode xrpl message board..."
+# Install xrpl message board only of NO_MB environment is not set.
+if [ "$NO_MB" == "" ]; then
+    # Install xrpl message board systemd service.
+    echo "Installing Evernode xrpl message board..."
 
-cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-# Creating message board user.
-useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-usermod --lock $MB_XRPL_USER
-usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
-loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    # Creating message board user.
+    useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    usermod --lock $MB_XRPL_USER
+    usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+    loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
 
-# First create the folder from root and then transfer ownership to the user
-# since the folder is created in /etc/sashimono directory.
-mkdir -p $MB_XRPL_DATA
-[ "$?" == "1" ] && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
-# Change ownership to message board user.
-chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+    # First create the folder from root and then transfer ownership to the user
+    # since the folder is created in /etc/sashimono directory.
+    mkdir -p $MB_XRPL_DATA
+    [ "$?" == "1" ] && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
+    # Change ownership to message board user.
+    chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
-mb_user_dir=/home/"$MB_XRPL_USER"
-mb_user_id=$(id -u "$MB_XRPL_USER")
-mb_user_runtime_dir="/run/user/$mb_user_id"
+    mb_user_dir=/home/"$MB_XRPL_USER"
+    mb_user_id=$(id -u "$MB_XRPL_USER")
+    mb_user_runtime_dir="/run/user/$mb_user_id"
 
-# Setup env variable for the message board user.
-echo "
-export XDG_RUNTIME_DIR=$mb_user_runtime_dir" >>"$mb_user_dir"/.bashrc
-echo "Updated mb user .bashrc."
+    # Setup env variable for the message board user.
+    echo "
+    export XDG_RUNTIME_DIR=$mb_user_runtime_dir" >>"$mb_user_dir"/.bashrc
+    echo "Updated mb user .bashrc."
 
-user_systemd=""
-for ((i = 0; i < 30; i++)); do
-    sleep 0.1
-    user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
-    [ "$user_systemd" == "running" ] && break
-done
-[ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
+    user_systemd=""
+    for ((i = 0; i < 30; i++)); do
+        sleep 0.1
+        user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
+        [ "$user_systemd" == "running" ] && break
+    done
+    [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
-# Generate beta host account.
-stage "Configuring host xrpl account"
-! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $HOOK_ADDRESS && echo "XRPLACC_FAILURE" && rollback
-# Register the host on Evernode.
-stage "Registering host on Evernode"
-! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-    $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
+    # Generate beta host account.
+    stage "Configuring host xrpl account"
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $HOOK_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+    # Register the host on Evernode.
+    stage "Registering host on Evernode"
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+        $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
 
-! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
+    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
 
-stage "Configuring xrpl message board service"
-# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-echo "[Unit]
-Description=Running and monitoring evernode xrpl transactions.
-After=network.target
-StartLimitIntervalSec=0
-[Service]
-Type=simple
-WorkingDirectory=$MB_XRPL_BIN
-Environment=\"MB_DATA_DIR=$MB_XRPL_DATA\"
-ExecStart=/usr/bin/node $MB_XRPL_BIN
-Restart=on-failure
-RestartSec=5
-[Install]
-WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
+    stage "Configuring xrpl message board service"
+    # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+    echo "[Unit]
+    Description=Running and monitoring evernode xrpl transactions.
+    After=network.target
+    StartLimitIntervalSec=0
+    [Service]
+    Type=simple
+    WorkingDirectory=$MB_XRPL_BIN
+    Environment=\"MB_DATA_DIR=$MB_XRPL_DATA\"
+    ExecStart=/usr/bin/node $MB_XRPL_BIN
+    Restart=on-failure
+    RestartSec=5
+    [Install]
+    WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
 
-# This service needs to be restarted when mb-xrpl.cfg is changed.
-sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
-# We only enable this service, so it'll automatically start on the next boot.
-echo "Installed Evernode xrpl message board."
+    # This service needs to be restarted when mb-xrpl.cfg is changed.
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
+    # We only enable this service, so it'll automatically start on the next boot.
+    echo "Installed Evernode xrpl message board."
+fi
 
 # If there's no pending reboot, start the sashimono and message board services.
 if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
     echo "Starting the sashimono and message board services."
     systemctl start $SASHIMONO_SERVICE
-    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+
+    if [ "$NO_MB" == "" ]; then
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+    fi
 fi
 
 echo "Sashimono installed successfully."

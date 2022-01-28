@@ -26,7 +26,7 @@ int main(int argc, char **argv)
     const void *input_mmap = hp_init_user_input_mmap();
 
     // Iterate through all users.
-    for (int u = 0; u < ctx->users.count; u++)
+    for (size_t u = 0; u < ctx->users.count; u++)
     {
         const struct hp_user *user = &ctx->users.list[u];
 
@@ -35,7 +35,7 @@ int main(int argc, char **argv)
             continue;
 
         // Iterate through all inputs from this user.
-        for (int i = 0; i < user->inputs.count; i++)
+        for (size_t i = 0; i < user->inputs.count; i++)
         {
             const struct hp_user_input input = user->inputs.list[i];
 

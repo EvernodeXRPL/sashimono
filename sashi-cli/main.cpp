@@ -103,10 +103,17 @@ int parse_cmd(int argc, char **argv)
     CLI11_PARSE(app, argc, argv);
 
     // Take the realpath of sashi cli exec path.
-    std::array<char, PATH_MAX> buffer;
-    realpath(argv[0], buffer.data());
-    buffer[PATH_MAX] = '\0';
-    exec_dir = dirname(buffer.data());
+    {
+        std::array<char, PATH_MAX> buffer;
+        const char *res = realpath(argv[0], buffer.data());
+        if (!res)
+        {
+            std::cerr << errno << ": Error in executable path." << std::endl;
+            return -1;
+        }
+        buffer[PATH_MAX] = '\0';
+        exec_dir = dirname(buffer.data());
+    }
 
     // Verifying subcommands.
     if (version->parsed())

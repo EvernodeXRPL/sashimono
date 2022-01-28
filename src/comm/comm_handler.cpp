@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../conf.hpp"
 
-#define __HANDLE_RESPONSE(type, content, ret)                                                                                                                              \
-    {                                                                                                                                                                      \
-        std::string res;                                                                                                                                                   \
-        msg_parser.build_response(res, type, content, (type == msg::MSGTYPE_CREATE_RES || type == msg::MSGTYPE_LIST_RES || type == msg::MSGTYPE_INSPECT_RES) && ret == 0); \
-        send(res);                                                                                                                                                         \
-        return ret;                                                                                                                                                        \
+#define __HANDLE_RESPONSE(type, content, ret)                                                                                                                                                                              \
+    {                                                                                                                                                                                                                      \
+        std::string res;                                                                                                                                                                                                   \
+        msg_parser.build_response(res, type, content, ((void *)type == (void *)msg::MSGTYPE_CREATE_RES || (void *)type == (void *)msg::MSGTYPE_LIST_RES || (void *)type == (void *)msg::MSGTYPE_INSPECT_RES) && ret == 0); \
+        send(res);                                                                                                                                                                                                         \
+        return ret;                                                                                                                                                                                                        \
     }
 
 namespace comm
@@ -186,7 +186,7 @@ namespace comm
         if (msg_parser.parse(msg) == -1 || msg_parser.extract_type(type) == -1)
         {
             read_buffer.clear();
-            __HANDLE_RESPONSE("error", FORMAT_ERROR, -1);
+            __HANDLE_RESPONSE(msg::MSGTYPE_ERROR, FORMAT_ERROR, -1);
         }
 
         // Clear the buffer after the message is parsed.

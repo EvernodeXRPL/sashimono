@@ -190,6 +190,7 @@ namespace msg
     constexpr const char *MSGTYPE_INSPECT = "inspect";
 
     // Message res types
+    constexpr const char *MSGTYPE_ERROR = "error";
     constexpr const char *MSGTYPE_CREATE_RES = "create_res";
     constexpr const char *MSGTYPE_CREATE_ERROR = "create_error";
     constexpr const char *MSGTYPE_INITIATE_RES = "initiate_res";

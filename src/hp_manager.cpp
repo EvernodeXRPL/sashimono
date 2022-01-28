@@ -116,7 +116,7 @@ namespace hp
             LOG_ERROR << "Error getting allocated instance count from db.";
             return -1;
         }
-        else if (allocated_count >= conf::cfg.system.max_instance_count)
+        else if ((size_t)allocated_count >= conf::cfg.system.max_instance_count)
         {
             error_msg = MAX_ALLOCATION_REACHED;
             LOG_ERROR << "Max instance count is reached.";

@@ -127,7 +127,9 @@ namespace util
     const std::string realpath(std::string_view path)
     {
         std::array<char, PATH_MAX> buffer;
-        ::realpath(path.data(), buffer.data());
+        if (!::realpath(path.data(), buffer.data()))
+            return {};
+
         buffer[PATH_MAX] = '\0';
         return buffer.data();
     }
@@ -469,13 +471,17 @@ namespace util
     {
         FILE *fpipe = popen(command, "r");
 
-        if (fpipe == NULL)
+        if (!fpipe)
         {
             LOG_ERROR << "Error on popen for command " << std::string(command);
             return -1;
         }
 
-        fgets(output, output_len, fpipe);
+        if (!fgets(output, output_len, fpipe))
+        {
+            LOG_ERROR << "Error on fgets for command " << std::string(command);
+            return -1;
+        }
 
         if (pclose(fpipe) < 0)
         {

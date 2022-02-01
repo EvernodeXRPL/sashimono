@@ -105,14 +105,20 @@ int parse_cmd(int argc, char **argv)
     // Take the realpath of sashi cli exec path.
     {
         std::array<char, PATH_MAX> buffer;
-        const char *res = realpath(argv[0], buffer.data());
-        if (!res)
+        if (!realpath(argv[0], buffer.data()))
         {
-            std::cerr << errno << ": Error in executable path." << std::endl;
-            return -1;
+            exec_dir = dirname(buffer.data());
         }
-        buffer[PATH_MAX] = '\0';
-        exec_dir = dirname(buffer.data());
+        else
+        {
+            // If real path fails, we get the current dir as exec bin path.
+            if (!getcwd(buffer.data(), buffer.size()))
+            {
+                std::cerr << errno << ": Error in executable path." << std::endl;
+                return -1;
+            }
+            exec_dir = buffer.data();
+        }
     }
 
     // Verifying subcommands.

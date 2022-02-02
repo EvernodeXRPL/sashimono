@@ -105,7 +105,7 @@ int parse_cmd(int argc, char **argv)
     // Take the realpath of sashi cli exec path.
     {
         std::array<char, PATH_MAX> buffer;
-        if (!realpath(argv[0], buffer.data()))
+        if (realpath(argv[0], buffer.data()))
         {
             exec_dir = dirname(buffer.data());
         }

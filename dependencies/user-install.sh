@@ -70,7 +70,7 @@ contract_host_uid=$(expr $uoffset + $contract_uid - 1)
 # If contract gid is not 0, get the calculated host gid and create the contract user group
 # and create user inside both contract user group and sashimono user group.
 # Otherwise get sashimono user's gid and create contract user inside that group.
-# Even though there's this "if not 0" condition contract_gid will always be 0 since we are setting hp config's gid to 0 in instance creation.
+# Even though there's this "if not 0" condition, contract_gid will always be 0 since we are setting hp config's gid to 0 in instance creation.
 if [ ! $contract_gid -eq 0 ]; then
     goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
     [ -z $goffset ] && rollback "SUBGID_ERR"

@@ -67,18 +67,20 @@ uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
 [ -z $uoffset ] && rollback "SUBUID_ERR"
 contract_host_uid=$(expr $uoffset + $contract_uid - 1)
 
-# If contract gid is not 0, get the calculated host gid and create the group.
-# Otherwise get sashimono user's gid.
+# If contract gid is not 0, get the calculated host gid and create the contract user group
+# and create user inside both contract user group and sashimono user group.
+# Otherwise get sashimono user's gid and create contract user inside that group.
 if [ ! $contract_gid -eq 0 ]; then
     goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
     [ -z $goffset ] && rollback "SUBGID_ERR"
     contract_host_gid=$(expr $goffset + $contract_gid - 1)
     groupadd -g "$contract_host_gid" "$contract_user"
+    useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -G "$user" -u "$contract_host_uid" "$contract_user"
 else
     contract_host_gid=$(id -g "$user")
+    useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -u "$contract_host_uid" "$contract_user"
 fi
 
-useradd --shell /usr/sbin/nologin -M -g "$contract_host_gid" -G "$user" -u "$contract_host_uid" "$contract_user"
 usermod --lock "$contract_user"
 echo "Created '$contract_user' contract user."
 

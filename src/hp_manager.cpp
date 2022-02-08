@@ -26,6 +26,7 @@ namespace hp
 
     conf::ugid contract_ugid;
     constexpr int CONTRACT_USER_ID = 10000;
+    constexpr int CONTRACT_GROUP_ID = 0;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
@@ -81,7 +82,9 @@ namespace hp
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
         instance_resources.swap_kbytes = instance_resources.mem_kbytes + (conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count);
         instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
-        contract_ugid = {CONTRACT_USER_ID, CONTRACT_USER_ID};
+        // Set run as group id 0 (sashimono user group id, root user inside docker container).
+        // Because contract user is in sashimono user's group, so the contract user will get the group permissions.
+        contract_ugid = {CONTRACT_USER_ID, CONTRACT_GROUP_ID};
 
         return 0;
     }

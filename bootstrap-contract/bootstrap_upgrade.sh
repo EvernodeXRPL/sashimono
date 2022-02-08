@@ -160,10 +160,10 @@ function upgrade() {
 function rollback() {
     # Restore self-script original name (Because hp requires it to be named post_exec.sh before execution)
     cp $self_name $self_original_name
-    # Restore patch.cfg
-    mv $patch_cfg_bk $patch_cfg
+    # Restore patch.cfg if backup exists
+    [ -f $patch_cfg_bk ] && mv $patch_cfg_bk $patch_cfg
     # Remove all files except the ones we need.
-    find . -not \( -name $bootstrap_bin -or -name $self_original_name -or -name $self_name \) -delete
+    find . -not \( -name $bootstrap_bin -or -name $self_original_name \) -delete
     return 0
 }
 

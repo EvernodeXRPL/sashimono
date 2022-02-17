@@ -1,8 +1,8 @@
 {
     "name": "mb-xrpl",
     "scripts": {
-        "lint": "./node_modules/.bin/eslint ./mb-xrpl.js",
-        "build": "npm run lint && ncc build mb-xrpl.js --minify -o dist"
+        "lint": "./node_modules/.bin/eslint ./app.js",
+        "build": "npm run lint && ncc build app.js --minify -o dist"
     },
     "dependencies": {
         "evernode-js-client": "0.4.2",

@@ -16,10 +16,10 @@ async function main() {
                 new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'betagen') {
-                const hookAddress = process.argv[3];
+                const registryAddress = process.argv[3];
                 const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(hookAddress);
-                setup.newConfig(acc.address, acc.secret, hookAddress, acc.token);
+                const acc = await setup.generateBetaHostAccount(registryAddress);
+                setup.newConfig(acc.address, acc.secret, registryAddress, acc.token);
             }
             else if (process.argv.length === 9 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
@@ -35,8 +35,8 @@ async function main() {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [hookAddress] [token] - Create new config file.
-        node index.js betagen [hookAddress] - Generate beta host account and populate config.
+        node index.js new [address] [secret] [registryAddress] [token] - Create new config file.
+        node index.js betagen [registryAddress] - Generate beta host account and populate config.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
@@ -52,10 +52,9 @@ async function main() {
 
             console.log('Starting the Evernode xrpl message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
             console.log('Data dir: ' + appenv.DATA_DIR);
-            console.log('Rippled server: ' + appenv.RIPPLED_URL);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
-            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.RIPPLED_URL);
+            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH);
             await mb.init();
         }
 

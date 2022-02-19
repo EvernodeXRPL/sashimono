@@ -3,10 +3,8 @@ process = require('process');
 let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",
     FILE_LOG_ENABLED: process.env.MB_FILE_LOG === "1",
-    RIPPLED_URL: process.env.MB_RIPPLED_URL || "wss://hooks-testnet.xrpl-labs.com",
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
-    FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet.xrpl-labs.com/newcreds",
-    EVR_SEND_URL: process.env.MB_EVR_SEND_URL || "https://func-hotpocket.azurewebsites.net/api/evrfaucet?code=pPUyV1q838ryrihA5NVlobVXj8ZGgn9HsQjGGjl6Vhgxlfha4/xCgQ==&action=fundhost&hostaddr=",
+    FAUCET_URL: process.env.MB_FAUCET_URL || "https://faucet-nft.ripple.com/accounts"
 }
 
 appenv = {

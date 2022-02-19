@@ -13,12 +13,11 @@ const RedeemStatus = {
 }
 
 class MessageBoard {
-    constructor(configPath, dbPath, sashiCliPath, rippledServer) {
+    constructor(configPath, dbPath, sashiCliPath) {
         this.configPath = configPath;
         this.redeemTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
-        this.rippledServer = rippledServer;
         this.lastRechargedMoment = null;
 
         if (!fs.existsSync(sashiCliPath))
@@ -33,15 +32,14 @@ class MessageBoard {
             throw `${this.configPath} does not exist.`;
 
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.hookAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.registryAddress)
             throw "Required cfg fields cannot be empty.";
 
-        console.log("Using hook " + this.cfg.xrpl.hookAddress);
+        console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
-        this.xrplApi = new evernode.XrplApi(this.rippledServer);
+        this.xrplApi = new evernode.XrplApi();
         evernode.Defaults.set({
-            hookAddress: this.cfg.xrpl.hookAddress,
-            rippledServer: this.rippledServer,
+            registryAddress: this.cfg.xrpl.registryAddress,
             xrplApi: this.xrplApi
         })
         await this.xrplApi.connect();

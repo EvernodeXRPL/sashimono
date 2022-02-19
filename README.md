@@ -45,10 +45,9 @@ Run `make installer` ('sashimono-installer.tar.gz' will be placed in build direc
 ## XRPL message board
 1. Node app which is listening to the hook xrpl account.
 1. `cd mb-xrpl && npm install` (You only have to do this once)
-1. `sudo node app.js wss://hooks-testnet.xrpl-labs.com --dev` (Message board will start and create a mb-xrpl.cfg with ixrpl account data)
-1. Frist Command line param is ripple server url which is required.
-1. Optional command line param `--dev` for dev mode, if not given it'll be prod mode.
-1. Optional Command line param `--enable-logging` will keeps logging in a log file inside log directory.
+1. `node app.js` (Message board will start and create a mb-xrpl.cfg with ixrpl account data)
+1. Optional environment `MB_DEV=1` for dev mode, if not given it'll be prod mode.
+1. Optional environment `MB_FILE_LOG=1` will keep logging in a log file inside log directory.
 1. This will listen to redeems in the particular xrpl account.
 1. If sashimono agent and sashi CLI is up, this will issue instance creation commands to the CLI.
 1. Responses data will be encrypted with redeem transaction account's pubke and sent back to the hook account as a transaction.

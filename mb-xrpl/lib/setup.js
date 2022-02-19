@@ -1,6 +1,7 @@
 
 const https = require('https');
 const { appenv } = require('./appenv');
+const evernode = require('evernode-js-client');
 
 class Setup {
 
@@ -28,8 +29,8 @@ class Setup {
         const resp = await this.#httpPost(appenv.FAUCET_URL);
         const json = JSON.parse(resp);
         return {
-            address: json.address,
-            secret: json.secret
+            address: json.account.address,
+            secret: json.account.secret
         };
     }
 
@@ -48,31 +49,10 @@ class Setup {
         return JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl;
     }
 
-    async #giftEvers(hostAddress) {
-        console.log("Sending EVRs...");
-
-        // Sometimes we may get error from func execution when some rippled servers in the testnet cluster
-        // haven't still updated the ledger. In such cases, we retry several times before giving up.
-        let attempts = 0;
-        while (attempts >= 0) {
-            try {
-                await this.#httpPost(appenv.EVR_SEND_URL + hostAddress);
-                break;
-            }
-            catch (err) {
-                if (++attempts <= 5)
-                    continue;
-
-                throw err;
-            }
-        }
-    }
-
-    async generateBetaHostAccount(hookAddress) {
+    async generateBetaHostAccount(registryAddress) {
 
         evernode.Defaults.set({
-            hookAddress: hookAddress,
-            rippledServer: appenv.RIPPLED_URL
+            registryAddress: registryAddress
         });
 
         const acc = await this.#generateFaucetAccount();
@@ -80,47 +60,62 @@ class Setup {
 
         // Prepare host account.
         {
-            console.log(`Preparing host account:${acc.address} (token:${acc.token} hook:${hookAddress})`);
+            console.log(`Preparing host account:${acc.address} (token:${acc.token} registry:${registryAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
 
             // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
             // haven't still updated the ledger. In such cases, we retry several times before giving up.
-            let attempts = 0;
-            while (attempts >= 0) {
-                try {
-                    await hostClient.prepareAccount();
-                    break;
-                }
-                catch (err) {
-                    if (err.data.error === 'actNotFound' && ++attempts <= 5) {
-                        console.log("actNotFound - retrying...")
-                        // Wait and retry.
-                        await new Promise(resolve => setTimeout(resolve, 3000));
-                        continue;
+            {
+                let attempts = 0;
+                while (attempts >= 0) {
+                    try {
+                        await hostClient.prepareAccount();
+                        break;
                     }
-                    throw err;
+                    catch (err) {
+                        if (err.data.error === 'actNotFound' && ++attempts <= 5) {
+                            console.log("actNotFound - retrying...")
+                            // Wait and retry.
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
+            }
+
+            // Get beta EVRs from foundation to host account.
+            {
+                console.log("Requesting beta EVRs...");
+                await hostClient.makePayment(registryClient.config.foundationAddress, 0, "XRP", null, [{ type: 'giftBetaEvr', format: '', data: '' }]);
+
+                // Keep watching our EVR balance.
+                let attempts = 0;
+                while (attempts >= 0) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    const balance = await hostClient.getEVRBalance();
+                    if (balance === '0') {
+                        if (++attempts <= 20)
+                            continue;
+                            throw "EVR funds not received within timeout.";
+                    }
                 }
             }
 
             await hostClient.disconnect();
         }
 
-        // Send EVRs from hook to host account.
-        {
-            await this.#giftEvers(acc.address);
-        }
-
         return acc;
     }
 
-    newConfig(address = "", secret = "", hookAddress = "", token = "") {
+    newConfig(address = "", secret = "", registryAddress = "", token = "") {
         if (fs.existsSync(appenv.CONFIG_PATH))
             throw `Config file already exists at ${appenv.CONFIG_PATH}`;
 
         const configJson = JSON.stringify({
             version: MB_VERSION,
-            xrpl: { address: address, secret: secret, hookAddress: hookAddress, token: token }
+            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token }
         }, null, 2);
         fs.writeFileSync(appenv.CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
     }
@@ -129,8 +124,7 @@ class Setup {
         console.log("Registering host...");
         const acc = this.#getConfigAccount();
         evernode.Defaults.set({
-            hookAddress: acc.hookAddress,
-            rippledServer: appenv.RIPPLED_URL
+            registryAddress: acc.registryAddress
         });
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -163,8 +157,7 @@ class Setup {
         console.log("Deregistering host...");
         const acc = this.#getConfigAccount();
         evernode.Defaults.set({
-            hookAddress: acc.hookAddress,
-            rippledServer: appenv.RIPPLED_URL
+            registryAddress: acc.registryAddress
         });
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -176,8 +169,7 @@ class Setup {
     async regInfo() {
         const acc = this.#getConfigAccount();
         evernode.Defaults.set({
-            hookAddress: acc.hookAddress,
-            rippledServer: appenv.RIPPLED_URL
+            registryAddress: acc.registryAddress
         });
 
         console.log(`Host account address: ${acc.address}`);
@@ -193,7 +185,7 @@ class Setup {
         catch {
             console.log('EVR balance: [Error occured when retrieving EVR balance]');
         }
-        console.log(`Hook address: ${acc.hookAddress}`);
+        console.log(`Registry address: ${acc.registryAddress}`);
     }
 }
 

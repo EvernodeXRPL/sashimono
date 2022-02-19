@@ -278,11 +278,10 @@ function online_version_timestamp() {
 }
 
 function install_evernode() {
-    echo "Starting installation..."
+    local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
     local version_timestamp=$(online_version_timestamp)
-    echo $version_timestamp
     [ -z "$version_timestamp" ] && echo "Online installer not found." && exit 1
 
     local tmp=$(mktemp -d)
@@ -294,11 +293,15 @@ function install_evernode() {
     set -o pipefail # We need installer exit code to detect failures (ignore the tee pipe exit code).
     mkdir -p $log_dir
     logfile="$log_dir/installer-$(date +%s).log"
-    echo "Installing prerequisites..."
-    ! ./prereq.sh $cgrulesengd_service 2>&1 \
-                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+
+    if [ "$upgrade" == "0" ] ; then
+        echo "Installing prerequisites..."
+        ! ./prereq.sh $cgrulesengd_service 2>&1 \
+                                | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+    fi
+
     echo "Installing Sashimono..."
-    ! ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
+    ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     set +o pipefail
@@ -313,6 +316,8 @@ function install_evernode() {
 
 function uninstall_evernode() {
 
+    local upgrade=$1
+
     # Check for existing contract instances.
     local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
     readarray -t userarr <<<"$users"
@@ -326,8 +331,8 @@ function uninstall_evernode() {
     $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
     ! $interactive && echo "$ucount contract instances will be deleted."
 
-    echo "Uninstalling..."
-    ! $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
+    [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
+    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
 
     remove_evernode_alias
 }
@@ -340,8 +345,13 @@ function update_evernode() {
     local current=$(cat $SASHIMONO_DATA/$version_timestamp_file)
     [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
 
-    echo "New $evernode update available."
+    echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and instances will be preserved."
     $interactive && ! confirm "Do you want to install the update?" && exit 1
+
+    uninstall_evernode 1
+    echo "Starting upgrade..."
+    install_evernode 1
+    echo "Upgrade complete."
 }
 
 # Create a copy of this same script as a command.
@@ -424,7 +434,8 @@ if [ "$mode" == "install" ]; then
     set_instance_alloc
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
-    install_evernode
+    echo "Starting installation..."
+    install_evernode 0
 
     echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
@@ -433,7 +444,7 @@ elif [ "$mode" == "uninstall" ]; then
 
     $interactive && ! confirm "Are you sure you want to uninstall Sashimono and deregister from $evernode?" && exit 1
 
-    uninstall_evernode
+    uninstall_evernode 0
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "status" ]; then

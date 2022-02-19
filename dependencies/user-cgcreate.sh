@@ -1,4 +1,5 @@
 #!/bin/bash
+# Call 'cgcreate' for all Sashimono users to specify resource restrictions for each user.
 
 datadir=$1
 if [ -z "$datadir" ]; then
@@ -14,7 +15,7 @@ if [ ! -f "$saconfig" ]; then
     exit 1
 fi
 
-# Calculate resourses
+# Calculate resources
 
 # Read config values
 max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)

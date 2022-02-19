@@ -170,26 +170,29 @@ class Setup {
         await hostClient.disconnect();
     }
 
-    async regInfo() {
+    async regInfo(isBasic) {
         const acc = this.#getConfigAccount();
-        evernode.Defaults.set({
-            registryAddress: acc.registryAddress
-        });
-
+        console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
         console.log(`Hosting token: ${acc.token}`);
-        try {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            console.log('Retrieving EVR balance...')
-            await hostClient.connect();
-            const evrBalance = await hostClient.getEVRBalance();
-            console.log(`EVR balance: ${evrBalance}`);
-            await hostClient.disconnect();
+
+        if (!isBasic) {
+            evernode.Defaults.set({
+                registryAddress: acc.registryAddress
+            });
+
+            try {
+                const hostClient = new evernode.HostClient(acc.address, acc.secret);
+                console.log('Retrieving EVR balance...')
+                await hostClient.connect();
+                const evrBalance = await hostClient.getEVRBalance();
+                console.log(`EVR balance: ${evrBalance}`);
+                await hostClient.disconnect();
+            }
+            catch {
+                console.log('EVR balance: [Error occured when retrieving EVR balance]');
+            }
         }
-        catch {
-            console.log('EVR balance: [Error occured when retrieving EVR balance]');
-        }
-        console.log(`Registry address: ${acc.registryAddress}`);
     }
 }
 

@@ -10,8 +10,9 @@ alloc_ratio=80
 memKB_per_instance=819200
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-script_url="https://sthotpocket.blob.core.windows.net/sashimono/setup.sh"
-installer="https://sthotpocket.blob.core.windows.net/sashimono/sashimono-installer.tar.gz"
+cloud_storage="https://sthotpocket.blob.core.windows.net/sashimono"
+script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -274,7 +275,7 @@ function install_sashimono() {
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl -s $installer --output installer.tgz
+    curl -s $installer_url --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 

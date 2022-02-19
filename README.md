@@ -24,7 +24,7 @@ Tested on Ubuntu 18.04 and 20.04
 1. Run `make` (Sashimono agent binary 'sagent' and dependencies will be placed in build directory)
 
 ## Build Sashimono installer
-Run `make installer` ('sashimono-installer.tar.gz' will be placed in build directory)
+Run `make installer` ('installer.tar.gz' will be placed in build directory)
 
 ## Run Sashimono
 1. `cd examples/message-board && npm install` (You only have to do this once)

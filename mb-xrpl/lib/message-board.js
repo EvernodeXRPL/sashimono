@@ -18,7 +18,7 @@ class MessageBoard {
         this.redeemTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
-        this.lastRechargedMoment = null;
+        this.lastHeartbeatMoment = null;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -46,10 +46,7 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
-        this.evernodeHookConf = this.hostClient.hookConfig;
-
-        this.hookClient = new evernode.HookClient();
-        await this.hookClient.connect();
+        this.hostClient.config = this.hostClient.config;
 
         this.db.open();
         // Create redeem table if not exist.
@@ -68,22 +65,22 @@ class MessageBoard {
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
 
-            const currentMoment = await this.hookClient.getMoment(e.ledger_index);
-            // Sending recharges every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (currentMoment % this.hostClient.hookConfig.hostHeartbeatFreq === 0 && currentMoment !== this.lastRechargedMoment) {
-                this.lastRechargedMoment = currentMoment;
+            const currentMoment = await this.hostClient.getMoment(e.ledger_index);
+            // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
+            if (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment) {
+                this.lastHeartbeatMoment = currentMoment;
 
-                console.log(`Recharging at Moment ${this.lastRechargedMoment}...`)
+                console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
 
                 try {
-                    await this.hostClient.recharge();
-                    console.log(`Recharge successful at Moment ${this.lastRechargedMoment}.`);
+                    await this.hostClient.heartbeat();
+                    console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {
                     if (err.code === 'tecHOOK_REJECTED')
-                        console.log("Recarge rejected by the hook.");
+                        console.log("Heartbeat rejected by the hook.");
                     else
-                        console.log("Recharge tx error", err);
+                        console.log("Heartbeat tx error", err);
                 }
             }
 
@@ -138,7 +135,7 @@ class MessageBoard {
             // Number of validated ledgers passed while processing the last request.
             let diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
             // Give-up the redeeming porocess if processing the last request takes more than 40% of allowed window.
-            let threshold = this.evernodeHookConf.redeemWindow * appenv.REDEEM_WAIT_TIMEOUT_THRESHOLD;
+            let threshold = this.hostClient.config.redeemWindow * appenv.REDEEM_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the redeem status of the request to 'SashiTimeout'.
@@ -151,7 +148,7 @@ class MessageBoard {
                 // Number of validated ledgers passed while the instance is created.
                 diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
                 // Give-up the redeeming porocess if the instance creation itself takes more than 80% of allowed window.
-                threshold = this.evernodeHookConf.redeemWindow * appenv.REDEEM_CREATE_TIMEOUT_THRESHOLD;
+                threshold = this.hostClient.config.redeemWindow * appenv.REDEEM_CREATE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the redeem status of the request to 'SashiTimeout'.
@@ -258,7 +255,7 @@ class MessageBoard {
     }
 
     async getExpiryMoment(createdOnLedger, moments) {
-        return (await this.hookClient.getMoment(createdOnLedger)) + moments;
+        return (await this.hostClient.getMoment(createdOnLedger)) + moments;
     }
 
     readConfig() {

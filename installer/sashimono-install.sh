@@ -55,9 +55,9 @@ stage "Installing docker packages"
 # Install private docker registry.
 # stage "Installing private docker registry"
 # (Disabled until secure registry configuration)
-# ./registry-install.sh $DOCKER_BIN $REGISTRY_USER $REGISTRY_PORT
+# ./registry-install.sh $DOCKER_BIN $DOCKER_REGISTRY_USER $DOCKER_REGISTRY_PORT
 # [ "$?" == "1" ] && rollback
-# registry_addr=$inetaddr:$REGISTRY_PORT
+# registry_addr=$inetaddr:$DOCKER_REGISTRY_PORT
 
 # Setting up Sashimono admin group.
 ! groupadd $SASHIADMIN_GROUP && echo "Admin group creation failed." && rollback
@@ -165,7 +165,7 @@ if [ "$NO_MB" == "" ]; then
 
     # Generate beta host account.
     stage "Configuring host xrpl account"
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $HOOK_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
     # Register the host on Evernode.
     stage "Registering host on Evernode"
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \

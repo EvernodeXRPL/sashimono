@@ -88,7 +88,11 @@ class Setup {
             // Get beta EVRs from foundation to host account.
             {
                 console.log("Requesting beta EVRs...");
-                await hostClient.makePayment(registryClient.config.foundationAddress, 0, "XRP", null, [{ type: 'giftBetaEvr', format: '', data: '' }]);
+                await hostClient.makePayment(registryClient.config.foundationAddress,
+                    evernode.XrplConstants.MIN_XRP_AMOUNT,
+                    evernode.XrplConstants.XRP,
+                    null,
+                    [{ type: 'giftBetaEvr', format: '', data: '' }]);
 
                 // Keep watching our EVR balance.
                 let attempts = 0;
@@ -98,7 +102,7 @@ class Setup {
                     if (balance === '0') {
                         if (++attempts <= 20)
                             continue;
-                            throw "EVR funds not received within timeout.";
+                        throw "EVR funds not received within timeout.";
                     }
                 }
             }

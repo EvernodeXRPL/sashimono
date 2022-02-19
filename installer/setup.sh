@@ -1,5 +1,6 @@
 #!/bin/bash
 # Evernode host setup tool to manage Sashimono installation and host registration.
+# This script is also used as the 'evernode' cli alias after the installation.
 # usage: ./setup.sh install
 
 evernode="Evernode beta"
@@ -26,10 +27,10 @@ export SASHIADMIN_GROUP="sashiadmin"
 export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
-export REGISTRY_USER="sashidockerreg"
+export DOCKER_REGISTRY_USER="sashidockerreg"
+export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
-export REGISTRY_PORT=4444
-export HOOK_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
+export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
 [ -f $SASHIMONO_DATA/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
 
@@ -367,7 +368,7 @@ if [ "$mode" == "install" ]; then
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-            and register your system as an $evernode host on the public XRPL hooks testnet.\n
+            and register your system as an $evernode host.\n
             \nThe setup will go through the following steps:\n
             - Check your system compatibility for $evernode.\n
             - Collect information about your system to be published to users.\n

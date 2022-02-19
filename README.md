@@ -36,22 +36,15 @@ Run `make installer` ('sashimono-installer.tar.gz' will be placed in build direc
 - Replace the sashimono-client.key file created inside dataDir in the first run by the key file found on this [link](https://geveoau.sharepoint.com/:u:/g/EX5U8SxYyM5Anyq2rAcMXtkBEOO_XWT7hCo30SGIsDAyLg?e=LycwQx). This is because we have hardcoded the pubkey in message board. This will generate the same pubkey we have hardcoded.
 - A sample **bundle.zip** bundle can be found [here](https://geveoau.sharepoint.com/:u:/g/EdurCbuttzdCnuQCyIb0SKEBWq4j9LKdgAIjJvt3zwueew?e=lPYfMG).
 
-## Sample user wallet
-1. Node app which is is connected with user xrpl account.
-1. `cd examples/sample-user-wallet && npm install` (You only have to do this once)
-1. `node user-wallet.js` (User wallet will start and create a user.cfg with ixrpl account data)
-1. Redeem transactions can be sent to the hooks xrpl account with "create" command.
-
 ## XRPL message board
-1. Node app which is listening to the hook xrpl account.
+1. Node app which is listening to the host xrpl account.
 1. `cd mb-xrpl && npm install` (You only have to do this once)
-1. `sudo node app.js wss://hooks-testnet.xrpl-labs.com --dev` (Message board will start and create a mb-xrpl.cfg with ixrpl account data)
-1. Frist Command line param is ripple server url which is required.
-1. Optional command line param `--dev` for dev mode, if not given it'll be prod mode.
-1. Optional Command line param `--enable-logging` will keeps logging in a log file inside log directory.
-1. This will listen to redeems in the particular xrpl account.
-1. If sashimono agent and sashi CLI is up, this will issue instance creation commands to the CLI.
-1. Responses data will be encrypted with redeem transaction account's pubke and sent back to the hook account as a transaction.
+1. `node app.js` (Message board will start and create a mb-xrpl.cfg with ixrpl account data)
+1. Optional environment `MB_DEV=1` for dev mode, if not given it'll be prod mode.
+1. Optional environment `MB_FILE_LOG=1` will keep logging in a log file inside log directory (used for debugging).
+1. This will listen to redeems on the configured host xrpl account.
+1. If sashimono agent and sashi CLI is up, this will issue instance management commands to the CLI.
+1. Responses data will be encrypted with redeem transaction account's pubkey and sent back to it as a transaction.
 
 ## Code structure
 Code is divided into subsystems via namespaces.

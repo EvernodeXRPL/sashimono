@@ -16,7 +16,7 @@ if (!currentContract)
 
 const userAddr = config.xrpl.userAddress;
 const userSecret = config.xrpl.userSecret;
-const hookAddress = config.xrpl.hookAddress;
+const registryAddress = config.xrpl.registryAddress;
 let xrplApi = null;
 let userClient = null;
 let userAcc = null;
@@ -239,7 +239,7 @@ async function createEvernodeConnections() {
     xrplApi = new XrplApi();
 
     Defaults.set({
-        hookAddress: hookAddress,
+        registryAddress: registryAddress,
         xrplApi: xrplApi
     })
 

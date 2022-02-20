@@ -8,14 +8,13 @@ A C++ version of sashimono agent
 ## Libraries
 * Crypto - Libsodium https://github.com/jedisct1/libsodium
 * jsoncons (for JSON and BSON) - https://github.com/danielaparker/jsoncons
-* Boost Stacktrace - https://www.boost.org
 * Reader Writer Queue - https://github.com/cameron314/readerwriterqueue
 * Concurrent Queue - https://github.com/cameron314/concurrentqueue
 * Boost Stacktrace - https://www.boost.org
 
 ## Setting up Sashimono Agent development environment
-Tested on Ubuntu 18.04 and 20.04
-1. Run `sudo ./prereq.sh`
+Tested on Ubuntu 20.04
+1. Run `sudo ./installer/prereq.sh`
 1. Reboot the machine.
 1. Run `./dev-setup.sh`
 
@@ -27,8 +26,6 @@ Tested on Ubuntu 18.04 and 20.04
 Run `make installer` ('sashimono-installer.tar.gz' will be placed in build directory)
 
 ## Run Sashimono
-1. `cd examples/message-board && npm install` (You only have to do this once)
-1. `node message-board.js` (Message board simulator will start listening at port 5000)
 1. `./build/sagent new` (This will create the Sashimono config in build directory. You only have to do this once)
 1. `sudo ./build/sagent run`
 

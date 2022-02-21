@@ -76,7 +76,7 @@ sudo apt-get install -y \
     libsodium-dev \
     sqlite3 libsqlite3-dev \
     libboost-stacktrace-dev \
-    fuse3
+    fuse3 \
     jq
 
 sudo cp $scriptdir/dependencies/libblake3.so /usr/local/lib/

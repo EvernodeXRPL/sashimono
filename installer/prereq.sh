@@ -9,14 +9,14 @@
 
 echo "---Sashimono prerequisites installer---"
 
-[ -z "$1" ] && echo "cgrules engine service name not specified." && exit 1
-
 tmp=$(mktemp -d)
 tmpfstab=$tmp.tmp
 originalfstab=/etc/fstab
 cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
 cgrulesengd_service=$1 # cgroups rules engine service name
+
+[ -z "$cgrulesengd_service" ] && cgrulesengd_service="cgrulesengd"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.

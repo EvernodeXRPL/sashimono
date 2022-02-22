@@ -109,7 +109,8 @@ echo "Configuring sashimono agent service..."
 
 # Create sashimono agent config (if not exists).
 if [ -f $SASHIMONO_DATA/sa.cfg ]; then
-    echo "Existing Sashimono config found. Skipping new config generation."
+    echo "Existing Sashimono data directory found. Updating..."
+    ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
     ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi

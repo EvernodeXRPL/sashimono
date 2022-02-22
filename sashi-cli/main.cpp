@@ -3,6 +3,7 @@
 **/
 #include "pchheader.hpp"
 #include "cli-manager.hpp"
+#include "version.hpp"
 
 std::string exec_dir;
 
@@ -124,7 +125,7 @@ int parse_cmd(int argc, char **argv)
     // Verifying subcommands.
     if (version->parsed())
     {
-        std::cout << "Sashimono CLI version 1.0.0" << std::endl;
+        std::cout << "Sashimono CLI version " << version::CLI_VERSION << std::endl;
         return 0;
     }
     else if (status->parsed())

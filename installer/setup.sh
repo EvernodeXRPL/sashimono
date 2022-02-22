@@ -347,7 +347,7 @@ function update_evernode() {
     local current=$(cat $SASHIMONO_DATA/$version_timestamp_file)
     [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
 
-    echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and instances will be preserved."
+    echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "Do you want to install the update?" && exit 1
 
     uninstall_evernode 1

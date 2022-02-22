@@ -20,6 +20,7 @@
         std::cerr << "sagent version\n";                                                                                                   \
         std::cerr << "sagent new [data_dir] [host_addr] [registry_addr] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n"; \
         std::cerr << "sagent run [data_dir]\n";                                                                                            \
+        std::cerr << "sagent upgrade [data_dir]\n";                                                                                        \
         std::cerr << "Example: sagent run /etc/sashimono\n";                                                                               \
         return -1;                                                                                                                         \
     }
@@ -38,6 +39,7 @@ int parse_cmd(int argc, char **argv)
 
         if ((conf::ctx.command == "new" && argc >= 2 && argc <= 10) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
+            (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2))
             return 0;
     }
@@ -156,7 +158,7 @@ int main(int argc, char **argv)
         if (conf::init() != 0)
             return 1;
 
-        salog::init(); // Initialize logger for SA.
+        salog::init();
 
         if (crypto::init() == -1)
             return 1;
@@ -181,6 +183,21 @@ int main(int argc, char **argv)
         deinit();
 
         LOG_INFO << "sashimono agent exited normally.";
+    }
+    else if (conf::ctx.command == "upgrade")
+    {
+        conf::set_dir_paths(argv[0], (argc == 3) ? argv[2] : "");
+
+        if (conf::init() != 0)
+            return 1;
+
+        salog::init();
+
+        // Do a simple version change in the config.
+        // In the future we could have real upgrade/data migration logic here.
+        conf::cfg.version = version::AGENT_VERSION;
+        if (conf::write_config(conf::cfg) != 0)
+            return -1;
     }
 
     return 0;

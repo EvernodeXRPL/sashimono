@@ -43,10 +43,21 @@ class Setup {
         return result;
     }
 
-    #getConfigAccount() {
+    #getConfig() {
         if (!fs.existsSync(appenv.CONFIG_PATH))
             throw `Config file does not exist at ${appenv.CONFIG_PATH}`;
-        return JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl;
+        return JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
+    }
+
+    #saveConfig(cfg) {
+        fs.writeFileSync(appenv.CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+    }
+
+    newConfig(address = "", secret = "", registryAddress = "", token = "") {
+        this.#saveConfig({
+            version: appenv.MB_VERSION,
+            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token }
+        });
     }
 
     async generateBetaHostAccount(registryAddress) {
@@ -113,20 +124,9 @@ class Setup {
         return acc;
     }
 
-    newConfig(address = "", secret = "", registryAddress = "", token = "") {
-        if (fs.existsSync(appenv.CONFIG_PATH))
-            throw `Config file already exists at ${appenv.CONFIG_PATH}`;
-
-        const configJson = JSON.stringify({
-            version: MB_VERSION,
-            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token }
-        }, null, 2);
-        fs.writeFileSync(appenv.CONFIG_PATH, configJson, { mode: 0o600 }); // Set file permission so only current user can read/write.
-    }
-
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, description) {
         console.log("Registering host...");
-        const acc = this.#getConfigAccount();
+        const acc = this.#getConfig().xrpl;
         evernode.Defaults.set({
             registryAddress: acc.registryAddress
         });
@@ -159,7 +159,7 @@ class Setup {
 
     async deregister() {
         console.log("Deregistering host...");
-        const acc = this.#getConfigAccount();
+        const acc = this.#getConfig().xrpl;
         evernode.Defaults.set({
             registryAddress: acc.registryAddress
         });
@@ -170,26 +170,41 @@ class Setup {
         await hostClient.disconnect();
     }
 
-    async regInfo() {
-        const acc = this.#getConfigAccount();
-        evernode.Defaults.set({
-            registryAddress: acc.registryAddress
-        });
-
+    async regInfo(isBasic) {
+        const acc = this.#getConfig().xrpl;
+        console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
         console.log(`Hosting token: ${acc.token}`);
-        try {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            console.log('Retrieving EVR balance...')
-            await hostClient.connect();
-            const evrBalance = await hostClient.getEVRBalance();
-            console.log(`EVR balance: ${evrBalance}`);
-            await hostClient.disconnect();
+
+        if (!isBasic) {
+            evernode.Defaults.set({
+                registryAddress: acc.registryAddress
+            });
+
+            try {
+                const hostClient = new evernode.HostClient(acc.address, acc.secret);
+                console.log('Retrieving EVR balance...')
+                await hostClient.connect();
+                const evrBalance = await hostClient.getEVRBalance();
+                console.log(`EVR balance: ${evrBalance}`);
+                await hostClient.disconnect();
+            }
+            catch {
+                console.log('EVR balance: [Error occured when retrieving EVR balance]');
+            }
         }
-        catch {
-            console.log('EVR balance: [Error occured when retrieving EVR balance]');
-        }
-        console.log(`Registry address: ${acc.registryAddress}`);
+    }
+
+    // Upgrades existing message board data to the new version.
+    async upgrade() {
+        
+        // Do a simple version change in the config.
+        // In the future we could have real upgrade/data migration logic here.
+        const cfg = this.#getConfig();
+        cfg.version = appenv.MB_VERSION;
+        this.#saveConfig(cfg);
+
+        await Promise.resolve(); // async placeholder.
     }
 }
 

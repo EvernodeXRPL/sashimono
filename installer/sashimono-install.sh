@@ -1,8 +1,8 @@
 #!/bin/bash
-# Sashimono agent installation script.
+# Sashimono agent installation script. This supports fresh installations as well as upgrades.
 # This must be executed with root privileges.
 
-echo "---Sashimono installer---"
+[ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
 inetaddr=$1
 countrycode=$2
@@ -19,9 +19,6 @@ function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
 }
 
-# Check cgroup rule config exists.
-[ ! -f /etc/cgred.conf ] && echo "Cgroup is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
-
 function rollback() {
     echo "Rolling back sashimono installation."
     "$script_dir"/sashimono-uninstall.sh
@@ -29,18 +26,33 @@ function rollback() {
     exit 1
 }
 
+function cgrulesengd_servicename() {
+    # Find the cgroups rules engine service.
+    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+    if [ -n "$cgrulesengd_filepath" ] ; then
+        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
+        echo "${cgrulesengd_filename%.*}"
+    fi
+}
+
+# Check cgroup rule config exists.
+[ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
+
+# Create directories if not exist.
 mkdir -p $SASHIMONO_BIN
 mkdir -p $DOCKER_BIN
 mkdir -p $SASHIMONO_DATA
+
+# Copy contract template (delete existing)
+rm -r "$SASHIMONO_DATA"/contract_template > /dev/null 2>&1
+cp -r "$script_dir"/contract_template $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,sashimono-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
-# Blake3
-[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/
-# Update linker library cache.
-ldconfig
+# Copy Blake3 and update linker library cache.
+[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
 
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $USER_BIN
@@ -60,33 +72,28 @@ stage "Installing docker packages"
 # registry_addr=$inetaddr:$DOCKER_REGISTRY_PORT
 
 # Setting up Sashimono admin group.
-! groupadd $SASHIADMIN_GROUP && echo "Admin group creation failed." && rollback
+! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
-# Setup Sashimono data dir.
-cp -r "$script_dir"/contract_template $SASHIMONO_DATA
-
 stage "Configuring Sashimono services"
 
-# Find the cgroups rules engine service.
-cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-if [ -n "$cgrulesengd_filepath" ] ; then
-    cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-    cgrulesengd_service="${cgrulesengd_filename%.*}"
-fi
+cgrulesengd_service=$(cgrulesengd_servicename)
 [ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && rollback
 
-# Setting up cgroup rules.
+# Setting up cgroup rules with sashiusers group (if not already setup).
 echo "Creating cgroup rules..."
-! groupadd $SASHIUSER_GROUP && echo "Group creation failed." && rollback
-! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
-# Restart the service to apply the cgrules config.
-echo "Restarting the '$cgrulesengd_service' service."
-systemctl restart $cgrulesengd_service || rollback
+! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && rollback
+if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf ; then
+    ! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+    # Restart the service to apply the cgrules config.
+    echo "Restarting the '$cgrulesengd_service' service."
+    systemctl restart $cgrulesengd_service || rollback
+fi
 
 # Install Sashimono Agent cgcreate service.
-# This is a oneshot service which runs only once.
+# This is a oneshot service which runs once at system startup. The intention is to run 'cgcreate' for
+# all sashimono users every time the system boots up.
 echo "[Unit]
 Description=Sashimono cgroup creation service.
 After=network.target
@@ -99,8 +106,14 @@ ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
 WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 
 echo "Configuring sashimono agent service..."
-# Rollback if 'sagent new' failed.
-$SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB || rollback
+
+# Create sashimono agent config (if not exists).
+if [ -f $SASHIMONO_DATA/sa.cfg ]; then
+    echo "Existing Sashimono data directory found. Updating..."
+    ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
+else
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+fi
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -123,7 +136,8 @@ systemctl daemon-reload
 systemctl enable $CGCREATE_SERVICE
 systemctl start $CGCREATE_SERVICE
 systemctl enable $SASHIMONO_SERVICE
-# We only enable this service, so it'll automatically start on the next boot.
+# Here, $SASHIMONO_SERVICE is only enabled. Not started. It'll be started after pending reboot checks at
+# the bottom of this script.
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
 # Install xrpl message board only of NO_MB environment is not set.
@@ -133,16 +147,17 @@ if [ "$NO_MB" == "" ]; then
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-    # Creating message board user.
-    useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-    usermod --lock $MB_XRPL_USER
-    usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
-    loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    # Creating message board user (if not exists).
+    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd ; then
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        usermod --lock $MB_XRPL_USER
+        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    fi
 
     # First create the folder from root and then transfer ownership to the user
     # since the folder is created in /etc/sashimono directory.
-    mkdir -p $MB_XRPL_DATA
-    [ "$?" == "1" ] && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
+    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
     # Change ownership to message board user.
     chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
@@ -163,17 +178,18 @@ if [ "$NO_MB" == "" ]; then
     done
     [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
-    # Generate beta host account.
-    stage "Configuring host xrpl account"
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
-    # Register the host on Evernode.
-    stage "Registering host on Evernode"
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-        $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
-
-    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
+    # Generate beta host account (if not already setup).
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic > /dev/null 2>&1 ; then
+        stage "Configuring host xrpl account"
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+        # Register the host on Evernode.
+        stage "Registering host on Evernode"
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+            $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
+    fi
 
     stage "Configuring xrpl message board service"
+    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
     # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
     echo "[Unit]
     Description=Running and monitoring evernode xrpl transactions.
@@ -189,13 +205,14 @@ if [ "$NO_MB" == "" ]; then
     [Install]
     WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
 
-    # This service needs to be restarted when mb-xrpl.cfg is changed.
+    # This service needs to be restarted whenever mb-xrpl.cfg is changed.
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
-    # We only enable this service, so it'll automatically start on the next boot.
+    # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
     echo "Installed Evernode xrpl message board."
 fi
 
-# If there's no pending reboot, start the sashimono and message board services.
+# If there's no pending reboot, start the sashimono and message board services now. Otherwise
+# they'll get started at next startup.
 if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
     echo "Starting the sashimono and message board services."
     systemctl start $SASHIMONO_SERVICE

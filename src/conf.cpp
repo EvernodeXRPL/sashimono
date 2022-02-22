@@ -143,7 +143,7 @@ namespace conf
             if (!util::is_file_exists(path) && !util::is_dir_exists(path))
             {
                 if (path == ctx.config_file)
-                    std::cerr << path << " does not exist. Initialize with <sagent new> command.\n";
+                    std::cerr << path << " config file does not exist. Initialize with <sagent new> command.\n";
                 else
                     std::cerr << path << " does not exist.\n";
                 return -1;

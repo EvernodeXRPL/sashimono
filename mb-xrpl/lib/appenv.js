@@ -18,7 +18,7 @@ appenv = {
     REDEEM_CREATE_TIMEOUT_THRESHOLD: 0.8,
     REDEEM_WAIT_TIMEOUT_THRESHOLD: 0.4,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '1.0.0',
+    MB_VERSION: '0.0.5',
 }
 Object.freeze(appenv);
 

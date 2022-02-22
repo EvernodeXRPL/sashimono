@@ -23,7 +23,7 @@ Tested on Ubuntu 20.04
 1. Run `make` (Sashimono agent binary 'sagent' and dependencies will be placed in build directory)
 
 ## Build Sashimono installer
-Run `make installer` ('sashimono-installer.tar.gz' will be placed in build directory)
+Run `make installer` ('installer.tar.gz' will be placed in build directory)
 
 ## Run Sashimono
 1. `./build/sagent new` (This will create the Sashimono config in build directory. You only have to do this once)

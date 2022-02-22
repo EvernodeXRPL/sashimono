@@ -29,7 +29,13 @@ async function main() {
                 await new Setup().deregister();
             }
             else if (process.argv.length === 3 && process.argv[2] === 'reginfo') {
-                await new Setup().regInfo();
+                await new Setup().regInfo(false);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'reginfo' && process.argv[3] === 'basic') {
+                await new Setup().regInfo(true);
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'upgrade') {
+                await new Setup().upgrade();
             }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
@@ -40,6 +46,7 @@ async function main() {
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
+        node index.js upgrade - Upgrade message board data.
         node index.js help - Print help.`);
             }
             else {

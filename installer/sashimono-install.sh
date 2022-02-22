@@ -2,7 +2,7 @@
 # Sashimono agent installation script. This supports fresh installations as well as upgrades.
 # This must be executed with root privileges.
 
-echo "---Sashimono installer--- (upgrade:$UPGRADE)"
+[ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
 inetaddr=$1
 countrycode=$2
@@ -81,7 +81,7 @@ stage "Configuring Sashimono services"
 cgrulesengd_service=$(cgrulesengd_servicename)
 [ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && rollback
 
-# Setting up cgroup rules (if not already setup).
+# Setting up cgroup rules with sashiusers group (if not already setup).
 echo "Creating cgroup rules..."
 ! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && rollback
 if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf ; then
@@ -108,7 +108,11 @@ WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 echo "Configuring sashimono agent service..."
 
 # Create sashimono agent config (if not exists).
-[ ! -f $SASHIMONO_DATA/sa.cfg ] && ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+if [ -f $SASHIMONO_DATA/sa.cfg ]; then
+    echo "Existing Sashimono config found. Skipping new config generation."
+else
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+fi
 
 # Install Sashimono Agent systemd service.
 # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
@@ -217,5 +221,5 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-echo "Sashimono installed successfully. (upgrade:$UPGRADE)"
+echo "Sashimono installed successfully."
 exit 0

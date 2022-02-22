@@ -34,7 +34,7 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
-[ -f $SASHIMONO_DATA/sa.cfg ] && sashimono_installed=true || sashimono_installed=false
+[ -f $SASHIMONO_BIN/sagent ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -328,8 +328,10 @@ function uninstall_evernode() {
     done
     local ucount=${#sashiusers[@]}
 
-    $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
-    ! $interactive && echo "$ucount contract instances will be deleted."
+    if [ "$upgrade" == "0" ] ; then
+        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
+        ! $interactive && echo "$ucount contract instances will be deleted."
+    fi
 
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
     ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
@@ -442,7 +444,12 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
-    $interactive && ! confirm "Are you sure you want to uninstall Sashimono and deregister from $evernode?" && exit 1
+    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
+            stored in '$MB_XRPL_DATA/mb-xrpl.cfg'. This is irreversible. Make sure you have your account address and
+            secret elsewhere before proceeding.\n"
+
+    $interactive && ! confirm "Have you read above warning and backed up your account credentials?" && exit 1
+    $interactive && ! confirm "Are you sure you want to uninstall $evernode?" && exit 1
 
     uninstall_evernode 0
     echo "Uninstallation complete!"

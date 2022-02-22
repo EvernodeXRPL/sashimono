@@ -2,7 +2,7 @@
 # Sashimono agent uninstall script.
 # This must be executed with root privileges.
 
-echo "---Sashimono uninstaller--- (upgrade:$UPGRADE)"
+[ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.
@@ -89,19 +89,19 @@ rm $USER_BIN/sashi
 if [ "$UPGRADE" == "0" ]; then
     echo "Deleting data directory..."
     rm -r $SASHIMONO_DATA
+
+    # When removing the cgrules service, we first edit the config and restart the service to apply the config.
+    # Then we remove the attached group.
+    echo "Deleting cgroup rules..."
+    sed -i -r "/^@$SASHIUSER_GROUP\s+cpu,memory\s+%u$CG_SUFFIX/d" /etc/cgrules.conf
+
+    cgrulesengd_service=$(cgrulesengd_servicename)
+    [ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
+
+    echo "Restarting the '$cgrulesengd_service' service..."
+    systemctl restart $cgrulesengd_service
+    groupdel $SASHIUSER_GROUP
 fi
-
-# When removing the cgrules service, we first edit the config and restart the service to apply the config.
-# Then we remove the attached group.
-echo "Deleting cgroup rules..."
-sed -i -r "/^@$SASHIUSER_GROUP\s+cpu,memory\s+%u$CG_SUFFIX/d" /etc/cgrules.conf
-
-cgrulesengd_service=$(cgrulesengd_servicename)
-[ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
-
-echo "Restarting the '$cgrulesengd_service' service..."
-systemctl restart $cgrulesengd_service
-groupdel $SASHIUSER_GROUP
 
 groupdel $SASHIADMIN_GROUP
 

@@ -13,6 +13,55 @@ self_path=$(realpath $0) # Full path of this script.
 self_name=$(basename $self_path) # File name of this script.
 self_dir=$(dirname $self_path) # Parent path of this script.
 
+# If field exists, append to patch json.
+function append_string_field() {
+    local field=$1
+    local req=$2 # '1' if empty value not allowed.
+    val=$(jq ".$field" $contract_config)
+    if [ "$val" != "null" ] ; then
+        if [ "$req" == "1" ] && [ ${#val} -eq 2 ]; then # Empty means "" or ''
+            echo "$field cannot be empty."
+            return 1
+        fi
+        [ "${patch_json: -1}" != "{" ] && patch_json="$patch_json,"
+        patch_json="$patch_json${field##*.}:$val" # Append last . component field name with value.
+    fi
+    return 0
+}
+
+# If field exists, append to patch json.
+function append_gt0_field() {
+    local field=$1
+    local val=$(jq ".$field" $contract_config)
+    if [ "$val" != "null" ] ; then
+        if [ "$val" -lt 0 ]; then
+            echo "Invalid $field. Should be greater than zero."
+            return 1
+        fi
+        [ "${patch_json: -1}" != "{" ] && patch_json="$patch_json,"
+        patch_json="$patch_json${field##*.}:$val" # Append last . component field name with value.
+    fi
+    return 0
+}
+
+# If field exists, append to patch json.
+function append_range_field() {
+    local field=$1
+    local min=$2
+    local max=$3
+
+    local val=$(jq ".$field" $contract_config)
+    if [ "$val" != "null" ] ; then
+        if [ "$val" -le $min ] || [ "$val" -gt $max ]; then
+            echo "$field must be between $min and $max inclusive."
+            return 1
+        fi
+        [ "${patch_json: -1}" != "{" ] && patch_json="$patch_json,"
+        patch_json="$patch_json${field##*.}:$val" # Append last . component field name with value.
+    fi
+    return 0
+}
+
 function upgrade() {
 
     # Check for binary archive availability.
@@ -32,6 +81,7 @@ function upgrade() {
     unzip -o $archive_name >>/dev/null
 
     if [ -f "$contract_config" ]; then
+
         # jq command is used for json manipulation.
         if ! command -v jq &>/dev/null; then
             echo "jq utility not found. Exiting.."
@@ -39,95 +89,103 @@ function upgrade() {
         fi
 
         # ********Config check********
-        version=$(jq '.version' $contract_config)
-        if [ "$version" == "null" ] || [ ${#version} -eq 2 ]; then # Empty means ""
-            echo "Version cannot be empty"
-            return 1
-        fi
 
-        unl=$(jq '.unl' $contract_config)
-        unl_res=$(jq '.unl? | map(length == 66 and startswith("ed")) | index(false)' $contract_config)
-        if [ "$unl_res" != "null" ]; then
-            echo "Unl pubkey invalid. Invalid format. Key should be 66 in length with ed prefix"
-            return 1
-        fi
-
-        bin_path=$(jq '.bin_path' $contract_config)
-        if [ "$bin_path" == "null" ] || [ ${#bin_path} -eq 2 ]; then # Empty means ""
+        # bin_path is the only field that we require. Everything else can be ommitted.
+        local bin_path=$(jq '.bin_path' $contract_config)
+        if [ "$bin_path" == "null" ] || [ ${#bin_path} -eq 2 ]; then # Empty means "" or ''
             echo "bin_path cannot be empty"
             return 1
-        fi
-
-        if [ ! -f "${bin_path:1:-1}" ]; then
+        elif [ ! -f "${bin_path:1:-1}" ]; then
             echo "Given binary file: $bin_path not found"
             return 1
+        else
+            patch_json="{bin_path:$bin_path"
         fi
 
-        bin_args=$(jq '.bin_args' $contract_config)
-        environment=$(jq '.environment' $contract_config)
-
-        roundtime=$(jq '.roundtime' $contract_config)
-        if [ "$roundtime" -le 0 ] || [ "$roundtime" -gt 3600000 ]; then
-            echo "Round time must be between 1 and 3600000ms inclusive."
+        if ! append_string_field "bin_args" ; then
             return 1
         fi
 
-        stage_slice=$(jq '.stage_slice' $contract_config)
-        if [ "$stage_slice" -le 0 ] || [ "$stage_slice" -gt 33 ]; then
-            echo "Stage slice must be between 1 and 33 percent inclusive."
+        if ! append_string_field "environment" ; then
+            return 1
+        fi
+        
+        if ! append_string_field "version" 1 ; then
             return 1
         fi
 
-        consensus=$(jq '.consensus' $contract_config)
-        if [ "$consensus" == "null" ] || [ ${#consensus} -eq 2 ] || { [ "$consensus" != "\"public\"" ] && [ "$consensus" != "\"private\"" ]; }; then
-            echo "Invalid consensus flag. Valid values: public|private."
+        if ! append_range_field "roundtime" 0 3600000 ; then
             return 1
         fi
 
-        npl=$(jq '.npl' $contract_config)
-        if [ "$npl" == "null" ] || [ ${#npl} -eq 2 ] || { [ "$npl" != "\"public\"" ] && [ "$npl" != "\"private\"" ]; }; then
-            echo "Invalid npl flag. Valid values: public|private."
+        if ! append_range_field "stage_slice" 0 33 ; then
             return 1
         fi
 
-        max_input_ledger_offset=$(jq '.max_input_ledger_offset' $contract_config)
-        if [ "$max_input_ledger_offset" -lt 0 ]; then
-            echo "Invalid max input ledger offset. Should be greater than zero."
+        if ! append_gt0_field "max_input_ledger_offset" ; then
             return 1
         fi
 
-        r_user_input_bytes=$(jq '.round_limits.user_input_bytes' $contract_config)
-        r_user_output_bytes=$(jq '.round_limits.user_output_bytes' $contract_config)
-        r_npl_output_bytes=$(jq '.round_limits.npl_output_bytes' $contract_config)
-        r_proc_cpu_seconds=$(jq '.round_limits.proc_cpu_seconds' $contract_config)
-        r_proc_mem_bytes=$(jq '.round_limits.proc_mem_bytes' $contract_config)
-        r_proc_ofd_count=$(jq '.round_limits.proc_ofd_count' $contract_config)
-        if [ "$r_user_input_bytes" -lt 0 ] || [ "$r_user_output_bytes" -lt 0 ] || [ "$r_npl_output_bytes" -lt 0 ] ||
-            [ "$r_proc_cpu_seconds" -lt 0 ] || [ "$r_proc_mem_bytes" -lt 0 ] || [ "$r_proc_ofd_count" -lt 0 ]; then
-            echo "Invalid round limits."
-            return 1
+        local unl=$(jq '.unl' $contract_config)
+        if [ "$unl" != "null" ] ; then
+            unl_res=$(jq '.unl? | map(length == 66 and startswith("ed")) | index(false)' $contract_config)
+            if [ "$unl_res" != "null" ]; then
+                echo "Unl pubkey invalid. Invalid format. Key should be 66 in length with ed prefix"
+                return 1
+            fi
+            patch_json="$patch_json,unl:$unl"
         fi
+
+        local consensus=$(jq '.consensus' $contract_config)
+        if [ "$consensus" != "null" ] ; then
+            if [ ${#consensus} -eq 2 ] || { [ "$consensus" != "\"public\"" ] && [ "$consensus" != "\"private\"" ]; }; then
+                echo "Invalid consensus flag. Valid values: public|private."
+                return 1
+            fi
+            patch_json="$patch_json,consensus:$consensus"
+        fi
+
+        local npl=$(jq '.npl' $contract_config)
+        if [ "$npl" != "null" ] ; then
+            if [ ${#npl} -eq 2 ] || { [ "$npl" != "\"public\"" ] && [ "$npl" != "\"private\"" ]; }; then
+                echo "Invalid npl flag. Valid values: public|private."
+                return 1
+            fi
+            patch_json="$patch_json,npl:$npl"
+        fi
+
+        local round_limits=$(jq '.round_limits' $contract_config)
+        if [ "$round_limits" != "null" ] ; then
+            patch_json="$patch_json,round_limits:{"
+
+            if ! append_gt0_field "round_limits.user_input_bytes" ; then
+                return 1
+            fi
+            if ! append_gt0_field "round_limits.user_output_bytes" ; then
+                return 1
+            fi
+            if ! append_gt0_field "round_limits.npl_output_bytes" ; then
+                return 1
+            fi
+            if ! append_gt0_field "round_limits.proc_cpu_seconds" ; then
+                return 1
+            fi
+            if ! append_gt0_field "round_limits.proc_mem_bytes" ; then
+                return 1
+            fi
+            if ! append_gt0_field "round_limits.proc_ofd_count" ; then
+                return 1
+            fi
+
+            patch_json="$patch_json}"
+        fi
+
+        patch_json="$patch_json}"
+
         echo "All $contract_config checks passed."
 
         echo "Updating $patch_cfg file."
-        new_patch=$(jq -M ". + {\
-        version:$version,\
-        bin_path:$bin_path,\
-        bin_args:$bin_args,\
-        environment:$environment,\
-        unl: $unl,\
-        roundtime:$roundtime,\
-        stage_slice:$stage_slice,\
-        consensus: $consensus,\
-        npl: $npl,\
-        max_input_ledger_offset: $max_input_ledger_offset,\
-        round_limits: {user_input_bytes: $r_user_input_bytes,\
-                    user_output_bytes: $r_user_output_bytes,\
-                    npl_output_bytes: $r_npl_output_bytes,\
-                    proc_cpu_seconds: $r_proc_cpu_seconds,\
-                    proc_mem_bytes: $r_proc_mem_bytes,\
-                    proc_ofd_count: $r_proc_ofd_count}
-        }" $patch_cfg)
+        local new_patch=$(jq -M ". + $patch_json" $patch_cfg) # Merge jsons
         cp $patch_cfg $patch_cfg_bk # Make a backup.
         echo "$new_patch" >$patch_cfg
 

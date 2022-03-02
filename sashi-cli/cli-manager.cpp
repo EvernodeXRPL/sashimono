@@ -13,7 +13,7 @@ namespace cli
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
     constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
 
-    constexpr const char *DOCKER_ATTACH = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker attach %s";
+    constexpr const char *DOCKER_ATTACH = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker attach --detach-keys=\"ctrl-c\" %s";
 
     cli_context ctx;
 
@@ -310,6 +310,7 @@ namespace cli
             const int len = 75 + user.length() + ctx.sashimono_dir.length() + container_name.length();
             char command[len];
             sprintf(command, DOCKER_ATTACH, user.data(), ctx.sashimono_dir.data(), container_name.data());
+            std::cout << "ctrl+C to detach." << std::endl;
             return system(command) == 0 ? 0 : -1;
         }
         else

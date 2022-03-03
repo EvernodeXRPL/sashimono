@@ -106,6 +106,28 @@ class MessageBoard {
         });
 
         this.hostClient.on(evernode.HostEvents.Redeem, r => this.handleRedeem(r));
+        this.hostClient.on(evernode.HostEvents.NftOfferCreate, r => this.handleNftOffer(r));
+    }
+
+    async handleNftOffer(r) {   
+        switch (r.transaction.Flags) {
+            // Accepting Sell Offers
+            case 1:
+                if (this.cfg.xrpl.address === r.transaction.Destination) {
+                    const registryAcc = new evernode.XrplAccount(this.cfg.xrpl.registryAddress, null, {xrplApi : this.xrplApi});
+                    // TODO Need to revisit - URI and HASH matching (If required)    
+                    const nft = (await registryAcc.getNfts()).find(n => n.URI === `${evernode.EvernodeConstants.NFT_PREFIX_HEX}${r.transaction.hash}`);
+                    if (nft) {
+                        const sellOffer = (await registryAcc.getNftOffers()).find(o => o.TokenID === r.transaction.TokenID && o.Flags === 1);
+                        await this.hostClient.xrplAcc.buyNft(sellOffer.index);
+                   }
+                }
+                break;
+
+            case 0:
+            default:
+                break;
+        }
     }
 
     async handleRedeem(r) {

@@ -69,7 +69,7 @@ namespace conf
             cfg.system.max_cpu_us = !cpu_us ? 900000 : cpu_us; // Total CPU allocation out of 1000000 microsec (1 sec).
             cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
-            const std::string img_prefix = registry_addr.empty() ? "hotpocketdev" : std::string(registry_addr);
+            const std::string img_prefix = registry_addr.empty() ? "evernodedev" : std::string(registry_addr);
             cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
             cfg.docker.images["hp.latest-ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.14";
 

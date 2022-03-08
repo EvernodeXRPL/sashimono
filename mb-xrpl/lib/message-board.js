@@ -108,7 +108,6 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.Redeem, r => this.handleRedeem(r));
     }
 
-
     async handleRedeem(r) {
 
         if (r.token !== this.cfg.xrpl.token || r.host !== this.cfg.xrpl.address)

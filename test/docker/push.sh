@@ -1,5 +1,5 @@
 #!/bin/bash
 
-img=hotpocketdev/sashimono
+img=evernodedev/sashimono
 
 docker image push --all-tags $img

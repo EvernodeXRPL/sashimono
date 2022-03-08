@@ -4,7 +4,7 @@
 docker_bin=$1
 user=$2
 port=$3
-hubacc="hotpocketdev"
+hubacc="evernodedev"
 images=("sashimono:hp.latest-ubt.20.04" "sashimono:hp.latest-ubt.20.04-njs.14")
 user_dir=/home/$user
 

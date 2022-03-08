@@ -4,7 +4,7 @@
 # usage: ./setup.sh install
 
 evernode="Evernode beta"
-maxmind_creds="653000:0yB7wwsBqCiPO2m6"
+maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 memKB_per_instance=819200

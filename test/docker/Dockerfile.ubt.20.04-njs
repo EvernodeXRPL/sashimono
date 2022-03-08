@@ -1,4 +1,4 @@
-FROM evernodedev/hotpocket:latest-ubt.20.04-njs.14
+FROM evernodedev/hotpocket:latest-ubt.20.04-njs.16
 
 RUN apt-get update \
     && apt-get install --no-install-recommends -y unzip jq \

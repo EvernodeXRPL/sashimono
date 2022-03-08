@@ -83,7 +83,7 @@ sudo cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
 
 # NodeJs
 sudo apt-get install -y ca-certificates # In case nodejs package certitficates are renewed.
-curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # Update linker library cache.

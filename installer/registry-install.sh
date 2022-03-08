@@ -5,7 +5,7 @@ docker_bin=$1
 user=$2
 port=$3
 hubacc="evernodedev"
-images=("sashimono:hp.latest-ubt.20.04" "sashimono:hp.latest-ubt.20.04-njs.14")
+images=("sashimono:hp.latest-ubt.20.04" "sashimono:hp.latest-ubt.20.04-njs.16")
 user_dir=/home/$user
 
 # Waits until a service becomes ready up to 3 seconds.

@@ -35,16 +35,16 @@ apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 # openssl       # Required by Sashimono agent to create contract tls certs.
 # jq            # Used for json config file manipulation.
 
-# Install nodejs 14 if not exists.
+# Install nodejs if not exists.
 if ! command -v node &>/dev/null; then
     stage "Installing nodejs"
     apt-get -y install ca-certificates # In case nodejs package certitficates are renewed.
-    curl -sL https://deb.nodesource.com/setup_14.x | bash -
+    curl -sL https://deb.nodesource.com/setup_16.x | bash -
     apt-get -y install nodejs
 else
     version=$(node -v)
-    if [[ ! $version =~ v14\..* ]]; then
-        echo "Found node $version, recommended node v14.x.x"
+    if [[ ! $version =~ v16\..* ]]; then
+        echo "Found node $version, recommended node v16.x.x"
     fi
 fi
 

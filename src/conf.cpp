@@ -71,7 +71,7 @@ namespace conf
 
             const std::string img_prefix = registry_addr.empty() ? "evernodedev" : std::string(registry_addr);
             cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
-            cfg.docker.images["hp.latest-ubt.20.04-njs.14"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.14";
+            cfg.docker.images["hp.latest-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.16";
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;

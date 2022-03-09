@@ -135,6 +135,25 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
+        // Check whether is there any acceptance pending registration NFT offer for this account.
+        const nft = (await hostClient.xrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.NFT_PREFIX_HEX))
+        if (!nft) {
+            const registryAcc = new evernode.XrplAccount(acc.registryAddress, null, {xrplApi: hostClient.xrplApi});
+            const sellOffer = (await registryAcc.getNftOffers()).find(
+                o => 
+                    o.Amount == "0"
+                    && o.Flags === 1
+                    && o.Owner === acc.registryAddress
+                    && o.Destination === acc.address
+            );
+
+            if (sellOffer) {            
+                const res = await hostClient.xrplAcc.buyNft(sellOffer.index);
+                console.log("Registration NFT acquisition was successfully completed.");
+                return res;
+            }
+        }
+
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
         let attempts = 0;

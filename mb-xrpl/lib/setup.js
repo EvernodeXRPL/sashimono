@@ -150,6 +150,7 @@ class Setup {
             if (sellOffer) {            
                 const res = await hostClient.xrplAcc.buyNft(sellOffer.index);
                 console.log("Registration NFT acquisition was successfully completed.");
+                await hostClient.disconnect();
                 return res;
             }
         }

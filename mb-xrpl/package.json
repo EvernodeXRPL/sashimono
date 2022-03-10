@@ -2,8 +2,7 @@
     "name": "mb-xrpl",
     "scripts": {
         "lint": "./node_modules/.bin/eslint ./app.js",
-        "build": "npm run lint && ncc build app.js --minify -o dist",
-        "start": "MB_DATA_DIR=/home/savinda/Documents/HotPocketDev/Sashimono-Agent/mb-xrpl/ MB_DEV=1 MB_TARGET_USER_DEFINED=0 node app.js"
+        "build": "npm run lint && ncc build app.js --minify -o dist"
     },
     "dependencies": {
         "evernode-js-client": "0.4.16",

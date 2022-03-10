@@ -51,7 +51,7 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
-        this.targetPrice = appenv.IS_TARGET_USER_DEFINED ? this.cfg.dex.targetPrice : this.hostClient.config.momentCommunityPrice; // in EVRs.
+        this.targetPrice = appenv.IS_TARGET_USER_DEFINED ? this.cfg.dex.targetPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
 
         this.db.open();
         // Create redeem table if not exist.
@@ -87,8 +87,8 @@ class MessageBoard {
                             // Refresh the evernode configs to get the latest target price set by purchaser community contract.
                             await this.hostClient.refreshConfig();
 
-                        if (!appenv.IS_TARGET_USER_DEFINED && this.targetPrice !== this.hostClient.config.momentCommunityPrice)
-                            this.targetPrice = this.hostClient.config.momentCommunityPrice;
+                        if (!appenv.IS_TARGET_USER_DEFINED && this.targetPrice !== this.hostClient.config.purchaserTargetPrice)
+                            this.targetPrice = this.hostClient.config.purchaserTargetPrice;
 
                         if (tokenOffer && tokenOffer.quality !== this.targetPrice) {
                             console.log('Target price has changed since last offer.');

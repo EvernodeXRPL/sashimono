@@ -2,6 +2,7 @@
 const https = require('https');
 const { appenv } = require('./appenv');
 const evernode = require('evernode-js-client');
+const fs = require('fs');
 
 class Setup {
 
@@ -124,7 +125,7 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, description) {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, description) {
         console.log("Registering host...");
         const acc = this.#getConfig().xrpl;
         evernode.Defaults.set({
@@ -140,7 +141,7 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(acc.token, countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), description.replace('_', ' '));
+                    Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), totalInstanceCount, description.replace('_', ' '));
                 break;
             }
             catch (err) {

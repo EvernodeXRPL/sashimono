@@ -21,9 +21,9 @@ async function main() {
                 const acc = await setup.generateBetaHostAccount(registryAddress);
                 setup.newConfig(acc.address, acc.secret, registryAddress, acc.token);
             }
-            else if (process.argv.length === 9 && process.argv[2] === 'register') {
+            else if (process.argv.length === 10 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
-                    parseInt(process.argv[6]), parseInt(process.argv[7]), process.argv[8]);
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9]);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();

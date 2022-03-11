@@ -12,6 +12,9 @@ const RedeemStatus = {
     SASHI_TIMEOUT: 'SashiTimeout',
 }
 
+const TOKEN_RE_ISSUE_THRESHOLD = 0.5; // 50%
+const TRADING_INTERVAL = 50;
+
 class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath) {
         this.configPath = configPath;
@@ -32,7 +35,7 @@ class MessageBoard {
             throw `${this.configPath} does not exist.`;
 
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.registryAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.registryAddress || !this.cfg.dex.listingLimit)
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
@@ -46,7 +49,7 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
-        this.hostClient.config = this.hostClient.config;
+        this.tokenPrice = (this.cfg.dex.tokenPrice && this.cfg.dex.tokenPrice !== "0") ? this.cfg.dex.tokenPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
 
         this.db.open();
         // Create redeem table if not exist.
@@ -61,11 +64,49 @@ class MessageBoard {
 
         this.db.close();
 
+        // Denote that there is an ongoing trading operation.
+        let tradingOperationOngoing = false;
         // Check for instance expiry.
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
 
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
+
+            // Check trading offer status (available balance amount and token price) after every TRADING_INTERVAL ledgers.
+            if (e.ledger_index % TRADING_INTERVAL == 0) {
+                if (!tradingOperationOngoing) {
+                    tradingOperationOngoing = true;
+                    try {
+                        const tokenOffer = await this.hostClient.getTokenOffer();
+                        let re_issue_price_change = false;
+                        if (!this.cfg.dex.tokenPrice || this.cfg.dex.tokenPrice === "0")
+                            // Refresh the evernode configs to get the latest target price set by purchaser community contract.
+                            await this.hostClient.refreshConfig();
+
+                        if ((!this.cfg.dex.tokenPrice || this.cfg.dex.tokenPrice === "0") && this.tokenPrice !== this.hostClient.config.purchaserTargetPrice)
+                            this.tokenPrice = this.hostClient.config.purchaserTargetPrice;
+
+                        if (tokenOffer && tokenOffer.quality !== this.tokenPrice) {
+                            console.log('Token price has changed since last offer.');
+                            re_issue_price_change = true;
+                        }
+                        if (re_issue_price_change || !tokenOffer || tokenOffer.taker_gets.value <= this.cfg.dex.listingLimit * TOKEN_RE_ISSUE_THRESHOLD) {
+
+                            console.log(`Balance ${tokenOffer?.taker_gets?.value || 0}. Threshold: ${this.cfg.dex.listingLimit * TOKEN_RE_ISSUE_THRESHOLD}`);
+                            if (tokenOffer) {
+                                console.log(`Cancelling the previous offer. Seq: ${tokenOffer?.seq}`)
+                                await this.hostClient.cancelOffer(tokenOffer?.seq);
+                            }
+                            console.log(`Creating a new offer with token price ${this.tokenPrice} for ${this.cfg.dex.listingLimit} ${this.cfg.xrpl.token}s.`);
+                            await this.hostClient.createTokenSellOffer(this.cfg.dex.listingLimit, (this.cfg.dex.listingLimit * this.tokenPrice).toString());
+                        }
+                    } catch (error) {
+                        console.error(error);
+                    }
+                    tradingOperationOngoing = false;
+                }
+            }
+
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
             if (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment) {
                 this.lastHeartbeatMoment = currentMoment;
@@ -73,7 +114,7 @@ class MessageBoard {
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
 
                 try {
-                    await this.hostClient.heartbeat();
+                    // await this.hostClient.heartbeat();
                     console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {

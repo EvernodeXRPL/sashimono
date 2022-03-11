@@ -1,4 +1,4 @@
-process = require('process');
+const process = require('process');
 
 let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",

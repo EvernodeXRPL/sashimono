@@ -43,7 +43,7 @@ async function main() {
         node index.js version - Print version.
         node index.js new [address] [secret] [registryAddress] [token] - Create new config file.
         node index.js betagen [registryAddress] - Generate beta host account and populate config.
-        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [description] - Register the host on Evernode.
+        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.

@@ -57,7 +57,8 @@ class Setup {
     newConfig(address = "", secret = "", registryAddress = "", token = "") {
         this.#saveConfig({
             version: appenv.MB_VERSION,
-            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token }
+            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token },
+            dex: { listingLimit: "0", tokenPrice: "0" }
         });
     }
 

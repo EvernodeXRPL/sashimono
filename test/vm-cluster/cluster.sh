@@ -186,7 +186,7 @@ if [ $mode == "reconfig" ]; then
     saconfig="/etc/sashimono/sa.cfg"
 
     uninstall="evernode uninstall -q"
-    install="curl -fsSL https://sthotpocket.blob.core.windows.net/sashimono/setup.sh | cat  | SKIP_SYSREQ=1 bash -s install -q auto auto 1000000 1000000 2097152 3145728 3 Auto_\$HOSTNAME"
+    install="curl -fsSL https://stevernode.blob.core.windows.net/evernode-dev/setup.sh | cat  | SKIP_SYSREQ=1 bash -s install -q auto auto 1000000 1000000 2097152 3145728 3 Auto_\$HOSTNAME"
 
     restartcgrs="systemctl restart $cgrulesengd_service.service"
     restartsas="systemctl restart $sashimono_service.service"

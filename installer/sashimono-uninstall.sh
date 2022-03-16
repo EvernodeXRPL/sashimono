@@ -110,8 +110,8 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     if [ "$UPGRADE" == "0" ]; then
         # Deregister evernode message board host registration.
         echo "Attempting Evernode host deregistration..."
-        # If deregistration failed and if the installation is not failed partial one, exit the uninstallation.
-        # So user can try again.
+        # If deregistration failed and if the previous installation a successful one, exit the uninstallation.
+        # So user can try uninstall again with deregistration.
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
             $sashimono_installed && echo "Evernode host deregistration failed. Aborting uninstall." && exit 1
     fi

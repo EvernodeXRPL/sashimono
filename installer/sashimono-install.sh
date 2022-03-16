@@ -78,7 +78,8 @@ if [ "$NO_MB" == "" ]; then
         doreg=1
     fi
 
-    if [ ! -z doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
+    # Register the host (if not already registered).
+    if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
         # Register the host on Evernode.
         stage "Registering host on Evernode"
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \

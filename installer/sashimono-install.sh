@@ -78,7 +78,7 @@ if [ "$NO_MB" == "" ]; then
         doreg=1
     fi
 
-    if [ ! -z doreg ] || [ ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ] >/dev/null 2>&1; then
+    if [ ! -z doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
         # Register the host on Evernode.
         stage "Registering host on Evernode"
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
@@ -93,7 +93,7 @@ rm -r "$SASHIMONO_DATA"/contract_template >/dev/null 2>&1
 cp -r "$script_dir"/contract_template $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,sashimono-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Copy Blake3 and update linker library cache.

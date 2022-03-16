@@ -65,7 +65,10 @@ rm /etc/systemd/system/$CGCREATE_SERVICE.service
 echo "Removing Sashimono service..."
 systemctl stop $SASHIMONO_SERVICE
 systemctl disable $SASHIMONO_SERVICE
-rm /etc/systemd/system/$SASHIMONO_SERVICE.service
+service_path="/etc/systemd/system/$SASHIMONO_SERVICE.service"
+# Keep installed flag before deleting the service.
+[ -f $service_path ] && sashimono_installed=true || sashimono_installed=false
+rm $service_path
 
 systemctl daemon-reload
 
@@ -74,7 +77,7 @@ systemctl daemon-reload
 
 # Delete binaries except message board and sashimnono uninstall script.
 echo "Deleting binaries..."
-find $SASHIMONO_BIN 1 ! \( -regex "^$MB_XRPL_BIN\(/.*\)?" -o -path $SASHIMONO_BIN/sashimono-uninstall.sh \) -delete
+find $SASHIMONO_BIN -mindepth 1 ! \( -regex "^$MB_XRPL_BIN\(/.*\)?" -o -path $SASHIMONO_BIN/sashimono-uninstall.sh \) -delete
 
 echo "Deleting Sashimono CLI..."
 rm $USER_BIN/sashi
@@ -104,10 +107,9 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     if [ "$UPGRADE" == "0" ]; then
         # Deregister evernode message board host registration.
         echo "Attempting Evernode host deregistration..."
-        # If deregistration failed and host is still registered exit uninstallation with error.
+        # If deregistration failed and if the installation is not partail exit the uninstallation.
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
-            sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1 &&
-            echo "Evernode host deregistration failed. Aborting uninstall." && exit 1
+            $sashimono_installed && echo "Evernode host deregistration failed. Aborting uninstall." && exit 1
     fi
 
     echo "Deleting message board user..."

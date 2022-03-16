@@ -34,7 +34,7 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
-[ ! systemctl status $SASHIMONO_SERVICE ] && sashimono_installed=true || sashimono_installed=false
+[ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)

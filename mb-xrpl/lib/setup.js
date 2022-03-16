@@ -101,7 +101,7 @@ class Setup {
             // Get beta EVRs from foundation to host account.
             {
                 console.log("Requesting beta EVRs...");
-                await hostClient.makePayment(registryClient.config.foundationAddress,
+                await hostClient.xrplAcc.makePayment(hostClient.config.foundationAddress,
                     evernode.XrplConstants.MIN_XRP_AMOUNT,
                     evernode.XrplConstants.XRP,
                     null,
@@ -117,6 +117,7 @@ class Setup {
                             continue;
                         throw "EVR funds not received within timeout.";
                     }
+                    break;
                 }
             }
 
@@ -185,21 +186,29 @@ class Setup {
 
             try {
                 const hostClient = new evernode.HostClient(acc.address, acc.secret);
-                console.log('Retrieving EVR balance...')
                 await hostClient.connect();
+                console.log('Retrieving EVR balance...');
                 const evrBalance = await hostClient.getEVRBalance();
                 console.log(`EVR balance: ${evrBalance}`);
+                console.log('Retrieving reg info...');
+                const hostInfo = await hostClient.getRegistration();
+                if (hostInfo)
+                    console.log(`NFT :${hostInfo.nfTokenId}`);
+                else {
+                    await hostClient.disconnect();
+                    throw 'Host is not registered';
+                }
                 await hostClient.disconnect();
             }
             catch {
-                console.log('EVR balance: [Error occured when retrieving EVR balance]');
+                throw 'EVR balance: [Error occured when retrieving EVR balance]';
             }
         }
     }
 
     // Upgrades existing message board data to the new version.
     async upgrade() {
-        
+
         // Do a simple version change in the config.
         // In the future we could have real upgrade/data migration logic here.
         const cfg = this.#getConfig();

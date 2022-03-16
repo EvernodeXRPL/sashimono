@@ -29,7 +29,7 @@ function rollback() {
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.
     local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ] ; then
+    if [ -n "$cgrulesengd_filepath" ]; then
         local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
         echo "${cgrulesengd_filename%.*}"
     fi
@@ -38,13 +38,58 @@ function cgrulesengd_servicename() {
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
-# Create directories if not exist.
+# Create bin and data directories if not exist.
 mkdir -p $SASHIMONO_BIN
-mkdir -p $DOCKER_BIN
 mkdir -p $SASHIMONO_DATA
 
+# Put Sashimono uninstallation into sashimono bin dir.
+# We do this at the begining because then if message board registration failed user can force uninstall sashimono.
+cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
+chmod -R +x $SASHIMONO_BIN
+
+# Setting up Sashimono admin group.
+! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
+
+# Register host only of NO_MB environment is not set.
+if [ "$NO_MB" == "" ]; then
+    # Install xrpl message board systemd service.
+    echo "Configuaring host registration on Evernode..."
+
+    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+
+    # Creating message board user (if not exists).
+    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        usermod --lock $MB_XRPL_USER
+        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    fi
+
+    # First create the folder from root and then transfer ownership to the user
+    # since the folder is created in /etc/sashimono directory.
+    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
+    # Change ownership to message board user.
+    chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+
+    # Generate beta host account (if not already setup).
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
+        stage "Configuring host xrpl account"
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+        doreg=1
+    fi
+
+    if [ ! -z doreg ] || [ ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ] >/dev/null 2>&1; then
+        # Register the host on Evernode.
+        stage "Registering host on Evernode"
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+            $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description && echo "REG_FAILURE" && rollback
+    fi
+
+    echo "Registered host on Evernode."
+fi
+
 # Copy contract template (delete existing)
-rm -r "$SASHIMONO_DATA"/contract_template > /dev/null 2>&1
+rm -r "$SASHIMONO_DATA"/contract_template >/dev/null 2>&1
 cp -r "$script_dir"/contract_template $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
@@ -59,6 +104,8 @@ cp "$script_dir"/sashi $USER_BIN
 
 # Download and install rootless dockerd.
 stage "Installing docker packages"
+# Create docker bin directory.
+mkdir -p $DOCKER_BIN
 "$script_dir"/docker-install.sh $DOCKER_BIN
 
 # Check whether docker installation dir is still empty.
@@ -71,8 +118,6 @@ stage "Installing docker packages"
 # [ "$?" == "1" ] && rollback
 # registry_addr=$inetaddr:$DOCKER_REGISTRY_PORT
 
-# Setting up Sashimono admin group.
-! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
@@ -84,7 +129,7 @@ cgrulesengd_service=$(cgrulesengd_servicename)
 # Setting up cgroup rules with sashiusers group (if not already setup).
 echo "Creating cgroup rules..."
 ! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && rollback
-if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf ; then
+if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf; then
     ! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
     # Restart the service to apply the cgrules config.
     echo "Restarting the '$cgrulesengd_service' service."
@@ -145,22 +190,6 @@ if [ "$NO_MB" == "" ]; then
     # Install xrpl message board systemd service.
     echo "Installing Evernode xrpl message board..."
 
-    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
-
-    # Creating message board user (if not exists).
-    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd ; then
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-        usermod --lock $MB_XRPL_USER
-        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
-        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
-    fi
-
-    # First create the folder from root and then transfer ownership to the user
-    # since the folder is created in /etc/sashimono directory.
-    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
-    # Change ownership to message board user.
-    chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
-
     mb_user_dir=/home/"$MB_XRPL_USER"
     mb_user_id=$(id -u "$MB_XRPL_USER")
     mb_user_runtime_dir="/run/user/$mb_user_id"
@@ -177,16 +206,6 @@ if [ "$NO_MB" == "" ]; then
         [ "$user_systemd" == "running" ] && break
     done
     [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
-
-    # Generate beta host account (if not already setup).
-    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic > /dev/null 2>&1 ; then
-        stage "Configuring host xrpl account"
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
-        # Register the host on Evernode.
-        stage "Registering host on Evernode"
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-            $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $description && echo "REG_FAILURE" && rollback
-    fi
 
     stage "Configuring xrpl message board service"
     ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback

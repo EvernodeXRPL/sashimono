@@ -34,7 +34,7 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
-[ -f $SASHIMONO_BIN/sagent ] && sashimono_installed=true || sashimono_installed=false
+[ ! systemctl status $SASHIMONO_SERVICE ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -44,12 +44,22 @@ function echomult() {
 
 # The set of commands supported differs based on whether Sashimono is installed or not.
 if ! $sashimono_installed ; then
-    [ "$1" != "install" ] \
-        && echomult "$evernode host management tool
-                \nYour system is not registered on $evernode.
-                \nSupported commands:
-                \ninstall - Install Sashimono and register on $evernode" \
-        && exit 1
+    if [ ! -d $SASHIMONO_BIN ] ; then
+        [ "$1" != "install" ] \
+            && echomult "$evernode host management tool
+                    \nYour system is not registered on $evernode.
+                    \nSupported commands:
+                    \ninstall - Install Sashimono and register on $evernode"\
+            && exit 1
+    else
+        [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
+            && echomult "$evernode host management tool
+                    \nYour system has a partial $evernode installation.
+                    \nSupported commands:
+                    \ninstall - Install Sashimono and register on $evernode
+                    \nuninstall - Uninstall $evernode partial installations"\
+            && exit 1
+    fi
 else
     [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] \
         && echomult "$evernode host management tool
@@ -300,18 +310,19 @@ function install_evernode() {
                                 | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     fi
 
+    # Create evernode cli alias at the begining.
+    create_evernode_alias
+
     echo "Installing Sashimono..."
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
-                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && remove_evernode_alias && install_failure
     set +o pipefail
 
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $version_timestamp > $SASHIMONO_DATA/$version_timestamp_file
-    # Create evernode cli alias.
-    create_evernode_alias
 }
 
 function uninstall_evernode() {

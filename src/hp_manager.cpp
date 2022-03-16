@@ -180,7 +180,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports) == -1)
         {
             error_msg = INTERNAL_ERROR;
             return -1;
@@ -194,7 +194,7 @@ namespace hp
             error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
-            uninstall_user(username);
+            uninstall_user(username, instance_ports);
             return -1;
         }
 
@@ -204,7 +204,7 @@ namespace hp
             LOG_ERROR << "Error inserting instance data into db for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
             docker_remove(username, container_name);
-            uninstall_user(username);
+            uninstall_user(username, instance_ports);
             return -1;
         }
 
@@ -478,7 +478,7 @@ namespace hp
             vacant_ports.push_back(info.assigned_ports);
 
         // Remove user after destroying.
-        if (uninstall_user(info.username) == -1)
+        if (uninstall_user(info.username, info.assigned_ports) == -1)
             return -1;
 
         return 0;
@@ -851,8 +851,9 @@ namespace hp
      * @param max_mem_kbytes Memory quota allowed for this user.
      * @param max_swap_kbytes Swap memory quota allowed for this user.
      * @param storage_kbytes Disk quota allowed for this user.
+     * @param instance_ports Ports assigned to the instance.
     */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name, const ports instance_ports)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
@@ -861,7 +862,9 @@ namespace hp
             std::to_string(storage_kbytes),
             container_name,
             std::to_string(contract_ugid.uid),
-            std::to_string(contract_ugid.gid)};
+            std::to_string(contract_ugid.gid),
+            std::to_string(instance_ports.peer_port),
+            std::to_string(instance_ports.user_port)};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;
@@ -894,10 +897,11 @@ namespace hp
     /**
      * Delete the given user and remove dependencies.
      * @param username Username of the user to be deleted.
+     * @param instance_ports Ports assigned to the instance.
     */
-    int uninstall_user(std::string_view username)
+    int uninstall_user(std::string_view username, const ports assigned_ports)
     {
-        const std::vector<std::string_view> input_params = {username};
+        const std::vector<std::string_view> input_params = {username, std::to_string(assigned_ports.peer_port), std::to_string(assigned_ports.user_port)};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)
             return -1;

@@ -34,6 +34,8 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
+# Configuring the sashimo service is the last stage of the installation.
+# So if the service exists, Sashimono previous sashimono installation has been complete.
 [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
@@ -44,6 +46,8 @@ function echomult() {
 
 # The set of commands supported differs based on whether Sashimono is installed or not.
 if ! $sashimono_installed ; then
+    # If sashimono is not installed but there's a sashimono binary directory, The previous installation is a failed attempt.
+    # So, user can reinstall or uninstall the previous partial failed attempt.
     if [ ! -d $SASHIMONO_BIN ] ; then
         [ "$1" != "install" ] \
             && echomult "$evernode host management tool
@@ -54,10 +58,10 @@ if ! $sashimono_installed ; then
     else
         [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
             && echomult "$evernode host management tool
-                    \nYour system has a partial $evernode installation.
+                    \nYour system has a previous failed partial $evernode installation.
                     \nSupported commands:
-                    \ninstall - Install Sashimono and register on $evernode
-                    \nuninstall - Uninstall $evernode partial installations"\
+                    \ninstall - Re-install Sashimono and register on $evernode
+                    \nuninstall - Uninstall previous $evernode installations"\
             && exit 1
     fi
 else
@@ -311,6 +315,7 @@ function install_evernode() {
     fi
 
     # Create evernode cli alias at the begining.
+    # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
     create_evernode_alias
 
     echo "Installing Sashimono..."
@@ -347,6 +352,8 @@ function uninstall_evernode() {
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
     ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
 
+    # Remove the evernide alias at the end.
+    # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
 }
 

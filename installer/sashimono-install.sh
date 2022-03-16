@@ -43,7 +43,7 @@ mkdir -p $SASHIMONO_BIN
 mkdir -p $SASHIMONO_DATA
 
 # Put Sashimono uninstallation into sashimono bin dir.
-# We do this at the begining because then if message board registration failed user can force uninstall sashimono.
+# We do this at the begining because then if message board registration failed user can uninstall sashimono with evernode command.
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
@@ -52,7 +52,7 @@ chmod -R +x $SASHIMONO_BIN
 
 # Register host only of NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
-    # Install xrpl message board systemd service.
+    # Configure message board users and register host.
     echo "Configuaring host registration on Evernode..."
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
@@ -78,9 +78,8 @@ if [ "$NO_MB" == "" ]; then
         doreg=1
     fi
 
-    # Register the host (if not already registered).
+    # Register the host on Evernode.
     if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-        # Register the host on Evernode.
         stage "Registering host on Evernode"
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
             $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description && echo "REG_FAILURE" && rollback

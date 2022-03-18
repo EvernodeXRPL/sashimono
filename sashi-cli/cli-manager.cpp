@@ -3,11 +3,11 @@
 
 namespace cli
 {
-    constexpr const char *SOCKET_NAME = "sa.sock";     // Name of the sashimono socket.
-    constexpr const char *SAGENT_BIN_NAME = "sagent";  // Name of the sashimono agent bin.
-    constexpr const char *DATA_DIR = "/etc/sashimono"; // Sashimono data directory.
-    constexpr const char *BIN_DIR = "/bin/sashimono";  // Sashimono data directory.
-    constexpr const int BUFFER_SIZE = 4096;            // Max read buffer size.
+    constexpr const char *SOCKET_NAME = "sa.sock";        // Name of the sashimono socket.
+    constexpr const char *SAGENT_BIN_NAME = "sagent";     // Name of the sashimono agent bin.
+    constexpr const char *DATA_DIR = "/etc/sashimono";    // Sashimono data directory.
+    constexpr const char *BIN_DIR = "/usr/bin/sashimono"; // Sashimono bin directory.
+    constexpr const int BUFFER_SIZE = 4096;               // Max read buffer size.
     constexpr const char *LIST_FORMATTER_STR = "%-38s%-27s%-10s%-10s%-10s%s\n";
     constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";

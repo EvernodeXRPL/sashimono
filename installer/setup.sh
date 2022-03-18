@@ -34,7 +34,9 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
-[ -f $SASHIMONO_BIN/sagent ] && sashimono_installed=true || sashimono_installed=false
+# Configuring the sashimono service is the last stage of the installation.
+# So if the service exists, Previous sashimono installation has been complete.
+[ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -44,12 +46,24 @@ function echomult() {
 
 # The set of commands supported differs based on whether Sashimono is installed or not.
 if ! $sashimono_installed ; then
-    [ "$1" != "install" ] \
-        && echomult "$evernode host management tool
-                \nYour system is not registered on $evernode.
-                \nSupported commands:
-                \ninstall - Install Sashimono and register on $evernode" \
-        && exit 1
+    # If sashimono is not installed but there's a sashimono binary directory, The previous installation is a failed attempt.
+    # So, user can reinstall or uninstall the previous partial failed attempt.
+    if [ ! -d $SASHIMONO_BIN ] ; then
+        [ "$1" != "install" ] \
+            && echomult "$evernode host management tool
+                    \nYour system is not registered on $evernode.
+                    \nSupported commands:
+                    \ninstall - Install Sashimono and register on $evernode"\
+            && exit 1
+    else
+        [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
+            && echomult "$evernode host management tool
+                    \nYour system has a previous failed partial $evernode installation.
+                    \nSupported commands:
+                    \ninstall - Re-install Sashimono and register on $evernode
+                    \nuninstall - Uninstall previous $evernode installations"\
+            && exit 1
+    fi
 else
     [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] \
         && echomult "$evernode host management tool
@@ -66,7 +80,6 @@ mode=$1
 if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
-
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -300,18 +313,20 @@ function install_evernode() {
                                 | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     fi
 
+    # Create evernode cli alias at the begining.
+    # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
+    create_evernode_alias
+
     echo "Installing Sashimono..."
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
-                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && remove_evernode_alias && install_failure
     set +o pipefail
 
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $version_timestamp > $SASHIMONO_DATA/$version_timestamp_file
-    # Create evernode cli alias.
-    create_evernode_alias
 }
 
 function uninstall_evernode() {
@@ -334,8 +349,10 @@ function uninstall_evernode() {
     fi
 
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
-    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
+    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
 
+    # Remove the evernode alias at the end.
+    # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
 }
 
@@ -451,7 +468,8 @@ elif [ "$mode" == "uninstall" ]; then
     $interactive && ! confirm "Have you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "Are you sure you want to uninstall $evernode?" && exit 1
 
-    uninstall_evernode 0
+    # Force uninstall on quiet mode.
+    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "status" ]; then

@@ -77,16 +77,9 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ]; then
-    if [ "$mode" == "install" ] || [ "$mode" == "update" ]; then
-        [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
-        [ "$2" == "-q" ] && interactive=false || interactive=true
-    elif [ "$mode" == "uninstall" ]; then
-        [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && [ "$2" != "-f" ] && echo "Second arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
-        [ -n "$3" ] && [ "$3" != "-q" ] && [ "$3" != "-i" ] && [ "$3" != "-f" ] && echo "Third arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
-        ([ "$2" == "-q" ] || [ "$3" == "-q" ]) && interactive=false || interactive=true
-        (! $interactive || [ "$2" == "-f" ] || [ "$3" == "-f" ]) && force="-f" || force=""
-    fi
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] ; then
+    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
+    [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -475,7 +468,8 @@ elif [ "$mode" == "uninstall" ]; then
     $interactive && ! confirm "Have you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "Are you sure you want to uninstall $evernode?" && exit 1
 
-    uninstall_evernode 0 $force
+    # Force uninstall on quiet mode.
+    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "status" ]; then

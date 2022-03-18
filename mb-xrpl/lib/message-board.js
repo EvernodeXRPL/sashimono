@@ -38,6 +38,12 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.registryAddress || !this.cfg.dex.listingLimit)
             throw "Required cfg fields cannot be empty.";
 
+        if (this.cfg.dex.listingLimit === "0" || parseInt(this.cfg.dex.listingLimit) < 0)
+            throw "Dex listing limit cfg value should be a positive integer.";
+
+        if (this.cfg.dex.tokenPrice && parseInt(this.cfg.dex.tokenPrice) < 0)
+            throw "Dex token price cfg value should be a positive integer.";
+
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
         this.xrplApi = new evernode.XrplApi();
@@ -52,7 +58,7 @@ class MessageBoard {
         this.tokenPrice = (this.cfg.dex.tokenPrice && this.cfg.dex.tokenPrice !== "0") ? this.cfg.dex.tokenPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
 
         this.db.open();
-        // Create redeem table if not exist.
+        // Create redeem table if not existintiger.
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
@@ -114,7 +120,7 @@ class MessageBoard {
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
 
                 try {
-                    // await this.hostClient.heartbeat();
+                    await this.hostClient.heartbeat();
                     console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {

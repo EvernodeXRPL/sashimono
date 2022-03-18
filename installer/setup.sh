@@ -85,7 +85,7 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
         [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && [ "$2" != "-f" ] && echo "Second arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
         [ -n "$3" ] && [ "$3" != "-q" ] && [ "$3" != "-i" ] && [ "$3" != "-f" ] && echo "Third arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
         ([ "$2" == "-q" ] || [ "$3" == "-q" ]) && interactive=false || interactive=true
-        ([ "$2" == "-f" ] || [ "$3" == "-f" ]) && force="-f" || force=""
+        (! $interactive || [ "$2" == "-f" ] || [ "$3" == "-f" ]) && force="-f" || force=""
     fi
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi

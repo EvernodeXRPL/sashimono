@@ -21,7 +21,7 @@ function stage() {
 
 function rollback() {
     echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh
+    "$script_dir"/sashimono-uninstall.sh -f
     echo "Rolled back the installation."
     exit 1
 }
@@ -45,12 +45,12 @@ mkdir -p $SASHIMONO_DATA
 # Put Sashimono uninstallation into sashimono bin dir.
 # We do this at the begining because then if message board registration failed user can uninstall sashimono with evernode command.
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
-chmod -R +x $SASHIMONO_BIN
+chmod -R $SASHIMONO_BIN/sashimono-uninstall.sh
 
 # Setting up Sashimono admin group.
 ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
 
-# Register host only of NO_MB environment is not set.
+# Register host only if NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
     # Configure message board users and register host.
     echo "Configuaring host registration on Evernode..."

@@ -192,8 +192,9 @@ class Setup {
                 console.log(`EVR balance: ${evrBalance}`);
                 console.log('Retrieving reg info...');
                 const hostInfo = await hostClient.getRegistration();
-                if (hostInfo)
-                    console.log(`NFT :${hostInfo.nfTokenId}`);
+                if (hostInfo) {
+                    console.log(`NFT: ${hostInfo.nfTokenId}`);
+                }
                 else {
                     await hostClient.disconnect();
                     throw 'Host is not registered';

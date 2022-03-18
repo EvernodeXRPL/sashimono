@@ -34,8 +34,8 @@ export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
 
-# Configuring the sashimo service is the last stage of the installation.
-# So if the service exists, Sashimono previous sashimono installation has been complete.
+# Configuring the sashimono service is the last stage of the installation.
+# So if the service exists, Previous sashimono installation has been complete.
 [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
 
 # Helper to print multi line text.
@@ -77,10 +77,16 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] ; then
-    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
-    [ "$2" == "-q" ] && interactive=false || interactive=true
-
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ]; then
+    if [ "$mode" == "install" ] || [ "$mode" == "update" ]; then
+        [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
+        [ "$2" == "-q" ] && interactive=false || interactive=true
+    elif [ "$mode" == "uninstall" ]; then
+        [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && [ "$2" != "-f" ] && echo "Second arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
+        [ -n "$3" ] && [ "$3" != "-q" ] && [ "$3" != "-i" ] && [ "$3" != "-f" ] && echo "Third arg must be -q (Quiet) or -i (Interactive) or -f (force)" && exit 1
+        ([ "$2" == "-q" ] || [ "$3" == "-q" ]) && interactive=false || interactive=true
+        ([ "$2" == "-f" ] || [ "$3" == "-f" ]) && force="-f" || force=""
+    fi
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -350,9 +356,9 @@ function uninstall_evernode() {
     fi
 
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
-    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh && uninstall_failure
+    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
 
-    # Remove the evernide alias at the end.
+    # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
 }
@@ -469,7 +475,7 @@ elif [ "$mode" == "uninstall" ]; then
     $interactive && ! confirm "Have you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "Are you sure you want to uninstall $evernode?" && exit 1
 
-    uninstall_evernode 0
+    uninstall_evernode 0 $force
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "status" ]; then

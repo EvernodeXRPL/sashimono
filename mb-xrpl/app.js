@@ -67,7 +67,8 @@ async function main() {
 
     }
     catch (err) {
-        console.log(err);
+        // If error is a RippledError show internal error message, Otherwise show err.
+        console.log(err?.data?.error_message || err);
         console.log("Evernode xrpl message board exiting with error.");
         process.exit(1);
     }

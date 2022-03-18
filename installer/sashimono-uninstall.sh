@@ -4,6 +4,21 @@
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
+force=$1
+
+function confirm() {
+    echo -en $1" [y/n] "
+    local yn=""
+
+    read yn </dev/tty
+    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
+        read -p "'y' or 'n' expected: " yn </dev/tty
+    done
+
+    echo ""                                     # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
+}
+
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.
     local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
@@ -23,8 +38,9 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     mb_user_dir=/home/"$MB_XRPL_USER"
     mb_user_id=$(id -u "$MB_XRPL_USER")
     mb_user_runtime_dir="/run/user/$mb_user_id"
+    mb_service_path="$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service
     # Remove xrpl message board service if exists.
-    if [ -f "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service ]; then
+    if [ -f $mb_service_path ]; then
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $MB_XRPL_SERVICE
     fi
@@ -66,8 +82,6 @@ echo "Removing Sashimono service..."
 systemctl stop $SASHIMONO_SERVICE
 systemctl disable $SASHIMONO_SERVICE
 service_path="/etc/systemd/system/$SASHIMONO_SERVICE.service"
-# Keep installed flag before deleting the service to handle failed partial installations.
-[ -f $service_path ] && sashimono_installed=true || sashimono_installed=false
 rm $service_path
 
 # Reload the systemd daemon after removing the service
@@ -110,10 +124,14 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     if [ "$UPGRADE" == "0" ]; then
         # Deregister evernode message board host registration.
         echo "Attempting Evernode host deregistration..."
-        # If deregistration failed and if the previous installation a successful one, exit the uninstallation.
-        # So user can try uninstall again with deregistration.
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
-            $sashimono_installed && echo "Evernode host deregistration failed. Aborting uninstall." && exit 1
+        # Message board service is created at the end of the installation. So, if this exists previous installation is a successfull one.
+        # If not force or quiet mode and deregistration failed and if the previous installation a successful one,
+        # Exit the uninstallation, So user can try uninstall again with deregistration.
+        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
+            [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
+            ! confirm "Evernode host deregistration failed. Still do you want to continue uninstall?" && echo "Aborting uninstall. Try again later." && exit 1
+            echo "Continuing uninstallation..."
+        fi
     fi
 
     echo "Deleting message board user..."

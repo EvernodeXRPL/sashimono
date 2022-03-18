@@ -45,7 +45,7 @@ mkdir -p $SASHIMONO_DATA
 # Put Sashimono uninstallation into sashimono bin dir.
 # We do this at the begining because then if message board registration failed user can uninstall sashimono with evernode command.
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
-chmod -R $SASHIMONO_BIN/sashimono-uninstall.sh
+chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 # Setting up Sashimono admin group.
 ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback

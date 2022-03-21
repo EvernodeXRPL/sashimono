@@ -123,7 +123,15 @@ done
 echo "Allowing user and peer ports in firewall"
 rule_list=$(sudo ufw status)
 comment=$prefix-$contract_dir
-sed -n -r -e "/${comment}/{q100}" <<<"$rule_list"
+# Rule is added such that the ports are in ascending order. So adjust the string to match the rule.
+if ((peer_port > user_port)); then
+    p1=$user_port
+    p2=$peer_port
+else
+    p1=$peer_port
+    p2=$user_port
+fi
+sed -n -r -e "/${p1},${p2}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
 res=$?
 if [ ! $res -eq 100 ]; then
     echo "Adding new rule to allow ports for new instance from firewall."

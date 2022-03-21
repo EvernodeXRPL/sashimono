@@ -5,6 +5,7 @@
 user=$1
 peer_port=$2
 user_port=$3
+instance_name=$4
 prefix="sashi"
 
 # Check whether this is a valid sashimono username.
@@ -76,15 +77,8 @@ setquota -g -F vfsv0 "$user" 0 0 0 0 /
 
 echo "Removing firewall rule allowing hp ports"
 rule_list=$(sudo ufw status)
-# Rule is added such that the ports are in ascending order. So adjust the string to match the rule.
-if ((peer_port > user_port)); then
-    p1=$user_port
-    p2=$peer_port
-else
-    p1=$peer_port
-    p2=$user_port
-fi
-sed -n -r -e "/${p1},${p2}\/tcp\s*ALLOW\s*Anywhere\s*# Sashimono/{q100}" <<<"$rule_list"
+comment=$prefix-$instance_name
+sed -n -r -e "/${comment}/{q100}" <<<"$rule_list"
 res=$?
 if [ $res -eq 100 ]; then
     echo "Deleting port rule for instance from firewall."

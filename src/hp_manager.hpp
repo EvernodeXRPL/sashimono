@@ -87,7 +87,7 @@ namespace hp
 
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name, const ports instance_ports);
 
-    int uninstall_user(std::string_view username, const ports assigned_ports);
+    int uninstall_user(std::string_view username, const ports assigned_ports, std::string_view instance_name);
 
     void get_instance_list(std::vector<hp::instance_info> &instances);
 

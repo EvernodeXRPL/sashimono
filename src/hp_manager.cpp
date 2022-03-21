@@ -59,7 +59,7 @@ namespace hp
 
     /**
      * Initialize hp related environment.
-    */
+     */
     int init()
     {
         // First, check whether system is ready to start.
@@ -91,7 +91,7 @@ namespace hp
 
     /**
      * Do hp related cleanups.
-    */
+     */
     void deinit()
     {
         is_shutting_down = true;
@@ -108,7 +108,7 @@ namespace hp
      * @param contract_id Contract id to be configured.
      * @param image_key Docker image name to use (must exist in the config iamge list).
      * @return 0 on success and -1 on error.
-    */
+     */
     int create_new_instance(std::string &error_msg, instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
         // If the max alloved instance count is already allocated. We won't allow more.
@@ -194,7 +194,7 @@ namespace hp
             error_msg = INTERNAL_ERROR;
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
-            uninstall_user(username, instance_ports);
+            uninstall_user(username, instance_ports, container_name);
             return -1;
         }
 
@@ -204,7 +204,7 @@ namespace hp
             LOG_ERROR << "Error inserting instance data into db for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
             docker_remove(username, container_name);
-            uninstall_user(username, instance_ports);
+            uninstall_user(username, instance_ports, container_name);
             return -1;
         }
 
@@ -222,7 +222,7 @@ namespace hp
      * @param container_name Name of the container.
      * @param config_msg Config values for the hp instance.
      * @return 0 on success and -1 on error.
-    */
+     */
     int initiate_instance(std::string &error_msg, std::string_view container_name, const msg::initiate_msg &config_msg)
     {
         instance_info info;
@@ -299,7 +299,7 @@ namespace hp
      * @param contract_dir Directory for the contract.
      * @param assigned_ports Assigned ports to the container.
      * @return 0 on success execution or relavent error code on error.
-    */
+     */
     int create_container(std::string_view username, std::string_view image_name, std::string_view container_name, std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
@@ -325,7 +325,7 @@ namespace hp
      * Stops the container with given name if exists.
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
-    */
+     */
     int stop_container(std::string_view container_name)
     {
         instance_info info;
@@ -356,7 +356,7 @@ namespace hp
      * Starts the container with given name if exists.
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
-    */
+     */
     int start_container(std::string_view container_name)
     {
         instance_info info;
@@ -414,7 +414,7 @@ namespace hp
      * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
-    */
+     */
     int docker_start(std::string_view username, std::string_view container_name)
     {
         const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
@@ -428,7 +428,7 @@ namespace hp
      * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
-    */
+     */
     int docker_stop(std::string_view username, std::string_view container_name)
     {
         const int len = 99 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
@@ -442,7 +442,7 @@ namespace hp
      * @param username Username of the instance user.
      * @param container_name Name of the container.
      * @return 0 on successful execution and -1 on error.
-    */
+     */
     int docker_remove(std::string_view username, std::string_view container_name)
     {
         const int len = 100 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
@@ -455,7 +455,7 @@ namespace hp
      * Destroy the container with given name if exists.
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
-    */
+     */
     int destroy_container(std::string_view container_name)
     {
         instance_info info;
@@ -478,7 +478,7 @@ namespace hp
             vacant_ports.push_back(info.assigned_ports);
 
         // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports) == -1)
+        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
             return -1;
 
         return 0;
@@ -493,8 +493,8 @@ namespace hp
      * @param assigned_ports Assigned ports to the instance.
      * @param info Information of the created contract instance.
      * @return -1 on error and 0 on success.
-     * 
-    */
+     *
+     */
     int create_contract(std::string_view username, std::string_view owner_pubkey, std::string_view contract_id,
                         std::string_view contract_dir, const ports &assigned_ports, instance_info &info)
     {
@@ -610,7 +610,7 @@ namespace hp
      * @param container_name Name of the container.
      * @param status The variable that holds the status of the container.
      * @return 0 on success and -1 on error.
-    */
+     */
     int check_instance_status(std::string_view username, std::string_view container_name, std::string &status)
     {
         const int len = 136 + username.length() + conf::ctx.exe_dir.length() + container_name.length();
@@ -852,7 +852,7 @@ namespace hp
      * @param max_swap_kbytes Swap memory quota allowed for this user.
      * @param storage_kbytes Disk quota allowed for this user.
      * @param instance_ports Ports assigned to the instance.
-    */
+     */
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name, const ports instance_ports)
     {
         const std::vector<std::string_view> input_params = {
@@ -898,10 +898,15 @@ namespace hp
      * Delete the given user and remove dependencies.
      * @param username Username of the user to be deleted.
      * @param instance_ports Ports assigned to the instance.
-    */
-    int uninstall_user(std::string_view username, const ports assigned_ports)
+     * @param instance_name Name of the instance.
+     */
+    int uninstall_user(std::string_view username, const ports assigned_ports, std::string_view instance_name)
     {
-        const std::vector<std::string_view> input_params = {username, std::to_string(assigned_ports.peer_port), std::to_string(assigned_ports.user_port)};
+        const std::vector<std::string_view> input_params = {
+            username,
+            std::to_string(assigned_ports.peer_port),
+            std::to_string(assigned_ports.user_port),
+            instance_name};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)
             return -1;
@@ -929,7 +934,7 @@ namespace hp
     /**
      * Get the instance list except destroyed instances from the database.
      * @param instances List of instances to be populated.
-    */
+     */
     void get_instance_list(std::vector<hp::instance_info> &instances)
     {
         sqlite::get_instance_list(db, instances);
@@ -941,7 +946,7 @@ namespace hp
      * @param container_name Name of the instance
      * @param instance Instance info ref to be populated.
      * @return 0 on success and -1 on error.
-    */
+     */
     int get_instance(std::string &error_msg, std::string_view container_name, hp::instance_info &instance)
     {
         if (sqlite::get_instance(db, container_name, instance) == -1)
@@ -957,7 +962,7 @@ namespace hp
     /**
      * Check whether there's a pending reboot and cgrules service is running and configured.
      * @return true if active and configured otherwise false.
-    */
+     */
     bool system_ready()
     {
         char buffer[20];

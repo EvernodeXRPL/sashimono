@@ -21,7 +21,6 @@ class MessageBoard {
         this.redeemTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
-        this.lastHeartbeatMoment = null;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -56,6 +55,10 @@ class MessageBoard {
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
         this.tokenPrice = (this.cfg.dex.tokenPrice && this.cfg.dex.tokenPrice !== "0") ? this.cfg.dex.tokenPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
+        
+        // Get last heartbeat moment from the host info.
+        const hostInfo = await this.hostClient.getRegistration();
+        this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
 
         this.db.open();
         // Create redeem table if not existintiger.

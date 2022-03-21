@@ -225,7 +225,7 @@ class MessageBoard {
             // Update the redeem response for failures.
             await this.updateRedeemStatus(redeemRefId, RedeemStatus.FAILED);
 
-            await this.hostClient.redeemError(redeemRefId, e.content);
+            await this.hostClient.redeemError(redeemRefId, userAddress, e.content);
         }
 
         this.db.close();

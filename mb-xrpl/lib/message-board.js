@@ -58,10 +58,11 @@ class MessageBoard {
         
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
+        // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
 
         this.db.open();
-        // Create redeem table if not existintiger.
+        // Create redeem table if not exist.
         await this.createRedeemTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 

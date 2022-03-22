@@ -21,7 +21,6 @@ class MessageBoard {
         this.redeemTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
-        this.lastHeartbeatMoment = null;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -38,6 +37,12 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.token || !this.cfg.xrpl.registryAddress || !this.cfg.dex.listingLimit)
             throw "Required cfg fields cannot be empty.";
 
+        if (this.cfg.dex.listingLimit === "0" || parseInt(this.cfg.dex.listingLimit) < 0)
+            throw "Dex listing limit cfg value should be a positive integer.";
+
+        if (this.cfg.dex.tokenPrice && parseInt(this.cfg.dex.tokenPrice) < 0)
+            throw "Dex token price cfg value should be a positive integer.";
+
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
         this.xrplApi = new evernode.XrplApi();
@@ -50,6 +55,11 @@ class MessageBoard {
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
         this.tokenPrice = (this.cfg.dex.tokenPrice && this.cfg.dex.tokenPrice !== "0") ? this.cfg.dex.tokenPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
+        
+        // Get last heartbeat moment from the host info.
+        const hostInfo = await this.hostClient.getRegistration();
+        // Get moment only if heartbeat info is not 0.
+        this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
 
         this.db.open();
         // Create redeem table if not exist.
@@ -114,7 +124,7 @@ class MessageBoard {
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
 
                 try {
-                    // await this.hostClient.heartbeat();
+                    await this.hostClient.heartbeat();
                     console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {
@@ -219,7 +229,7 @@ class MessageBoard {
             // Update the redeem response for failures.
             await this.updateRedeemStatus(redeemRefId, RedeemStatus.FAILED);
 
-            await this.hostClient.redeemError(redeemRefId, e.content);
+            await this.hostClient.redeemError(redeemRefId, userAddress, e.content);
         }
 
         this.db.close();

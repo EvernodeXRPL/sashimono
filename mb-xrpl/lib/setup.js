@@ -62,7 +62,7 @@ class Setup {
         });
     }
 
-    async generateBetaHostAccount(registryAddress) {
+    async generateBetaHostAccount(registryAddress, domain) {
 
         evernode.Defaults.set({
             registryAddress: registryAddress
@@ -73,7 +73,7 @@ class Setup {
 
         // Prepare host account.
         {
-            console.log(`Preparing host account:${acc.address} (token:${acc.token} registry:${registryAddress})`);
+            console.log(`Preparing host account:${acc.address} (token:${acc.token} domain:${domain} registry:${registryAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
 
@@ -83,11 +83,11 @@ class Setup {
                 let attempts = 0;
                 while (attempts >= 0) {
                     try {
-                        await hostClient.prepareAccount();
+                        await hostClient.prepareAccount(domain);
                         break;
                     }
                     catch (err) {
-                        if (err.data.error === 'actNotFound' && ++attempts <= 5) {
+                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
                             console.log("actNotFound - retrying...")
                             // Wait and retry.
                             await new Promise(resolve => setTimeout(resolve, 3000));

@@ -3,6 +3,9 @@
 # This is intended to be called by Sashimono agent or via the user-install script for rollback.
 
 user=$1
+peer_port=$2
+user_port=$3
+instance_name=$4
 prefix="sashi"
 
 # Check whether this is a valid sashimono username.
@@ -71,6 +74,18 @@ cgdelete -g memory:$user$cgroupsuffix
 
 # Removing applied disk quota of the user before deleting.
 setquota -g -F vfsv0 "$user" 0 0 0 0 /
+
+echo "Removing firewall rule allowing hp ports"
+rule_list=$(sudo ufw status)
+comment=$prefix-$instance_name
+sed -n -r -e "/${comment}/{q100}" <<<"$rule_list"
+res=$?
+if [ $res -eq 100 ]; then
+    echo "Deleting port rule for instance from firewall."
+    sudo ufw delete allow "$peer_port","$user_port"/tcp
+else
+    echo "Rule not added by Sashimono. Skipping.."
+fi
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"

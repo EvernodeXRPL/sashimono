@@ -10,8 +10,10 @@ disk=$4
 contract_dir=$5
 contract_uid=$6
 contract_gid=$7
-if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ]; then
-    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <swap quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid>"
+peer_port=$8
+user_port=$9
+if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ]; then
+    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <swap quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid> <peer_port> <user_port>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -117,6 +119,26 @@ for ((i = 0; i < 30; i++)); do
     [ "$user_systemd" == "running" ] && break
 done
 [ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"
+
+echo "Allowing user and peer ports in firewall"
+rule_list=$(sudo ufw status)
+comment=$prefix-$contract_dir
+# Rule is added such that the ports are in ascending order. So adjust the string to match the rule.
+if ((peer_port > user_port)); then
+    p1=$user_port
+    p2=$peer_port
+else
+    p1=$peer_port
+    p2=$user_port
+fi
+sed -n -r -e "/${p1},${p2}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+res=$?
+if [ ! $res -eq 100 ]; then
+    echo "Adding new rule to allow ports for new instance from firewall."
+    sudo ufw allow "$peer_port","$user_port"/tcp comment "$comment"
+else
+    echo "Rule already exists. Skipping."
+fi
 
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install

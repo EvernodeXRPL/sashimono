@@ -15,10 +15,11 @@ async function main() {
             if (process.argv.length >= 3 && process.argv[2] === 'new') {
                 new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
             }
-            else if (process.argv.length === 4 && process.argv[2] === 'betagen') {
+            else if (process.argv.length === 5 && process.argv[2] === 'betagen') {
                 const registryAddress = process.argv[3];
+                const domain = process.argv[4];
                 const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(registryAddress);
+                const acc = await setup.generateBetaHostAccount(registryAddress, domain);
                 setup.newConfig(acc.address, acc.secret, registryAddress, acc.token);
             }
             else if (process.argv.length === 10 && process.argv[2] === 'register') {
@@ -42,7 +43,7 @@ async function main() {
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [registryAddress] [token] - Create new config file.
-        node index.js betagen [registryAddress] - Generate beta host account and populate config.
+        node index.js betagen [registryAddress] [domain or ip] - Generate beta host account and populate config.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.

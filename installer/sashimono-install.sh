@@ -74,7 +74,7 @@ if [ "$NO_MB" == "" ]; then
     # Generate beta host account (if not already setup).
     if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
         stage "Configuring host xrpl account"
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS && echo "XRPLACC_FAILURE" && rollback
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr && echo "XRPLACC_FAILURE" && rollback
         doreg=1
     fi
 

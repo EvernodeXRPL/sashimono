@@ -15,8 +15,8 @@ appenv = {
     DB_TABLE_NAME: 'redeem_ops',
     DB_UTIL_TABLE_NAME: 'util_data',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
-    REDEEM_CREATE_TIMEOUT_THRESHOLD: 0.8,
-    REDEEM_WAIT_TIMEOUT_THRESHOLD: 0.4,
+    ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,
+    ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD: 0.4,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
     MB_VERSION: '0.0.5',
 }

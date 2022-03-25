@@ -127,8 +127,10 @@ class MessageBoard {
 
     async handleAcquire(r) {
 
-        if (r.host !== this.cfg.xrpl.address)
+        if (r.host !== this.cfg.xrpl.address) {
+            console.log('Invalid host in the lease aquire.')
             return;
+        }
 
         this.db.open();
 
@@ -139,6 +141,17 @@ class MessageBoard {
         const tenantAddress = r.tenant;
         const nfTokenId = r.nfTokenId;
         const leaseAmount = r.leaseAmount;
+
+        // Get the existing nft of the lease.
+        const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
+        if (!nft) {
+            console.log('Could not find the nft for lease acquire request.')
+            return;
+        }
+        // Get the lease index from the nft URI.
+        const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
+        const leaseIndex = Buffer.from(nft.URI, 'hex').readUint16BE(prefixLen);
+
         // Since acquire is accepted for leaseAmount
         const moments = 1;
 
@@ -198,15 +211,8 @@ class MessageBoard {
             // Update the lease response for failures.
             await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED);
 
-            // Get the existing nft.
-            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
-            // Get the lease index from the nft URI.
-            const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
-            const leaseIndex = Buffer.from(nft.URI, 'hex').readUint16BE(prefixLen);
-
             // Burn the NFTs and recreate the offer and send back the lease amount back to the user.
             await this.hostClient.burnOfferLease(nfTokenId);
-
             await this.hostClient.createOfferLease(leaseIndex, leaseAmount, appenv.TOS_HASH);
 
             // Send error transaction with received leaseAmount.

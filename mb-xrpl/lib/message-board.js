@@ -3,7 +3,6 @@ const evernode = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
 const { appenv } = require('./appenv');
 const { SashiCLI } = require('./sashi-cli');
-const { Utility } = require('./utility');
 
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
@@ -12,9 +11,6 @@ const LeaseStatus = {
     EXPIRED: 'Expired',
     SASHI_TIMEOUT: 'SashiTimeout',
 }
-
-const TOKEN_RE_ISSUE_THRESHOLD = 0.5; // 50%
-const TRADING_INTERVAL = 50;
 
 class MessageBoard {
     constructor(configPath, dbPath, sashiCliPath) {
@@ -77,52 +73,15 @@ class MessageBoard {
 
         const leaseRecords = await this.getAcquiredRecords();
         for (const lease of leaseRecords)
-            this.addToExpiryList(lease.tx_hash, lease.container_name, await this.getExpiryMoment(lease.created_on_ledger, lease.h_token_amount));
+            this.addToExpiryList(lease.tx_hash, lease.container_name, await this.getExpiryMoment(lease.created_on_ledger, lease.life_moments));
 
         this.db.close();
 
-        // Denote that there is an ongoing trading operation.
-        let tradingOperationOngoing = false;
         // Check for instance expiry.
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
 
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
-
-            // Check trading offer status (available balance amount and token price) after every TRADING_INTERVAL ledgers.
-            // if (e.ledger_index % TRADING_INTERVAL == 0) {
-            //     if (!tradingOperationOngoing) {
-            //         tradingOperationOngoing = true;
-            //         try {
-            //             const tokenOffer = await this.hostClient.getTokenOffer();
-            //             let re_issue_price_change = false;
-            //             if (!this.cfg.dex.tokenPrice || this.cfg.dex.tokenPrice === "0")
-            //                 // Refresh the evernode configs to get the latest target price set by purchaser community contract.
-            //                 await this.hostClient.refreshConfig();
-
-            //             if ((!this.cfg.dex.tokenPrice || this.cfg.dex.tokenPrice === "0") && this.tokenPrice !== this.hostClient.config.purchaserTargetPrice)
-            //                 this.tokenPrice = this.hostClient.config.purchaserTargetPrice;
-
-            //             if (tokenOffer && tokenOffer.quality !== this.tokenPrice) {
-            //                 console.log('Token price has changed since last offer.');
-            //                 re_issue_price_change = true;
-            //             }
-            //             if (re_issue_price_change || !tokenOffer || tokenOffer.taker_gets.value <= this.cfg.dex.listingLimit * TOKEN_RE_ISSUE_THRESHOLD) {
-
-            //                 console.log(`Balance ${tokenOffer?.taker_gets?.value || 0}. Threshold: ${this.cfg.dex.listingLimit * TOKEN_RE_ISSUE_THRESHOLD}`);
-            //                 if (tokenOffer) {
-            //                     console.log(`Cancelling the previous offer. Seq: ${tokenOffer?.seq}`)
-            //                     await this.hostClient.cancelOffer(tokenOffer?.seq);
-            //                 }
-            //                 console.log(`Creating a new offer with token price ${this.tokenPrice} for ${this.cfg.dex.listingLimit} ${this.cfg.xrpl.token}s.`);
-            //                 await this.hostClient.createTokenSellOffer(this.cfg.dex.listingLimit, (this.cfg.dex.listingLimit * this.tokenPrice).toString());
-            //             }
-            //         } catch (error) {
-            //             console.error(error);
-            //         }
-            //         tradingOperationOngoing = false;
-            //     }
-            // }
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
             if (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment) {
@@ -178,6 +137,8 @@ class MessageBoard {
 
         const acquireRefId = r.acquireRefId; // Acquire tx hash.
         const tenantAddress = r.tenant;
+        const nfTokenId = r.nfTokenId;
+        const leaseAmount = r.leaseAmount;
         // Since acquire is accepted for leaseAmount
         const moments = 1;
 
@@ -237,13 +198,19 @@ class MessageBoard {
             // Update the lease response for failures.
             await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED);
 
-            // Burn the NFTs and recreate the offer abd send back the lease amount back to the user.
-            await this.hostClient.burnOfferLease(r.nfTokenId);
+            // Get the existing nft.
+            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
+            // Get the lease index from the nft URI.
+            const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
+            const leaseIndex = Buffer.from(nft.URI, 'hex').readUint16BE(prefixLen);
 
-            await this.hostClient.createOfferLease(r.leaseAmount, Utility.getTOSHash());
+            // Burn the NFTs and recreate the offer and send back the lease amount back to the user.
+            await this.hostClient.burnOfferLease(nfTokenId);
+
+            await this.hostClient.createOfferLease(leaseIndex, leaseAmount, appenv.TOS_HASH);
 
             // Send error transaction with received leaseAmount.
-            await this.hostClient.acquireError(acquireRefId, tenantAddress, r.leaseAmount, e.content);
+            await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content);
         }
 
         this.db.close();
@@ -264,7 +231,7 @@ class MessageBoard {
             { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },
             { name: 'tx_hash', type: DataTypes.TEXT, primary: true, notNull: true },
             { name: 'user_xrp_address', type: DataTypes.TEXT, notNull: true },
-            { name: 'h_token_amount', type: DataTypes.INTEGER, notNull: true },
+            { name: 'life_moments', type: DataTypes.INTEGER, notNull: true },
             { name: 'container_name', type: DataTypes.TEXT },
             { name: 'created_on_ledger', type: DataTypes.INTEGER },
             { name: 'status', type: DataTypes.TEXT, notNull: true }
@@ -296,7 +263,7 @@ class MessageBoard {
             timestamp: Date.now(),
             tx_hash: txHash,
             user_xrp_address: txUserAddress,
-            h_token_amount: moments,
+            life_moments: moments,
             status: LeaseStatus.ACQUIRING
         });
     }

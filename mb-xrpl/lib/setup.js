@@ -3,7 +3,6 @@ const https = require('https');
 const { appenv } = require('./appenv');
 const evernode = require('evernode-js-client');
 const fs = require('fs');
-const { Utility } = require('./utility');
 
 class Setup {
 
@@ -34,15 +33,6 @@ class Setup {
             address: json.account.address,
             secret: json.account.secret
         };
-    }
-
-    #getRandomToken() {
-        const randomChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        let result = '';
-        for (var i = 0; i < 3; i++) {
-            result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
-        }
-        return result;
     }
 
     #getConfig() {
@@ -162,7 +152,7 @@ class Setup {
                 // Create lease offers.
                 const leaseAmount = acc.leaseAmount ? acc.leaseAmount : hostClient.config.purchaserTargetPrice; // in EVRs.
                 for (let i = 0; i < totalInstanceCount; i++)
-                    await hostClient.createOfferLease(leaseAmount, Utility.getTOSHash());
+                    await hostClient.createOfferLease(i, leaseAmount, appenv.TOS_HASH);
 
                 break;
             }

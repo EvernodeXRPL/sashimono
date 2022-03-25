@@ -12,6 +12,14 @@ const RedeemStatus = {
     SASHI_TIMEOUT: 'SashiTimeout',
 }
 
+const EntendStatus = {
+    EXTENDING: 'Extending',
+    EXTENDED: 'Extended',
+    FAILED: 'Failed',
+    EXPIRED: 'Expired',
+    SASHI_TIMEOUT: 'SashiTimeout',
+}
+
 const TOKEN_RE_ISSUE_THRESHOLD = 0.5; // 50%
 const TRADING_INTERVAL = 50;
 
@@ -157,6 +165,7 @@ class MessageBoard {
         });
 
         this.hostClient.on(evernode.HostEvents.Redeem, r => this.handleRedeem(r));
+        this.hostClient.on(evernode.HostEvents.Extend, r => this.handlExtend(r));
     }
 
     async handleRedeem(r) {
@@ -230,6 +239,39 @@ class MessageBoard {
             await this.updateRedeemStatus(redeemRefId, RedeemStatus.FAILED);
 
             await this.hostClient.redeemError(redeemRefId, userAddress, e.content);
+        }
+
+        this.db.close();
+    }
+
+    async handleExtend(r) {
+        if (r.transaction.Destination !== this.cfg.xrpl.address)
+            return;
+
+        this.db.open();
+
+        const extendRefId = r.extendRefId;
+        
+        try {
+            const tenantAcc = new evernode.XrplAccount(r.tenant, null, {xrplApi: this.xrplApi});
+            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID == r.nfTokenId);
+
+            if (!hostingNft || !hostingNft.URI.startsWith("EVERNODE")) {
+                throw "The NFT ownership verification was failed";
+            }
+
+            const perMomentPrice = 30000;            
+            const extendingMoments = Math.floor(r.payment/perMomentPrice);
+                        
+
+        }
+        catch (e) {
+            console.error(e);
+
+            // Update the offer extention response for failures.
+            //await this.updateExtendStatus(extendRefId, EntendStatus.FAILED);
+
+            await this.hostClient.extendError(extendRefId, tenantAddress, e.content);
         }
 
         this.db.close();

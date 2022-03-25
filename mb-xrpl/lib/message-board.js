@@ -211,7 +211,7 @@ class MessageBoard {
             // Update the lease response for failures.
             await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED);
 
-            // Burn the NFTs and recreate the offer and send back the lease amount back to the user.
+            // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
             await this.hostClient.burnOfferLease(nfTokenId);
             await this.hostClient.createOfferLease(leaseIndex, leaseAmount, appenv.TOS_HASH);
 
@@ -236,7 +236,7 @@ class MessageBoard {
         await this.db.createTableIfNotExists(this.leaseTable, [
             { name: 'timestamp', type: DataTypes.INTEGER, notNull: true },
             { name: 'tx_hash', type: DataTypes.TEXT, primary: true, notNull: true },
-            { name: 'user_xrp_address', type: DataTypes.TEXT, notNull: true },
+            { name: 'tenant_xrp_address', type: DataTypes.TEXT, notNull: true },
             { name: 'life_moments', type: DataTypes.INTEGER, notNull: true },
             { name: 'container_name', type: DataTypes.TEXT },
             { name: 'created_on_ledger', type: DataTypes.INTEGER },
@@ -264,11 +264,11 @@ class MessageBoard {
         return (await this.db.getValues(this.leaseTable, { status: LeaseStatus.ACQUIRED }));
     }
 
-    async createLeaseRecord(txHash, txUserAddress, moments) {
+    async createLeaseRecord(txHash, txTenantAddress, moments) {
         await this.db.insertValue(this.leaseTable, {
             timestamp: Date.now(),
             tx_hash: txHash,
-            user_xrp_address: txUserAddress,
+            tenant_xrp_address: txTenantAddress,
             life_moments: moments,
             status: LeaseStatus.ACQUIRING
         });

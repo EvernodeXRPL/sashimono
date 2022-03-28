@@ -36,7 +36,7 @@ class MessageBoard {
 
         if (this.cfg.xrpl.leaseAmount && this.cfg.xrpl.leaseAmount === 'string') {
             try {
-                this.cfg.xrpl.leaseAmount = parseInt(this.cfg.xrpl.leaseAmount);
+                this.cfg.xrpl.leaseAmount = parseFloat(this.cfg.xrpl.leaseAmount);
             }
             catch {
                 throw "Lease amount should be a numerical value.";
@@ -44,7 +44,7 @@ class MessageBoard {
         }
 
         if (this.cfg.xrpl.leaseAmount && this.cfg.xrpl.leaseAmount < 0)
-            throw "Lease amount should be a positive intiger.";
+            throw "Lease amount should be a positive value.";
 
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
@@ -125,6 +125,12 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquire(r));
     }
 
+    async recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount) {
+        // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+        await this.hostClient.expireLease(nfTokenId).catch(console.error);
+        await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+    }
+
     async handleAcquire(r) {
 
         if (r.host !== this.cfg.xrpl.address) {
@@ -140,7 +146,7 @@ class MessageBoard {
         const acquireRefId = r.acquireRefId; // Acquire tx hash.
         const tenantAddress = r.tenant;
         const nfTokenId = r.nfTokenId;
-        const leaseAmount = r.leaseAmount;
+        const leaseAmount = parseFloat(r.leaseAmount);
 
         // Get the existing nft of the lease.
         const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
@@ -149,8 +155,17 @@ class MessageBoard {
             return;
         }
         // Get the lease index from the nft URI.
+        // <prefix><lease index 16)><half of tos hash><lease amount (uint32)>
         const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
-        const leaseIndex = Buffer.from(nft.URI, 'hex').readUint16BE(prefixLen);
+        const halfToSLen = appenv.TOS_HASH.length / 4;
+        const uriBuf = Buffer.from(nft.URI, 'hex');
+        const leaseIndex = uriBuf.readUint16BE(prefixLen);
+        const uriLeaseAmount = evernode.XflHelpers.toString(uriBuf.readBigInt64BE(prefixLen + 2 + halfToSLen));
+        
+        if (leaseAmount != parseFloat(uriLeaseAmount)) {
+            console.log('NFT embedded lease amount and acquire lease amount does not match.');
+            return;
+        }
 
         // Since acquire is accepted for leaseAmount
         const moments = 1;
@@ -209,14 +224,13 @@ class MessageBoard {
             console.error(e);
 
             // Update the lease response for failures.
-            await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED);
+            await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED).catch(console.error);
 
-            // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
-            await this.hostClient.burnOfferLease(nfTokenId);
-            await this.hostClient.createOfferLease(leaseIndex, leaseAmount, appenv.TOS_HASH);
+            // Re-create the lease offer.
+            await this.recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount).catch(console.error);
 
             // Send error transaction with received leaseAmount.
-            await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content);
+            await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content).catch(console.error);
         }
 
         this.db.close();

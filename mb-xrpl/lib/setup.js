@@ -43,7 +43,7 @@ class Setup {
         // Validate lease amount.
         if (config.xrpl.leaseAmount && config.xrpl.leaseAmount === 'string') {
             try {
-                config.xrpl.leaseAmount = parseInt(config.xrpl.leaseAmount);
+                config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
             }
             catch {
                 throw "Lease amount should be a numerical value.";
@@ -51,7 +51,7 @@ class Setup {
         }
 
         if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
-            throw "Lease amount should be a positive intiger";
+            throw "Lease amount should be a positive value";
 
         return config;
     }
@@ -152,7 +152,7 @@ class Setup {
                 // Create lease offers.
                 const leaseAmount = acc.leaseAmount ? acc.leaseAmount : hostClient.config.purchaserTargetPrice; // in EVRs.
                 for (let i = 0; i < totalInstanceCount; i++)
-                    await hostClient.createOfferLease(i, leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
 
                 break;
             }

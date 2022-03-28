@@ -21,7 +21,7 @@ async function main() {
                 const leaseAmount = process.argv[5];
                 const setup = new Setup();
                 const acc = await setup.generateBetaHostAccount(registryAddress, domain);
-                setup.newConfig(acc.address, acc.secret, registryAddress, parseInt(leaseAmount));
+                setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount));
             }
             else if (process.argv.length === 10 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),

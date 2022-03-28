@@ -29,6 +29,7 @@ class MessageBoard {
         this.redeemTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
+        this.leaseAmount = null;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -63,7 +64,7 @@ class MessageBoard {
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
         this.tokenPrice = (this.cfg.dex.tokenPrice && this.cfg.dex.tokenPrice !== "0") ? this.cfg.dex.tokenPrice : this.hostClient.config.purchaserTargetPrice; // in EVRs.
-        
+
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
         // Get moment only if heartbeat info is not 0.
@@ -165,7 +166,7 @@ class MessageBoard {
         });
 
         this.hostClient.on(evernode.HostEvents.Redeem, r => this.handleRedeem(r));
-        this.hostClient.on(evernode.HostEvents.Extend, r => this.handlExtend(r));
+        this.hostClient.on(evernode.HostEvents.Extend, r => this.handleExtend(r));
     }
 
     async handleRedeem(r) {
@@ -246,32 +247,63 @@ class MessageBoard {
 
     async handleExtend(r) {
         if (r.transaction.Destination !== this.cfg.xrpl.address)
-            return;
+            throw "Invalid transaction";
 
         this.db.open();
 
-        const extendRefId = r.extendRefId;
-        
         try {
+
+            this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+            if (!(this.leaseAmount > 0)) {
+                throw "Invalid per moment lease amount";
+            }
+
             const tenantAcc = new evernode.XrplAccount(r.tenant, null, {xrplApi: this.xrplApi});
             const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID == r.nfTokenId);
 
             if (!hostingNft || !hostingNft.URI.startsWith("EVERNODE")) {
-                throw "The NFT ownership verification was failed";
+                throw "The NFT ownership verification was failed in the lease extension process";
             }
 
-            const perMomentPrice = 30000;            
-            const extendingMoments = Math.floor(r.payment/perMomentPrice);
-                        
+            const extendRefId = r.extendRefId;
+            const instance = (await this.getRedeemedRecords()).find(
+                i => i.user_xrp_address === r.tenant && i.tx_hash === extendRefId && (i.status == "ACQUIRED" || i.status == "EXTENDED"));
+
+            if (!instance) {
+                throw "No relevant acquired instance was found to perform the lease extension";
+            }
+
+            const extendingMoments = Math.floor(r.payment/this.leaseAmount);
+
+            let expiryItemFound = false;
+
+            this.expiryList.forEach(element => {
+                if (element.txHash === extendRefId && element.containerName === instance.container_name) {
+                    let extentionAppliedFrom = (instance.status == "ACQUIRED") ? element.created_on_ledger : element.expiryMoment;
+                    element.expiryMoment = await this.getExpiryMoment(extentionAppliedFrom , extendingMoments);
+                    expiryItemFound = true;
+                    return;
+                }
+            });
+
+            if (!expiryItemFound) {
+                throw "No matching expiration record  was found for the acquired instance";
+            }
+
+            // Update the database for redeemed record.
+            await this.updateInstanceOpsStatus(extendRefId, EntendStatus.EXTENDED);
+
+            // Send the extend response with created instance info.
+            await this.hostClient.extendSuccess(extendRefId, r.tenant);
 
         }
         catch (e) {
             console.error(e);
 
-            // Update the offer extention response for failures.
-            //await this.updateExtendStatus(extendRefId, EntendStatus.FAILED);
+            // Update the offer extension response for failures.
+            await this.updateInstanceOpsStatus(extendRefId, EntendStatus.FAILED);
 
-            await this.hostClient.extendError(extendRefId, tenantAddress, e.content);
+            await this.hostClient.extendError(extendRefId, r.tenant, e.content, r.payment);
         }
 
         this.db.close();
@@ -344,6 +376,10 @@ class MessageBoard {
     }
 
     async updateRedeemStatus(txHash, status) {
+        await this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
+    }
+
+    async updateInstanceOpsStatus(txHash, status) {
         await this.db.updateValue(this.redeemTable, { status: status }, { tx_hash: txHash });
     }
 

@@ -57,7 +57,7 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
-        this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : this.hostClient.config.purchaserTargetPrice; // in EVRs.
+        this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice); // in EVRs.
 
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();

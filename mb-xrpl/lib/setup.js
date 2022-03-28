@@ -150,7 +150,7 @@ class Setup {
                     Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), totalInstanceCount, description.replace('_', ' '));
 
                 // Create lease offers.
-                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : hostClient.config.purchaserTargetPrice; // in EVRs.
+                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice); // in EVRs.
                 for (let i = 0; i < totalInstanceCount; i++)
                     await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
 

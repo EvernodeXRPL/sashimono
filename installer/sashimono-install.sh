@@ -12,6 +12,7 @@ ramKB=$5
 swapKB=$6
 diskKB=$7
 description=$8
+lease_amount=$9
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -74,13 +75,13 @@ if [ "$NO_MB" == "" ]; then
     # Generate beta host account (if not already setup).
     if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
         stage "Configuring host xrpl account"
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr && echo "XRPLACC_FAILURE" && rollback
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount && echo "XRPLACC_FAILURE" && rollback
         doreg=1
     fi
 
     # Register the host on Evernode.
     if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-        stage "Registering host on Evernode"
+        stage "Registering host on Evernode and Creating lease offers (This might take a while!)"
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
             $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description && echo "REG_FAILURE" && rollback
     fi

@@ -41,7 +41,7 @@ class Setup {
         const config = JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
 
         // Validate lease amount.
-        if (config.xrpl.leaseAmount && config.xrpl.leaseAmount === 'string') {
+        if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {
             try {
                 config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
             }
@@ -150,9 +150,12 @@ class Setup {
                     Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), totalInstanceCount, description.replace('_', ' '));
 
                 // Create lease offers.
+                console.log("Creating lease offers for the hosts...");
                 const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice); // in EVRs.
-                for (let i = 0; i < totalInstanceCount; i++)
+                for (let i = 0; i < totalInstanceCount; i++) {
                     await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
+                    console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
+                }
 
                 break;
             }

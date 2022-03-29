@@ -34,7 +34,7 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress)
             throw "Required cfg fields cannot be empty.";
 
-        if (this.cfg.xrpl.leaseAmount && this.cfg.xrpl.leaseAmount === 'string') {
+        if (this.cfg.xrpl.leaseAmount && typeof this.cfg.xrpl.leaseAmount === 'string') {
             try {
                 this.cfg.xrpl.leaseAmount = parseFloat(this.cfg.xrpl.leaseAmount);
             }

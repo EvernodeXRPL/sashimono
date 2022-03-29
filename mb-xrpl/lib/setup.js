@@ -35,30 +35,35 @@ class Setup {
         };
     }
 
-    #getRandomToken() {
-        const randomChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-        let result = '';
-        for (var i = 0; i < 3; i++) {
-            result += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
-        }
-        return result;
-    }
-
     #getConfig() {
         if (!fs.existsSync(appenv.CONFIG_PATH))
             throw `Config file does not exist at ${appenv.CONFIG_PATH}`;
-        return JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
+        const config = JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
+
+        // Validate lease amount.
+        if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {
+            try {
+                config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
+            }
+            catch {
+                throw "Lease amount should be a numerical value.";
+            }
+        }
+
+        if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
+            throw "Lease amount should be a positive value";
+
+        return config;
     }
 
     #saveConfig(cfg) {
         fs.writeFileSync(appenv.CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
     }
 
-    newConfig(address = "", secret = "", registryAddress = "", token = "") {
+    newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0) {
         this.#saveConfig({
             version: appenv.MB_VERSION,
-            xrpl: { address: address, secret: secret, registryAddress: registryAddress, token: token },
-            dex: { listingLimit: "0", tokenPrice: "0" }
+            xrpl: { address: address, secret: secret, registryAddress: registryAddress, leaseAmount: leaseAmount }
         });
     }
 
@@ -69,11 +74,10 @@ class Setup {
         });
 
         const acc = await this.#generateFaucetAccount();
-        acc.token = this.#getRandomToken();
 
         // Prepare host account.
         {
-            console.log(`Preparing host account:${acc.address} (token:${acc.token} domain:${domain} registry:${registryAddress})`);
+            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${registryAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
 
@@ -142,8 +146,17 @@ class Setup {
         let attempts = 0;
         while (attempts >= 0) {
             try {
-                await hostClient.register(acc.token, countryCode, cpuMicroSec,
+                await hostClient.register(countryCode, cpuMicroSec,
                     Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), totalInstanceCount, description.replace('_', ' '));
+
+                // Create lease offers.
+                console.log("Creating lease offers for the hosts...");
+                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice); // in EVRs.
+                for (let i = 0; i < totalInstanceCount; i++) {
+                    await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
+                    console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
+                }
+
                 break;
             }
             catch (err) {
@@ -177,7 +190,6 @@ class Setup {
         const acc = this.#getConfig().xrpl;
         console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
-        console.log(`Hosting token: ${acc.token}`);
 
         if (!isBasic) {
             evernode.Defaults.set({

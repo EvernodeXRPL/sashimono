@@ -190,7 +190,6 @@ class Setup {
         const acc = this.#getConfig().xrpl;
         console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
-        console.log(`Hosting token: ${acc.token}`);
 
         if (!isBasic) {
             evernode.Defaults.set({

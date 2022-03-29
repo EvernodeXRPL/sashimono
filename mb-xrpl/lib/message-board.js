@@ -122,7 +122,7 @@ class MessageBoard {
             }
         });
 
-        this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquire(r));
+        this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
     }
 
     async recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount) {
@@ -131,7 +131,7 @@ class MessageBoard {
         await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
     }
 
-    async handleAcquire(r) {
+    async handleAcquireLease(r) {
 
         if (r.host !== this.cfg.xrpl.address) {
             console.log('Invalid host in the lease aquire.')

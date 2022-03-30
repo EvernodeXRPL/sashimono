@@ -82,9 +82,9 @@ if [ "$NO_MB" == "" ]; then
     # Register the host on Evernode.
     if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
         stage "Registering host on Evernode"
-        set -o pipefail # We need register operation exit code to detect failures (ignore the tee pipe exit code).
+        set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
         # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
-        # Use -p so those specific commands can be handled to print in previous log line.
+        # Add -p to the progress logs so they would be printed overwriting the same line.
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
             $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description |
             stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&

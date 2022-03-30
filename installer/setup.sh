@@ -280,7 +280,7 @@ function set_lease_amount() {
     [ -z $lease_amount ] && lease_amount=0
 
     if $interactive; then
-        # The lease amount is defautly taken from the target price set by the purchaser service.
+        # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
         echo "Default contract instance lease amount is taken from purchaser service target price."
 
         ! confirm "Do you want to specify a contract instance lease amount?" && return 0
@@ -339,8 +339,8 @@ function install_evernode() {
     create_evernode_alias
 
     echo "Installing Sashimono..."
-    # Filter logs with STAGE prefix and ommit the prefix for echo variable.
-    # If STAGE log contains -p arg, print them in previous log line.
+    # Filter logs with STAGE prefix and ommit the prefix when echoing.
+    # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \

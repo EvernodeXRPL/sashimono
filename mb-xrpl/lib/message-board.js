@@ -72,7 +72,7 @@ class MessageBoard {
 
         this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
-        const leaseRecords = await this.getAcquiredRecords();
+        const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, await this.getExpiryMoment(lease.created_on_ledger, lease.life_moments));
 
@@ -250,40 +250,36 @@ class MessageBoard {
                 throw "Invalid destination";
 
             this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-            if (!(this.leaseAmount > 0))
+            if (this.leaseAmount <= 0)
                 throw "Invalid per moment lease amount";
 
             const extendingMoments = Math.floor(r.payment / this.leaseAmount);
 
-            if (!(extendingMoments > 0))
+            if (extendingMoments < 1)
                 throw "The transaction does not satisfy the minimum extendable moments";
 
-            const tenantAcc = new evernode.XrplAccount(r.tenant, null, { xrplApi: this.xrplApi });
-            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === r.nfTokenId);
+            const tenantAcc = new evernode.XrplAccount(r.tenant);
+            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === r.nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
 
-            if (!hostingNft || !hostingNft.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
+            if (!hostingNft)
                 throw "The NFT ownership verification was failed in the lease extension process";
 
-            // The instance of tenants those who are new to evernode
-            const newInstances = await this.getAcquiredRecords();
+            const instanceSearchCriteria = { tenant_xrp_address: r.tenant, container_name: hostingNft.TokenID };
 
-            // The instances of existing evernode tenants who need to extend the lease, prior to the expiration.
-            const existingInstances = await this.getExtendedRecords();
-
-            const instance = (newInstances.concat(existingInstances)).find(i => i.tenant_xrp_address === r.tenant && i.container_name === hostingNft.TokenID);
+            const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
 
             if (!instance)
-                throw "No relevant acquired instance was found to perform the lease extension";
+                throw "No relevant instance was found to perform the lease extension";
 
             let expiryItemFound = false;
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    let extensionAppliedFrom = (instance.status === LeaseStatus.ACQUIRED) ? item.created_on_ledger : item.expiryMoment;
-                    item.expiryMoment = await this.getExpiryMoment(extensionAppliedFrom, extendingMoments);
+                    let lifeMoments = (instance.status === LeaseStatus.ACQUIRED) ? extendingMoments : (instance.life_moments + extendingMoments);
+                    item.expiryMoment = await this.getExpiryMoment(item.created_on_ledger, lifeMoments);
                     let obj = {
                         status: LeaseStatus.EXTENDED,
-                        life_moments: (instance.status === LeaseStatus.ACQUIRED) ? extendingMoments : (instance.life_moments + extendingMoments)
+                        life_moments: lifeMoments
                     };
                     await this.updateLeaseData(instance.tx_hash, obj);
                     expiryItemFound = true;
@@ -349,8 +345,11 @@ class MessageBoard {
         return (await this.db.getValues(this.leaseTable, { status: LeaseStatus.ACQUIRED }));
     }
 
-    async getExtendedRecords() {
-        return (await this.db.getValues(this.leaseTable, { status: LeaseStatus.EXTENDED }));
+    async getLeaseRecords(searchCriteria = null) {
+        if (searchCriteria)
+            return (await this.db.getValues(this.leaseTable, searchCriteria));
+
+        return (await this.db.getValues(this.leaseTable));
     }
 
     async createLeaseRecord(txHash, txTenantAddress, moments) {
@@ -390,8 +389,9 @@ class MessageBoard {
      * }
      */
 
-    async updateLeaseData(txHash, savingData) {
-        await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
+    async updateLeaseData(txHash, savingData = null) {
+        if (savingData)
+            await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
     }
 
     async getExpiryMoment(createdOnLedger, moments) {

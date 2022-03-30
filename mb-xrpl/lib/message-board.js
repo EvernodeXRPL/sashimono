@@ -253,22 +253,22 @@ class MessageBoard {
             if (!(this.leaseAmount > 0))
                 throw "Invalid per moment lease amount";
 
-            const extendingMoments = Math.floor(r.payment/this.leaseAmount);
+            const extendingMoments = Math.floor(r.payment / this.leaseAmount);
 
             if (!(extendingMoments > 0))
                 throw "The transaction does not satisfy the minimum extendable moments";
 
-            const tenantAcc = new evernode.XrplAccount(r.tenant, null, {xrplApi: this.xrplApi});
+            const tenantAcc = new evernode.XrplAccount(r.tenant, null, { xrplApi: this.xrplApi });
             const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === r.nfTokenId);
 
             if (!hostingNft || !hostingNft.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
                 throw "The NFT ownership verification was failed in the lease extension process";
 
             // The instance of tenants those who are new to evernode
-            const newInstances =  await this.getAcquiredRecords();
+            const newInstances = await this.getAcquiredRecords();
 
             // The instances of existing evernode tenants who need to extend the lease, prior to the expiration.
-            const existingInstances =  await this.getExtendedRecords();
+            const existingInstances = await this.getExtendedRecords();
 
             const instance = (newInstances.concat(existingInstances)).find(i => i.tenant_xrp_address === r.tenant && i.container_name === hostingNft.TokenID);
 
@@ -280,7 +280,7 @@ class MessageBoard {
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
                     let extensionAppliedFrom = (instance.status === LeaseStatus.ACQUIRED) ? item.created_on_ledger : item.expiryMoment;
-                    item.expiryMoment = await this.getExpiryMoment(extensionAppliedFrom , extendingMoments);
+                    item.expiryMoment = await this.getExpiryMoment(extensionAppliedFrom, extendingMoments);
                     let obj = {
                         status: LeaseStatus.EXTENDED,
                         life_moments: (instance.status === LeaseStatus.ACQUIRED) ? extendingMoments : (instance.life_moments + extendingMoments)
@@ -305,7 +305,7 @@ class MessageBoard {
         } finally {
             this.db.close();
         }
-   }
+    }
 
     addToExpiryList(txHash, containerName, expiryMoment) {
         this.expiryList.push({

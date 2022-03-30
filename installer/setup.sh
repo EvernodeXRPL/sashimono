@@ -275,6 +275,27 @@ function set_instance_alloc() {
     fi
 }
 
+function set_lease_amount() {
+    # We take the default lease amount as 0, So it is taken from the purchaser target price.
+    [ -z $lease_amount ] && lease_amount=0
+
+    if $interactive; then
+        # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
+        echo "Default contract instance lease amount is taken from purchaser service target price."
+
+        ! confirm "Do you want to specify a contract instance lease amount?" && return 0
+
+        local amount=0
+
+        while true ; do
+            read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
+            ! [[ $amount =~ ^[0-9]+(\.[0-9]+)?$ ]] && echo "Lease amount should be a positive numerical value." || break
+        done
+
+        lease_amount=$amount
+    fi
+}
+
 function install_failure() {
     echo "There was an error during installation. Please provide the file $logfile to Evernode team. Thank you."
     exit 1
@@ -318,9 +339,13 @@ function install_evernode() {
     create_evernode_alias
 
     echo "Installing Sashimono..."
+    # Filter logs with STAGE prefix and ommit the prefix when echoing.
+    # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description 2>&1 \
-                            | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && remove_evernode_alias && install_failure
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
+                            | tee -a $logfile | stdbuf --output=L grep "STAGE" \
+                            | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
+                            && remove_evernode_alias && install_failure
     set +o pipefail
 
     rm -r $tmp
@@ -424,6 +449,7 @@ if [ "$mode" == "install" ]; then
         alloc_diskKB=${8}       # Disk space to allocate for contract instances.
         alloc_instcount=${9}    # Total contract instance count.
         description=${10}       # Registration description (underscore for spaces).
+        lease_amount=${11}      # Contract instance lease amount in EVRs.
     else
         description="Evernode_host"
     fi
@@ -452,6 +478,9 @@ if [ "$mode" == "install" ]; then
 
     set_instance_alloc
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
+
+    set_lease_amount
+    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using purchaser service target price as lease amount.\n"
 
     echo "Starting installation..."
     install_evernode 0

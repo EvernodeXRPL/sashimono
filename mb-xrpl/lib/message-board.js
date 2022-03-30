@@ -275,11 +275,10 @@ class MessageBoard {
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    let lifeMoments = (instance.status === LeaseStatus.ACQUIRED) ? extendingMoments : (instance.life_moments + extendingMoments);
-                    item.expiryMoment = await this.getExpiryMoment(item.created_on_ledger, lifeMoments);
+                    item.expiryMoment += extendingMoments;
                     let obj = {
                         status: LeaseStatus.EXTENDED,
-                        life_moments: lifeMoments
+                        life_moments: (instance.life_moments + extendingMoments)
                     };
                     await this.updateLeaseData(instance.tx_hash, obj);
                     expiryItemFound = true;

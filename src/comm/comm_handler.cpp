@@ -210,7 +210,7 @@ namespace comm
 
             hp::instance_info info;
             std::string error_msg;
-            if (hp::create_new_instance(error_msg, info, msg.pubkey, msg.contract_id, msg.image) == -1)
+            if (hp::create_new_instance(error_msg, info, msg.container_name, msg.pubkey, msg.contract_id, msg.image) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
 
             if (hp::initiate_instance(error_msg, info.container_name, init_msg) == -1)

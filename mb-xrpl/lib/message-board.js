@@ -57,7 +57,6 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.hostClient.connect();
-        this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice); // in EVRs.
 
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
@@ -133,46 +132,47 @@ class MessageBoard {
 
     async handleAcquireLease(r) {
 
-        if (r.host !== this.cfg.xrpl.address) {
-            console.log('Invalid host in the lease aquire.')
-            return;
-        }
+        const acquireRefId = r.acquireRefId; // Acquire tx hash.
+        const nfTokenId = r.nfTokenId;
+        const leaseAmount = parseFloat(r.leaseAmount);
+        const tenantAddress = r.tenant;
+        let requestValidated = false;
+        let leaseIndex = -1; // Lease index cannot be negative, So we keep initial non populated value as -1.
 
         this.db.open();
 
-        // Update last watched ledger sequence number.
-        await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
-
-        const acquireRefId = r.acquireRefId; // Acquire tx hash.
-        const tenantAddress = r.tenant;
-        const nfTokenId = r.nfTokenId;
-        const leaseAmount = parseFloat(r.leaseAmount);
-
-        // Get the existing nft of the lease.
-        const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
-        if (!nft) {
-            console.log('Could not find the nft for lease acquire request.')
-            return;
-        }
-        // Get the lease index from the nft URI.
-        // <prefix><lease index 16)><half of tos hash><lease amount (uint32)>
-        const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
-        const halfToSLen = appenv.TOS_HASH.length / 4;
-        const uriBuf = Buffer.from(nft.URI, 'hex');
-        const leaseIndex = uriBuf.readUint16BE(prefixLen);
-        const uriLeaseAmount = evernode.XflHelpers.toString(uriBuf.readBigInt64BE(prefixLen + 2 + halfToSLen));
-        
-        if (leaseAmount != parseFloat(uriLeaseAmount)) {
-            console.log('NFT embedded lease amount and acquire lease amount does not match.');
-            return;
-        }
-
-        // Since acquire is accepted for leaseAmount
-        const moments = 1;
-
         try {
+
+            if (r.host !== this.cfg.xrpl.address)
+                throw "Invalid host.";
+
+            // Update last watched ledger sequence number.
+            await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
+
+            // Get the existing nft of the lease.
+            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
+            if (!nft)
+                throw 'Could not find the nft for lease acquire request.';
+
+            // Get the lease index from the nft URI.
+            // <prefix><lease index 16)><half of tos hash><lease amount (uint32)>
+            const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
+            const halfToSLen = appenv.TOS_HASH.length / 4;
+            const uriBuf = Buffer.from(nft.URI, 'hex');
+            leaseIndex = uriBuf.readUint16BE(prefixLen);
+            const uriLeaseAmount = evernode.XflHelpers.toString(uriBuf.readBigInt64BE(prefixLen + 2 + halfToSLen));
+
+            if (leaseAmount != parseFloat(uriLeaseAmount))
+                throw 'NFT embedded lease amount and acquire lease amount does not match.';
+
+            // Since acquire is accepted for leaseAmount
+            const moments = 1;
+
+            // Use NFTokenId as the instance name.
+            const containerName = nfTokenId;
             console.log(`Received acquire lease from ${tenantAddress}`);
-            await this.createLeaseRecord(acquireRefId, tenantAddress, moments);
+            requestValidated = true;
+            await this.createLeaseRecord(acquireRefId, tenantAddress, containerName, moments);
 
             // The last validated ledger when we receive the acquire request.
             const startingValidatedLedger = this.lastValidatedLedgerIndex;
@@ -191,7 +191,7 @@ class MessageBoard {
             }
             else {
                 const instanceRequirements = r.payload;
-                const createRes = await this.sashiCli.createInstance(instanceRequirements);
+                const createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
                 diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
@@ -210,10 +210,10 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(acquireRefId, createRes.content.name, await this.getExpiryMoment(currentLedgerIndex, moments));
+                    this.addToExpiryList(acquireRefId, containerName, await this.getExpiryMoment(currentLedgerIndex, moments));
 
                     // Update the database for acquired record.
-                    await this.updateAcquiredRecord(acquireRefId, createRes.content.name, currentLedgerIndex);
+                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
 
                     // Send the acquire response with created instance info.
                     await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);
@@ -223,17 +223,20 @@ class MessageBoard {
         catch (e) {
             console.error(e);
 
-            // Update the lease response for failures.
-            await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED).catch(console.error);
+            // Update the lease response for failures (Only if the request validated and ACQUIRING record is added).
+            if (requestValidated)
+                await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED).catch(console.error);
 
-            // Re-create the lease offer.
-            await this.recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount).catch(console.error);
+            // Re-create the lease offer (Only if the nft belongs to this request has a lease index).
+            if (leaseIndex >= 0)
+                await this.recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount).catch(console.error);
 
             // Send error transaction with received leaseAmount.
             await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content).catch(console.error);
         }
-
-        this.db.close();
+        finally {
+            this.db.close();
+        }
     }
 
     addToExpiryList(txHash, containerName, expiryMoment) {
@@ -278,12 +281,13 @@ class MessageBoard {
         return (await this.db.getValues(this.leaseTable, { status: LeaseStatus.ACQUIRED }));
     }
 
-    async createLeaseRecord(txHash, txTenantAddress, moments) {
+    async createLeaseRecord(txHash, txTenantAddress, containerName, moments) {
         await this.db.insertValue(this.leaseTable, {
             timestamp: Date.now(),
             tx_hash: txHash,
             tenant_xrp_address: txTenantAddress,
             life_moments: moments,
+            container_name: containerName,
             status: LeaseStatus.ACQUIRING
         });
     }
@@ -294,9 +298,8 @@ class MessageBoard {
         }, { name: appenv.LAST_WATCHED_LEDGER });
     }
 
-    async updateAcquiredRecord(txHash, containerName, ledgerIndex) {
+    async updateAcquiredRecord(txHash, ledgerIndex) {
         await this.db.updateValue(this.leaseTable, {
-            container_name: containerName,
             created_on_ledger: ledgerIndex,
             status: LeaseStatus.ACQUIRED
         }, { tx_hash: txHash });

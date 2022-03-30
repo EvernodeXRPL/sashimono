@@ -109,7 +109,7 @@ namespace hp
      * @param image_key Docker image name to use (must exist in the config iamge list).
      * @return 0 on success and -1 on error.
      */
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
         // If the max alloved instance count is already allocated. We won't allow more.
         const int allocated_count = sqlite::get_allocated_instance_count(db);
@@ -145,7 +145,6 @@ namespace hp
         }
         const std::string image_name = img_itr->second;
 
-        std::string container_name = crypto::generate_uuid(); // This will be the docker container name as well as the contract folder name.
         int retries = 0;
         // If the generated uuid is already assigned to a container, we try generating a
         // unique uuid with max tries limited under a threshold.
@@ -853,7 +852,7 @@ namespace hp
      * @param storage_kbytes Disk quota allowed for this user.
      * @param instance_ports Ports assigned to the instance.
      */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, const std::string container_name, const ports instance_ports)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),

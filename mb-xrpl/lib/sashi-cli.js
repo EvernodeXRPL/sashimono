@@ -9,9 +9,10 @@ class SashiCLI {
         this.cliPath = cliPath;
     }
 
-    async createInstance(requirements) {
+    async createInstance(containerName, requirements) {
         if (!requirements.type)
             requirements.type = 'create';
+        requirements.container_name = containerName;
 
         const res = await this.execSashiCli(requirements);
         if (res.type === 'create_error')

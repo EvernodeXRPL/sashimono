@@ -9,6 +9,7 @@ namespace msg
     struct create_msg
     {
         std::string type;
+        std::string container_name;
         std::string pubkey;
         std::string contract_id;
         std::string image;

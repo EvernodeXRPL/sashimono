@@ -96,6 +96,7 @@ int parse_cmd(int argc, char **argv)
     create->add_option("-i,--image", image, "Container image to use");
 
     std::string container_name;
+    create->add_option("-n,--name", container_name, "Instance name");
     start->add_option("-n,--name", container_name, "Instance name");
     stop->add_option("-n,--name", container_name, "Instance name");
     destroy->add_option("-n,--name", container_name, "Instance name");
@@ -163,7 +164,7 @@ int parse_cmd(int argc, char **argv)
     else if (create->parsed() && !contract_id.empty() && !image.empty())
     {
         return execute_cli([&]()
-                           { return cli::create(owner, contract_id, image); });
+                           { return cli::create(container_name, owner, contract_id, image); });
     }
     else if (start->parsed() && !container_name.empty())
     {

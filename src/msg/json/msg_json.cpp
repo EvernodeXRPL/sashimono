@@ -82,6 +82,18 @@ namespace msg::json
         if (extract_type(msg.type, d) == -1)
             return -1;
 
+        if (!d.contains(msg::FLD_CONTAINER_NAME))
+        {
+            LOG_ERROR << "Field container_name is missing.";
+            return -1;
+        }
+
+        if (!d[msg::FLD_CONTAINER_NAME].is<std::string>())
+        {
+            LOG_ERROR << "Invalid container_name value.";
+            return -1;
+        }
+
         if (!d.contains(msg::FLD_PUBKEY))
         {
             LOG_ERROR << "Field owner_pubkey is missing.";
@@ -118,6 +130,7 @@ namespace msg::json
             return -1;
         }
 
+        msg.container_name = d[msg::FLD_CONTAINER_NAME].as<std::string>();
         msg.pubkey = d[msg::FLD_PUBKEY].as<std::string>();
         msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
         msg.image = d[msg::FLD_IMAGE].as<std::string>();

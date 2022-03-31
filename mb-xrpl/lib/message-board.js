@@ -252,11 +252,11 @@ class MessageBoard {
             if (r.transaction.Destination !== this.cfg.xrpl.address)
                 throw "Invalid destination";
 
-            this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-            if (this.leaseAmount <= 0)
+            const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+            if (leaseAmount <= 0)
                 throw "Invalid per moment lease amount";
 
-            const extendingMoments = Math.floor(r.payment / this.leaseAmount);
+            const extendingMoments = Math.floor(r.payment / leaseAmount);
 
             if (extendingMoments < 1)
                 throw "The transaction does not satisfy the minimum extendable moments";

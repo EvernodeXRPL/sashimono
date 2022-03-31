@@ -354,7 +354,7 @@ class MessageBoard {
         return (await this.db.getValues(this.leaseTable));
     }
 
-    async createLeaseRecord(txHash, txTenantAddress, moments) {
+    async createLeaseRecord(txHash, txTenantAddress, containerName, moments) {
         await this.db.insertValue(this.leaseTable, {
             timestamp: Date.now(),
             tx_hash: txHash,

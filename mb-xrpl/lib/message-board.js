@@ -10,6 +10,7 @@ const LeaseStatus = {
     FAILED: 'Failed',
     EXPIRED: 'Expired',
     SASHI_TIMEOUT: 'SashiTimeout',
+    EXTENDED: 'Extended'
 }
 
 class MessageBoard {
@@ -70,7 +71,7 @@ class MessageBoard {
 
         this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
-        const leaseRecords = await this.getAcquiredRecords();
+        const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, await this.getExpiryMoment(lease.created_on_ledger, lease.life_moments));
 
@@ -122,6 +123,7 @@ class MessageBoard {
         });
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
+        this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
     }
 
     async recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount) {
@@ -239,6 +241,70 @@ class MessageBoard {
         }
     }
 
+    async handleExtendLease(r) {
+
+        this.db.open();
+
+        const extendRefId = r.extendRefId;
+
+        try {
+
+            if (r.transaction.Destination !== this.cfg.xrpl.address)
+                throw "Invalid destination";
+
+            this.leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+            if (this.leaseAmount <= 0)
+                throw "Invalid per moment lease amount";
+
+            const extendingMoments = Math.floor(r.payment / this.leaseAmount);
+
+            if (extendingMoments < 1)
+                throw "The transaction does not satisfy the minimum extendable moments";
+
+            const tenantAcc = new evernode.XrplAccount(r.tenant);
+            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === r.nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
+
+            if (!hostingNft)
+                throw "The NFT ownership verification was failed in the lease extension process";
+
+            const instanceSearchCriteria = { tenant_xrp_address: r.tenant, container_name: hostingNft.TokenID };
+
+            const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
+
+            if (!instance)
+                throw "No relevant instance was found to perform the lease extension";
+
+            let expiryItemFound = false;
+
+            for (const item of this.expiryList) {
+                if (item.containerName === instance.container_name) {
+                    item.expiryMoment += extendingMoments;
+                    let obj = {
+                        status: LeaseStatus.EXTENDED,
+                        life_moments: (instance.life_moments + extendingMoments)
+                    };
+                    await this.updateLeaseData(instance.tx_hash, obj);
+                    expiryItemFound = true;
+                    break;
+                }
+            }
+
+            if (!expiryItemFound)
+                throw "No matching expiration record was found for the instance";
+
+            // Send the extend success response
+            await this.hostClient.extendSuccess(extendRefId, r.tenant);
+
+        }
+        catch (e) {
+            console.error(e);
+            // Send the extend error response
+            await this.hostClient.extendError(extendRefId, r.tenant, e.content, `${r.payment}`);
+        } finally {
+            this.db.close();
+        }
+    }
+
     addToExpiryList(txHash, containerName, expiryMoment) {
         this.expiryList.push({
             txHash: txHash,
@@ -281,7 +347,14 @@ class MessageBoard {
         return (await this.db.getValues(this.leaseTable, { status: LeaseStatus.ACQUIRED }));
     }
 
-    async createLeaseRecord(txHash, txTenantAddress, containerName, moments) {
+    async getLeaseRecords(searchCriteria = null) {
+        if (searchCriteria)
+            return (await this.db.getValues(this.leaseTable, searchCriteria));
+
+        return (await this.db.getValues(this.leaseTable));
+    }
+
+    async createLeaseRecord(txHash, txTenantAddress, moments) {
         await this.db.insertValue(this.leaseTable, {
             timestamp: Date.now(),
             tx_hash: txHash,
@@ -307,6 +380,20 @@ class MessageBoard {
 
     async updateLeaseStatus(txHash, status) {
         await this.db.updateValue(this.leaseTable, { status: status }, { tx_hash: txHash });
+    }
+
+    /**
+     * Sample savingData
+     * Note : The keys of the object should match with the sqlite db column names
+     * {
+     *      status: "XXXX",
+     *      life_moments: 1
+     * }
+     */
+
+    async updateLeaseData(txHash, savingData = null) {
+        if (savingData)
+            await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
     }
 
     async getExpiryMoment(createdOnLedger, moments) {

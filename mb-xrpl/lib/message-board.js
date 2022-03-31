@@ -146,7 +146,7 @@ class MessageBoard {
         try {
 
             if (r.host !== this.cfg.xrpl.address)
-                throw "Invalid host.";
+                throw "Invalid host in the lease aquire.";
 
             // Update last watched ledger sequence number.
             await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);

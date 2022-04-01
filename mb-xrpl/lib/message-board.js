@@ -276,10 +276,12 @@ class MessageBoard {
             console.log(`Received extend lease from ${tenantAddress}`);
 
             let expiryItemFound = false;
+            let expiryMoment;
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
                     item.expiryMoment += extendingMoments;
+                    expiryMoment = item.expiryMoment;
                     let obj = {
                         status: LeaseStatus.EXTENDED,
                         life_moments: (instance.life_moments + extendingMoments)
@@ -294,7 +296,7 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             // Send the extend success response
-            await this.hostClient.extendSuccess(extendRefId, tenantAddress);
+            await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
 
         }
         catch (e) {

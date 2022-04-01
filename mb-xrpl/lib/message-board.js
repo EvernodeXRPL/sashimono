@@ -156,16 +156,11 @@ class MessageBoard {
             if (!nft)
                 throw 'Could not find the nft for lease acquire request.';
 
-            // Get the lease index from the nft URI.
-            // <prefix><lease index 16)><half of tos hash><lease amount (uint32)>
-            const prefixLen = evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX.length / 2;
-            const halfToSLen = appenv.TOS_HASH.length / 4;
-            const uriBuf = Buffer.from(nft.URI, 'hex');
-            leaseIndex = uriBuf.readUint16BE(prefixLen);
-            const uriLeaseAmount = evernode.XflHelpers.toString(uriBuf.readBigInt64BE(prefixLen + 2 + halfToSLen));
+            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
 
-            if (leaseAmount != parseFloat(uriLeaseAmount))
+            if (leaseAmount != uriInfo.leaseAmount)
                 throw 'NFT embedded lease amount and acquire lease amount does not match.';
+            leaseIndex = uriInfo.leaseIndex;
 
             // Since acquire is accepted for leaseAmount
             const moments = 1;
@@ -234,7 +229,7 @@ class MessageBoard {
                 await this.recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount).catch(console.error);
 
             // Send error transaction with received leaseAmount.
-            await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content).catch(console.error);
+            await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
         }
         finally {
             this.db.close();
@@ -246,33 +241,39 @@ class MessageBoard {
         this.db.open();
 
         const extendRefId = r.extendRefId;
+        const nfTokenId = r.nfTokenId;
+        const tenantAddress = r.tenant;
+        const amount = r.payment;
 
         try {
 
             if (r.transaction.Destination !== this.cfg.xrpl.address)
                 throw "Invalid destination";
 
-            const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-            if (leaseAmount <= 0)
-                throw "Invalid per moment lease amount";
-
-            const extendingMoments = Math.floor(r.payment / leaseAmount);
-
-            if (extendingMoments < 1)
-                throw "The transaction does not satisfy the minimum extendable moments";
-
-            const tenantAcc = new evernode.XrplAccount(r.tenant);
-            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === r.nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
+            const tenantAcc = new evernode.XrplAccount(tenantAddress);
+            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
 
             if (!hostingNft)
                 throw "The NFT ownership verification was failed in the lease extension process";
 
-            const instanceSearchCriteria = { tenant_xrp_address: r.tenant, container_name: hostingNft.TokenID };
+            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(hostingNft.URI);
+            const leaseAmount = uriInfo.leaseAmount;
+            if (leaseAmount <= 0)
+                throw "Invalid per moment lease amount";
+
+            const extendingMoments = Math.floor(amount / leaseAmount);
+
+            if (extendingMoments < 1)
+                throw "The transaction does not satisfy the minimum extendable moments";
+
+            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.TokenID };
 
             const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
 
             if (!instance)
                 throw "No relevant instance was found to perform the lease extension";
+
+            console.log(`Received extend lease from ${tenantAddress}`);
 
             let expiryItemFound = false;
 
@@ -293,13 +294,13 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             // Send the extend success response
-            await this.hostClient.extendSuccess(extendRefId, r.tenant);
+            await this.hostClient.extendSuccess(extendRefId, tenantAddress);
 
         }
         catch (e) {
             console.error(e);
             // Send the extend error response
-            await this.hostClient.extendError(extendRefId, r.tenant, e.content, `${r.payment}`);
+            await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount);
         } finally {
             this.db.close();
         }

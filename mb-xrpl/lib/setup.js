@@ -258,7 +258,6 @@ class Setup {
 
             for (const instance of instances) {
                 const nfTokenId = instance.container_name;
-                // Currently this burning option is not working as expected (The ability of an issuer to burn a minted token, if it has the tfBurnable flag).
                 await xrplAcc.burnNft(nfTokenId);
                 console.log(`Burnt sold hosting NFT (${nfTokenId}) of ${instance.tenant_xrp_address} tenant account`);
             }

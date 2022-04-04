@@ -257,9 +257,10 @@ class Setup {
             const instances = (await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"));
 
             for (const instance of instances) {
+                const nfTokenId = instance.container_name;
                 // As currently this burning option is not working (The ability of an issuer to burn a minted token, if it has the tfBurnable flag)
-                //await xrplAcc.burnNft(instance.container_name);
-                console.log(`Burnt sold hosting NFT (${instance.container_name}) of ${instance.tenant_xrp_address} tenant account`);
+                //await xrplAcc.burnNft(nfTokenId);
+                console.log(`Burnt sold hosting NFT (${nfTokenId}) of ${instance.tenant_xrp_address} tenant account`);
             }
         }
         finally {

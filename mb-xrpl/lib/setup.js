@@ -3,8 +3,17 @@ const https = require('https');
 const { appenv } = require('./appenv');
 const evernode = require('evernode-js-client');
 const fs = require('fs');
+const { SqliteDatabase } = require('./sqlite-handler');
+
 
 class Setup {
+
+    constructor(options) {
+        if (options) {
+            this.leaseTable = options.DB_TABLE_NAME;
+            this.db = new SqliteDatabase(options.DB_PATH);
+        }
+    }
 
     #httpPost(url) {
         return new Promise((resolve, reject) => {
@@ -182,6 +191,7 @@ class Setup {
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
+        await this.burnMintedNfts(hostClient.xrplAcc);
         await hostClient.deregister();
         await hostClient.disconnect();
     }
@@ -229,6 +239,42 @@ class Setup {
         this.#saveConfig(cfg);
 
         await Promise.resolve(); // async placeholder.
+    }
+
+    // Burn the host minted NFTs at the de-registration
+    async burnMintedNfts(xrplAcc) {
+
+        this.db.open();
+
+        try {
+
+            // Burning unsold NFTs
+            const unsoldHostingNfts = (await xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
+
+            for (const nft of unsoldHostingNfts) {
+                await xrplAcc.burnNft(nft.TokenID);
+                console.log(`Burnt unsold hosting NFT (${nft.TokenID}) of ${xrplAcc.address} account`);
+            }
+
+            // Burning sold NFTs
+            const instances = (await this.getLeaseRecords()).filter(i => (i.status === "Acquired" || i.status === "Extended"));
+
+            for (const instance of instances) {
+                // As currently this burning option is not working (The ability of an issuer to burn a minted token, if it has the tfBurnable flag)
+                //await xrplAcc.burnNft(instance.container_name);
+                console.log(`Burnt sold hosting NFT (${instance.container_name}) of ${instance.tenant_xrp_address} tenant account`);
+            }
+        }
+        finally {
+            this.db.close();
+        }
+    }
+
+    async getLeaseRecords(searchCriteria = null) {
+        if (searchCriteria)
+            return (await this.db.getValues(this.leaseTable, searchCriteria));
+
+        return (await this.db.getValues(this.leaseTable));
     }
 }
 

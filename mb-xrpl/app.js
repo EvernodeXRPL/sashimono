@@ -28,7 +28,7 @@ async function main() {
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9]);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
-                await new Setup().deregister();
+                await new Setup(appenv).deregister();
             }
             else if (process.argv.length === 3 && process.argv[2] === 'reginfo') {
                 await new Setup().regInfo(false);

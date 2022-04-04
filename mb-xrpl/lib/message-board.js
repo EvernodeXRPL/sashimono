@@ -111,11 +111,9 @@ class MessageBoard {
                     try {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
-                        const nft = (await (new evernode.XrplAccount(x.tenant, null, { xrplApi: this.xrplApi })).getNfts())?.find(n => n.TokenID == x.containerName);
+                        const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.TokenID == x.containerName);
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.recreateLeaseOffer(x.containerName, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
-                        // Destroy Sashimono instance.
-                        await this.sashiCli.destroyInstance(x.containerName);
+                        await this.destryInstance(x.containerName, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -203,8 +201,7 @@ class MessageBoard {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                    // Destroy the instance.
-                    await this.sashiCli.destroyInstance(createRes.content.name);
+                    await this.destryInstance(createRes.content.name, leaseIndex, leaseAmount);
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 
@@ -239,6 +236,12 @@ class MessageBoard {
         finally {
             this.db.close();
         }
+    }
+
+    async destryInstance(containerName, leaseIndex, leaseAmount) {
+        await this.recreateLeaseOffer(containerName, leaseIndex, leaseAmount).catch(console.error);
+        // Destroy the instance.
+        await this.sashiCli.destroyInstance(containerName);
     }
 
     async handleExtendLease(r) {

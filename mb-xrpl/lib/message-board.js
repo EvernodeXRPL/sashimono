@@ -188,6 +188,7 @@ class MessageBoard {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the lease status of the request to 'SashiTimeout'.
                 await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
+                await this.recreateLeaseOffer(nfTokenId, leaseIndex, leaseAmount);
             }
             else {
                 const instanceRequirements = r.payload;

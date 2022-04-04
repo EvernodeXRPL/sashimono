@@ -113,7 +113,7 @@ class MessageBoard {
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
                         const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.TokenID == x.containerName);
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destryInstance(x.containerName, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
+                        await this.destroyInstance(x.containerName, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -202,7 +202,7 @@ class MessageBoard {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                    await this.destryInstance(createRes.content.name, leaseIndex, leaseAmount);
+                    await this.destroyInstance(createRes.content.name, leaseIndex, leaseAmount);
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 
@@ -239,7 +239,7 @@ class MessageBoard {
         }
     }
 
-    async destryInstance(containerName, leaseIndex, leaseAmount) {
+    async destroyInstance(containerName, leaseIndex, leaseAmount) {
         await this.recreateLeaseOffer(containerName, leaseIndex, leaseAmount).catch(console.error);
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);

@@ -95,9 +95,9 @@ if [ "$NO_MB" == "" ]; then
     echo "Registered host on Evernode."
 fi
 
-# Copy contract template (delete existing)
-rm -r "$SASHIMONO_DATA"/contract_template >/dev/null 2>&1
-cp -r "$script_dir"/contract_template $SASHIMONO_DATA
+# Copy contract template and licence file (delete existing)
+rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
+cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $SASHIMONO_BIN

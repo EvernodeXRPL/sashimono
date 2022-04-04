@@ -27,7 +27,7 @@ namespace cli
 
     int execute_basic(std::string_view type, std::string_view container_name);
 
-    int create(std::string_view owner, std::string_view contract_id, std::string_view image);
+    int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image);
 
     int list();
 

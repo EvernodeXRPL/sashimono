@@ -73,7 +73,7 @@ class MessageBoard {
 
         const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
-            this.addToExpiryList(lease.tx_hash, lease.container_name, await this.getExpiryMoment(lease.created_on_ledger, lease.life_moments));
+            this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
 
         this.db.close();
 
@@ -102,14 +102,19 @@ class MessageBoard {
             }
 
             // Filter out instances which needed to be expired and destroy them.
-            const expired = this.expiryList.filter(x => x.expiryMoment < currentMoment);
+            const expired = this.expiryList.filter(x => x.expiryLedger < e.ledger_index);
             if (expired && expired.length) {
-                this.expiryList = this.expiryList.filter(x => x.expiryMoment >= currentMoment);
+                this.expiryList = this.expiryList.filter(x => x.expiryLedger >= e.ledger_index);
 
                 this.db.open();
                 for (const x of expired) {
                     try {
-                        console.log(`Moments exceeded (current:${currentMoment}, expiry:${x.expiryMoment}). Destroying ${x.containerName}`);
+                        console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
+                        // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
+                        const nft = (await (new evernode.XrplAccount(x.tenant, null, { xrplApi: this.xrplApi })).getNfts())?.find(n => n.TokenID == x.containerName);
+                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                        await this.recreateLeaseOffer(x.containerName, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
+                        // Destroy Sashimono instance.
                         await this.sashiCli.destroyInstance(x.containerName);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
@@ -207,7 +212,7 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(acquireRefId, containerName, await this.getExpiryMoment(currentLedgerIndex, moments));
+                    this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryLedger(currentLedgerIndex, moments));
 
                     // Update the database for acquired record.
                     await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
@@ -280,8 +285,9 @@ class MessageBoard {
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    item.expiryMoment += extendingMoments;
-                    expiryMoment = item.expiryMoment;
+                    item.expiryLedger = this.getExpiryLedger(item.expiryLedger, extendingMoments);
+                    expiryMoment = (await this.hostClient.getMoment(instance.created_on_ledger)) + extendingMoments;
+
                     let obj = {
                         status: LeaseStatus.EXTENDED,
                         life_moments: (instance.life_moments + extendingMoments)
@@ -308,13 +314,14 @@ class MessageBoard {
         }
     }
 
-    addToExpiryList(txHash, containerName, expiryMoment) {
+    addToExpiryList(txHash, containerName, tenant, expiryLedger) {
         this.expiryList.push({
             txHash: txHash,
             containerName: containerName,
-            expiryMoment: expiryMoment,
+            tenant: tenant,
+            expiryLedger: expiryLedger,
         });
-        console.log(`Container ${containerName} expiry set at ${expiryMoment}`);
+        console.log(`Container ${containerName} expiry set at ledger ${expiryLedger}`);
     }
 
     async createLeaseTableIfNotExists() {
@@ -399,8 +406,8 @@ class MessageBoard {
             await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
     }
 
-    async getExpiryMoment(createdOnLedger, moments) {
-        return (await this.hostClient.getMoment(createdOnLedger)) + moments;
+    getExpiryLedger(ledgerIndex, moments) {
+        return ledgerIndex + moments * this.hostClient.config.momentSize;
     }
 
     readConfig() {

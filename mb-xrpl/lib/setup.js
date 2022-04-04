@@ -8,13 +8,6 @@ const { SqliteDatabase } = require('./sqlite-handler');
 
 class Setup {
 
-    constructor(options) {
-        if (options) {
-            this.leaseTable = options.DB_TABLE_NAME;
-            this.db = new SqliteDatabase(options.DB_PATH);
-        }
-    }
-
     #httpPost(url) {
         return new Promise((resolve, reject) => {
             const req = https.request(url, { method: 'POST' }, (resp) => {
@@ -244,7 +237,11 @@ class Setup {
     // Burn the host minted NFTs at the de-registration
     async burnMintedNfts(xrplAcc) {
 
-        this.db.open();
+        // This local initialization can be changed according to the DB access requirement
+        const db = new SqliteDatabase(appenv.DB_PATH);
+        const leaseTable = appenv.DB_TABLE_NAME;
+
+        db.open();
 
         try {
 
@@ -257,7 +254,7 @@ class Setup {
             }
 
             // Burning sold NFTs
-            const instances = (await this.getLeaseRecords()).filter(i => (i.status === "Acquired" || i.status === "Extended"));
+            const instances = (await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"));
 
             for (const instance of instances) {
                 // As currently this burning option is not working (The ability of an issuer to burn a minted token, if it has the tfBurnable flag)
@@ -266,15 +263,8 @@ class Setup {
             }
         }
         finally {
-            this.db.close();
+            db.close();
         }
-    }
-
-    async getLeaseRecords(searchCriteria = null) {
-        if (searchCriteria)
-            return (await this.db.getValues(this.leaseTable, searchCriteria));
-
-        return (await this.db.getValues(this.leaseTable));
     }
 }
 

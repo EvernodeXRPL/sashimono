@@ -112,8 +112,11 @@ class MessageBoard {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
                         const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.TokenID == x.containerName);
+                        if (!nft)
+                            throw `Cannot find a NFT for ${x.containerName}`;
+
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
+                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, uriInfo.leaseAmount);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -142,6 +145,7 @@ class MessageBoard {
         const leaseAmount = parseFloat(r.leaseAmount);
         const tenantAddress = r.tenant;
         let requestValidated = false;
+        let createRes;
         let leaseIndex = -1; // Lease index cannot be negative, So we keep initial non populated value as -1.
 
         this.db.open();
@@ -192,7 +196,7 @@ class MessageBoard {
             }
             else {
                 const instanceRequirements = r.payload;
-                const createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
+                createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
                 diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
@@ -227,6 +231,10 @@ class MessageBoard {
             if (requestValidated)
                 await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED).catch(console.error);
 
+            // Destroy the instance if created.
+            if (createRes)
+                await this.sashiCli.destroyInstance(createRes.content.name).catch(console.error);
+
             // Re-create the lease offer (Only if the nft belongs to this request has a lease index).
             if (leaseIndex >= 0)
                 await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex, leaseAmount).catch(console.error);
@@ -240,9 +248,9 @@ class MessageBoard {
     }
 
     async destroyInstance(containerName, tenantAddress, leaseIndex, leaseAmount) {
-        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex, leaseAmount).catch(console.error);
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);
+        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex, leaseAmount).catch(console.error);
     }
 
     async handleExtendLease(r) {

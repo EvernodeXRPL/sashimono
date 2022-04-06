@@ -258,7 +258,7 @@ class Setup {
 
             for (const instance of instances) {
                 const nfTokenId = instance.container_name;
-                await xrplAcc.burnNft(nfTokenId);
+                await xrplAcc.burnNft(nfTokenId, instance.tenant_xrp_address);
                 console.log(`Burnt sold hosting NFT (${nfTokenId}) of ${instance.tenant_xrp_address} tenant account`);
             }
         }

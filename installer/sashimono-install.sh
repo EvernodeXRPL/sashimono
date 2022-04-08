@@ -64,6 +64,9 @@ if [ "$NO_MB" == "" ]; then
         usermod --lock $MB_XRPL_USER
         usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
         loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+
+        # If installing with sudo, add current logged-in user to message board user group.
+        [ -n "$SUDO_USER" ] && usermod -a -G $MB_XRPL_USER $SUDO_USER
     fi
 
     # First create the folder from root and then transfer ownership to the user

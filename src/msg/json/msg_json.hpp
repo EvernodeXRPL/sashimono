@@ -30,7 +30,7 @@ namespace msg::json
 
     void build_create_response(std::string &msg, const hp::instance_info &info);
 
-    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances);
+    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances, const std::vector<hp::lease_info> &leases);
 
     void build_inspect_response(std::string &msg, const hp::instance_info &instance);
 

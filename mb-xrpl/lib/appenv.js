@@ -12,7 +12,7 @@ appenv = {
     CONFIG_PATH: appenv.DATA_DIR + '/mb-xrpl.cfg',
     LOG_PATH: appenv.DATA_DIR + '/log/mb-xrpl.log',
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',
-    DB_TABLE_NAME: 'instance_data',
+    DB_TABLE_NAME: 'leases',
     DB_UTIL_TABLE_NAME: 'util_data',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,

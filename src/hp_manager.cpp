@@ -940,6 +940,15 @@ namespace hp
     }
 
     /**
+     * Get the leases list from message board database.
+     * @param leases List of leases to be populated.
+     */
+    void get_lease_list(std::vector<hp::lease_info> &leases)
+    {
+        sqlite::get_lease_list(db, leases);
+    }
+
+    /**
      * Get the instance with given name from the database, skip if destroyed.
      * @param error_msg Error message if any.
      * @param container_name Name of the instance

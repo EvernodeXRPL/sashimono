@@ -9,7 +9,8 @@ namespace msg::json
     constexpr const char *SEP_COMMA_NOQUOTE = ",\"";
     constexpr const char *SEP_COLON_NOQUOTE = "\":";
     constexpr const char *DOUBLE_QUOTE = "\"";
-
+    constexpr uint16_t MOMENT_SIZE = 900;         // XRP ledgers per Moment.
+    constexpr uint16_t LEDGER_TIME_APPROX = 4000; // Approx. milliseconds per XRP ledger.
     /**
      * Parses a json message sent by the message board.
      * @param d Jsoncons document to which the parsed json should be loaded.
@@ -438,7 +439,7 @@ namespace msg::json
      *          {
      *            "type": "destroy",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name>", 
+     *            "container_name": "<container_name>",
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -471,7 +472,7 @@ namespace msg::json
      *          {
      *            "type": "start",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name>", 
+     *            "container_name": "<container_name>",
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -504,7 +505,7 @@ namespace msg::json
      *          {
      *            "type": "stop",
      *            "owner_pubkey": "<pubkey of the owner>",
-     *            "container_name": "<container_name>", 
+     *            "container_name": "<container_name>",
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -536,7 +537,7 @@ namespace msg::json
      *          Accepted signed input container format:
      *          {
      *            "type": "inspect",
-     *            "container_name": "<container_name>", 
+     *            "container_name": "<container_name>",
      *          }
      * @return 0 on successful extraction. -1 for failure.
      */
@@ -648,19 +649,25 @@ namespace msg::json
      *              "image": "<docker image name>",
      *              "status": "<status of the instance>",
      *              "peer_port": "<peer port of the instance>",
-     *              "user_port": "<user port of the instance>"
+     *              "user_port": "<user port of the instance>",
+     *              "created_timestamp": <created on UNIX timestamp>,
+     *              "expiry_approx_timestamp": <approx UNIX timestamp for expiration>,
+     *              "created_ledger": <created on xrpl ledger>,
+     *              "expiry_ledger": <expires upon xrpl ledger>,
+     *              "tenant": "<tenant xrp account address>",
      *             }
      *           ]
      * @param instances Instance list.
-     * 
+     *
      */
-    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances)
+    void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances, const std::vector<hp::lease_info> &leases)
     {
         msg.reserve(1024);
         msg += "[";
         for (size_t i = 0; i < instances.size(); i++)
         {
             const hp::instance_info &instance = instances[i];
+
             msg += "{\"";
             msg += "name";
             msg += SEP_COLON;
@@ -685,6 +692,35 @@ namespace msg::json
             msg += "user_port";
             msg += SEP_COLON_NOQUOTE;
             msg += std::to_string(instance.assigned_ports.user_port);
+
+            // Include matching lease information.
+            const auto lease = std::find_if(leases.begin(), leases.end(), [&](const hp::lease_info &l)
+                                            { return l.container_name == instance.container_name; });
+            if (lease != leases.end())
+            {
+                msg += SEP_COMMA_NOQUOTE;
+                msg += "created_timestamp";
+                msg += SEP_COLON_NOQUOTE;
+                msg += std::to_string(lease->timestamp);
+                msg += SEP_COMMA_NOQUOTE;
+                msg += "expiry_approx_timestamp";
+                msg += SEP_COLON_NOQUOTE;
+                msg += std::to_string(lease->timestamp + (lease->life_moments * MOMENT_SIZE * LEDGER_TIME_APPROX));
+                msg += SEP_COMMA_NOQUOTE;
+                msg += "created_ledger";
+                msg += SEP_COLON_NOQUOTE;
+                msg += std::to_string(lease->created_on_ledger);
+                msg += SEP_COMMA_NOQUOTE;
+                msg += "expiry_ledger";
+                msg += SEP_COLON_NOQUOTE;
+                msg += std::to_string(lease->created_on_ledger + (lease->life_moments * MOMENT_SIZE));
+                msg += SEP_COMMA;
+                msg += "tenant";
+                msg += SEP_COLON;
+                msg += lease->tenant_xrp_address;
+                msg += "\"";
+            }
+
             msg += "}";
             if (i < instances.size() - 1)
                 msg += ",";
@@ -705,7 +741,7 @@ namespace msg::json
      *              "user_port": "<user port of the instance>"
      *             }
      * @param instance Instance info.
-     * 
+     *
      */
     void build_inspect_response(std::string &msg, const hp::instance_info &instance)
     {

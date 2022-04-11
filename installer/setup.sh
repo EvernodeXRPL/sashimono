@@ -280,10 +280,12 @@ function set_lease_amount() {
     [ -z $lease_amount ] && lease_amount=0
 
     if $interactive; then
+        # Temperory disable option to take lease amount from purchaser service.
+        
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
-        echo "Default contract instance lease amount is taken from purchaser service target price."
+        # echo "Default contract instance lease amount is taken from purchaser service target price."
 
-        ! confirm "Do you want to specify a contract instance lease amount?" && return 0
+        # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
         local amount=0
 

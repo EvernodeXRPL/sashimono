@@ -111,7 +111,7 @@ class MessageBoard {
                     try {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
-                        const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.TokenID == x.containerName);
+                        const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.NFTokenID == x.containerName);
                         if (!nft)
                             throw `Cannot find a NFT for ${x.containerName}`;
 
@@ -162,7 +162,7 @@ class MessageBoard {
             await this.updateLastIndexRecord(r.transaction.LastLedgerSequence);
 
             // Get the existing nft of the lease.
-            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.TokenID == nfTokenId);
+            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.NFTokenID == nfTokenId);
             if (!nft)
                 throw 'Could not find the nft for lease acquire request.';
 
@@ -271,7 +271,7 @@ class MessageBoard {
                 throw "Invalid destination";
 
             const tenantAcc = new evernode.XrplAccount(tenantAddress);
-            const hostingNft = (await tenantAcc.getNfts()).find(n => n.TokenID === nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
+            const hostingNft = (await tenantAcc.getNfts()).find(n => n.NFTokenID === nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
 
             if (!hostingNft)
                 throw "The NFT ownership verification was failed in the lease extension process";
@@ -286,7 +286,7 @@ class MessageBoard {
             if (extendingMoments < 1)
                 throw "The transaction does not satisfy the minimum extendable moments";
 
-            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.TokenID };
+            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.NFTokenID };
 
             const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
 

@@ -13,6 +13,7 @@ log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev"
 script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
+licence_url="$cloud_storage/licence.txt"
 version_timestamp_file="version.timestamp"
 
 # export vars used by Sashimono installer.
@@ -155,7 +156,7 @@ function set_inet_addr() {
     if $interactive ; then
         
         if [ -n "$inetaddr" ] && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
-                                                on your host. Do you want to specify a different IP or DNS address?" ; then
+                                                on your host. \n\nDo you want to specify a different IP or DNS address?" ; then
             return 0
         fi
 
@@ -240,7 +241,7 @@ function set_instance_alloc() {
                 $(GB $alloc_swapKB) Swap\n
                 $(GB $alloc_diskKB) disk space\n
                 Distributed among $alloc_instcount contract instances"
-        ! confirm "Do you wish to change this allocation?" && return 0
+        ! confirm "\nDo you wish to change this allocation?" && return 0
 
         local ramMB=0 swapMB=0 diskMB=0
 
@@ -277,9 +278,9 @@ function set_instance_alloc() {
 
 function set_lease_amount() {
     # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    [ -z $lease_amount ] && lease_amount=20
+    [ -z $lease_amount ] && lease_amount=0
 
-    if $interactive; then
+    # if $interactive; then
         # Temperory disable option to take lease amount from purchaser service.
         
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
@@ -287,15 +288,15 @@ function set_lease_amount() {
 
         # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
-        local amount=0
+        # local amount=0
 
-        while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
-            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
-        done
+        # while true ; do
+        #     read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
+        #     ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+        # done
 
-        lease_amount=$amount
-    fi
+        # lease_amount=$amount
+    # fi
 }
 
 function install_failure() {
@@ -371,7 +372,7 @@ function uninstall_evernode() {
     local ucount=${#sashiusers[@]}
 
     if [ "$upgrade" == "0" ] ; then
-        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. Do you still want to uninstall?" && exit 1
+        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to uninstall?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
 
@@ -392,7 +393,7 @@ function update_evernode() {
     [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
-    $interactive && ! confirm "Do you want to install the update?" && exit 1
+    $interactive && ! confirm "\nDo you want to install the update?" && exit 1
 
     uninstall_evernode 1
     echo "Starting upgrade..."
@@ -465,9 +466,17 @@ if [ "$mode" == "install" ]; then
             \nContinue?" && exit 1
     
     check_sys_req
+
+    # Display licence file and ask for concent.
+    printf "\n*****************************************************************************************************\n\n"
+    curl --silent $licence_url | cat
+    printf "\n\n*****************************************************************************************************\n"
+    ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
+    
+
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
-            \nThis is beta software, so there's a chance things can go wrong. Continue?" && exit 1
+            \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -496,8 +505,8 @@ elif [ "$mode" == "uninstall" ]; then
             stored in '$MB_XRPL_DATA/mb-xrpl.cfg'. This is irreversible. Make sure you have your account address and
             secret elsewhere before proceeding.\n"
 
-    $interactive && ! confirm "Have you read above warning and backed up your account credentials?" && exit 1
-    $interactive && ! confirm "Are you sure you want to uninstall $evernode?" && exit 1
+    $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+    $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
     # Force uninstall on quiet mode.
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f

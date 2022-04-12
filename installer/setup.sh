@@ -277,7 +277,7 @@ function set_instance_alloc() {
 
 function set_lease_amount() {
     # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    [ -z $lease_amount ] && lease_amount=0
+    [ -z $lease_amount ] && lease_amount=20
 
     if $interactive; then
         # Temperory disable option to take lease amount from purchaser service.
@@ -291,7 +291,7 @@ function set_lease_amount() {
 
         while true ; do
             read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
-            ! [[ $amount =~ ^[0-9]+(\.[0-9]+)?$ ]] && echo "Lease amount should be a positive numerical value." || break
+            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
         done
 
         lease_amount=$amount

@@ -251,7 +251,7 @@ class Setup {
             db.open();
 
             try {
-                // We check for yable existance since table is created by message board (not setup).
+                // We check for table existance since table is created by message board (not setup).
                 if (db.isTableExists(leaseTable)) {
                     nfts.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
                         .map(o => { return { nfTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))

@@ -236,34 +236,37 @@ class Setup {
 
     // Burn the host minted NFTs at the de-registration.
     async burnMintedNfts(xrplAcc) {
+        // Get unsold NFTs.
+        const nfts = (await xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
+            .map(o => { return { nfTokenId: o.NFTokenID, ownerAddress: xrplAcc.address }; });
 
-        // This local initialization can be changed according to the DB access requirement.
-        const db = new SqliteDatabase(appenv.DB_PATH);
-        const leaseTable = appenv.DB_TABLE_NAME;
+        // Get sold NFTs.
+        // We check for db existance since db is created by message board (not setup).
+        const dbPath = appenv.DB_PATH;
+        if (fs.existsSync(dbPath)) {
+            // This local initialization can be changed according to the DB access requirement.
+            const db = new SqliteDatabase(appenv.DB_PATH);
+            const leaseTable = appenv.DB_TABLE_NAME;
 
-        db.open();
+            db.open();
 
-        try {
-
-            // Burning unsold NFTs.
-            const unsoldHostingNfts = (await xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
-
-            for (const nft of unsoldHostingNfts) {
-                await xrplAcc.burnNft(nft.TokenID);
-                console.log(`Burnt unsold hosting NFT (${nft.TokenID}) of ${xrplAcc.address} account`);
+            try {
+                // We check for table existance since table is created by message board (not setup).
+                if (db.isTableExists(leaseTable)) {
+                    nfts.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
+                        .map(o => { return { nfTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))
+                }
             }
-
-            // Burning sold NFTs.
-            const instances = (await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"));
-
-            for (const instance of instances) {
-                const nfTokenId = instance.container_name;
-                await xrplAcc.burnNft(nfTokenId, instance.tenant_xrp_address);
-                console.log(`Burnt sold hosting NFT (${nfTokenId}) of ${instance.tenant_xrp_address} tenant account`);
+            finally {
+                db.close();
             }
         }
-        finally {
-            db.close();
+
+
+        for (const nft of nfts) {
+            const sold = nft.ownerAddress !== xrplAcc.address;
+            await xrplAcc.burnNft(nft.nfTokenId, sold ? nft.ownerAddress : null);
+            console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting NFT (${nft.nfTokenId}) of ${nft.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
     }
 }

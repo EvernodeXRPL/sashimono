@@ -112,8 +112,11 @@ class MessageBoard {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
                         const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.TokenID == x.containerName);
+                        if (!nft)
+                            throw `Cannot find a NFT for ${x.containerName}`;
+
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, this.cfg.xrpl.leaseAmount);
+                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -129,9 +132,12 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
     }
 
-    async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex, leaseAmount) {
+    async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
         // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
+        // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
+        this.hostClient.refreshConfig();
+        const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
         await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
     }
 
@@ -142,6 +148,7 @@ class MessageBoard {
         const leaseAmount = parseFloat(r.leaseAmount);
         const tenantAddress = r.tenant;
         let requestValidated = false;
+        let createRes;
         let leaseIndex = -1; // Lease index cannot be negative, So we keep initial non populated value as -1.
 
         this.db.open();
@@ -188,11 +195,11 @@ class MessageBoard {
                 console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                 // Update the lease status of the request to 'SashiTimeout'.
                 await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex, leaseAmount);
+                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex);
             }
             else {
                 const instanceRequirements = r.payload;
-                const createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
+                createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
                 diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
@@ -202,7 +209,7 @@ class MessageBoard {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                    await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex, leaseAmount);
+                    await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex);
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 
@@ -227,9 +234,13 @@ class MessageBoard {
             if (requestValidated)
                 await this.updateLeaseStatus(acquireRefId, LeaseStatus.FAILED).catch(console.error);
 
+            // Destroy the instance if created.
+            if (createRes)
+                await this.sashiCli.destroyInstance(createRes.content.name).catch(console.error);
+
             // Re-create the lease offer (Only if the nft belongs to this request has a lease index).
             if (leaseIndex >= 0)
-                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex, leaseAmount).catch(console.error);
+                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex).catch(console.error);
 
             // Send error transaction with received leaseAmount.
             await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
@@ -239,10 +250,10 @@ class MessageBoard {
         }
     }
 
-    async destroyInstance(containerName, tenantAddress, leaseIndex, leaseAmount) {
-        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex, leaseAmount).catch(console.error);
+    async destroyInstance(containerName, tenantAddress, leaseIndex) {
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);
+        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex).catch(console.error);
     }
 
     async handleExtendLease(r) {

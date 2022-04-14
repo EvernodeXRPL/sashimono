@@ -229,24 +229,19 @@ namespace cli
                 return -1;
             }
 
-            std::map<std::string, std::string> columns = {
+            std::vector<std::pair<std::string, std::string>> columns = {
                 {"name", "Name"},
-                {"user", "User"}
+                {"user", "User"},
+                {"user_port", "User Port"},
+                {"peer_port", "Peer Port"},
+                {"image", "Image"},
+                {"status", "Status"},
+                {"created_ledger", "Created Ledger"},
+                {"expiry_ledger", "Expiry Ledger"},
+                {"created_timestamp", "Timestamp"},
+                {"tenant", "Tenant"},
             };
             print_to_table(d["content"], columns);
-
-            // printf(LIST_FORMATTER_STR, "Name", "User", "UserPort", "MeshPort", "Status", "Image");
-
-                        // for (const auto &instance : d["content"].array_range())
-            // {
-            //     printf(LIST_FORMATTER_STR,
-            //            instance["name"].as<std::string_view>().data(),
-            //            instance["user"].as<std::string_view>().data(),
-            //            std::to_string(instance["user_port"].as<uint16_t>()).c_str(),
-            //            std::to_string(instance["peer_port"].as<uint16_t>()).c_str(),
-            //            instance["status"].as<std::string_view>().data(),
-            //            instance["image"].as<std::string_view>().data());
-            // }
         }
         catch (const std::exception &e)
         {
@@ -326,7 +321,7 @@ namespace cli
         return 0;
     }
 
-    void print_to_table(const jsoncons::json &list, const std::map<std::string, std::string> &columns)
+    void print_to_table(const jsoncons::json &list, const std::vector<std::pair<std::string, std::string>> &columns)
     {
         // Initialize column sizes to header lengths.
         std::map<std::string, size_t> col_sizes;
@@ -339,7 +334,8 @@ namespace cli
             {
                 if (item.contains(key))
                 {
-                    const size_t val_size = item[key].as_string_view().size();
+                    const std::string val_str = value_to_string(item[key]);
+                    const size_t val_size = val_str.size();
                     if (col_sizes[key] < val_size)
                         col_sizes[key] = val_size;
                 }
@@ -349,8 +345,8 @@ namespace cli
         // Print the headers.
         for (const auto &[key, header] : columns)
         {
-            const std::string padstr = ("%-" + std::to_string(col_sizes[key]) + "s  ");
-            printf(padstr.data(), header.data());
+            const std::string pad_str = ("%-" + std::to_string(col_sizes[key]) + "s  ");
+            printf(pad_str.data(), header.data());
         }
         printf("\n");
 
@@ -367,11 +363,23 @@ namespace cli
         {
             for (const auto &[key, header] : columns)
             {
-                const std::string padstr = ("%-" + std::to_string(col_sizes[key]) + "s  ");
-                printf(padstr.data(), item[key].as_string_view().data());
+                if (!item.contains(key))
+                    continue;
+
+                const std::string pad_str = ("%-" + std::to_string(col_sizes[key]) + "s  ");
+                const std::string val_str = value_to_string(item[key]);
+                printf(pad_str.data(), val_str.data());
             }
             printf("\n");
         }
+    }
+
+    const std::string value_to_string(const jsoncons::json &val)
+    {
+        if (val.is_uint64())
+            return std::to_string(val.as<uint64_t>());
+        else
+            return val.as_string();
     }
 
     /**

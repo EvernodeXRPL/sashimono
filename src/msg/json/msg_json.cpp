@@ -703,10 +703,6 @@ namespace msg::json
                 msg += SEP_COLON_NOQUOTE;
                 msg += std::to_string(lease->timestamp);
                 msg += SEP_COMMA_NOQUOTE;
-                msg += "expiry_approx_timestamp";
-                msg += SEP_COLON_NOQUOTE;
-                msg += std::to_string(lease->timestamp + (lease->life_moments * MOMENT_SIZE * LEDGER_TIME_APPROX));
-                msg += SEP_COMMA_NOQUOTE;
                 msg += "created_ledger";
                 msg += SEP_COLON_NOQUOTE;
                 msg += std::to_string(lease->created_on_ledger);
@@ -714,7 +710,7 @@ namespace msg::json
                 msg += "expiry_ledger";
                 msg += SEP_COLON_NOQUOTE;
                 msg += std::to_string(lease->created_on_ledger + (lease->life_moments * MOMENT_SIZE));
-                msg += SEP_COMMA;
+                msg += SEP_COMMA_NOQUOTE;
                 msg += "tenant";
                 msg += SEP_COLON;
                 msg += lease->tenant_xrp_address;
@@ -726,6 +722,8 @@ namespace msg::json
                 msg += ",";
         }
         msg += "]";
+
+        std::cout << msg << "\n";
     }
 
     /**

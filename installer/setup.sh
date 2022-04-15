@@ -433,7 +433,7 @@ function check_installer_pending_finish() {
 function reg_info() {
     echo ""
     if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
-        echo -e "\nYou are receiving $evernode rewards to the Host account. The account secret is stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo -e "\nThe account secret is stored in $MB_XRPL_DATA/mb-xrpl.cfg"
     fi
 }
 
@@ -497,7 +497,7 @@ if [ "$mode" == "install" ]; then
     install_evernode 0
 
     echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
+            \n\nYour system is now registered on $evernode. You can check your system status with 'sudo evernode status' command."
 
 elif [ "$mode" == "uninstall" ]; then
 

@@ -58,6 +58,20 @@ class SqliteDatabase {
         await this.runQuery(query);
     }
 
+    isTableExists(tableName) {
+        const query = `SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}';`;
+        return new Promise((resolve, reject) => {
+            this.db.all(query, [], function (err, rows) {
+                if (err) {
+                    reject(err);
+                    return;
+                }
+
+                resolve(!!(rows.length && rows.length > 0));
+            });
+        });
+    }
+
     getValues(tableName, filter = null) {
         if (!this.db)
             throw 'Database connection is not open.';

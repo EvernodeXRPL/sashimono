@@ -33,7 +33,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
-export EVERNODE_REGISTRY_ADDRESS="rEEd18Kp3eQV6nPVScRX6DPrqRfG4Qb3Wk"
+export EVERNODE_REGISTRY_ADDRESS="rHQQq5aJ5kxFyNJXE36rAmuhxpDvpLHcWq"
 
 # Configuring the sashimono service is the last stage of the installation.
 # So if the service exists, Previous sashimono installation has been complete.

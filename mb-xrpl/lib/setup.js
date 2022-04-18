@@ -4,6 +4,7 @@ const { appenv } = require('./appenv');
 const evernode = require('evernode-js-client');
 const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
+const { ConfigHelper } = require('./config-helper');
 
 
 class Setup {
@@ -38,28 +39,11 @@ class Setup {
     }
 
     #getConfig() {
-        if (!fs.existsSync(appenv.CONFIG_PATH))
-            throw `Config file does not exist at ${appenv.CONFIG_PATH}`;
-        const config = JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
-
-        // Validate lease amount.
-        if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {
-            try {
-                config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
-            }
-            catch {
-                throw "Lease amount should be a numerical value.";
-            }
-        }
-
-        if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
-            throw "Lease amount should be a positive value";
-
-        return config;
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
     #saveConfig(cfg) {
-        fs.writeFileSync(appenv.CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+        ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
     newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0) {

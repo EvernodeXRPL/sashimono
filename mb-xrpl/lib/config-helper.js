@@ -1,0 +1,45 @@
+const fs = require('fs');
+
+class ConfigHelper {
+    static readConfig(configPath, secretConfigPath) {
+        if (!fs.existsSync(configPath))
+            throw `Config file does not exist at ${configPath}`;
+        else if (!fs.existsSync(secretConfigPath))
+            throw `Secret config file does not exist at ${secretConfigPath}`;
+
+        let config = JSON.parse(fs.readFileSync(configPath).toString());
+        const secretCfg = JSON.parse(fs.readFileSync(secretConfigPath).toString());
+        config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
+
+        // Validate lease amount.
+        if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {
+            try {
+                config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
+            }
+            catch {
+                throw "Lease amount should be a numerical value.";
+            }
+        }
+
+        if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
+            throw "Lease amount should be a positive value";
+
+        return config;
+    }
+
+    static writeConfig(config, configPath, secretConfigPath) {
+        let publicCfg = config;
+        const secretCfg = {
+            xrpl: {
+                secret: publicCfg.xrpl.secret
+            }
+        }
+        delete publicCfg.xrpl.secret;
+        fs.writeFileSync(secretConfigPath, JSON.stringify(secretCfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+        fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
+    }
+}
+
+module.exports = {
+    ConfigHelper
+}

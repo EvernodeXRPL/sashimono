@@ -25,7 +25,7 @@ class ConfigHelper {
     }
 
     static writeConfig(config, configPath, secretConfigPath) {
-        let publicCfg = config;
+        let publicCfg = JSON.parse(JSON.stringify(config)); // Make a copy. So, referenced object won't get changed.
         const secretCfg = {
             xrpl: {
                 secret: publicCfg.xrpl.secret

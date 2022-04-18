@@ -34,18 +34,6 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress)
             throw "Required cfg fields cannot be empty.";
 
-        if (this.cfg.xrpl.leaseAmount && typeof this.cfg.xrpl.leaseAmount === 'string') {
-            try {
-                this.cfg.xrpl.leaseAmount = parseFloat(this.cfg.xrpl.leaseAmount);
-            }
-            catch {
-                throw "Lease amount should be a numerical value.";
-            }
-        }
-
-        if (this.cfg.xrpl.leaseAmount && this.cfg.xrpl.leaseAmount < 0)
-            throw "Lease amount should be a positive value.";
-
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
         this.xrplApi = new evernode.XrplApi();
@@ -60,6 +48,9 @@ class MessageBoard {
 
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
+        if (!hostInfo)
+            throw "Host is not registered.";
+
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
 

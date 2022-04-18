@@ -13,12 +13,9 @@ class ConfigHelper {
 
         // Validate lease amount.
         if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {
-            try {
-                config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
-            }
-            catch {
+            config.xrpl.leaseAmount = parseFloat(config.xrpl.leaseAmount);
+            if (isNaN(config.xrpl.leaseAmount))
                 throw "Lease amount should be a numerical value.";
-            }
         }
 
         if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)

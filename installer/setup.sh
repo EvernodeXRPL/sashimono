@@ -471,7 +471,7 @@ if [ "$mode" == "install" ]; then
     printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
-    ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
+    $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
     
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important

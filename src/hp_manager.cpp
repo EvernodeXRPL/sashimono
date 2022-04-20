@@ -18,6 +18,7 @@ namespace hp
     constexpr int DOCKER_CREATE_TIMEOUT_SECS = 120; // Max timeout for docker create command to execute.
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
+    sqlite3 *db_mb = NULL; // Database connection for messageboard related sqlite stuff.
 
     // Vector keeping vacant ports from destroyed instances.
     std::vector<ports> vacant_ports;
@@ -945,7 +946,14 @@ namespace hp
      */
     void get_lease_list(std::vector<hp::lease_info> &leases)
     {
-        sqlite::get_lease_list(db, leases);
+        const std::string db_mb_path = conf::ctx.data_dir + "/mb-xrpl/mb-xrpl.sqlite";
+        if (sqlite::open_db(db_mb_path, &db_mb, true) == -1)
+        {
+            LOG_ERROR << "Error preparing messageboard database in " << db_mb_path;
+            return;
+        }
+        sqlite::get_lease_list(db_mb, leases);
+        sqlite::close_db(&db_mb);
     }
 
     /**

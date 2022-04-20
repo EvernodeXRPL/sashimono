@@ -232,14 +232,14 @@ namespace cli
             std::vector<std::pair<std::string, std::string>> columns = {
                 {"name", "Name"},
                 {"user", "User"},
+                {"tenant", "Tenant"},
+                {"image", "Image"},
                 {"user_port", "User Port"},
                 {"peer_port", "Peer Port"},
-                {"image", "Image"},
                 {"status", "Status"},
                 {"created_ledger", "Created Ledger"},
                 {"expiry_ledger", "Expiry Ledger"},
                 {"created_timestamp", "Timestamp"},
-                {"tenant", "Tenant"},
             };
             print_to_table(d["content"], columns);
         }

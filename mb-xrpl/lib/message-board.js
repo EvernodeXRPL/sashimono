@@ -106,7 +106,7 @@ class MessageBoard {
                             throw `Cannot find a NFT for ${x.containerName}`;
 
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
+                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -122,9 +122,9 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
     }
 
-    async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
+    async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex, decreaseInstanceCount = false) {
         // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
-        await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
+        await this.hostClient.expireLease(nfTokenId, tenantAddress, decreaseInstanceCount).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
         this.hostClient.refreshConfig();
         const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
@@ -240,10 +240,10 @@ class MessageBoard {
         }
     }
 
-    async destroyInstance(containerName, tenantAddress, leaseIndex) {
+    async destroyInstance(containerName, tenantAddress, leaseIndex, decreaseInstanceCount = false) {
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);
-        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex).catch(console.error);
+        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex, decreaseInstanceCount).catch(console.error);
     }
 
     async handleExtendLease(r) {

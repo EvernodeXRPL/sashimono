@@ -36,7 +36,12 @@ Run `make installer` ('installer.tar.gz' will be placed in build directory)
 ## XRPL message board
 1. Node app which is listening to the host xrpl account.
 1. `cd mb-xrpl && npm install` (You only have to do this once)
-1. `node app.js` (Message board will start and create a mb-xrpl.cfg with ixrpl account data)
+1. `node index.js new [address] [secret] [registryAddress] [leaseAmount]` will create new config files called `mb-xrpl.cfg` and `secret.cfg`
+1. `node index.js betagen [registryAddress] [domain or ip] [leaseAmount]` will generate beta host account and populate the configs.
+1. `node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description]` will register the host on Evernode.
+1. `node index.js deregister` will deregister the host from Evernode.
+1. `node index.js upgrade` will upgrade message board data.
+1. `node app.js` will start the message board with ixrpl account data.
 1. Optional environment `MB_DEV=1` for dev mode, if not given it'll be prod mode.
 1. Optional environment `MB_FILE_LOG=1` will keep logging in a log file inside log directory (used for debugging).
 1. This will listen to redeems on the configured host xrpl account.

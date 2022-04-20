@@ -433,7 +433,7 @@ function check_installer_pending_finish() {
 function reg_info() {
     echo ""
     if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
-        echo -e "\nThe account secret is stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
 
@@ -471,7 +471,7 @@ if [ "$mode" == "install" ]; then
     printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
-    ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
+    $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
     
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
@@ -497,12 +497,12 @@ if [ "$mode" == "install" ]; then
     install_evernode 0
 
     echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'sudo evernode status' command."
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
 
 elif [ "$mode" == "uninstall" ]; then
 
     echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg'. This is irreversible. Make sure you have your account address and
+            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
             secret elsewhere before proceeding.\n"
 
     $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1

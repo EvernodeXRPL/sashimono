@@ -46,7 +46,7 @@ namespace sqlite
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
     // Message boad database queries
-    constexpr const char *GET_LEASES_LIST = "SELECT timestamp, tx_hash, tenant_xrp_address, life_moments, container_name, created_on_ledger, status FROM leases";
+    constexpr const char *GET_LEASES_LIST = "SELECT timestamp, tx_hash, tenant_xrp_address, life_moments, container_name, created_on_ledger, status FROM leases WHERE status = 'Acquired' OR status = 'Extended'";
 
     /**
      * Opens a connection to a given databse and give the db pointer.

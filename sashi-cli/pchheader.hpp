@@ -12,6 +12,5 @@
 #include <unistd.h>
 #include <CLI/CLI.hpp>
 #include <jsoncons/json.hpp>
-#include <jsoncons_ext/jsonpath/jsonpath.hpp>
 
 #endif

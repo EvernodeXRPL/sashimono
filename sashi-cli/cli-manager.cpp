@@ -229,8 +229,8 @@ namespace cli
                 return -1;
             }
 
-            jsoncons::json result = jsoncons::jsonpath::json_query(d,"$.content");
-            std::cout << jsoncons::pretty_print(result[0]) << std::endl;
+            jsoncons::json content = jsoncons::json::parse(d["content"].as<std::string>(), jsoncons::strict_json_parsing());
+            std::cout << jsoncons::pretty_print(content) << std::endl;
         }
         catch (const std::exception &e)
         {

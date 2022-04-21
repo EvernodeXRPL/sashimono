@@ -651,6 +651,7 @@ namespace msg::json
      *              "peer_port": "<peer port of the instance>",
      *              "user_port": "<user port of the instance>",
      *              "created_timestamp": <created on UNIX timestamp>,
+     *              "contract_id": "<evernode contract id>",
      *              "expiry_approx_timestamp": <approx UNIX timestamp for expiration>,
      *              "created_ledger": <created on xrpl ledger>,
      *              "expiry_ledger": <expires upon xrpl ledger>,
@@ -680,6 +681,10 @@ namespace msg::json
             msg += "image";
             msg += SEP_COLON;
             msg += instance.image_name;
+            msg += SEP_COMMA;
+            msg += "contract_id";
+            msg += SEP_COLON;
+            msg += instance.contract_id;
             msg += SEP_COMMA;
             msg += "status";
             msg += SEP_COLON;

@@ -229,19 +229,8 @@ namespace cli
                 return -1;
             }
 
-            std::vector<std::pair<std::string, std::string>> columns = {
-                {"name", "Name"},
-                {"user", "User"},
-                {"tenant", "Tenant"},
-                {"image", "Image"},
-                {"user_port", "User Port"},
-                {"peer_port", "Peer Port"},
-                {"status", "Status"},
-                {"created_ledger", "Created Ledger"},
-                {"expiry_ledger", "Expiry Ledger"},
-                {"created_timestamp", "Timestamp"},
-            };
-            print_to_table(d["content"], columns);
+            jsoncons::json result = jsoncons::jsonpath::json_query(d,"$.content");
+            std::cout << jsoncons::pretty_print(result[0]) << std::endl;
         }
         catch (const std::exception &e)
         {

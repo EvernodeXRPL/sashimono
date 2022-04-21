@@ -39,7 +39,7 @@ namespace sqlite
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
-    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE status != ?";
+    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name, contract_id FROM instances WHERE status != ?";
 
     constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
@@ -500,6 +500,7 @@ namespace sqlite
                 info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
                 info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
                 info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
                 instances.push_back(info);
             }
         }

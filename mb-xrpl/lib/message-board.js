@@ -21,6 +21,7 @@ class MessageBoard {
         this.leaseTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
+        this.activeInstanceCount = 0;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -65,6 +66,12 @@ class MessageBoard {
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
 
+        this.activeInstanceCount = leaseRecords.length;
+        console.log(`Active instance count: ${this.activeInstanceCount}`);
+        // Update the registry with the active instance count.
+        await this.hostClient.updateRegInfo({
+            activeInstances: this.activeInstanceCount
+        });
         this.db.close();
 
         // Check for instance expiry.
@@ -107,6 +114,10 @@ class MessageBoard {
 
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                         await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
+                        this.activeInstanceCount--;
+                        await this.hostClient.updateRegInfo({
+                            activeInstances: this.activeInstanceCount
+                        });
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -211,6 +222,12 @@ class MessageBoard {
 
                     // Update the database for acquired record.
                     await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
+
+                    // Update the active instance count.
+                    this.activeInstanceCount++;
+                    await this.hostClient.updateRegInfo({
+                        activeInstances: this.activeInstanceCount
+                    });
 
                     // Send the acquire response with created instance info.
                     await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);

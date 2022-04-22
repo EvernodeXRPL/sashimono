@@ -143,9 +143,10 @@ fi
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
-mkdir "$user_dir"/.config/systemd/user/$docker_service.d
+sudo -H -u "$user" mkdir "$user_dir"/.config/systemd/user/$docker_service.d
+sudo -H -u "$user" touch "$user_dir"/.config/systemd/user/$docker_service.d/override.conf
 echo "[Service]
-    Environment='DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns'" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
+    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 service_ready $docker_service || rollback "NO_DOCKERSVC"
 

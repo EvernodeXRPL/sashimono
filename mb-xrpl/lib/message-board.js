@@ -69,9 +69,7 @@ class MessageBoard {
         this.activeInstanceCount = leaseRecords.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo({
-            activeInstances: this.activeInstanceCount
-        });
+        await this.hostClient.updateRegInfo(this.activeInstanceCount);
         this.db.close();
 
         // Check for instance expiry.
@@ -115,9 +113,7 @@ class MessageBoard {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                         await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
                         this.activeInstanceCount--;
-                        await this.hostClient.updateRegInfo({
-                            activeInstances: this.activeInstanceCount
-                        });
+                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -225,9 +221,7 @@ class MessageBoard {
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
-                    await this.hostClient.updateRegInfo({
-                        activeInstances: this.activeInstanceCount
-                    });
+                    await this.hostClient.updateRegInfo(this.activeInstanceCount);
 
                     // Send the acquire response with created instance info.
                     await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);

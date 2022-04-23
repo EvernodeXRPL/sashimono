@@ -161,7 +161,7 @@ int parse_cmd(int argc, char **argv)
                                return 0;
                            });
     }
-    else if (create->parsed() && !contract_id.empty() && !image.empty())
+    else if (create->parsed() && !container_name.empty() && !owner.empty() && !contract_id.empty() && !image.empty())
     {
         return execute_cli([&]()
                            { return cli::create(container_name, owner, contract_id, image); });

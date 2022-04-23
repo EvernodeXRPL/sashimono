@@ -199,7 +199,7 @@ namespace cli
     int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image)
     {
         std::string msg, output;
-        msg.resize(96 + owner.size() + contract_id.size() + image.size());
+        msg.resize(95 + container_name.size() + owner.size() + contract_id.size() + image.size());
         sprintf(msg.data(), MSG_CREATE, container_name.data(), owner.data(), contract_id.data(), image.data());
 
         const int ret = get_json_output(msg, output);

@@ -151,10 +151,10 @@ echo "[Service]
     Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" > $user_dir/.config/systemd/user/$docker_service.d/override.conf
 
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
-# echo "Applying $docker_service extra args."
-# exec_original="ExecStart=$docker_bin/dockerd-rootless.sh"
-# exec_replace="$exec_original --max-concurrent-downloads 1"
-# sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_service
+echo "Applying $docker_service extra args."
+exec_original="ExecStart=$docker_bin/dockerd-rootless.sh"
+exec_replace="$exec_original --max-concurrent-downloads 1"
+sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_service
 
 # Reload the docker service.
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload

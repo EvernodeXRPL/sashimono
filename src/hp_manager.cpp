@@ -876,7 +876,7 @@ namespace hp
                 return -1;
             }
             username = output_params.at(1);
-            LOG_DEBUG << "Created new user : " << username << ", uid : " << user_id;
+            LOG_INFO << "Created new user : " << username << ", uid : " << user_id;
             return 0;
         }
         else if (strncmp(output_params.at(output_params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
@@ -913,7 +913,7 @@ namespace hp
         // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
         {
-            LOG_DEBUG << "Deleted the user : " << username;
+            LOG_INFO << "Deleted the user : " << username;
             return 0;
         }
         if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.

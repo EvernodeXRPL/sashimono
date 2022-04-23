@@ -143,10 +143,21 @@ fi
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
-sudo -H -u "$user" mkdir "$user_dir"/.config/systemd/user/$docker_service.d
-sudo -H -u "$user" touch "$user_dir"/.config/systemd/user/$docker_service.d/override.conf
+# Add environment variables as an override to docker service unit file.
+echo "Applying $docker_service env overrides."
+sudo -H -u "$user" mkdir $user_dir/.config/systemd/user/$docker_service.d
+sudo -H -u "$user" touch $user_dir/.config/systemd/user/$docker_service.d/override.conf
 echo "[Service]
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >"$user_dir"/.config/systemd/user/$docker_service.d/override.conf
+    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" > $user_dir/.config/systemd/user/$docker_service.d/override.conf
+
+# Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
+# echo "Applying $docker_service extra args."
+# exec_original="ExecStart=$docker_bin/dockerd-rootless.sh"
+# exec_replace="$exec_original --max-concurrent-downloads 1"
+# sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_service
+
+# Reload the docker service.
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 service_ready $docker_service || rollback "NO_DOCKERSVC"
 

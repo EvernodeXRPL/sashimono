@@ -48,6 +48,13 @@ else
     fi
 fi
 
+# Load br_netfilter kernel module on startup (if not loaded already).
+if [[ -z "$(lsmod | grep br_netfilter)" ]]; then
+    echo "Adding br_netfilter"
+    modprobe br_netfilter
+    echo "br_netfilter" > /etc/modules-load.d/br_netfilter.conf
+fi
+
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.

@@ -451,7 +451,7 @@ namespace util
             {
                 if (output.back() == '\n')
                     output.pop_back();
-                LOG_DEBUG << output;
+                LOG_INFO << output;
             }
         }
 

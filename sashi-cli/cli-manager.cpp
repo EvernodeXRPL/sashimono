@@ -8,7 +8,6 @@ namespace cli
     constexpr const char *DATA_DIR = "/etc/sashimono";    // Sashimono data directory.
     constexpr const char *BIN_DIR = "/usr/bin/sashimono"; // Sashimono bin directory.
     constexpr const int BUFFER_SIZE = 4096;               // Max read buffer size.
-    constexpr const char *LIST_FORMATTER_STR = "%-66s%-27s%-10s%-10s%-10s%s\n";
     constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
     constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"container_name\":\"%s\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
@@ -22,7 +21,7 @@ namespace cli
     /**
      * Initialize the socket and connect.
      * @return 0 on success, -1 on error.
-    */
+     */
     int init(std::string_view sashi_dir)
     {
         ctx.sashi_dir = sashi_dir;
@@ -71,7 +70,7 @@ namespace cli
      * Else show error.
      * @param socket_path Socket path to be populated.
      * @return 0 on success, -1 on error.
-    */
+     */
     int get_socket_path(std::string &socket_path)
     {
         // Check whether socket exists in exec path.
@@ -103,7 +102,7 @@ namespace cli
      * Else show error.
      * @param bin_path Binary path to be populated.
      * @return 0 on success, -1 on error.
-    */
+     */
     int get_bin_path(std::string &bin_path)
     {
         // Check whether binary exists in exec path.
@@ -132,7 +131,7 @@ namespace cli
      * Write a given message into the sashimono socket.
      * @param message Message to be write.
      * @return 0 on success, -1 on error.
-    */
+     */
     int write_to_socket(std::string_view message)
     {
         if (!init_success)
@@ -154,7 +153,7 @@ namespace cli
      * Read message from the sashimono socket.
      * @param message Message to be read.
      * @return Read message length on success, -1 on error.
-    */
+     */
     int read_from_socket(std::string &message)
     {
         if (!init_success)
@@ -199,7 +198,7 @@ namespace cli
     int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image)
     {
         std::string msg, output;
-        msg.resize(96 + owner.size() + contract_id.size() + image.size());
+        msg.resize(95 + container_name.size() + owner.size() + contract_id.size() + image.size());
         sprintf(msg.data(), MSG_CREATE, container_name.data(), owner.data(), contract_id.data(), image.data());
 
         const int ret = get_json_output(msg, output);
@@ -211,7 +210,7 @@ namespace cli
     /**
      * Print the list of instances in a tabular manner.
      * @return 0 on success, -1 on error.
-    */
+     */
     int list()
     {
         std::string output;
@@ -230,19 +229,8 @@ namespace cli
                 return -1;
             }
 
-            printf(LIST_FORMATTER_STR, "Name", "User", "UserPort", "MeshPort", "Status", "Image");
-            printf(LIST_FORMATTER_STR, "====", "====", "========", "========", "======", "=====");
-
-            for (const auto &instance : d["content"].array_range())
-            {
-                printf(LIST_FORMATTER_STR,
-                       instance["name"].as<std::string_view>().data(),
-                       instance["user"].as<std::string_view>().data(),
-                       std::to_string(instance["user_port"].as<uint16_t>()).c_str(),
-                       std::to_string(instance["peer_port"].as<uint16_t>()).c_str(),
-                       instance["status"].as<std::string_view>().data(),
-                       instance["image"].as<std::string_view>().data());
-            }
+            jsoncons::json content = jsoncons::json::parse(d["content"].as<std::string>(), jsoncons::strict_json_parsing());
+            std::cout << jsoncons::pretty_print(content) << std::endl;
         }
         catch (const std::exception &e)
         {
@@ -258,7 +246,7 @@ namespace cli
      * @param type Type of the command.
      * @param container_name Name of the contract.
      * @return 0 on success, -1 on error.
-    */
+     */
     int docker_exec(std::string_view type, std::string_view container_name)
     {
         std::string msg, output;
@@ -322,9 +310,70 @@ namespace cli
         return 0;
     }
 
+    void print_to_table(const jsoncons::json &list, const std::vector<std::pair<std::string, std::string>> &columns)
+    {
+        // Initialize column sizes to header lengths.
+        std::map<std::string, size_t> col_sizes;
+        for (const auto &[key, header] : columns)
+            col_sizes[key] = header.size();
+
+        for (auto &item : list.array_range())
+        {
+            for (const auto &[key, header] : columns)
+            {
+                if (item.contains(key))
+                {
+                    const std::string val_str = value_to_string(item[key]);
+                    const size_t val_size = val_str.size();
+                    if (col_sizes[key] < val_size)
+                        col_sizes[key] = val_size;
+                }
+            }
+        }
+
+        // Print the headers.
+        for (const auto &[key, header] : columns)
+        {
+            const std::string pad_str = ("%-" + std::to_string(col_sizes[key]) + "s  ");
+            printf(pad_str.data(), header.data());
+        }
+        printf("\n");
+
+        // Print the header separators.
+        for (const auto &[key, header] : columns)
+        {
+            const std::string sep(col_sizes[key], '-');
+            printf("%s  ", sep.data());
+        }
+        printf("\n");
+
+        // Print the values.
+        for (auto &item : list.array_range())
+        {
+            for (const auto &[key, header] : columns)
+            {
+                if (!item.contains(key))
+                    continue;
+
+                const std::string pad_str = ("%-" + std::to_string(col_sizes[key]) + "s  ");
+                const std::string val_str = value_to_string(item[key]);
+                printf(pad_str.data(), val_str.data());
+            }
+            printf("\n");
+        }
+    }
+
+    const std::string value_to_string(const jsoncons::json &val)
+    {
+        if (val.is_uint64())
+            return std::to_string(val.as<uint64_t>());
+        else
+            return val.as_string();
+    }
+
     /**
      * Close the socket and deinitialize.
-    */
+     */
     void deinit()
     {
         if (init_success)

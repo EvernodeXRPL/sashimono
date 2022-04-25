@@ -146,21 +146,6 @@ namespace hp
         }
         const std::string image_name = img_itr->second;
 
-        int retries = 0;
-        // If the generated uuid is already assigned to a container, we try generating a
-        // unique uuid with max tries limited under a threshold.
-        while (sqlite::is_container_exists(db, container_name, info) == 1)
-        {
-            if (retries >= MAX_UNIQUE_NAME_RETRIES)
-            {
-                error_msg = INTERNAL_ERROR;
-                LOG_ERROR << "Could not find a unique container name. Threshold of " << MAX_UNIQUE_NAME_RETRIES << " exceeded";
-                return -1;
-            }
-            container_name = crypto::generate_uuid();
-            retries++;
-        }
-
         ports instance_ports;
         if (!vacant_ports.empty())
         {

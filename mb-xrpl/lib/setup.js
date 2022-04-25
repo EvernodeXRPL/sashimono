@@ -133,7 +133,7 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1024), Math.floor(diskKb / 1024), totalInstanceCount, description.replace('_', ' '));
+                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, description.replace('_', ' '));
 
                 // Create lease offers.
                 console.log("Creating lease offers for the hosts...");

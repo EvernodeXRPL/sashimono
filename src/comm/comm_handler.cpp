@@ -195,9 +195,11 @@ namespace comm
         if (type == msg::MSGTYPE_LIST)
         {
             std::vector<hp::instance_info> instances;
+            std::vector<hp::lease_info> leases;
             hp::get_instance_list(instances);
+            hp::get_lease_list(leases);
             std::string list_res;
-            msg_parser.build_list_response(list_res, instances);
+            msg_parser.build_list_response(list_res, instances, leases);
             __HANDLE_RESPONSE(msg::MSGTYPE_LIST_RES, list_res, 0);
         }
         else if (type == msg::MSGTYPE_CREATE)

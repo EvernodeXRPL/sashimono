@@ -14,7 +14,6 @@ namespace hp
     bool last_port_assign_from_vacant = true;
 
     constexpr int FILE_PERMS = 0644;
-    constexpr int MAX_UNIQUE_NAME_RETRIES = 10;     // Max retries before abandoning container uniqueness check.
     constexpr int DOCKER_CREATE_TIMEOUT_SECS = 120; // Max timeout for docker create command to execute.
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.

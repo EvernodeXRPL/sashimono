@@ -46,6 +46,16 @@ namespace hp
         std::string image_name;
     };
 
+    // Represents a lease data retured from message board database.
+    struct lease_info
+    {
+        uint64_t timestamp;
+        std::string container_name;
+        std::string tenant_xrp_address;
+        uint64_t created_on_ledger;
+        uint64_t life_moments;
+    };
+
     struct resources
     {
         size_t cpu_us = 0;         // CPU time an instance can consume.
@@ -90,6 +100,8 @@ namespace hp
     int uninstall_user(std::string_view username, const ports assigned_ports, std::string_view instance_name);
 
     void get_instance_list(std::vector<hp::instance_info> &instances);
+
+    void get_lease_list(std::vector<hp::lease_info> &leases);
 
     int get_instance(std::string &error_msg, std::string_view container_name, hp::instance_info &instance);
 

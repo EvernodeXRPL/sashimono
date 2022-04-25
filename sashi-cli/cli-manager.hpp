@@ -33,6 +33,10 @@ namespace cli
 
     int docker_exec(std::string_view type, std::string_view container_name);
 
+    void print_to_table(const jsoncons::json &list, const std::vector<std::pair<std::string, std::string>> &columns);
+
+    const std::string value_to_string(const jsoncons::json &val);
+
     void deinit();
 }
 

@@ -14,7 +14,6 @@ namespace hp
     bool last_port_assign_from_vacant = true;
 
     constexpr int FILE_PERMS = 0644;
-    constexpr int MAX_UNIQUE_NAME_RETRIES = 10;     // Max retries before abandoning container uniqueness check.
     constexpr int DOCKER_CREATE_TIMEOUT_SECS = 120; // Max timeout for docker create command to execute.
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
@@ -144,21 +143,6 @@ namespace hp
             return -1;
         }
         const std::string image_name = img_itr->second;
-
-        int retries = 0;
-        // If the generated uuid is already assigned to a container, we try generating a
-        // unique uuid with max tries limited under a threshold.
-        while (sqlite::is_container_exists(db, container_name, info) == 1)
-        {
-            if (retries >= MAX_UNIQUE_NAME_RETRIES)
-            {
-                error_msg = INTERNAL_ERROR;
-                LOG_ERROR << "Could not find a unique container name. Threshold of " << MAX_UNIQUE_NAME_RETRIES << " exceeded";
-                return -1;
-            }
-            container_name = crypto::generate_uuid();
-            retries++;
-        }
 
         ports instance_ports;
         if (!vacant_ports.empty())

@@ -22,17 +22,17 @@ namespace msg
     {
         return json::extract_initiate_message(msg, jdoc);
     }
-        
+
     int msg_parser::extract_destroy_message(destroy_msg &msg) const
     {
         return json::extract_destroy_message(msg, jdoc);
     }
-        
+
     int msg_parser::extract_start_message(start_msg &msg) const
     {
         return json::extract_start_message(msg, jdoc);
     }
-        
+
     int msg_parser::extract_stop_message(stop_msg &msg) const
     {
         return json::extract_stop_message(msg, jdoc);
@@ -53,9 +53,10 @@ namespace msg
         json::build_create_response(msg, info);
     }
 
-    void msg_parser::build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances) const
+    void msg_parser::build_list_response(std::string &msg,
+                                         const std::vector<hp::instance_info> &instances, const std::vector<hp::lease_info> &leases) const
     {
-        json::build_list_response(msg, instances);
+        json::build_list_response(msg, instances, leases);
     }
 
     void msg_parser::build_inspect_response(std::string &msg, const hp::instance_info &instance) const

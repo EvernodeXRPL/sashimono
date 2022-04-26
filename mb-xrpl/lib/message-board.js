@@ -3,6 +3,7 @@ const evernode = require('evernode-js-client');
 const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
 const { appenv } = require('./appenv');
 const { SashiCLI } = require('./sashi-cli');
+const { ConfigHelper } = require('./config-helper');
 
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
@@ -14,11 +15,13 @@ const LeaseStatus = {
 }
 
 class MessageBoard {
-    constructor(configPath, dbPath, sashiCliPath) {
+    constructor(configPath, secretConfigPath, dbPath, sashiCliPath) {
         this.configPath = configPath;
+        this.secretConfigPath = secretConfigPath;
         this.leaseTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
+        this.activeInstanceCount = 0;
 
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
@@ -28,24 +31,9 @@ class MessageBoard {
     }
 
     async init() {
-        if (!fs.existsSync(this.configPath))
-            throw `${this.configPath} does not exist.`;
-
         this.readConfig();
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress)
             throw "Required cfg fields cannot be empty.";
-
-        if (this.cfg.xrpl.leaseAmount && typeof this.cfg.xrpl.leaseAmount === 'string') {
-            try {
-                this.cfg.xrpl.leaseAmount = parseFloat(this.cfg.xrpl.leaseAmount);
-            }
-            catch {
-                throw "Lease amount should be a numerical value.";
-            }
-        }
-
-        if (this.cfg.xrpl.leaseAmount && this.cfg.xrpl.leaseAmount < 0)
-            throw "Lease amount should be a positive value.";
 
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
 
@@ -61,6 +49,9 @@ class MessageBoard {
 
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
+        if (!hostInfo)
+            throw "Host is not registered.";
+
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
 
@@ -75,6 +66,10 @@ class MessageBoard {
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
 
+        this.activeInstanceCount = leaseRecords.length;
+        console.log(`Active instance count: ${this.activeInstanceCount}`);
+        // Update the registry with the active instance count.
+        await this.hostClient.updateRegInfo(this.activeInstanceCount);
         this.db.close();
 
         // Check for instance expiry.
@@ -84,7 +79,7 @@ class MessageBoard {
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment) {
+            if (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment)) {
                 this.lastHeartbeatMoment = currentMoment;
 
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
@@ -116,7 +111,9 @@ class MessageBoard {
                             throw `Cannot find a NFT for ${x.containerName}`;
 
                         const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
+                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
+                        this.activeInstanceCount--;
+                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
                         await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
                         console.log(`Destroyed ${x.containerName}`);
                     }
@@ -221,6 +218,10 @@ class MessageBoard {
 
                     // Update the database for acquired record.
                     await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
+
+                    // Update the active instance count.
+                    this.activeInstanceCount++;
+                    await this.hostClient.updateRegInfo(this.activeInstanceCount);
 
                     // Send the acquire response with created instance info.
                     await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);
@@ -426,11 +427,11 @@ class MessageBoard {
     }
 
     readConfig() {
-        this.cfg = JSON.parse(fs.readFileSync(this.configPath).toString());
+        this.cfg = ConfigHelper.readConfig(this.configPath, this.secretConfigPath);
     }
 
     persistConfig() {
-        fs.writeFileSync(this.configPath, JSON.stringify(this.cfg, null, 2));
+        ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
     }
 }
 

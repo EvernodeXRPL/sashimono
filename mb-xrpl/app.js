@@ -43,8 +43,8 @@ async function main() {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config file.
-        node index.js betagen [registryAddress] [domain or ip] [leaseAmount] - Generate beta host account and populate config.
+        node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
+        node index.js betagen [registryAddress] [domain or ip] [leaseAmount] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
@@ -63,7 +63,7 @@ async function main() {
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
-            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH);
+            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH);
             await mb.init();
         }
 

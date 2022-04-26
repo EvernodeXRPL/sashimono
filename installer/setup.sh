@@ -99,7 +99,7 @@ function confirm() {
 
 # Format the given KB number into GB units.
 function GB() {
-    echo "$(bc <<<"scale=2; $1 / 1048576") GB"
+    echo "$(bc <<<"scale=2; $1 / 1000000") GB"
 }
 
 function check_sys_req() {
@@ -121,7 +121,7 @@ function check_sys_req() {
     local os=$(grep -ioP '^ID=\K.+' /etc/os-release)
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
-    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $swapKB -lt 2000000 ] || [ $diskKB -lt 4194304 ]; then
+    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $swapKB -lt 2000000 ] || [ $diskKB -lt 4000000 ]; then
         echomult "Your system specs are:
             \n OS: $os $osversion
             \n RAM: $(GB $ramKB)
@@ -265,9 +265,9 @@ function set_instance_alloc() {
             ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
         done
 
-        alloc_ramKB=$(( ramMB * 1024 ))
-        alloc_swapKB=$(( swapMB * 1024 ))
-        alloc_diskKB=$(( diskMB * 1024 ))
+        alloc_ramKB=$(( ramMB * 1000 ))
+        alloc_swapKB=$(( swapMB * 1000 ))
+        alloc_diskKB=$(( diskMB * 1000 ))
     fi
 
     if ! [[ $alloc_ramKB -gt 0 ]] || ! [[ $alloc_swapKB -gt 0 ]] || ! [[ $alloc_diskKB -gt 0 ]] ||
@@ -433,7 +433,7 @@ function check_installer_pending_finish() {
 function reg_info() {
     echo ""
     if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
-        echo -e "\nThe account secret is stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
 
@@ -471,7 +471,7 @@ if [ "$mode" == "install" ]; then
     printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
-    ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
+    $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
     
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
@@ -497,12 +497,12 @@ if [ "$mode" == "install" ]; then
     install_evernode 0
 
     echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'sudo evernode status' command."
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
 
 elif [ "$mode" == "uninstall" ]; then
 
     echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg'. This is irreversible. Make sure you have your account address and
+            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
             secret elsewhere before proceeding.\n"
 
     $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1

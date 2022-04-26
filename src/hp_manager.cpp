@@ -14,10 +14,10 @@ namespace hp
     bool last_port_assign_from_vacant = true;
 
     constexpr int FILE_PERMS = 0644;
-    constexpr int MAX_UNIQUE_NAME_RETRIES = 10;     // Max retries before abandoning container uniqueness check.
     constexpr int DOCKER_CREATE_TIMEOUT_SECS = 120; // Max timeout for docker create command to execute.
 
     sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
+    sqlite3 *db_mb = NULL; // Database connection for messageboard related sqlite stuff.
 
     // Vector keeping vacant ports from destroyed instances.
     std::vector<ports> vacant_ports;
@@ -144,21 +144,6 @@ namespace hp
             return -1;
         }
         const std::string image_name = img_itr->second;
-
-        int retries = 0;
-        // If the generated uuid is already assigned to a container, we try generating a
-        // unique uuid with max tries limited under a threshold.
-        while (sqlite::is_container_exists(db, container_name, info) == 1)
-        {
-            if (retries >= MAX_UNIQUE_NAME_RETRIES)
-            {
-                error_msg = INTERNAL_ERROR;
-                LOG_ERROR << "Could not find a unique container name. Threshold of " << MAX_UNIQUE_NAME_RETRIES << " exceeded";
-                return -1;
-            }
-            container_name = crypto::generate_uuid();
-            retries++;
-        }
 
         ports instance_ports;
         if (!vacant_ports.empty())
@@ -876,7 +861,7 @@ namespace hp
                 return -1;
             }
             username = output_params.at(1);
-            LOG_DEBUG << "Created new user : " << username << ", uid : " << user_id;
+            LOG_INFO << "Created new user : " << username << ", uid : " << user_id;
             return 0;
         }
         else if (strncmp(output_params.at(output_params.size() - 1).data(), "INST_ERR", 8) == 0) // If error.
@@ -913,7 +898,7 @@ namespace hp
         // const std::string contract_dir = util::get_user_contract_dir(info.username, container_name);
         if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_SUC", 8) == 0) // If success.
         {
-            LOG_DEBUG << "Deleted the user : " << username;
+            LOG_INFO << "Deleted the user : " << username;
             return 0;
         }
         if (strncmp(output_params.at(output_params.size() - 1).data(), "UNINST_ERR", 8) == 0) // If error.
@@ -937,6 +922,22 @@ namespace hp
     void get_instance_list(std::vector<hp::instance_info> &instances)
     {
         sqlite::get_instance_list(db, instances);
+    }
+
+    /**
+     * Get the leases list from message board database.
+     * @param leases List of leases to be populated.
+     */
+    void get_lease_list(std::vector<hp::lease_info> &leases)
+    {
+        const std::string db_mb_path = conf::ctx.data_dir + "/mb-xrpl/mb-xrpl.sqlite";
+        if (sqlite::open_db(db_mb_path, &db_mb, true) == -1)
+        {
+            LOG_ERROR << "Error preparing messageboard database in " << db_mb_path;
+            return;
+        }
+        sqlite::get_lease_list(db_mb, leases);
+        sqlite::close_db(&db_mb);
     }
 
     /**

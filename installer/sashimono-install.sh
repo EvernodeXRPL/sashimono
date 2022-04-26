@@ -70,7 +70,7 @@ if [ "$NO_MB" == "" ]; then
     # since the folder is created in /etc/sashimono directory.
     ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
     # Change ownership to message board user.
-    chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
     # Betage and register if not upgrade mode.
     if [ "$UPGRADE" == "0" ]; then
@@ -234,7 +234,7 @@ if [ "$NO_MB" == "" ]; then
     [Install]
     WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
 
-    # This service needs to be restarted whenever mb-xrpl.cfg is changed.
+    # This service needs to be restarted whenever mb-xrpl.cfg or secret.cfg is changed.
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
     # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
     echo "Installed Evernode xrpl message board."

@@ -39,11 +39,14 @@ namespace sqlite
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
-    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE status != ?";
+    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name, contract_id FROM instances WHERE status != ?";
 
     constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
+
+    // Message boad database queries
+    constexpr const char *GET_LEASES_LIST = "SELECT timestamp, tx_hash, tenant_xrp_address, life_moments, container_name, created_on_ledger, status FROM leases WHERE status = 'Acquired' OR status = 'Extended'";
 
     /**
      * Opens a connection to a given databse and give the db pointer.
@@ -52,7 +55,7 @@ namespace sqlite
      * @param writable Whether the database must be opened in a writable mode or not.
      * @param journal Whether to enable db journaling or not.
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int open_db(std::string_view db_name, sqlite3 **db, const bool writable, const bool journal)
     {
         int ret;
@@ -80,7 +83,7 @@ namespace sqlite
      * @param callback Callback funcion which is called for each result row.
      * @param callback_first_arg First data argumat to be parced to the callback (void pointer).
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int exec_sql(sqlite3 *db, std::string_view sql, int (*callback)(void *, int, char **, char **), void *callback_first_arg)
     {
         char *err_msg;
@@ -114,7 +117,7 @@ namespace sqlite
      * @param table_name Table name to be created.
      * @param column_info Column info of the table.
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int create_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info)
     {
         std::string sql;
@@ -182,7 +185,7 @@ namespace sqlite
      * @param column_names_string Comma seperated string of colums (eg: "col_1,col_2,...").
      * @param value_strings Vector of comma seperated values (wrap in single quotes for TEXT type) (eg: ["r1val1,'r1val2',...", "r2val1,'r2val2',..."]).
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int insert_rows(sqlite3 *db, std::string_view table_name, std::string_view column_names_string, const std::vector<std::string> &value_strings)
     {
         std::string sql;
@@ -215,7 +218,7 @@ namespace sqlite
      * @param column_names_string Comma seperated string of colums (eg: "col_1,col_2,...").
      * @param value_string comma seperated values as per column order (wrap in single quotes for TEXT type) (eg: "r1val1,'r1val2',...").
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int insert_row(sqlite3 *db, std::string_view table_name, std::string_view column_names_string, std::string_view value_string)
     {
         std::string sql;
@@ -241,7 +244,7 @@ namespace sqlite
      * @param db Pointer to the db.
      * @param table_name Table name to be checked.
      * @returns returns true is exist, otherwise false.
-    */
+     */
     bool is_table_exists(sqlite3 *db, std::string_view table_name)
     {
         sqlite3_stmt *stmt;
@@ -264,7 +267,7 @@ namespace sqlite
      * Closes a connection to a given databse.
      * @param db Pointer to the db.
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int close_db(sqlite3 **db)
     {
         if (*db == NULL)
@@ -284,7 +287,7 @@ namespace sqlite
      * Initialize hp_instances table. Table is only created if not existed. Indexes are added for name and owner_pubkey fields.
      * @param db Database connection.
      * @return -1 on error and 0 on success.
-    */
+     */
     int initialize_hp_db(sqlite3 *db)
     {
         if (!is_table_exists(db, INSTANCE_TABLE))
@@ -315,7 +318,7 @@ namespace sqlite
      * @param db Pointer to the db.
      * @param info HP instance information.
      * @returns returns 0 on success, or -1 on error.
-    */
+     */
     int insert_hp_instance_row(sqlite3 *db, const hp::instance_info &info)
     {
         sqlite3_stmt *stmt;
@@ -347,7 +350,7 @@ namespace sqlite
      * @param container_name Name of the container to be checked.
      * @param info HP instance information.
      * @returns 0 if not found, 1 if container exists .
-    */
+     */
     int is_container_exists(sqlite3 *db, std::string_view container_name, hp::instance_info &info)
     {
         sqlite3_stmt *stmt;
@@ -377,8 +380,8 @@ namespace sqlite
      * @param db Database connection.
      * @param container_name Name of the container whose status should be updated.
      * @param status The new status of the container.
-     * @return 0 on success and -1 on error. 
-    */
+     * @return 0 on success and -1 on error.
+     */
     int update_status_in_container(sqlite3 *db, std::string_view container_name, std::string_view status)
     {
         sqlite3_stmt *stmt;
@@ -398,7 +401,7 @@ namespace sqlite
      * Get the max peer and user ports assigned for instances excluding destroyed instances.
      * @param db Database connection.
      * @param max_ports Container holding max peer and user ports.
-    */
+     */
     void get_max_ports(sqlite3 *db, hp::ports &max_ports)
     {
         sqlite3_stmt *stmt;
@@ -426,7 +429,7 @@ namespace sqlite
      * Populate the given vector with vacant ports of destroyed instances which are not already assigned.
      * @param db Database connection.
      * @param vacant_ports Ports vector to hold port pairs from database.
-    */
+     */
     void get_vacant_ports(sqlite3 *db, std::vector<hp::ports> &vacant_ports)
     {
 
@@ -453,7 +456,7 @@ namespace sqlite
      * Populate the given vector with names of running hp instances.
      * @param db Database connection.
      * @param running_instance_names Vector to hold name of instances from database.
-    */
+     */
     void get_running_instance_names(sqlite3 *db, std::vector<std::string> &running_instance_names)
     {
         running_instance_names.clear();
@@ -478,8 +481,8 @@ namespace sqlite
     /**
      * Populate the given vector with the instance list except destroyed instances.
      * @param db Database connection.
-     * @param running_instances Vector to hold instance details.
-    */
+     * @param instances Vector to hold instance details.
+     */
     void get_instance_list(sqlite3 *db, std::vector<hp::instance_info> &instances)
     {
         sqlite3_stmt *stmt;
@@ -497,7 +500,34 @@ namespace sqlite
                 info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
                 info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
                 info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
                 instances.push_back(info);
+            }
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+    }
+
+    /**
+     * Populate the given vector with the leases list from message board database.
+     * @param db Message board database connection.
+     * @param leases Vector to hold leases info.
+     */
+    void get_lease_list(sqlite3 *db, std::vector<hp::lease_info> &leases)
+    {
+        sqlite3_stmt *stmt;
+        if (sqlite3_prepare_v2(db, GET_LEASES_LIST, -1, &stmt, 0) == SQLITE_OK && stmt != NULL)
+        {
+            while (sqlite3_step(stmt) == SQLITE_ROW)
+            {
+                hp::lease_info info;
+                info.timestamp = sqlite3_column_int64(stmt, 0);
+                info.tenant_xrp_address = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 2));
+                info.life_moments = sqlite3_column_int64(stmt, 3);
+                info.container_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
+                info.created_on_ledger = sqlite3_column_int64(stmt, 5);
+                leases.push_back(info);
             }
         }
 
@@ -511,7 +541,7 @@ namespace sqlite
      * @param container_name Container name.
      * @param instance Instance details.
      * @return 0 on if exist otherwise -1.
-    */
+     */
     int get_instance(sqlite3 *db, std::string_view container_name, hp::instance_info &instance)
     {
         sqlite3_stmt *stmt;
@@ -543,7 +573,7 @@ namespace sqlite
      * Get count of running instances
      * @param db Database connection.
      * @return Count on success -1 on error.
-    */
+     */
     int get_allocated_instance_count(sqlite3 *db)
     {
         sqlite3_stmt *stmt;

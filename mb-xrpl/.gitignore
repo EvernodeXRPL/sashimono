@@ -2,4 +2,5 @@ node_modules
 dist
 log
 mb-xrpl.cfg
+secret.cfg
 mb-xrpl.sqlite

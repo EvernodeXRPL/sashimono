@@ -79,7 +79,7 @@ class MessageBoard {
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment) {
+            if (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment)) {
                 this.lastHeartbeatMoment = currentMoment;
 
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)

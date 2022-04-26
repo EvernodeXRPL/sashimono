@@ -70,7 +70,7 @@ if [ "$NO_MB" == "" ]; then
     # since the folder is created in /etc/sashimono directory.
     ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
     # Change ownership to message board user.
-    chown "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
     # Betage and register if not upgrade mode.
     if [ "$UPGRADE" == "0" ]; then

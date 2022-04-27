@@ -66,12 +66,13 @@ if ! $sashimono_installed ; then
             && exit 1
     fi
 else
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
         && echomult "$evernode host management tool
                 \nYour system is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
+                \nlog - Generate evernode log file.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
@@ -401,6 +402,27 @@ function update_evernode() {
     echo "Upgrade complete."
 }
 
+function create_log() {
+    tempfile=$(mktemp)
+    {
+        uname -r
+        lsb_release -a
+        
+        echo ""
+        
+        echo "Sashimono log:"
+        
+        journalctl -u sashimono-agent.service | tail -n 200
+        
+        echo ""
+        
+        echo "Message board log:"
+        
+        sudo -u sashimbxrpl bash -c  journalctl -u --user sashimono-mb-xrpl | tail -n 200
+    } > "$tempfile" 2>&1
+    echo "Evernode log saved to $tempfile"
+}
+
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
     ! curl -fsSL $script_url --output $evernode_alias >> $logfile 2>&1 && install_failure
@@ -521,6 +543,8 @@ elif [ "$mode" == "list" ]; then
 elif [ "$mode" == "update" ]; then
     update_evernode
 
+elif [ "$mode" == "log" ]; then
+    create_log
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

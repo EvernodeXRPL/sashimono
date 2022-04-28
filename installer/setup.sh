@@ -408,13 +408,9 @@ function create_log() {
         uname -r
         lsb_release -a
         
-        echo ""
-        
         echo "Sashimono log:"
         
         journalctl -u sashimono-agent.service | tail -n 200
-        
-        echo ""
         
         echo "Message board log:"
         

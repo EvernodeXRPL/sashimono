@@ -147,6 +147,12 @@ function resolve_ip_addr() {
     fi
 }
 
+function check_ip_or_dns_empty() {
+    if [ -z "$inetaddr" ] ; then
+      return 1
+    fi
+}
+
 function set_inet_addr() {
 
     # Attempt to auto-detect in interactive mode or if 'auto' is specified.
@@ -154,7 +160,7 @@ function set_inet_addr() {
     resolve_ip_addr
 
     if $interactive ; then
-        
+
         if [ -n "$inetaddr" ] && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
                                                 on your host. \n\nDo you want to specify a different IP or DNS address?" ; then
             return 0
@@ -164,7 +170,7 @@ function set_inet_addr() {
         while [ -z "$inetaddr" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
             read -p "Please specify the IP or DNS address your server is reachable at: " inetaddr </dev/tty
-            resolve_ip_addr || echo "Invalid IP or DNS address."
+            check_ip_or_dns_empty || echo "IP or DNS address cannot be empty."
         done
 
     else

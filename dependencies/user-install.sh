@@ -58,7 +58,7 @@ function service_ready() {
 
 # Wait until daemon ready
 function wait_for_dockerd() {
-    # Retry for 5 times until docker available.
+    # Retry for 5 times until dockerd is available.
     i=0
     while true; do
         DOCKER_HOST=$dockerd_socket $docker_bin/docker version >/dev/null && return 0 # Success

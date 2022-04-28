@@ -12,6 +12,7 @@ contract_uid=$6
 contract_gid=$7
 peer_port=$8
 user_port=$9
+docker_image=${10}
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ]; then
     echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <swap quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid> <peer_port> <user_port>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
@@ -27,6 +28,7 @@ user_dir=/home/$user
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 docker_service="docker.service"
+docker_pull_timeout_secs=120
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -52,6 +54,19 @@ function service_ready() {
         fi
     done
     return 1 # Error
+}
+
+# Wait until daemon ready
+function wait_for_dockerd() {
+    # Retry for 5 times until dockerd is available.
+    local i=0
+    while true; do
+        DOCKER_HOST=$dockerd_socket $docker_bin/docker version >/dev/null && return 0 # Success
+        ((i++))
+        echo "Docker daemon isn't available. Retrying $i..."
+        [[ $i -ge 5 ]] && return 1 # Error
+        sleep 1
+    done
 }
 
 # Setup user and dockerd service.
@@ -91,18 +106,9 @@ user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-# Setup user cgroup.
-! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$cgroupsuffix &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
-
-# Adding disk quota to the group.
+echo "Adding disk quota to the group."
 setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
-
-echo "Configured the resources"
+echo "Configured disk quota for the group."
 
 # Setup env variables for the user.
 echo "
@@ -148,7 +154,7 @@ echo "Applying $docker_service env overrides."
 sudo -H -u "$user" mkdir $user_dir/.config/systemd/user/$docker_service.d
 sudo -H -u "$user" touch $user_dir/.config/systemd/user/$docker_service.d/override.conf
 echo "[Service]
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" > $user_dir/.config/systemd/user/$docker_service.d/override.conf
+    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$user_dir/.config/systemd/user/$docker_service.d/override.conf
 
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
 echo "Applying $docker_service extra args."
@@ -160,8 +166,14 @@ sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 service_ready $docker_service || rollback "NO_DOCKERSVC"
+# Wait until docker daemon ready, If failed rollback.
+! wait_for_dockerd && rollback "NO_DOCKERD"
 
 echo "Installed rootless dockerd."
+
+echo "Pulling the docker image $docker_image."
+DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
+echo "Docker image $docker_image pull complete."
 
 echo "Adding hpfs services for the instance."
 
@@ -192,6 +204,15 @@ RestartSec=5
 WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+
+echo "Setting up user cgroup resources."
+! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
+    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$cgroupsuffix &&
+    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
+echo "Configured user cgroup resources."
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

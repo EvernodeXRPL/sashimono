@@ -54,6 +54,19 @@ function service_ready() {
     return 1 # Error
 }
 
+# Wait until daemon ready
+function wait_for_dockerd() {
+    # Retry for 5 times until docker available.
+    i=0
+    while true; do
+        DOCKER_HOST=$dockerd_socket $docker_bin/docker version >/dev/null && return 0 # Success
+        ((i++))
+        echo "Docker daemon isn't available. Retrying $i..."
+        [[ $i -ge 5 ]] && return 1 # Error
+        sleep 1
+    done
+}
+
 # Setup user and dockerd service.
 useradd --shell /usr/sbin/nologin -m $user
 usermod --lock $user
@@ -90,19 +103,6 @@ echo "Created '$contract_user' contract user."
 user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
-
-# Setup user cgroup.
-! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$cgroupsuffix &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
-
-# Adding disk quota to the group.
-setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
-
-echo "Configured the resources"
 
 # Setup env variables for the user.
 echo "
@@ -148,7 +148,7 @@ echo "Applying $docker_service env overrides."
 sudo -H -u "$user" mkdir $user_dir/.config/systemd/user/$docker_service.d
 sudo -H -u "$user" touch $user_dir/.config/systemd/user/$docker_service.d/override.conf
 echo "[Service]
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" > $user_dir/.config/systemd/user/$docker_service.d/override.conf
+    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$user_dir/.config/systemd/user/$docker_service.d/override.conf
 
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
 echo "Applying $docker_service extra args."
@@ -160,6 +160,8 @@ sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 service_ready $docker_service || rollback "NO_DOCKERSVC"
+# Wait until docker daemon ready, If failed rollback.
+! wait_for_dockerd && rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd."
 
@@ -192,6 +194,19 @@ RestartSec=5
 WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+
+# Setup user cgroup.
+! (cgcreate -g cpu:$user$cgroupsuffix &&
+    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
+    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
+! (cgcreate -g memory:$user$cgroupsuffix &&
+    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
+
+# Adding disk quota to the group.
+setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+
+echo "Configured the resources"
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

@@ -16,7 +16,7 @@ namespace hp
     constexpr int FILE_PERMS = 0644;
     constexpr int DOCKER_CREATE_TIMEOUT_SECS = 120; // Max timeout for docker create command to execute.
 
-    sqlite3 *db = NULL; // Database connection for hp related sqlite stuff.
+    sqlite3 *db = NULL;    // Database connection for hp related sqlite stuff.
     sqlite3 *db_mb = NULL; // Database connection for messageboard related sqlite stuff.
 
     // Vector keeping vacant ports from destroyed instances.

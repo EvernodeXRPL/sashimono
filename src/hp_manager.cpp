@@ -293,7 +293,7 @@ namespace hp
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
                 user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
-        LOG_ERROR << "Creating the docker container. name: " << container_name;
+        LOG_INFO << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;

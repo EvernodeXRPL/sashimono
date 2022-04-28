@@ -7,7 +7,8 @@ evernode="Evernode beta"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
-memKB_per_instance=819200
+ramKB_per_instance=524288
+instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev"
@@ -232,8 +233,18 @@ function set_instance_alloc() {
     [ -z $alloc_diskKB ] && alloc_diskKB=$(( (diskKB / 100) * alloc_ratio ))
     [ -z $alloc_cpu ] && alloc_cpu=$(( (1000000 / 100) * alloc_ratio ))
 
-    # We decide instance count based on total memory (ram+swap)
-    [ -z $alloc_instcount ] && alloc_instcount=$(( (alloc_ramKB + alloc_swapKB) / memKB_per_instance ))
+    # If instance count is not specified, decide it based on some rules.
+    if [ -z $alloc_instcount ]; then
+        # Instance count based on total RAM
+        local ram_c=$(( alloc_ramKB / ramKB_per_instance ))
+        # Instance count based on no. of CPU cores.
+        local cores=$(grep -c ^processor /proc/cpuinfo)
+        local cpu_c=$(( cores * instances_per_core ))
+
+        # Final instance count will be the lower of the two.
+        alloc_instcount=$(( ram_c < cpu_c ? ram_c : cpu_c ))
+    fi
+
 
     if $interactive; then
         echomult "Based on your system resources, we have chosen the following allocation:\n

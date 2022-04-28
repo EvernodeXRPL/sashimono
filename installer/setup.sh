@@ -407,13 +407,11 @@ function create_log() {
     {
         uname -r
         lsb_release -a
-        
+        echo ""
         echo "Sashimono log:"
-        
         journalctl -u sashimono-agent.service | tail -n 200
-        
+        echo ""
         echo "Message board log:"
-        
         sudo -u sashimbxrpl bash -c  journalctl -u --user sashimono-mb-xrpl | tail -n 200
     } > "$tempfile" 2>&1
     echo "Evernode log saved to $tempfile"

@@ -59,7 +59,7 @@ function service_ready() {
 # Wait until daemon ready
 function wait_for_dockerd() {
     # Retry for 5 times until dockerd is available.
-    i=0
+    local i=0
     while true; do
         DOCKER_HOST=$dockerd_socket $docker_bin/docker version >/dev/null && return 0 # Success
         ((i++))
@@ -105,6 +105,10 @@ echo "Created '$contract_user' contract user."
 user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
+
+echo "Adding disk quota to the group."
+setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+echo "Configured disk quota for the group."
 
 # Setup env variables for the user.
 echo "
@@ -168,9 +172,7 @@ service_ready $docker_service || rollback "NO_DOCKERSVC"
 echo "Installed rootless dockerd."
 
 echo "Pulling the docker image $docker_image."
-
 DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
-
 echo "Docker image $docker_image pull complete."
 
 echo "Adding hpfs services for the instance."
@@ -203,18 +205,14 @@ WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 
-# Setup user cgroup.
+echo "Setting up user cgroup resources."
 ! (cgcreate -g cpu:$user$cgroupsuffix &&
     echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
     echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
 ! (cgcreate -g memory:$user$cgroupsuffix &&
     echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
     echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
-
-# Adding disk quota to the group.
-setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
-
-echo "Configured the resources"
+echo "Configured user cgroup resources."
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

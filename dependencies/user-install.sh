@@ -12,6 +12,7 @@ contract_uid=$6
 contract_gid=$7
 peer_port=$8
 user_port=$9
+docker_image=${10}
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ]; then
     echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <swap quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid> <peer_port> <user_port>"
     echo "INVALID_PARAMS,INST_ERR" && exit 1
@@ -27,6 +28,7 @@ user_dir=/home/$user
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 docker_service="docker.service"
+docker_pull_timeout_secs=120
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -164,6 +166,12 @@ service_ready $docker_service || rollback "NO_DOCKERSVC"
 ! wait_for_dockerd && rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd."
+
+echo "Pulling the docker image $docker_image."
+
+DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
+
+echo "Docker image $docker_image pull complete."
 
 echo "Adding hpfs services for the instance."
 

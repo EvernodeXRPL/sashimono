@@ -164,7 +164,7 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports) == -1)
+        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports, image_name) == -1)
         {
             error_msg = INTERNAL_ERROR;
             return -1;
@@ -293,6 +293,7 @@ namespace hp
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
                 user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
+        LOG_ERROR << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
@@ -837,7 +838,7 @@ namespace hp
      * @param storage_kbytes Disk quota allowed for this user.
      * @param instance_ports Ports assigned to the instance.
      */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports)
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
@@ -848,7 +849,8 @@ namespace hp
             std::to_string(contract_ugid.uid),
             std::to_string(contract_ugid.gid),
             std::to_string(instance_ports.peer_port),
-            std::to_string(instance_ports.user_port)};
+            std::to_string(instance_ports.user_port),
+            docker_image};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

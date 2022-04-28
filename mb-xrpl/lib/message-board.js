@@ -86,7 +86,6 @@ class MessageBoard {
 
                 try {
                     await this.hostClient.heartbeat();
-                    console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {
                     if (err.code === 'tecHOOK_REJECTED')

@@ -149,9 +149,7 @@ function resolve_ip_addr() {
 }
 
 function check_ip_or_dns_empty() {
-    if [ -z "$inetaddr" ] ; then
-      return 1
-    fi
+    [ -z "$inetaddr" ] && return 1 || return 0
 }
 
 function set_inet_addr() {
@@ -289,7 +287,7 @@ function set_lease_amount() {
 
     # if $interactive; then
         # Temperory disable option to take lease amount from purchaser service.
-        
+
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
         # echo "Default contract instance lease amount is taken from purchaser service target price."
 
@@ -486,7 +484,7 @@ if [ "$mode" == "install" ]; then
             - Collect information about your system to be published to users.\n
             - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
             \nContinue?" && exit 1
-    
+
     check_sys_req
 
     # Display licence file and ask for concent.
@@ -494,7 +492,7 @@ if [ "$mode" == "install" ]; then
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
-    
+
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.

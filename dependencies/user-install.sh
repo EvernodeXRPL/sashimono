@@ -163,7 +163,7 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-relo
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $docker_service
 service_ready $docker_service || rollback "NO_DOCKERSVC"
 # Wait until docker daemon ready, If failed rollback.
-! wait_for_dockerd && rollback "NO_DOCKERSVC"
+! wait_for_dockerd && rollback "NO_DOCKERD"
 
 echo "Installed rootless dockerd."
 

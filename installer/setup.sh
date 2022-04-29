@@ -34,7 +34,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
-export EVERNODE_REGISTRY_ADDRESS="rPmxne3NGeBJ5YY97tshCop2WVoS43bMez"
+export EVERNODE_REGISTRY_ADDRESS="rDsg8R6MYfEB7Da861ThTRzVUWBa3xJgWL"
 
 # Configuring the sashimono service is the last stage of the installation.
 # So if the service exists, Previous sashimono installation has been complete.
@@ -67,9 +67,13 @@ if ! $sashimono_installed ; then
             && exit 1
     fi
 else
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" == "install" ] \
+        && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
+        && exit 1
+
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
         && echomult "$evernode host management tool
-                \nYour system is registered on $evernode.
+                \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
@@ -140,7 +144,7 @@ function check_sys_req() {
 function resolve_ip_addr() {
     # Attempt to resolve ip (in case inetaddr is a DNS address)
     # This will resolve correctly if inetaddr is a valid ip or dns address.
-    ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+    local ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
 
     # If invalid, reset inetaddr and return with non-zero code.
     if [ -z "$ipaddr" ] ; then
@@ -149,8 +153,14 @@ function resolve_ip_addr() {
     fi
 }
 
-function check_ip_or_dns_empty() {
-    [ -z "$inetaddr" ] && return 1 || return 0
+function check_inet_addr_validity() {
+    # inert address cannot be empty and cannot contain spaces.
+    if [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] ; then
+        inetaddr=""
+        return 1
+    else
+        return 0
+    fi
 }
 
 function set_inet_addr() {
@@ -161,20 +171,20 @@ function set_inet_addr() {
 
     if $interactive ; then
 
-        if [ -n "$inetaddr" ] && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
-                                                on your host. \n\nDo you want to specify a different IP or DNS address?" ; then
+        if [ -n "$inetaddr" ] && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                            internet. \n\nIs this the IP/DNS address you want to use?" ; then
             return 0
         fi
 
         inetaddr=""
         while [ -z "$inetaddr" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
-            read -p "Please specify the IP or DNS address your server is reachable at: " inetaddr </dev/tty
-            check_ip_or_dns_empty || echo "IP or DNS address cannot be empty."
+            read -p "Please specify the public IP/DNS address your server is reachable at: " inetaddr </dev/tty
+            check_inet_addr_validity || echo "Invalid IP/DNS address."
         done
 
     else
-        [ -z "$inetaddr" ] && echo "Invalid IP or DNS address '$inetaddr'" && exit 1
+        [ -z "$inetaddr" ] && echo "Invalid IP/DNS address '$inetaddr'" && exit 1
     fi
 }
 
@@ -197,7 +207,13 @@ function set_country_code() {
         echo "Checking country code..."
         echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
-        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$ipaddr?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
+        # MaxMind needs a ip address to detect country code. DNS is not supported by it.
+        # Use getent to resolve ip address in case inetaddr is a DNS name.
+        local mxm_ip=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+        # If getent fails (mxm_ip empty) for some reason, keep using inetaddr for MaxMind api call.
+        [ -z "$mxm_ip" ] && mxm_ip="$inetaddr"
+
+        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$mxm_ip?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
         countrycode=${detected:1:2}
         resolve_countrycode || echo "Could not detect country code."
     fi
@@ -257,7 +273,7 @@ function set_instance_alloc() {
                 $(GB $alloc_swapKB) Swap\n
                 $(GB $alloc_diskKB) disk space\n
                 Distributed among $alloc_instcount contract instances"
-        ! confirm "\nDo you wish to change this allocation?" && return 0
+        confirm "\nIs this the allocation you want to use?" && return 0
 
         local ramMB=0 swapMB=0 diskMB=0
 
@@ -418,10 +434,17 @@ function update_evernode() {
 }
 
 function create_log() {
-    tempfile=$(mktemp)
+    tempfile=$(mktemp evernode.XXXXXXXXX.log)
     {
+        echo "System:"
         uname -r
         lsb_release -a
+        echo ""
+        echo "sa.cfg:"
+        cat "$SASHIMONO_DATA/sa.cfg"
+        echo ""
+        echo "mb-xrpl.cfg:"
+        cat "$MB_XRPL_DATA/mb-xrpl.cfg"
         echo ""
         echo "Sashimono log:"
         journalctl -u sashimono-agent.service | tail -n 200
@@ -522,7 +545,7 @@ if [ "$mode" == "install" ]; then
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
     set_lease_amount
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using purchaser service target price as lease amount.\n"
+    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
 
     echo "Starting installation..."
     install_evernode 0

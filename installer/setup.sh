@@ -84,7 +84,7 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
@@ -434,7 +434,7 @@ function update_evernode() {
 }
 
 function create_log() {
-    tempfile=$(mktemp evernode.XXXXXXXXX.log)
+    tempfile=$(mktemp /tmp/evernode.XXXXXXXXX.log)
     {
         echo "System:"
         uname -r
@@ -450,7 +450,7 @@ function create_log() {
         journalctl -u sashimono-agent.service | tail -n 200
         echo ""
         echo "Message board log:"
-        sudo -u sashimbxrpl bash -c  journalctl -u --user sashimono-mb-xrpl | tail -n 200
+        sudo -u sashimbxrpl bash -c  journalctl --user -u sashimono-mb-xrpl | tail -n 200
     } > "$tempfile" 2>&1
     echo "Evernode log saved to $tempfile"
 }

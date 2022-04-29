@@ -7,7 +7,8 @@ evernode="Evernode beta"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
-memKB_per_instance=819200
+ramKB_per_instance=524288
+instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta"
@@ -66,19 +67,24 @@ if ! $sashimono_installed ; then
             && exit 1
     fi
 else
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] \
+    [ "$1" == "install" ] \
+        && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
+        && exit 1
+
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
         && echomult "$evernode host management tool
-                \nYour system is registered on $evernode.
+                \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
+                \nlog - Generate evernode log file.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
@@ -138,12 +144,22 @@ function check_sys_req() {
 function resolve_ip_addr() {
     # Attempt to resolve ip (in case inetaddr is a DNS address)
     # This will resolve correctly if inetaddr is a valid ip or dns address.
-    ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+    local ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
 
     # If invalid, reset inetaddr and return with non-zero code.
     if [ -z "$ipaddr" ] ; then
         inetaddr=""
         return 1
+    fi
+}
+
+function check_inet_addr_validity() {
+    # inert address cannot be empty and cannot contain spaces.
+    if [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] ; then
+        inetaddr=""
+        return 1
+    else
+        return 0
     fi
 }
 
@@ -154,21 +170,21 @@ function set_inet_addr() {
     resolve_ip_addr
 
     if $interactive ; then
-        
-        if [ -n "$inetaddr" ] && ! confirm "Detected ip address '$inetaddr'. This will be used to reach contract instances running
-                                                on your host. \n\nDo you want to specify a different IP or DNS address?" ; then
+
+        if [ -n "$inetaddr" ] && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                            internet. \n\nIs this the IP/DNS address you want to use?" ; then
             return 0
         fi
 
         inetaddr=""
         while [ -z "$inetaddr" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
-            read -p "Please specify the IP or DNS address your server is reachable at: " inetaddr </dev/tty
-            resolve_ip_addr || echo "Invalid IP or DNS address."
+            read -p "Please specify the public IP/DNS address your server is reachable at: " inetaddr </dev/tty
+            check_inet_addr_validity || echo "Invalid IP/DNS address."
         done
 
     else
-        [ -z "$inetaddr" ] && echo "Invalid IP or DNS address '$inetaddr'" && exit 1
+        [ -z "$inetaddr" ] && echo "Invalid IP/DNS address '$inetaddr'" && exit 1
     fi
 }
 
@@ -191,7 +207,13 @@ function set_country_code() {
         echo "Checking country code..."
         echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
-        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$ipaddr?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
+        # MaxMind needs a ip address to detect country code. DNS is not supported by it.
+        # Use getent to resolve ip address in case inetaddr is a DNS name.
+        local mxm_ip=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+        # If getent fails (mxm_ip empty) for some reason, keep using inetaddr for MaxMind api call.
+        [ -z "$mxm_ip" ] && mxm_ip="$inetaddr"
+
+        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$mxm_ip?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
         countrycode=${detected:1:2}
         resolve_countrycode || echo "Could not detect country code."
     fi
@@ -232,8 +254,18 @@ function set_instance_alloc() {
     [ -z $alloc_diskKB ] && alloc_diskKB=$(( (diskKB / 100) * alloc_ratio ))
     [ -z $alloc_cpu ] && alloc_cpu=$(( (1000000 / 100) * alloc_ratio ))
 
-    # We decide instance count based on total memory (ram+swap)
-    [ -z $alloc_instcount ] && alloc_instcount=$(( (alloc_ramKB + alloc_swapKB) / memKB_per_instance ))
+    # If instance count is not specified, decide it based on some rules.
+    if [ -z $alloc_instcount ]; then
+        # Instance count based on total RAM
+        local ram_c=$(( alloc_ramKB / ramKB_per_instance ))
+        # Instance count based on no. of CPU cores.
+        local cores=$(grep -c ^processor /proc/cpuinfo)
+        local cpu_c=$(( cores * instances_per_core ))
+
+        # Final instance count will be the lower of the two.
+        alloc_instcount=$(( ram_c < cpu_c ? ram_c : cpu_c ))
+    fi
+
 
     if $interactive; then
         echomult "Based on your system resources, we have chosen the following allocation:\n
@@ -241,7 +273,7 @@ function set_instance_alloc() {
                 $(GB $alloc_swapKB) Swap\n
                 $(GB $alloc_diskKB) disk space\n
                 Distributed among $alloc_instcount contract instances"
-        ! confirm "\nDo you wish to change this allocation?" && return 0
+        confirm "\nIs this the allocation you want to use?" && return 0
 
         local ramMB=0 swapMB=0 diskMB=0
 
@@ -282,7 +314,7 @@ function set_lease_amount() {
 
     # if $interactive; then
         # Temperory disable option to take lease amount from purchaser service.
-        
+
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
         # echo "Default contract instance lease amount is taken from purchaser service target price."
 
@@ -401,6 +433,28 @@ function update_evernode() {
     echo "Upgrade complete."
 }
 
+function create_log() {
+    tempfile=$(mktemp /tmp/evernode.XXXXXXXXX.log)
+    {
+        echo "System:"
+        uname -r
+        lsb_release -a
+        echo ""
+        echo "sa.cfg:"
+        cat "$SASHIMONO_DATA/sa.cfg"
+        echo ""
+        echo "mb-xrpl.cfg:"
+        cat "$MB_XRPL_DATA/mb-xrpl.cfg"
+        echo ""
+        echo "Sashimono log:"
+        journalctl -u sashimono-agent.service | tail -n 200
+        echo ""
+        echo "Message board log:"
+        sudo -u sashimbxrpl bash -c  journalctl --user -u sashimono-mb-xrpl | tail -n 200
+    } > "$tempfile" 2>&1
+    echo "Evernode log saved to $tempfile"
+}
+
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
     ! curl -fsSL $script_url --output $evernode_alias >> $logfile 2>&1 && install_failure
@@ -464,7 +518,7 @@ if [ "$mode" == "install" ]; then
             - Collect information about your system to be published to users.\n
             - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
             \nContinue?" && exit 1
-    
+
     check_sys_req
 
     # Display licence file and ask for concent.
@@ -472,7 +526,7 @@ if [ "$mode" == "install" ]; then
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
-    
+
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
@@ -491,7 +545,7 @@ if [ "$mode" == "install" ]; then
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
     set_lease_amount
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using purchaser service target price as lease amount.\n"
+    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
 
     echo "Starting installation..."
     install_evernode 0
@@ -521,6 +575,8 @@ elif [ "$mode" == "list" ]; then
 elif [ "$mode" == "update" ]; then
     update_evernode
 
+elif [ "$mode" == "log" ]; then
+    create_log
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

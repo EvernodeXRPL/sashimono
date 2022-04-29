@@ -186,22 +186,21 @@ class Setup {
             try {
                 const hostClient = new evernode.HostClient(acc.address, acc.secret);
                 await hostClient.connect();
-                console.log('Retrieving EVR balance...');
-                const evrBalance = await hostClient.getEVRBalance();
-                console.log(`EVR balance: ${evrBalance}`);
-                console.log('Retrieving reg info...');
-                const hostInfo = await hostClient.getRegistration();
+
+                const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
-                    console.log(`NFT: ${hostInfo.nfTokenId}`);
+                    console.log(`Registration NFT: ${hostInfo.nfTokenId}`);
                 }
                 else {
                     await hostClient.disconnect();
                     throw 'Host is not registered';
                 }
+                console.log(`EVR balance: ${evrBalance}`);
+
                 await hostClient.disconnect();
             }
             catch {
-                throw 'EVR balance: [Error occured when retrieving EVR balance]';
+                throw 'Error occured when retrieving account info.';
             }
         }
     }

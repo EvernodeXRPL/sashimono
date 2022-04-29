@@ -86,7 +86,6 @@ class MessageBoard {
 
                 try {
                     await this.hostClient.heartbeat();
-                    console.log(`Heartbeat reported at Moment ${this.lastHeartbeatMoment}.`);
                 }
                 catch (err) {
                     if (err.code === 'tecHOOK_REJECTED')
@@ -302,7 +301,7 @@ class MessageBoard {
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
                     item.expiryLedger = this.getExpiryLedger(item.expiryLedger, extendingMoments);
-                    expiryMoment = (await this.hostClient.getMoment(instance.created_on_ledger)) + extendingMoments;
+                    expiryMoment = (await this.hostClient.getMoment(item.expiryLedger));
 
                     let obj = {
                         status: LeaseStatus.EXTENDED,

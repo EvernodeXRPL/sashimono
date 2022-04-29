@@ -142,6 +142,7 @@ int main(int argc, char **argv)
             conf::create(host_addr, "", inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
         {
             std::cerr << "Invalid Sashimono Agent config creation args.\n";
+            std::cerr << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", " << swap_kbytes << ", " << disk_kbytes << "\n";
             return 1;
         }
     }

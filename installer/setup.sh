@@ -67,9 +67,13 @@ if ! $sashimono_installed ; then
             && exit 1
     fi
 else
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" == "install" ] \
+        && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
+        && exit 1
+
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
         && echomult "$evernode host management tool
-                \nYour system is registered on $evernode.
+                \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
@@ -424,10 +428,17 @@ function update_evernode() {
 }
 
 function create_log() {
-    tempfile=$(mktemp)
+    tempfile=$(mktemp evernode.XXXXXXXXX.log)
     {
+        echo "System:"
         uname -r
         lsb_release -a
+        echo ""
+        echo "sa.cfg:"
+        cat "$SASHIMONO_DATA/sa.cfg"
+        echo ""
+        echo "mb-xrpl.cfg:"
+        cat "$MB_XRPL_DATA/mb-xrpl.cfg"
         echo ""
         echo "Sashimono log:"
         journalctl -u sashimono-agent.service | tail -n 200

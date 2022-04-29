@@ -153,8 +153,14 @@ function resolve_ip_addr() {
     fi
 }
 
-function check_ip_or_dns_empty() {
-    [ -z "$inetaddr" ] && return 1 || return 0
+function check_inet_addr_validity() {
+    # inert address cannot be empty and cannot contain spaces.
+    if [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] ; then
+        inetaddr=""
+        return 1
+    else
+        return 0
+    fi
 }
 
 function set_inet_addr() {
@@ -174,7 +180,7 @@ function set_inet_addr() {
         while [ -z "$inetaddr" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
             read -p "Please specify the public IP/DNS address your server is reachable at: " inetaddr </dev/tty
-            check_ip_or_dns_empty || echo "IP/DNS address cannot be empty."
+            check_inet_addr_validity || echo "Invalid IP/DNS address."
         done
 
     else

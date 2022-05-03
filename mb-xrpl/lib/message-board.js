@@ -210,12 +210,9 @@ class MessageBoard {
                 threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
-
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-
                     await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex);
-
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 

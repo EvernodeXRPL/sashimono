@@ -453,7 +453,8 @@ namespace hp
 
         LOG_INFO << "Destroying container " << container_name;
         if (docker_remove(info.username, container_name) == -1 ||
-            sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1)
+            // sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1) // Soft Deletion
+            sqlite::delete_hp_instance(db, container_name) == -1) // Permanent Deletion
         {
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;

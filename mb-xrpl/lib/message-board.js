@@ -113,7 +113,14 @@ class MessageBoard {
                         await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
                         this.activeInstanceCount--;
                         await this.hostClient.updateRegInfo(this.activeInstanceCount);
-                        await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+                        /**
+                         * Soft deletion for debugging purpose.
+                         */
+                        // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+                        // Delete the lease record related to this instance (Permanent Delete).
+                        await this.deleteLeaseRecord({ txhash: x.txHash });
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {
@@ -203,9 +210,17 @@ class MessageBoard {
                 threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+
+                    /**
+                     * Soft deletion for debugging purpose.
+                     */
                     // Update the lease status of the request to 'SashiTimeout'.
-                    await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
+                    //await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
+
                     await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex);
+                    // Delete the lease record related to this instance (Permanent Delete).
+                    await this.deleteLeaseRecord({ txhash: acquireRefId });
+
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 
@@ -419,6 +434,11 @@ class MessageBoard {
     async updateLeaseData(txHash, savingData = null) {
         if (savingData)
             await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
+    }
+
+    async deleteLeaseRecord(savingData = null) {
+        if (savingData)
+            await this.deleteValues(this.leaseTable, savingData);
     }
 
     getExpiryLedger(ledgerIndex, moments) {

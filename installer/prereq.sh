@@ -200,16 +200,16 @@ tmpgrub=$tmp.tmp
 cp /etc/default/grub "$tmpgrub"
 
 updated=0
-# Check GRUB_CMDLINE_LINUX_DEFAULT exists, create new if not exists.
+# Check GRUB_CMDLINE_LINUX exists, create new if not exists.
 # If exists check for cgroup_enable=memory and swapaccount=1 and configure them if not already configured.
-sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{q100}" "$tmpgrub"
+sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{q100}" "$tmpgrub"
 res=$?
 if [ $res -eq 100 ]; then
     # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
-    sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
     res=$?
     if [ $res -eq 0 ]; then
-        sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" "$tmpgrub"
+        sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" "$tmpgrub"
         res=$?
         updated=1
     fi
@@ -217,32 +217,32 @@ if [ $res -eq 100 ]; then
     # If there's no error.
     if [ $res -eq 0 ] || [ $res -eq 100 ]; then
         # Check swapaccount=1 exists, create new if not exists otherwise skip.
-        sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
+        sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
         res=$?
         if [ $res -eq 0 ]; then
             # Check whether there's swapaccount value other than 1, If so replace value with 1.
             # Otherwise add swapaccount=1 after cgroup_enable=memory.
-            sed -n -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ /swapaccount=/{q100}; }" "$tmpgrub"
+            sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=/{q100}; }" "$tmpgrub"
             res=$?
             if [ $res -eq 100 ]; then
-                sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" "$tmpgrub"
+                sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" "$tmpgrub"
                 res=$?
                 updated=1
             elif [ $res -eq 0 ]; then
-                sed -i -r -e "/^GRUB_CMDLINE_LINUX_DEFAULT=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" "$tmpgrub"
+                sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" "$tmpgrub"
                 res=$?
                 updated=1
             fi
         fi
     fi
 elif [ $res -eq 0 ]; then
-    echo "GRUB_CMDLINE_LINUX_DEFAULT=\"cgroup_enable=memory swapaccount=1\"" >> "$tmpgrub"
+    echo "GRUB_CMDLINE_LINUX=\"cgroup_enable=memory swapaccount=1\"" >> "$tmpgrub"
     res=$?
     updated=1
 fi
 
 # If the res is not success(0) or alredy exist(100).
-[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX_DEFAULT update failed." && exit 1
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX update failed." && exit 1
 
 # If updated we do update-grub and reboot.
 if [ $updated -eq 1 ]; then

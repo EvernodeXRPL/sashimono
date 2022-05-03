@@ -120,7 +120,7 @@ class MessageBoard {
                         // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
 
                         // Delete the lease record related to this instance (Permanent Delete).
-                        await this.deleteLeaseRecord({ txhash: x.txHash });
+                        await this.deleteLeaseRecord({ tx_hash: x.txHash });
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {
@@ -211,15 +211,10 @@ class MessageBoard {
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
 
-                    /**
-                     * Soft deletion for debugging purpose.
-                     */
                     // Update the lease status of the request to 'SashiTimeout'.
-                    //await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
+                    await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
 
                     await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex);
-                    // Delete the lease record related to this instance (Permanent Delete).
-                    await this.deleteLeaseRecord({ txhash: acquireRefId });
 
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
@@ -438,7 +433,7 @@ class MessageBoard {
 
     async deleteLeaseRecord(savingData = null) {
         if (savingData)
-            await this.deleteValues(this.leaseTable, savingData);
+            await this.db.deleteValues(this.leaseTable, savingData);
     }
 
     getExpiryLedger(ledgerIndex, moments) {

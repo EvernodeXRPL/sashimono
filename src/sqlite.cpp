@@ -597,12 +597,12 @@ namespace sqlite
     }
 
     /**
-     * Delete a given container.
+     * Delete an instance revord based on the provided container name.
      * @param db Database connection.
      * @param container_name Name of the container which should be deleted.
      * @return 0 on success and -1 on error.
      */
-    int delete_container(sqlite3 *db, std::string_view container_name)
+    int delete_hp_instance(sqlite3 *db, std::string_view container_name)
     {
         sqlite3_stmt *stmt;
         if (sqlite3_prepare_v2(db, DELETE_HP_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&

@@ -545,7 +545,8 @@ if [ "$mode" == "install" ]; then
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
     set_lease_amount
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
+    # Commented for future consideration.
+    # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
 
     echo "Starting installation..."
     install_evernode 0

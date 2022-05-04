@@ -82,5 +82,7 @@ namespace sqlite
     int get_instance(sqlite3 *db, std::string_view container_name, hp::instance_info &instance);
 
     int get_allocated_instance_count(sqlite3 *db);
+
+    int delete_hp_instance(sqlite3 *db, std::string_view container_name);
 }
 #endif

@@ -45,6 +45,8 @@ namespace sqlite
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
+    constexpr const char *DELETE_HP_INSTANCE = "DELETE FROM instances WHERE name = ?";
+
     // Message boad database queries
     constexpr const char *GET_LEASES_LIST = "SELECT timestamp, tx_hash, tenant_xrp_address, life_moments, container_name, created_on_ledger, status FROM leases WHERE status = 'Acquired' OR status = 'Extended'";
 
@@ -591,6 +593,26 @@ namespace sqlite
 
         // Finalize and distroys the statement.
         sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    /**
+     * Delete an instance record based on the provided container name.
+     * @param db Database connection.
+     * @param container_name Name of the container which should be deleted.
+     * @return 0 on success and -1 on error.
+     */
+    int delete_hp_instance(sqlite3 *db, std::string_view container_name)
+    {
+        sqlite3_stmt *stmt;
+        if (sqlite3_prepare_v2(db, DELETE_HP_INSTANCE, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, container_name.data(), container_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_DONE)
+        {
+            sqlite3_finalize(stmt);
+            return 0;
+        }
+        LOG_ERROR << "Error deleting container " << container_name;
         return -1;
     }
 }

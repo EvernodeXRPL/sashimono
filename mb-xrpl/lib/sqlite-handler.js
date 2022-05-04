@@ -164,6 +164,25 @@ class SqliteDatabase {
         }
     }
 
+    async deleteValues(tableName, filter = null) {
+        if (!this.db)
+            throw 'Database connection is not open.';
+
+        let values = [];
+        let filterStr = '1 AND '
+        if (filter) {
+            const columnNames = Object.keys(filter);
+            for (const columnName of columnNames) {
+                filterStr += `${columnName} = ? AND `;
+                values.push(filter[columnName] ? filter[columnName] : 'NULL');
+            }
+        }
+        filterStr = filterStr.slice(0, -5);
+
+        const query = `DELETE FROM ${tableName} WHERE ${filterStr};`;
+        return (await this.runQuery(query, values));
+    }
+
     runQuery(query, params = null) {
         return new Promise((resolve, reject) => {
             this.db.run(query, params ? params : [], function (err) {

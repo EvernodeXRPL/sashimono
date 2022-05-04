@@ -486,7 +486,7 @@ function check_installer_pending_finish() {
 
 function reg_info() {
     echo ""
-    if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
+    if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }

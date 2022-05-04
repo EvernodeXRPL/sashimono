@@ -1,15 +1,19 @@
 const fs = require('fs');
 
 class ConfigHelper {
-    static readConfig(configPath, secretConfigPath) {
+    static readConfig(configPath, secretConfigPath = null) {
         if (!fs.existsSync(configPath))
             throw `Config file does not exist at ${configPath}`;
-        else if (!fs.existsSync(secretConfigPath))
-            throw `Secret config file does not exist at ${secretConfigPath}`;
 
         let config = JSON.parse(fs.readFileSync(configPath).toString());
-        const secretCfg = JSON.parse(fs.readFileSync(secretConfigPath).toString());
-        config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
+
+        if (secretConfigPath) {
+            if (!fs.existsSync(secretConfigPath))
+                throw `Secret config file does not exist at ${secretConfigPath}`;
+
+            const secretCfg = JSON.parse(fs.readFileSync(secretConfigPath).toString());
+            config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
+        }
 
         // Validate lease amount.
         if (config.xrpl.leaseAmount && typeof config.xrpl.leaseAmount === 'string') {

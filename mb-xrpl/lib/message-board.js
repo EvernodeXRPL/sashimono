@@ -120,7 +120,7 @@ class MessageBoard {
                         // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
 
                         // Delete the lease record related to this instance (Permanent Delete).
-                        await this.deleteLeaseRecord({ tx_hash: x.txHash });
+                        await this.deleteLeaseRecord(x.txHash);
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {
@@ -428,9 +428,8 @@ class MessageBoard {
             await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
     }
 
-    async deleteLeaseRecord(savingData = null) {
-        if (savingData)
-            await this.db.deleteValues(this.leaseTable, savingData);
+    async deleteLeaseRecord(txHash) {
+        await this.db.deleteValues(this.leaseTable, { tx_hash: txHash });
     }
 
     getExpiryLedger(ledgerIndex, moments) {

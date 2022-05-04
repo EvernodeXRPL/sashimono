@@ -597,7 +597,7 @@ namespace sqlite
     }
 
     /**
-     * Delete an instance revord based on the provided container name.
+     * Delete an instance record based on the provided container name.
      * @param db Database connection.
      * @param container_name Name of the container which should be deleted.
      * @return 0 on success and -1 on error.

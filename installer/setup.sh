@@ -547,6 +547,7 @@ if [ "$mode" == "install" ]; then
     set_lease_amount
     # Commented for future consideration.
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
+    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
 
     echo "Starting installation..."
     install_evernode 0

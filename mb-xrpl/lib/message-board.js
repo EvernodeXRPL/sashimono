@@ -69,7 +69,7 @@ class MessageBoard {
         this.activeInstanceCount = leaseRecords.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
         // Check for instance expiry.

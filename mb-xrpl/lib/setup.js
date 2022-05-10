@@ -38,8 +38,8 @@ class Setup {
         };
     }
 
-    #getConfig() {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
+    #getConfig(readSecret = true) {
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret? appenv.SECRET_CONFIG_PATH : null);
     }
 
     #saveConfig(cfg) {
@@ -174,7 +174,7 @@ class Setup {
     }
 
     async regInfo(isBasic) {
-        const acc = this.#getConfig().xrpl;
+        const acc = this.#getConfig(false).xrpl;
         console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
 
@@ -184,7 +184,7 @@ class Setup {
             });
 
             try {
-                const hostClient = new evernode.HostClient(acc.address, acc.secret);
+                const hostClient = new evernode.HostClient(acc.address);
                 await hostClient.connect();
 
                 const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);

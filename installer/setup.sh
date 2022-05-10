@@ -486,7 +486,7 @@ function check_installer_pending_finish() {
 
 function reg_info() {
     echo ""
-    if sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
+    if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
@@ -521,6 +521,12 @@ if [ "$mode" == "install" ]; then
 
     check_sys_req
 
+    # Check bc command is installed.
+    if ! command -v bc &>/dev/null; then
+        echo "bc command not found. Installing.."
+        apt-get -y install bc >/dev/null
+    fi
+
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat
@@ -545,7 +551,9 @@ if [ "$mode" == "install" ]; then
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
     set_lease_amount
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
+    # Commented for future consideration.
+    # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
+    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
 
     echo "Starting installation..."
     install_evernode 0

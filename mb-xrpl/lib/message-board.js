@@ -69,7 +69,7 @@ class MessageBoard {
         this.activeInstanceCount = leaseRecords.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
         // Check for instance expiry.
@@ -113,7 +113,14 @@ class MessageBoard {
                         await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
                         this.activeInstanceCount--;
                         await this.hostClient.updateRegInfo(this.activeInstanceCount);
-                        await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+                        /**
+                         * Soft deletion for debugging purpose.
+                         */
+                        // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+                        // Delete the lease record related to this instance (Permanent Delete).
+                        await this.deleteLeaseRecord(x.txHash);
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {
@@ -419,6 +426,10 @@ class MessageBoard {
     async updateLeaseData(txHash, savingData = null) {
         if (savingData)
             await this.db.updateValue(this.leaseTable, savingData, { tx_hash: txHash });
+    }
+
+    async deleteLeaseRecord(txHash) {
+        await this.db.deleteValues(this.leaseTable, { tx_hash: txHash });
     }
 
     getExpiryLedger(ledgerIndex, moments) {

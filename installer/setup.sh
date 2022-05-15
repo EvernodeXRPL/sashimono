@@ -91,10 +91,12 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
 fi
 
 function confirm() {
-    echo -en $1" [y/n] "
+    echo -en $1" [Y/n] "
     local yn=""
-
     read yn </dev/tty
+    
+    # Default choice is 'y'
+    [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
         read -p "'y' or 'n' expected: " yn </dev/tty
     done

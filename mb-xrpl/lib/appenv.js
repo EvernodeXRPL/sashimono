@@ -4,7 +4,8 @@ let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",
     FILE_LOG_ENABLED: process.env.MB_FILE_LOG === "1",
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
-    FAUCET_URL: process.env.MB_FAUCET_URL || "https://faucet-nft.ripple.com/accounts"
+    FAUCET_URL: process.env.MB_FAUCET_URL || "https://faucet-nft.ripple.com/accounts",
+    DEFAULT_RIPPLED_SERVER: 'wss://xls20-sandbox.rippletest.net:51233'
 }
 
 appenv = {

@@ -6,6 +6,12 @@ const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 
+function setEvernodeDefaults(registryAddress, rippledServer) {
+    evernode.Defaults.set({
+        registryAddress: registryAddress,
+        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER
+    });
+}
 
 class Setup {
 
@@ -39,7 +45,7 @@ class Setup {
     }
 
     #getConfig(readSecret = true) {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret? appenv.SECRET_CONFIG_PATH : null);
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
     }
 
     #saveConfig(cfg) {
@@ -49,15 +55,19 @@ class Setup {
     newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0) {
         this.#saveConfig({
             version: appenv.MB_VERSION,
-            xrpl: { address: address, secret: secret, registryAddress: registryAddress, leaseAmount: leaseAmount }
+            xrpl: {
+                address: address,
+                secret: secret,
+                registryAddress: registryAddress,
+                rippledServer: appenv.DEFAULT_RIPPLED_SERVER,
+                leaseAmount: leaseAmount
+            }
         });
     }
 
     async generateBetaHostAccount(registryAddress, domain) {
 
-        evernode.Defaults.set({
-            registryAddress: registryAddress
-        });
+        setEvernodeDefaults(registryAddress);
 
         const acc = await this.#generateFaucetAccount();
 
@@ -120,9 +130,7 @@ class Setup {
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, description) {
         console.log("Registering host...");
         const acc = this.#getConfig().xrpl;
-        evernode.Defaults.set({
-            registryAddress: acc.registryAddress
-        });
+        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -162,9 +170,7 @@ class Setup {
     async deregister() {
         console.log("Deregistering host...");
         const acc = this.#getConfig().xrpl;
-        evernode.Defaults.set({
-            registryAddress: acc.registryAddress
-        });
+        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -179,9 +185,7 @@ class Setup {
         console.log(`Host account address: ${acc.address}`);
 
         if (!isBasic) {
-            evernode.Defaults.set({
-                registryAddress: acc.registryAddress
-            });
+            setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
 
             try {
                 const hostClient = new evernode.HostClient(acc.address);
@@ -209,9 +213,13 @@ class Setup {
     async upgrade() {
 
         // Do a simple version change in the config.
-        // In the future we could have real upgrade/data migration logic here.
         const cfg = this.#getConfig();
         cfg.version = appenv.MB_VERSION;
+
+        // Fill missing fields.
+        if (!cfg.xrpl.rippledServer)
+            cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
+
         this.#saveConfig(cfg);
 
         await Promise.resolve(); // async placeholder.

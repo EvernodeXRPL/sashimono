@@ -135,7 +135,7 @@ int main(int argc, char **argv)
         uint16_t docker_registry_port = 0;
         size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
-        if (((argc >= 5) && (util::stoul(argv[4], docker_registry_port) != 0 || docker_registry_port == 0)) ||
+        if (((argc >= 5) && util::stoul(argv[4], docker_registry_port) != 0) ||
             ((argc >= 6) && (util::stoull(argv[5], inst_count) != 0 || inst_count == 0)) ||
             ((argc >= 7) && (util::stoull(argv[6], cpu_us) != 0 || cpu_us == 0)) ||
             ((argc >= 8) && (util::stoull(argv[7], ram_kbytes) != 0 || ram_kbytes == 0)) ||
@@ -198,8 +198,11 @@ int main(int argc, char **argv)
         salog::init();
 
         // Do a simple version change in the config.
-        // In the future we could have real upgrade/data migration logic here.
         conf::cfg.version = version::AGENT_VERSION;
+
+        if (conf::cfg.docker.registry_port == 0)
+            conf::cfg.docker.registry_port = 4444;
+
         if (conf::write_config(conf::cfg) != 0)
             return -1;
     }

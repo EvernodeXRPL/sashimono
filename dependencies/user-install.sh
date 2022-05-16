@@ -161,7 +161,9 @@ echo "[Service]
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
 echo "Applying $docker_service extra args."
 exec_original="ExecStart=$docker_bin/dockerd-rootless.sh"
-exec_replace="$exec_original --max-concurrent-downloads 1 --registry-mirror http://$docker_registry --insecure-registry $docker_registry"
+exec_replace="$exec_original --max-concurrent-downloads 1"
+# Add private docker registry information.
+[ "$docker_registry" != "-" ] && exec_replace="$exec_replace --registry-mirror http://$docker_registry --insecure-registry $docker_registry"
 sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_service
 
 # Reload the docker service.

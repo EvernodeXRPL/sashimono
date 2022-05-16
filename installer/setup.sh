@@ -530,7 +530,7 @@ if [ "$mode" == "install" ]; then
     fi
 
     # Display licence file and ask for concent.
-    printf "\n*****************************************************************************************************\n"
+    printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1

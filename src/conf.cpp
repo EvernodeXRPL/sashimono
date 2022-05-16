@@ -72,6 +72,7 @@ namespace conf
             const std::string img_prefix = "evernodedev";
             cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
             cfg.docker.images["hp.latest-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.16";
+            cfg.docker.registry_port = docker_registry_port;
 
             cfg.log.max_file_count = 50;
             cfg.log.max_mbytes_per_file = 10;
@@ -269,6 +270,9 @@ namespace conf
 
                 for (const auto &elem : docker["images"].object_range())
                     cfg.docker.images[elem.key()] = elem.value().as<std::string>();
+
+                if (docker.contains("registry_port"))
+                    cfg.docker.registry_port = docker["registry_port"].as<uint16_t>();
             }
             catch (const std::exception &e)
             {
@@ -300,7 +304,9 @@ namespace conf
             }
         }
 
-        cfg.docker.registry_address = cfg.hp.host_address + ":" + std::to_string(cfg.docker.registry_port);
+        // If docker registry port is 0, we assume there's no private docker registry.
+        if (cfg.docker.registry_port > 0)
+            cfg.docker.registry_address = cfg.hp.host_address + ":" + std::to_string(cfg.docker.registry_port);
 
         return 0;
     }

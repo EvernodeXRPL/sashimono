@@ -123,10 +123,14 @@ mkdir -p $DOCKER_BIN
 [ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Install private docker registry.
-stage "Installing private docker registry"
-# TODO: secure registry configuration
-"$script_dir"/docker-registry-install.sh
-[ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
+    stage "Installing private docker registry"
+    # TODO: secure registry configuration
+    "$script_dir"/docker-registry-install.sh
+    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+else
+    echo "Private docker registry installation skipped"
+fi
 
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER

@@ -85,7 +85,7 @@ namespace conf
     struct docker_config
     {
         std::unordered_map<std::string, std::string> images;
-        uint16_t registry_port = 4444;  // This is overridden by the setup.
+        uint16_t registry_port = 0;     // 0 means bypass private docker registry.
         std::string registry_address;   // This is dynamically constructed at load time.
     };
 

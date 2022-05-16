@@ -1,11 +1,10 @@
 #!/bin/bash
-# Sashimono docker registry installation script.
+# Sashimono private docker registry installation script.
+# This acts as a pull-through cache to the public docker hub registry.
 
-docker_bin=$1
-user=$2
-port=$3
-hubacc="evernodedev"
-images=("sashimono:hp.latest-ubt.20.04" "sashimono:hp.latest-ubt.20.04-njs.16")
+user=$DOCKER_REGISTRY_USER
+port=$DOCKER_REGISTRY_PORT
+hubregistry="https://index.docker.io"
 user_dir=/home/$user
 
 # Waits until a service becomes ready up to 3 seconds.
@@ -37,7 +36,7 @@ dockerd_socket="unix://$user_runtime_dir/docker.sock"
 # Setup env variables for the user.
 echo "
 export XDG_RUNTIME_DIR=$user_runtime_dir
-export PATH=$docker_bin:\$PATH
+export PATH=$DOCKER_BIN:\$PATH
 export DOCKER_HOST=$dockerd_socket" >>"$user_dir"/.bashrc
 echo "Updated user .bashrc."
 
@@ -51,22 +50,13 @@ done
 [ "$user_systemd" != "running" ] && rollback "NO_SYSTEMD"
 
 echo "Installing rootless dockerd for user."
-sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
+sudo -H -u "$user" PATH="$DOCKER_BIN":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$DOCKER_BIN"/dockerd-rootless-setuptool.sh install
 service_ready "docker.service" || rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd for docker registry."
 
-# Run the docker registry container on port 4444
-DOCKER_HOST=$dockerd_socket $docker_bin/docker run -d -p $port:5000 --restart=always --name registry registry:2
+# Run the docker registry container on specified port.
+DOCKER_HOST=$dockerd_socket $DOCKER_BIN/docker run -d -p $port:5000 --restart=always --name registry -e REGISTRY_PROXY_REMOTEURL=$hubregistry registry:2
 echo "Docker registry listening at $port"
-
-# Prefetch the required docker images.
-echo "Pulling Sashimono base contract images..."
-for img in ${images[@]}; do
-    DOCKER_HOST=$dockerd_socket $docker_bin/docker pull $hubacc/$img
-    DOCKER_HOST=$dockerd_socket $docker_bin/docker tag $hubacc/$img localhost:$port/$img
-    DOCKER_HOST=$dockerd_socket $docker_bin/docker push localhost:$port/$img
-    DOCKER_HOST=$dockerd_socket $docker_bin/docker rmi $hubacc/$img
-done
 
 exit 0

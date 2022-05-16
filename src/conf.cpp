@@ -33,7 +33,7 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create(std::string_view host_addr, std::string_view registry_addr, const size_t inst_count,
+    int create(std::string_view host_addr, const uint16_t docker_registry_port, const size_t inst_count,
                const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes)
     {
         if (util::is_file_exists(ctx.config_file))
@@ -69,7 +69,7 @@ namespace conf
             cfg.system.max_cpu_us = !cpu_us ? 900000 : cpu_us; // Total CPU allocation out of 1000000 microsec (1 sec).
             cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
-            const std::string img_prefix = registry_addr.empty() ? "evernodedev" : std::string(registry_addr);
+            const std::string img_prefix = "evernodedev";
             cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
             cfg.docker.images["hp.latest-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.16";
 
@@ -300,6 +300,8 @@ namespace conf
             }
         }
 
+        cfg.docker.registry_address = cfg.hp.host_address + ":" + std::to_string(cfg.docker.registry_port);
+
         return 0;
     }
 
@@ -346,6 +348,7 @@ namespace conf
             for (const auto &[key, name] : cfg.docker.images)
                 images.insert_or_assign(key, name);
             docker_config.insert_or_assign("images", images);
+            docker_config.insert_or_assign("registry_port", cfg.docker.registry_port);
 
             d.insert_or_assign("docker", docker_config);
         }
@@ -412,7 +415,7 @@ namespace conf
      * Convert string to Log Severity enum type.
      * @param severity log severity code.
      * @return log severity type.
-    */
+     */
     LOG_SEVERITY get_loglevel_type(std::string_view severity)
     {
         if (severity == "dbg")

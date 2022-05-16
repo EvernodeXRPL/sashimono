@@ -1,15 +1,14 @@
 #!/bin/bash
 # Sashimono docker registry installation script.
 
-docker_bin=$1
-user=$2
+user=$DOCKER_REGISTRY_USER
 
 # Check if users exists.
 if [[ $(id -u "$user" 2>/dev/null || echo -1) -ge 0 ]]; then
-        :
+    :
 else
-        echo "$user does not exist."
-        exit 1
+    echo "$user does not exist."
+    exit 1
 fi
 
 user_dir=/home/$user
@@ -18,8 +17,7 @@ user_runtime_dir="/run/user/$user_id"
 
 # Uninstall rootless dockerd.
 echo "Uninstalling rootless dockerd."
-sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh uninstall
-
+sudo -H -u "$user" PATH="$DOCKER_BIN":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$DOCKER_BIN"/dockerd-rootless-setuptool.sh uninstall
 
 # Gracefully terminate user processes.
 echo "Terminating user processes."

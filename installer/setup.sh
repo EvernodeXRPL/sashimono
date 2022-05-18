@@ -382,7 +382,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $cpu_model_name $cpu_count $cpu_mhz 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -496,6 +496,13 @@ function reg_info() {
     fi
 }
 
+function set_cpu_info() {
+
+    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu |grep -i "^Model name:" | sed 's/Model name://g; s/;//g' | xargs)
+    [ -z $cpu_count ] && cpu_count=$(lscpu |grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
+    [ -z $cpu_mhz ] && cpu_mhz=$(lscpu |grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
+}
+
 # Begin setup execution flow --------------------
 
 echo "Thank you for trying out $evernode!"
@@ -556,6 +563,8 @@ if [ "$mode" == "install" ]; then
     # Commented for future consideration.
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
     (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+
+    set_cpu_info
 
     echo "Starting installation..."
     install_evernode 0

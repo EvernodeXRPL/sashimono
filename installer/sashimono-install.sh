@@ -13,6 +13,9 @@ swapKB=$6
 diskKB=$7
 description=$8
 lease_amount=$9
+cpuModel=$10
+cpuCount=$11
+cpuSpeedMHz=$12
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -89,7 +92,7 @@ if [ "$NO_MB" == "" ]; then
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description |
+                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpuModel $cpuCount $cpuSpeedMHz $description |
                 stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
                 echo "REG_FAILURE" && rollback
             set +o pipefail

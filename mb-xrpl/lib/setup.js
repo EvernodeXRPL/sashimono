@@ -128,6 +128,8 @@ class Setup {
     }
 
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description) {
+        console.log("Registering host...");
+
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const acc = this.#getConfig().xrpl;
         setEvernodeDefaults(acc.registryAddress, acc.rippledServer);

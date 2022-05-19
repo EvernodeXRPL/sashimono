@@ -13,9 +13,9 @@ swapKB=$6
 diskKB=$7
 description=$8
 lease_amount=$9
-cpuModel=$10
-cpuCount=$11
-cpuSpeedMHz=$12
+cpuModel=${10}
+cpuCount=${11}
+cpuSpeedMHz=${12}
 
 script_dir=$(dirname "$(realpath "$0")")
 

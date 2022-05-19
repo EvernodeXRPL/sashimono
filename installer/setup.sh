@@ -498,7 +498,7 @@ function reg_info() {
 
 function set_cpu_info() {
 
-    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu |grep -i "^Model name:" | sed 's/Model name://g; s/;//g' | xargs)
+    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu |grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
     [ -z $cpu_count ] && cpu_count=$(lscpu |grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
     [ -z $cpu_mhz ] && cpu_mhz=$(lscpu |grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
 }

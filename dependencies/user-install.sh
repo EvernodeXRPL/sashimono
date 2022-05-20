@@ -13,8 +13,10 @@ contract_gid=$7
 peer_port=$8
 user_port=$9
 docker_image=${10}
-if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] || [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ]; then
-    echo "Expected: user-install.sh <cpu quota microseconds> <memory quota kbytes> <swap quota kbytes> <disk quota kbytes> <contract dir> <contract uid> <contract gid> <peer_port> <user_port>"
+docker_registry=${11}
+if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
+    [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] ||
+    [ -z "$docker_image" ] || [ -z "$docker_registry" ]; then
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -160,6 +162,8 @@ echo "[Service]
 echo "Applying $docker_service extra args."
 exec_original="ExecStart=$docker_bin/dockerd-rootless.sh"
 exec_replace="$exec_original --max-concurrent-downloads 1"
+# Add private docker registry information.
+[ "$docker_registry" != "-" ] && exec_replace="$exec_replace --registry-mirror http://$docker_registry --insecure-registry $docker_registry"
 sed -i "s%$exec_original%$exec_replace%" $user_dir/.config/systemd/user/$docker_service
 
 # Reload the docker service.

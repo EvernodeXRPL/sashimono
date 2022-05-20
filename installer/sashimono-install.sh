@@ -104,7 +104,7 @@ rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
 cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Copy Blake3 and update linker library cache.
@@ -123,11 +123,14 @@ mkdir -p $DOCKER_BIN
 [ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Install private docker registry.
-# stage "Installing private docker registry"
-# (Disabled until secure registry configuration)
-# ./registry-install.sh $DOCKER_BIN $DOCKER_REGISTRY_USER $DOCKER_REGISTRY_PORT
-# [ "$?" == "1" ] && rollback
-# registry_addr=$inetaddr:$DOCKER_REGISTRY_PORT
+if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
+    stage "Installing private docker registry"
+    # TODO: secure registry configuration
+    "$script_dir"/docker-registry-install.sh
+    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+else
+    echo "Private docker registry installation skipped"
+fi
 
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
@@ -168,7 +171,7 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then

@@ -87,8 +87,8 @@ rm $service_path
 # Reload the systemd daemon after removing the service
 systemctl daemon-reload
 
-# echo "Removing Sashimono private docker registry..."
-# ./registry-uninstall.sh $DOCKER_BIN $DOCKER_REGISTRY_USER
+echo "Removing Sashimono private docker registry..."
+$SASHIMONO_BIN/docker-registry-uninstall.sh
 
 # Delete binaries except message board and sashimnono uninstall script.
 # We keep uninstall script so user can uninstall again if error occured at later steps.

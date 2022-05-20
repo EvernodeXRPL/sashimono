@@ -78,7 +78,7 @@ target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
 add_custom_target(installer
   COMMAND mkdir -p ./build/installer
   COMMAND bash -c "cp -r ./build/{sagent,sashi,hpfs,user-install.sh,user-uninstall.sh,contract_template} ./build/installer/"
-  COMMAND bash -c "cp -r ./installer/{docker-install.sh,registry-install.sh,registry-uninstall.sh,prereq.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/installer/"
+  COMMAND bash -c "cp -r ./installer/{docker-install.sh,docker-registry-install.sh,docker-registry-uninstall.sh,prereq.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/installer/"
   COMMAND bash -c "cp -r ./dependencies/{user-cgcreate.sh,libblake3.so,licence.txt} ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
   COMMAND tar cfz  ./build/installer.tar.gz --directory=./build/ installer

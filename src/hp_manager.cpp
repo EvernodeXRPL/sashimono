@@ -851,7 +851,8 @@ namespace hp
             std::to_string(contract_ugid.gid),
             std::to_string(instance_ports.peer_port),
             std::to_string(instance_ports.user_port),
-            docker_image};
+            docker_image,
+            conf::cfg.docker.registry_address};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

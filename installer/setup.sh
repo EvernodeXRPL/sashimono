@@ -31,10 +31,12 @@ export SASHIADMIN_GROUP="sashiadmin"
 export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
-export DOCKER_REGISTRY_USER="sashidockerreg"
-export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rDsg8R6MYfEB7Da861ThTRzVUWBa3xJgWL"
+
+# Private docker registry (not used for now)
+export DOCKER_REGISTRY_USER="sashidockerreg"
+export DOCKER_REGISTRY_PORT=0
 
 # Configuring the sashimono service is the last stage of the installation.
 # So if the service exists, Previous sashimono installation has been complete.

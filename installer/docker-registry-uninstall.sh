@@ -7,8 +7,8 @@ user=$DOCKER_REGISTRY_USER
 if [[ $(id -u "$user" 2>/dev/null || echo -1) -ge 0 ]]; then
     :
 else
-    echo "$user does not exist."
-    exit 1
+    echo "$user does not exist. Nothing to uninstall"
+    exit 0
 fi
 
 user_dir=/home/$user

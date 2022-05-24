@@ -36,6 +36,12 @@ function cgrulesengd_servicename() {
     fi
 }
 
+function set_cpu_info() {
+    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
+    [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
+    [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -50,6 +56,8 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 # Setting up Sashimono admin group.
 ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
+
+! set_cpu_info && echo "Fetching CPU info failed" && rollback
 
 # Register host only if NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
@@ -89,7 +97,7 @@ if [ "$NO_MB" == "" ]; then
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description |
+                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $description |
                 stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
                 echo "REG_FAILURE" && rollback
             set +o pipefail
@@ -175,7 +183,7 @@ else
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
-        ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
+    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
 fi
 
 # Install Sashimono Agent systemd service.

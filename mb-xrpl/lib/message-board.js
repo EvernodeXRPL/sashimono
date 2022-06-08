@@ -47,8 +47,7 @@ class MessageBoard {
         await this.xrplApi.connect();
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
-        await this.hostClient.connect();
-
+        await this.#connectHost();
         // Get last heartbeat moment from the host info.
         const hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
@@ -135,6 +134,28 @@ class MessageBoard {
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
+    }
+
+    // Connect the host and trying to reconnect in the event of account not found error.
+    // Account not found error can be because of a network reset. (Dev and test nets)
+    async #connectHost() {
+        let attempts = 0;
+        // eslint-disable-next-line no-constant-condition
+        while (true) {
+            try {
+                attempts++;
+                const ret = await this.hostClient.connect();
+                if (ret)
+                    break;
+            } catch (error) {
+                if (error?.data?.error === 'actNotFound') {
+                    const delaySec = 2 * attempts;
+                    console.log(`Network reset detected. Attempt ${attempts} failed. Retrying in ${delaySec}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delaySec * 1000));
+                } else
+                    throw error;
+            }
+        }
     }
 
     async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {

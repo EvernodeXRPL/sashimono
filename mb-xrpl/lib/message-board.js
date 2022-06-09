@@ -149,7 +149,13 @@ class MessageBoard {
                     break;
             } catch (error) {
                 if (error?.data?.error === 'actNotFound') {
-                    const delaySec = 2 * attempts;
+                    let delaySec;
+                    // The maximum delay will be 5 minutes.
+                    if (attempts > 150) {
+                        delaySec = 300;
+                    } else {
+                        delaySec = 2 * attempts;
+                    }
                     console.log(`Network reset detected. Attempt ${attempts} failed. Retrying in ${delaySec}s...`);
                     await new Promise(resolve => setTimeout(resolve, delaySec * 1000));
                 } else

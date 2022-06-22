@@ -38,10 +38,18 @@ class Setup {
         console.log("Generating faucet account...");
         const resp = await this.#httpPost(appenv.FAUCET_URL);
         const json = JSON.parse(resp);
+
+        // If Hooks TEST NET is used.
         return {
-            address: json.account.address,
-            secret: json.account.secret
+            address: json.address,
+            secret: json.secret
         };
+
+        // If NFT DEV NET is used.
+        // return {
+        //     address: json.account.address,
+        //     secret: json.account.secret
+        // };
     }
 
     #getConfig(readSecret = true) {
@@ -143,7 +151,7 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0,40), cpuCount, cpuSpeed, description.replaceAll('_', ' '));
+                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '));
 
                 // Create lease offers.
                 console.log("Creating lease offers for the hosts...");

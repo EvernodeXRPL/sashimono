@@ -32,12 +32,14 @@ class MessageBoard {
 
     async init() {
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress ||
+            !this.cfg.xrpl.registryAddress)
             throw "Required cfg fields cannot be empty.";
 
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
+        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
 
-        this.xrplApi = new evernode.XrplApi();
+        this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
         evernode.Defaults.set({
             registryAddress: this.cfg.xrpl.registryAddress,
             xrplApi: this.xrplApi

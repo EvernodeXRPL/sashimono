@@ -21,6 +21,7 @@ function stage() {
 }
 
 function rollback() {
+    [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
     echo "Rolling back sashimono installation."
     "$script_dir"/sashimono-uninstall.sh -f
     echo "Rolled back the installation."
@@ -34,6 +35,12 @@ function cgrulesengd_servicename() {
         local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
         echo "${cgrulesengd_filename%.*}"
     fi
+}
+
+function set_cpu_info() {
+    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
+    [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
+    [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
 }
 
 # Check cgroup rule config exists.
@@ -50,6 +57,8 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 # Setting up Sashimono admin group.
 ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
+
+! set_cpu_info && echo "Fetching CPU info failed" && rollback
 
 # Register host only if NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
@@ -89,7 +98,7 @@ if [ "$NO_MB" == "" ]; then
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $description |
+                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $description |
                 stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
                 echo "REG_FAILURE" && rollback
             set +o pipefail
@@ -104,7 +113,7 @@ rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
 cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Copy Blake3 and update linker library cache.
@@ -123,11 +132,14 @@ mkdir -p $DOCKER_BIN
 [ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
 
 # Install private docker registry.
-# stage "Installing private docker registry"
-# (Disabled until secure registry configuration)
-# ./registry-install.sh $DOCKER_BIN $DOCKER_REGISTRY_USER $DOCKER_REGISTRY_PORT
-# [ "$?" == "1" ] && rollback
-# registry_addr=$inetaddr:$DOCKER_REGISTRY_PORT
+if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
+    stage "Installing private docker registry"
+    # TODO: secure registry configuration
+    "$script_dir"/docker-registry-install.sh
+    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+else
+    echo "Private docker registry installation skipped"
+fi
 
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
@@ -168,11 +180,11 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
-        ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
+    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
 fi
 
 # Install Sashimono Agent systemd service.

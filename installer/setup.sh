@@ -31,10 +31,12 @@ export SASHIADMIN_GROUP="sashiadmin"
 export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
-export DOCKER_REGISTRY_USER="sashidockerreg"
-export DOCKER_REGISTRY_PORT=4444
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="rHQQq5aJ5kxFyNJXE36rAmuhxpDvpLHcWq"
+
+# Private docker registry (not used for now)
+export DOCKER_REGISTRY_USER="sashidockerreg"
+export DOCKER_REGISTRY_PORT=0
 
 # Configuring the sashimono service is the last stage of the installation.
 # So if the service exists, Previous sashimono installation has been complete.
@@ -375,6 +377,9 @@ function install_evernode() {
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
     create_evernode_alias
 
+    # Adding ip address as the host description.
+    description=$inetaddr
+
     echo "Installing Sashimono..."
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
@@ -507,10 +512,7 @@ if [ "$mode" == "install" ]; then
         alloc_swapKB=${7}       # Swap to allocate for contract instances.
         alloc_diskKB=${8}       # Disk space to allocate for contract instances.
         alloc_instcount=${9}    # Total contract instance count.
-        description=${10}       # Registration description (underscore for spaces).
-        lease_amount=${11}      # Contract instance lease amount in EVRs.
-    else
-        description="Evernode_host"
+        lease_amount=${10}      # Contract instance lease amount in EVRs.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,

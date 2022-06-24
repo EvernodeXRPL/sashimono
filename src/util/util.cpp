@@ -39,7 +39,7 @@ namespace util
     }
 
     /**
-     * Check whether given directory exists. 
+     * Check whether given directory exists.
      * @param path Directory path.
      * @return Returns true if given directory exists otherwise false.
      */
@@ -50,7 +50,7 @@ namespace util
     }
 
     /**
-     * Check whether given file exists. 
+     * Check whether given file exists.
      * @param path File path.
      * @return Returns true if give file exists otherwise false.
      */
@@ -61,7 +61,7 @@ namespace util
     }
 
     /**
-     * Recursively creates directories and sub-directories if not exist. 
+     * Recursively creates directories and sub-directories if not exist.
      * @param path Directory path.
      * @return Returns 0 operations succeeded otherwise -1.
      */
@@ -99,12 +99,12 @@ namespace util
     }
 
     /**
-     * Reads the entire file from given file discriptor. 
+     * Reads the entire file from given file discriptor.
      * @param fd File descriptor to be read.
      * @param buf String buffer to be populated.
      * @param offset Begin offset of the file to read.
      * @return Returns number of bytes read in a successful read and -1 on error.
-    */
+     */
     int read_from_fd(const int fd, std::string &buf, const off_t offset)
     {
         struct stat st;
@@ -123,7 +123,7 @@ namespace util
      * Provide a safe std::string overload for realpath.
      * @param path Path.
      * @returns Returns the realpath as string.
-    */
+     */
     const std::string realpath(std::string_view path)
     {
         std::array<char, PATH_MAX> buffer;
@@ -174,8 +174,8 @@ namespace util
     }
 
     /**
-    * Returns current time in UNIX epoch milliseconds.
-    */
+     * Returns current time in UNIX epoch milliseconds.
+     */
     uint64_t get_epoch_milliseconds()
     {
         return std::chrono::duration_cast<std::chrono::duration<std::uint64_t, std::milli>>(
@@ -218,7 +218,7 @@ namespace util
      * Split string by given delimeter.
      * @param collection Splitted strings params.
      * @param delimeter Delimeter to split string.
-    */
+     */
     void split_string(std::vector<std::string> &collection, std::string_view str, std::string_view delimeter)
     {
         if (str.empty())
@@ -242,11 +242,11 @@ namespace util
     }
 
     /**
-     * Converts given string to a int. A wrapper function for std::stoi. 
+     * Converts given string to a int. A wrapper function for std::stoi.
      * @param str String variable.
      * @param result Variable to store the answer from the conversion.
      * @return Returns 0 in a successful conversion and -1 on error.
-    */
+     */
     int stoi(const std::string &str, int &result)
     {
         try
@@ -262,11 +262,11 @@ namespace util
     }
 
     /**
-     * Converts given string to a uint16_t. A wrapper function for std::stoul. 
+     * Converts given string to a uint16_t. A wrapper function for std::stoul.
      * @param str String variable.
      * @param result Variable to store the answer from the conversion.
      * @return Returns 0 in a successful conversion and -1 on error.
-    */
+     */
     int stoul(const std::string &str, uint16_t &result)
     {
         try
@@ -282,11 +282,11 @@ namespace util
     }
 
     /**
-     * Converts given string to a uint_64. A wrapper function for std::stoull. 
+     * Converts given string to a uint_64. A wrapper function for std::stoull.
      * @param str String variable.
      * @param result Variable to store the answer from the conversion.
      * @return Returns 0 in a successful conversion and -1 on error.
-    */
+     */
     int stoull(const std::string &str, uint64_t &result)
     {
         try
@@ -305,7 +305,7 @@ namespace util
      * Construct the user contract directory path when username is given.
      * @param username Username of the user.
      * @return Contract directory path.
-    */
+     */
     const std::string get_user_contract_dir(const std::string &username, std::string_view container_name)
     {
         return "/home/" + username + "/" + container_name.data();
@@ -316,7 +316,7 @@ namespace util
      * @param username Username of the user.
      * @param user_info User info struct to be populated.
      * @return -1 of error, 0 on success.
-    */
+     */
     int get_system_user_info(std::string_view username, user_info &user_info)
     {
         const struct passwd *pwd = getpwnam(username.data());
@@ -339,7 +339,7 @@ namespace util
      * @param str String to be modified.
      * @param find Substring to be searched.
      * @param replace Substring to be replaced.
-    */
+     */
     void find_and_replace(std::string &str, std::string_view find, std::string_view replace)
     {
         size_t pos = str.find(find);
@@ -418,13 +418,15 @@ namespace util
      * @param file_name Name of the bash script.
      * @param output_params Final output of the bash script.
      * @param input_params Input parameters to the bash script (Optional).
-    */
+     */
     int execute_bash_file(std::string_view file_name, std::vector<std::string> &output_params, const std::vector<std::string_view> &input_params)
     {
         std::string params = "";
         for (auto itr = input_params.begin(); itr != input_params.end(); itr++)
         {
-            params.append(*itr);
+            // Empty params are appended as '-' to preserve param order.
+            params.append(itr->empty() ? "-" : *itr);
+
             if (std::next(itr) != input_params.end())
                 params.append(" ");
         }
@@ -466,7 +468,7 @@ namespace util
      * @param output Pointer to populate output.
      * @param output_len Length of the output.
      * @return 0 on success and -1 on error.
-    */
+     */
     int execute_bash_cmd(const char *command, char *output, const int output_len)
     {
         FILE *fpipe = popen(command, "r");

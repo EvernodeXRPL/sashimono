@@ -132,17 +132,20 @@ int main(int argc, char **argv)
 
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
+        uint16_t docker_registry_port = 0;
         size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
-        if (((argc >= 5) && (util::stoull(argv[4], inst_count) != 0 || inst_count == 0)) ||
-            ((argc >= 6) && (util::stoull(argv[5], cpu_us) != 0 || cpu_us == 0)) ||
-            ((argc >= 7) && (util::stoull(argv[6], ram_kbytes) != 0 || ram_kbytes == 0)) ||
-            ((argc >= 8) && (util::stoull(argv[7], swap_kbytes) != 0 || swap_kbytes == 0)) ||
-            ((argc >= 9) && (util::stoull(argv[8], disk_kbytes) != 0 || disk_kbytes == 0)) ||
-            conf::create(host_addr, "", inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
+        if (((argc >= 5) && util::stoul(argv[4], docker_registry_port) != 0) ||
+            ((argc >= 6) && (util::stoull(argv[5], inst_count) != 0 || inst_count == 0)) ||
+            ((argc >= 7) && (util::stoull(argv[6], cpu_us) != 0 || cpu_us == 0)) ||
+            ((argc >= 8) && (util::stoull(argv[7], ram_kbytes) != 0 || ram_kbytes == 0)) ||
+            ((argc >= 9) && (util::stoull(argv[8], swap_kbytes) != 0 || swap_kbytes == 0)) ||
+            ((argc >= 10) && (util::stoull(argv[9], disk_kbytes) != 0 || disk_kbytes == 0)) ||
+            conf::create(host_addr, docker_registry_port, inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
         {
             std::cerr << "Invalid Sashimono Agent config creation args.\n";
-            std::cerr << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", " << swap_kbytes << ", " << disk_kbytes << "\n";
+            std::cerr << docker_registry_port << ", " << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", "
+                      << swap_kbytes << ", " << disk_kbytes << "\n";
             return 1;
         }
     }
@@ -195,8 +198,11 @@ int main(int argc, char **argv)
         salog::init();
 
         // Do a simple version change in the config.
-        // In the future we could have real upgrade/data migration logic here.
         conf::cfg.version = version::AGENT_VERSION;
+
+        if (conf::cfg.docker.registry_port == 0)
+            conf::cfg.docker.registry_port = 4444;
+
         if (conf::write_config(conf::cfg) != 0)
             return -1;
     }

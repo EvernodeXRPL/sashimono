@@ -32,7 +32,7 @@ export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
-export EVERNODE_REGISTRY_ADDRESS="rHQQq5aJ5kxFyNJXE36rAmuhxpDvpLHcWq"
+export EVERNODE_REGISTRY_ADDRESS="r3cNR2bdao1NyvQ5ZuQvCUgqkoWGmgF34E"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"

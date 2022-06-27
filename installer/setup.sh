@@ -349,7 +349,7 @@ function uninstall_failure() {
 
 function online_version_timestamp() {
     # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
-    curl --silent -head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
+    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
 }
 
 function install_evernode() {

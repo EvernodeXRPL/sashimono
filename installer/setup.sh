@@ -524,9 +524,9 @@ Description=Timer for the Evernode auto-update.
 RefuseManualStart=no # Allow manual starts
 RefuseManualStop=no # Allow manual stops
 [Timer]
-#Execute job if it missed a run due to machine being off
 Unit=evernode-auto-update.service
 OnCalendar=daily
+#Execute job if it missed a run due to machine being off
 Persistent=true
 [Install]
 WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer

@@ -42,7 +42,16 @@ namespace hp
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
 
     // Error codes used in create and initiate instance.
-    constexpr const char *INTERNAL_ERROR = "internal_error";
+    constexpr const char *DB_READ_ERROR = "db_read_error";
+    constexpr const char *DB_WRITE_ERROR = "db_write_error";
+    constexpr const char *USER_INSTALL_ERROR = "user_install_error";
+    constexpr const char *INSTANCE_ERROR = "instance_error";
+    constexpr const char *CONF_READ_ERROR = "conf_read_error";
+    constexpr const char *CONTAINER_CONF_ERROR = "container_conf_error";
+    constexpr const char *CONTAINER_START_ERROR = "container_start_error";
+    constexpr const char *CONTAINER_UPDATE_ERROR = "container_update_error";
+    constexpr const char *NO_CONTAINER = "NO_CONTAINER";
+    constexpr const char *DUP_CONTAINER = "DUP_CONTAINER";
     constexpr const char *MAX_ALLOCATION_REACHED = "max_alloc_reached";
     constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
@@ -115,7 +124,7 @@ namespace hp
         const int allocated_count = sqlite::get_allocated_instance_count(db);
         if (allocated_count == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = DB_READ_ERROR;
             LOG_ERROR << "Error getting allocated instance count from db.";
             return -1;
         }
@@ -166,7 +175,7 @@ namespace hp
         std::string username;
         if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports, image_name) == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = USER_INSTALL_ERROR;
             return -1;
         }
 
@@ -175,7 +184,7 @@ namespace hp
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
             create_container(username, image_name, container_name, contract_dir, instance_ports, info) == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = INSTANCE_ERROR;
             LOG_ERROR << "Error creating hp instance for " << owner_pubkey;
             // Remove user if instance creation failed.
             uninstall_user(username, instance_ports, container_name);
@@ -184,7 +193,7 @@ namespace hp
 
         if (sqlite::insert_hp_instance_row(db, info) == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = DB_WRITE_ERROR;
             LOG_ERROR << "Error inserting instance data into db for " << owner_pubkey;
             // Remove container and uninstall user if database update failed.
             docker_remove(username, container_name);
@@ -213,13 +222,13 @@ namespace hp
         const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = NO_CONTAINER;
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
         else if (info.status != CONTAINER_STATES[STATES::CREATED])
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = DUP_CONTAINER;
             LOG_ERROR << "Given container is already initiated. name: " << container_name;
             return -1;
         }
@@ -231,7 +240,7 @@ namespace hp
         const int config_fd = open(config_file_path.data(), O_RDWR, FILE_PERMS);
         if (config_fd == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = CONF_READ_ERROR;
             LOG_ERROR << errno << ": Error opening config file " << config_file_path;
             return -1;
         }
@@ -246,7 +255,7 @@ namespace hp
             hpfs::update_service_conf(info.username, hpfs_log_level, is_full_history) == -1 ||
             hpfs::start_hpfs_systemd(info.username) == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = CONTAINER_CONF_ERROR;
             LOG_ERROR << "Error when setting up container. name: " << container_name;
             close(config_fd);
             return -1;
@@ -255,7 +264,7 @@ namespace hp
 
         if (docker_start(info.username, container_name) == -1)
         {
-            error_msg = INTERNAL_ERROR;
+            error_msg = CONTAINER_START_ERROR;
             LOG_ERROR << "Error when starting container. name: " << container_name;
             // Stop started hpfs processes if starting instance failed.
             hpfs::stop_hpfs_systemd(info.username);
@@ -264,8 +273,8 @@ namespace hp
 
         if (sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::RUNNING]) == -1)
         {
-            error_msg = INTERNAL_ERROR;
-            LOG_ERROR << "Error when starting container. name: " << container_name;
+            error_msg = CONTAINER_UPDATE_ERROR;
+            LOG_ERROR << "Error when updating container status. name: " << container_name;
             // Stop started docker and hpfs processes if database update fails.
             docker_stop(info.username, container_name);
             hpfs::stop_hpfs_systemd(info.username);

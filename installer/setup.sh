@@ -12,10 +12,12 @@ instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev"
-script_url="$cloud_storage/setup.sh"
+setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
-version_timestamp_file="version.timestamp"
+installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
+
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -346,16 +348,16 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    # Send HTTP HEAD request and get last modified timestamp of the installer package.
-    curl --silent --head $installer_url | grep 'Last-Modified:' | sed 's/[^ ]* //'
+    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
+    curl --silent -head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
 }
 
 function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local version_timestamp=$(online_version_timestamp)
-    [ -z "$version_timestamp" ] && echo "Online installer not found." && exit 1
+    local installer_version_timestamp=$(online_version_timestamp $installer_url)
+    [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
 
     local tmp=$(mktemp -d)
     cd $tmp
@@ -375,7 +377,7 @@ function install_evernode() {
 
     # Create evernode cli alias at the begining.
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
-    create_evernode_alias
+    create_evernode_alias $setup_script_url 0
 
     # Adding ip address as the host description.
     description=$inetaddr
@@ -393,7 +395,10 @@ function install_evernode() {
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
-    echo $version_timestamp > $SASHIMONO_DATA/$version_timestamp_file
+    echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
+    
+    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
+    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function uninstall_evernode() {
@@ -425,10 +430,10 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest=$(online_version_timestamp)
+    local latest=$(online_version_timestamp $installer_url)
     [ -z "$latest" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
-    local current=$(cat $SASHIMONO_DATA/$version_timestamp_file)
+    local current=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
     [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
@@ -438,6 +443,11 @@ function update_evernode() {
     echo "Starting upgrade..."
     install_evernode 1
     echo "Upgrade complete."
+
+    # Update the setup Script Alias
+    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
+    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
+    ! [ "$latest_setup_script_version" == "$current_setup_script_version" ] && create_evernode_alias $setup_script_url 1
 }
 
 function create_log() {
@@ -464,8 +474,9 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    ! curl -fsSL $script_url --output $evernode_alias >> $logfile 2>&1 && install_failure
-    ! chmod +x $evernode_alias >> $logfile 2>&1 && install_failure
+    local update = $2
+    ! curl -fsSL $1 --output $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
+    ! chmod +x $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
 }
 
 function remove_evernode_alias() {

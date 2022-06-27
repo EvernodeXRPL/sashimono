@@ -426,7 +426,7 @@ function uninstall_evernode() {
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
 
-    # Remove the Evernode Auto Updater service.
+    # Remove the Evernode Auto Updater Service.
     remove_evernode_auto_updater
 }
 
@@ -526,7 +526,6 @@ RefuseManualStop=no # Allow manual stops
 [Timer]
 #Execute job if it missed a run due to machine being off
 Unit=evernode-auto-update.service
-Persistent=true
 OnCalendar=daily
 Persistent=true
 [Install]
@@ -534,6 +533,7 @@ WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
 
     # Reload the systemd daemon after enabling the service
     systemctl daemon-reload
+
     echo "Enabling Evernode auto update service..."
     systemctl enable $evernode_auto_update_service.service
 

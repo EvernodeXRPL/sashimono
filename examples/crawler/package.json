@@ -1,6 +1,6 @@
 {
     "dependencies": {
-        "evernode-js-client": "0.4.39",
+        "evernode-js-client": "0.4.40",
         "hotpocket-js-client": "0.5.3",
         "bson": "4.6.1",
         "uuid": "8.3.2"

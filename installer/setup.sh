@@ -474,7 +474,7 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    local update = $2
+    local update=$2
     ! curl -fsSL $1 --output $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
     ! chmod +x $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
 }

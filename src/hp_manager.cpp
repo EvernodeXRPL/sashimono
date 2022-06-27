@@ -50,8 +50,8 @@ namespace hp
     constexpr const char *CONTAINER_CONF_ERROR = "container_conf_error";
     constexpr const char *CONTAINER_START_ERROR = "container_start_error";
     constexpr const char *CONTAINER_UPDATE_ERROR = "container_update_error";
-    constexpr const char *NO_CONTAINER = "NO_CONTAINER";
-    constexpr const char *DUP_CONTAINER = "DUP_CONTAINER";
+    constexpr const char *NO_CONTAINER = "no_container";
+    constexpr const char *DUP_CONTAINER = "dup_container";
     constexpr const char *MAX_ALLOCATION_REACHED = "max_alloc_reached";
     constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";

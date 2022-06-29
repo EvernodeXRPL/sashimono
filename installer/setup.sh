@@ -422,12 +422,12 @@ function uninstall_evernode() {
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
     ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
 
+    # Remove the Evernode Auto Updater Service.
+    remove_evernode_auto_updater
+
     # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
-
-    # Remove the Evernode Auto Updater Service.
-    remove_evernode_auto_updater
 }
 
 function update_evernode() {
@@ -514,7 +514,7 @@ After=network.target
 User=root
 Group=root
 Type=oneshot
-ExecStart=$(which evernode) update
+ExecStart=evernode update
 [Install]
 WantedBy=multi-user.target" >/etc/systemd/system/$evernode_auto_update_service.service
 
@@ -531,7 +531,7 @@ Persistent=true
 [Install]
 WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
 
-    # Reload the systemd daemon after enabling the service
+    # Reload the systemd daemon.
     systemctl daemon-reload
 
     echo "Enabling Evernode auto update service..."
@@ -544,11 +544,6 @@ WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
 }
 
 function remove_evernode_auto_updater() {
-    echo "Removing Evernode auto update service..."
-    systemctl stop $evernode_auto_update_service.service
-    systemctl disable $evernode_auto_update_service.service
-    service_path="/etc/systemd/system/$evernode_auto_update_service.service"
-    rm $service_path
 
     echo "Removing Evernode auto update timer..."
     systemctl stop $evernode_auto_update_service.timer
@@ -556,7 +551,13 @@ function remove_evernode_auto_updater() {
     service_path="/etc/systemd/system/$evernode_auto_update_service.timer"
     rm $service_path
 
-    # Reload the systemd daemon after removing the service
+    echo "Removing Evernode auto update service..."
+    systemctl stop $evernode_auto_update_service.service
+    systemctl disable $evernode_auto_update_service.service
+    service_path="/etc/systemd/system/$evernode_auto_update_service.service"
+    rm $service_path
+
+    # Reload the systemd daemon.
     systemctl daemon-reload
 }
 

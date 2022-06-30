@@ -379,7 +379,7 @@ function install_evernode() {
 
     # Create evernode cli alias at the begining.
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
-    ! create_evernode_alias $setup_script_url && install_failure
+    ! create_evernode_alias && install_failure
 
     # Adding ip address as the host description.
     description=$inetaddr
@@ -449,7 +449,7 @@ function update_evernode() {
         install_evernode 1
         echo "Upgrade complete."
     elif [ "$latest_setup_script_version" != "$current_setup_script_version" ]; then 
-        ! create_evernode_alias $setup_script_url && echo "Setup.sh alias creation failed."
+        ! create_evernode_alias && echo "Setup.sh alias creation failed."
     fi
     
 }
@@ -478,8 +478,8 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    ! curl -fsSL $1 --output $evernode_alias >> $logfile 2>&1 && return -1
-    ! chmod +x $evernode_alias >> $logfile 2>&1 && return -1
+    ! curl -fsSL $setup_script_url --output $evernode_alias >> $logfile 2>&1 && return 1
+    ! chmod +x $evernode_alias >> $logfile 2>&1 && return 1
 }
 
 function remove_evernode_alias() {

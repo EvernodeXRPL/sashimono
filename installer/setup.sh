@@ -358,6 +358,8 @@ function install_evernode() {
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
     local installer_version_timestamp=$(online_version_timestamp $installer_url)
     [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
+    # Get setup version (timestamp).
+    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
@@ -377,7 +379,7 @@ function install_evernode() {
 
     # Create evernode cli alias at the begining.
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
-    create_evernode_alias $setup_script_url 0
+    ! create_evernode_alias $setup_script_url && install_failure
 
     # Adding ip address as the host description.
     description=$inetaddr
@@ -396,8 +398,6 @@ function install_evernode() {
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
-    
-    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
     echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
@@ -430,24 +430,28 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest=$(online_version_timestamp $installer_url)
-    [ -z "$latest" ] && echo "Could not check for updates. Online installer not found." && exit 1
+    local latest_installer_script_version=$(online_version_timestamp $installer_url)
+    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
+    [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
-    local current=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
-    [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
+    local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
+    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
 
-    uninstall_evernode 1
-    echo "Starting upgrade..."
-    install_evernode 1
-    echo "Upgrade complete."
-
-    # Update the setup Script Alias
-    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
-    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
-    ! [ "$latest_setup_script_version" == "$current_setup_script_version" ] && create_evernode_alias $setup_script_url 1
+    # Alias for setup.sh is created during 'install_evernode' too. 
+    # If only the setup.sh is updated but not the installer, then the alias should be created again.
+    if [ "$latest_installer_script_version" != "$current_installer_script_version" ]; then
+        uninstall_evernode 1
+        echo "Starting upgrade..."
+        install_evernode 1
+        echo "Upgrade complete."
+    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ]; then 
+        ! create_evernode_alias $setup_script_url && echo "Setup.sh alias creation failed."
+    fi
+    
 }
 
 function create_log() {
@@ -474,9 +478,8 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    local update=$2
-    ! curl -fsSL $1 --output $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
-    ! chmod +x $evernode_alias >> $logfile 2>&1 && ["$update" == "0"] && install_failure
+    ! curl -fsSL $1 --output $evernode_alias >> $logfile 2>&1 && return -1
+    ! chmod +x $evernode_alias >> $logfile 2>&1 && return -1
 }
 
 function remove_evernode_alias() {

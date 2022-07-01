@@ -16,7 +16,7 @@ script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 version_timestamp_file="version.timestamp"
-evernode_auto_update_service="evernode-auto-update"
+
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -97,7 +97,7 @@ function confirm() {
     echo -en $1" [Y/n] "
     local yn=""
     read yn </dev/tty
-    
+
     # Default choice is 'y'
     [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
@@ -396,8 +396,6 @@ function install_evernode() {
     # Write the verison timestamp to a file for later updated version comparison.
     echo $version_timestamp > $SASHIMONO_DATA/$version_timestamp_file
 
-    # Enable the Evernode Auto Updater Service.
-    enable_evernode_auto_updater
 }
 
 function uninstall_evernode() {
@@ -421,9 +419,6 @@ function uninstall_evernode() {
 
     [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
     ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-
-    # Remove the Evernode Auto Updater Service.
-    remove_evernode_auto_updater
 
     # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
@@ -505,63 +500,6 @@ function reg_info() {
     fi
 }
 
-function enable_evernode_auto_updater() {
-    # Create the service.
-    echo "[Unit]
-Description=Service for the Evernode auto-update.
-After=network.target
-[Service]
-User=root
-Group=root
-Type=oneshot
-ExecStart=evernode update -q
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$evernode_auto_update_service.service
-
-    # Create a timer for the service (every two hours).
-    echo "[Unit]
-Description=Timer for the Evernode auto-update.
-# Allow manual starts
-RefuseManualStart=no
-# Allow manual stops
-RefuseManualStop=no
-[Timer]
-Unit=evernode-auto-update.service
-OnCalendar=0/2:00:00
-# Execute job if it missed a run due to machine being off
-Persistent=true
-[Install]
-WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-
-    echo "Enabling Evernode auto update service..."
-    systemctl enable $evernode_auto_update_service.service
-
-    echo "Enabling Evernode auto update timer..."
-    systemctl enable $evernode_auto_update_service.timer
-    echo "Starting Evernode auto update timer..."
-    systemctl start $evernode_auto_update_service.timer
-}
-
-function remove_evernode_auto_updater() {
-
-    echo "Removing Evernode auto update timer..."
-    systemctl stop $evernode_auto_update_service.timer
-    systemctl disable $evernode_auto_update_service.timer
-    service_path="/etc/systemd/system/$evernode_auto_update_service.timer"
-    rm $service_path
-
-    echo "Removing Evernode auto update service..."
-    systemctl stop $evernode_auto_update_service.service
-    systemctl disable $evernode_auto_update_service.service
-    service_path="/etc/systemd/system/$evernode_auto_update_service.service"
-    rm $service_path
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-}
 
 # Begin setup execution flow --------------------
 

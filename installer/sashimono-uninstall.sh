@@ -5,6 +5,7 @@
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
+evernode_auto_update_service="evernode-auto-update"
 
 function confirm() {
     echo -en $1" [y/n] "
@@ -26,6 +27,24 @@ function cgrulesengd_servicename() {
         local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
         echo "${cgrulesengd_filename%.*}"
     fi
+}
+
+function remove_evernode_auto_updater() {
+
+    echo "Removing Evernode auto update timer..."
+    systemctl stop $evernode_auto_update_service.timer
+    systemctl disable $evernode_auto_update_service.timer
+    service_path="/etc/systemd/system/$evernode_auto_update_service.timer"
+    rm $service_path
+
+    echo "Removing Evernode auto update service..."
+    systemctl stop $evernode_auto_update_service.service
+    systemctl disable $evernode_auto_update_service.service
+    service_path="/etc/systemd/system/$evernode_auto_update_service.service"
+    rm $service_path
+
+    # Reload the systemd daemon.
+    systemctl daemon-reload
 }
 
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
@@ -155,5 +174,8 @@ fi
 groupdel $SASHIADMIN_GROUP
 
 [ "$UPGRADE" == "0" ] && echo "Sashimono uninstalled successfully." || echo "Sashimono uninstalled successfully. Your data has been preserved."
+
+# Remove the Evernode Auto Updater Service.
+[ "$UPGRADE" == "0" ] && remove_evernode_auto_updater
 
 exit 0

@@ -15,6 +15,7 @@ description=$8
 lease_amount=$9
 
 script_dir=$(dirname "$(realpath "$0")")
+evernode_auto_update_service="evernode-auto-update"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -41,6 +42,46 @@ function set_cpu_info() {
     [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
     [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
     [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
+}
+
+function enable_evernode_auto_updater() {
+    # Create the service.
+    echo "[Unit]
+Description=Service for the Evernode auto-update.
+After=network.target
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=/usr/bin/evernode update -q
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$evernode_auto_update_service.service
+
+    # Create a timer for the service (every two hours).
+    echo "[Unit]
+Description=Timer for the Evernode auto-update.
+# Allow manual starts
+RefuseManualStart=no
+# Allow manual stops
+RefuseManualStop=no
+[Timer]
+Unit=evernode-auto-update.service
+OnCalendar=0/2:00:00
+# Execute job if it missed a run due to machine being off
+Persistent=true
+[Install]
+WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
+
+    # Reload the systemd daemon.
+    systemctl daemon-reload
+
+    echo "Enabling Evernode auto update service..."
+    systemctl enable $evernode_auto_update_service.service
+
+    echo "Enabling Evernode auto update timer..."
+    systemctl enable $evernode_auto_update_service.timer
+    echo "Starting Evernode auto update timer..."
+    systemctl start $evernode_auto_update_service.timer
 }
 
 # Check cgroup rule config exists.
@@ -269,4 +310,8 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
 fi
 
 echo "Sashimono installed successfully."
+
+# Enable the Evernode Auto Updater Service.
+[ "$UPGRADE" == "0" ] &&  enable_evernode_auto_updater
+
 exit 0

@@ -514,19 +514,21 @@ After=network.target
 User=root
 Group=root
 Type=oneshot
-ExecStart=evernode update
+ExecStart=evernode update -q
 [Install]
 WantedBy=multi-user.target" >/etc/systemd/system/$evernode_auto_update_service.service
 
-    # Create a daily timer for the service.
+    # Create a timer for the service (every two hours).
     echo "[Unit]
 Description=Timer for the Evernode auto-update.
-RefuseManualStart=no # Allow manual starts
-RefuseManualStop=no # Allow manual stops
+# Allow manual starts
+RefuseManualStart=no
+# Allow manual stops
+RefuseManualStop=no
 [Timer]
 Unit=evernode-auto-update.service
-OnCalendar=daily
-#Execute job if it missed a run due to machine being off
+OnCalendar=0/2:00:00
+# Execute job if it missed a run due to machine being off
 Persistent=true
 [Install]
 WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer

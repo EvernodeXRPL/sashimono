@@ -1,0 +1,11 @@
+{
+    "scripts": {
+        "build": "ncc build echo_contract.js --minify -o dist",
+        "cpconf": "cp contract.config dist/",
+        "zip": "mkdir -p ../dist && cd dist && zip -r ../../dist/contract-bundle.zip *",
+        "bundle": "npm run build && npm run cpconf && npm run zip"
+    },
+    "dependencies": {
+        "hotpocket-nodejs-contract": "0.5.3"
+    }
+}

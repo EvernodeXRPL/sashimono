@@ -15,7 +15,6 @@ description=$8
 lease_amount=$9
 
 script_dir=$(dirname "$(realpath "$0")")
-evernode_auto_update_service="evernode-auto-update"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -55,7 +54,7 @@ Group=root
 Type=oneshot
 ExecStart=/usr/bin/evernode update -q
 [Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$evernode_auto_update_service.service
+WantedBy=multi-user.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service
 
     # Create a timer for the service (every two hours).
     echo "[Unit]
@@ -65,23 +64,23 @@ RefuseManualStart=no
 # Allow manual stops
 RefuseManualStop=no
 [Timer]
-Unit=evernode-auto-update.service
+Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
 OnCalendar=0/2:00:00
 # Execute job if it missed a run due to machine being off
 Persistent=true
 [Install]
-WantedBy=timers.target" >/etc/systemd/system/$evernode_auto_update_service.timer
+WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     # Reload the systemd daemon.
     systemctl daemon-reload
 
     echo "Enabling Evernode auto update service..."
-    systemctl enable $evernode_auto_update_service.service
+    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.service
 
     echo "Enabling Evernode auto update timer..."
-    systemctl enable $evernode_auto_update_service.timer
+    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.timer
     echo "Starting Evernode auto update timer..."
-    systemctl start $evernode_auto_update_service.timer
+    systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
 }
 
 # Check cgroup rule config exists.

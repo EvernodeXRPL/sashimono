@@ -5,7 +5,6 @@
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
-evernode_auto_update_service="evernode-auto-update"
 
 function confirm() {
     echo -en $1" [y/n] "
@@ -32,15 +31,15 @@ function cgrulesengd_servicename() {
 function remove_evernode_auto_updater() {
 
     echo "Removing Evernode auto update timer..."
-    systemctl stop $evernode_auto_update_service.timer
-    systemctl disable $evernode_auto_update_service.timer
-    service_path="/etc/systemd/system/$evernode_auto_update_service.timer"
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
     rm $service_path
 
     echo "Removing Evernode auto update service..."
-    systemctl stop $evernode_auto_update_service.service
-    systemctl disable $evernode_auto_update_service.service
-    service_path="/etc/systemd/system/$evernode_auto_update_service.service"
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
     rm $service_path
 
     # Reload the systemd daemon.

@@ -443,13 +443,16 @@ function update_evernode() {
 
     # Alias for setup.sh is created during 'install_evernode' too. 
     # If only the setup.sh is updated but not the installer, then the alias should be created again.
-    if [ "$latest_installer_script_version" != "$current_installer_script_version" ]; then
+    if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
         uninstall_evernode 1
         echo "Starting upgrade..."
         install_evernode 1
         echo "Upgrade complete."
-    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ]; then 
+    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
+        [ -d $log_dir ] || mkdir -p $log_dir
+        logfile="$log_dir/installer-$(date +%s).log"
         ! create_evernode_alias && echo "Setup.sh alias creation failed."
+        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
     
 }
@@ -478,8 +481,9 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    ! curl -fsSL $setup_script_url --output $evernode_alias >> $logfile 2>&1 && return 1
-    ! chmod +x $evernode_alias >> $logfile 2>&1 && return 1
+    ! curl -fsSL $setup_script_url --output $evernode_alias >> $logfile 2>&1 && echo "Error in creating alias." && return 1
+    ! chmod +x $evernode_alias >> $logfile 2>&1 && echo "Error in changing permission for the alias." && return 1
+    return 0
 }
 
 function remove_evernode_alias() {

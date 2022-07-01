@@ -19,6 +19,7 @@ installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 
 
+
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
@@ -35,6 +36,7 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
+export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -98,7 +100,7 @@ function confirm() {
     echo -en $1" [Y/n] "
     local yn=""
     read yn </dev/tty
-    
+
     # Default choice is 'y'
     [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
@@ -515,6 +517,7 @@ function reg_info() {
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
+
 
 # Begin setup execution flow --------------------
 

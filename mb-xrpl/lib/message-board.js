@@ -107,14 +107,15 @@ class MessageBoard {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
                         // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
                         const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.NFTokenID == x.containerName);
+                        // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
                         if (!nft)
-                            throw `Cannot find a NFT for ${x.containerName}`;
+                            console.log(`Cannot find a NFT for ${x.containerName}`);
+                        else {
+                            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                            await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
+                        }
 
-                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex, true);
                         this.activeInstanceCount--;
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
-
                         /**
                          * Soft deletion for debugging purpose.
                          */
@@ -122,6 +123,8 @@ class MessageBoard {
 
                         // Delete the lease record related to this instance (Permanent Delete).
                         await this.deleteLeaseRecord(x.txHash);
+
+                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {

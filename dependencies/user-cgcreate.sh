@@ -35,9 +35,12 @@ if [ "$max_swap_kbytes" != "" ] && [ ! ${#max_swap_kbytes} -eq 0 ] && [ "$max_sw
     ! instance_swap_kbytes=$(expr $instance_mem_kbytes + $max_swap_kbytes / $max_instance_count) && echo "Max swap memory limit calculation error." && exit 1
 fi
 
-instance_cpu_us=0
+instance_cpu_quota=0
+# CPU time is 1000000us Sashimono is given max_cpu_us out of it.
+# Instance allocation is multiplied by number of cores to determined the number of cores per instance
 if [ "$max_cpu_us" != "" ] && [ ! ${#max_cpu_us} -eq 0 ] && [ "$max_cpu_us" -gt 0 ]; then
-    ! instance_cpu_us=$(expr $max_cpu_us / $max_instance_count) && echo "Max cpu limit calculation error." && exit 1
+    cores=$(grep -c ^processor /proc/cpuinfo)
+    ! instance_cpu_quota=$(expr $(expr $cores \* $max_cpu_us) / $(expr $max_instance_count \* 10)) && echo "Max cpu limit calculation error." && exit 1
 fi
 
 prefix="sashi"
@@ -53,18 +56,18 @@ done
 has_err=0
 for user in "${validusers[@]}"; do
     # Setup user cgroup.
-    if  [ $instance_cpu_us -gt 0 ] &&
+    if [ $instance_cpu_quota -gt 0 ] &&
         ! (cgcreate -g cpu:$user$cgroupsuffix &&
-        echo "1000000" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-        echo "$instance_cpu_us" > /sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us); then
+            echo "100000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
+            echo "$instance_cpu_quota" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us); then
         echo "CPU cgroup creation for $user failed."
         has_err=1
     fi
 
     if [ $instance_mem_kbytes -gt 0 ] &&
         ! (cgcreate -g memory:$user$cgroupsuffix &&
-        echo "${instance_mem_kbytes}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-        echo "${instance_swap_kbytes}K" > /sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes); then
+            echo "${instance_mem_kbytes}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
+            echo "${instance_swap_kbytes}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes); then
         echo "Memory cgroup creation for $user failed."
         has_err=1
     fi

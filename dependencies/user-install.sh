@@ -209,8 +209,8 @@ WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 
-# CPU time is 1000000us Sashimono is given max_cpu_us out of it.
-# Instance allocation is multiplied by number of cores to determined the number of cores per instance
+# In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
+# Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided bu 10 since cfs_period_us is set to 100000us
 cores=$(grep -c ^processor /proc/cpuinfo)
 cpu_quota=$(expr $(expr $cores \* $cpu) / 10)
 echo "Setting up user cgroup resources."

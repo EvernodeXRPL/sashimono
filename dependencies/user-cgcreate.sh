@@ -36,8 +36,8 @@ if [ "$max_swap_kbytes" != "" ] && [ ! ${#max_swap_kbytes} -eq 0 ] && [ "$max_sw
 fi
 
 instance_cpu_quota=0
-# CPU time is 1000000us Sashimono is given max_cpu_us out of it.
-# Instance allocation is multiplied by number of cores to determined the number of cores per instance
+# In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
+# Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided bu 10 since cfs_period_us is set to 100000us
 if [ "$max_cpu_us" != "" ] && [ ! ${#max_cpu_us} -eq 0 ] && [ "$max_cpu_us" -gt 0 ]; then
     cores=$(grep -c ^processor /proc/cpuinfo)
     ! instance_cpu_quota=$(expr $(expr $cores \* $max_cpu_us) / $(expr $max_instance_count \* 10)) && echo "Max cpu limit calculation error." && exit 1

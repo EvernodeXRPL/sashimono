@@ -48,11 +48,17 @@ else
     fi
 fi
 
+# Install iptables
+if ! command -v iptables &>/dev/null; then
+    stage "Installing iptables"
+    apt-get install -y iptables
+fi
+
 # Load br_netfilter kernel module on startup (if not loaded already).
 if [[ -z "$(lsmod | grep br_netfilter)" ]]; then
     echo "Adding br_netfilter"
     modprobe br_netfilter
-    echo "br_netfilter" > /etc/modules-load.d/br_netfilter.conf
+    echo "br_netfilter" >/etc/modules-load.d/br_netfilter.conf
 fi
 
 # -------------------------------
@@ -92,10 +98,10 @@ if [ $updated -eq 1 ]; then
     # Create a backup of original, if remount failed replace updated with backup.
     cp $originalfstab $backup
     mv "$tmpfstab" $originalfstab
-    if ! mount -o remount / 2>&1 ; then
+    if ! mount -o remount / 2>&1; then
         mv $backup $originalfstab
         echo "Re mounting error." && exit 1
-    fi 
+    fi
     echo "Updated fstab."
 else
     echo "fstab already configured."
@@ -134,7 +140,7 @@ if [ $res -eq 0 ]; then
         res=$?
         updated=1
     elif [ $res -eq 0 ]; then
-        echo "user_allow_other" >> "$tmpconf"
+        echo "user_allow_other" >>"$tmpconf"
         res=$?
         updated=1
     fi
@@ -236,7 +242,7 @@ if [ $res -eq 100 ]; then
         fi
     fi
 elif [ $res -eq 0 ]; then
-    echo "GRUB_CMDLINE_LINUX=\"cgroup_enable=memory swapaccount=1\"" >> "$tmpgrub"
+    echo "GRUB_CMDLINE_LINUX=\"cgroup_enable=memory swapaccount=1\"" >>"$tmpgrub"
     res=$?
     updated=1
 fi
@@ -251,7 +257,7 @@ if [ $updated -eq 1 ]; then
     cp /etc/default/grub $grub_backup
     mv "$tmpgrub" /etc/default/grub
     rm -r "$tmp"
-    if ! update-grub >/dev/null 2>&1 ; then
+    if ! update-grub >/dev/null 2>&1; then
         mv $grub_backup /etc/default/grub
         echo "Grub update failed."
         exit 1

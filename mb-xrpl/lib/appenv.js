@@ -20,7 +20,7 @@ appenv = {
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,
     ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD: 0.4,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '0.5.2',
+    MB_VERSION: '0.5.3',
     TOS_HASH: '757A0237B44D8B2BBB04AE2BAD5813858E0AECD2F0B217075E27E0630BA74314' // This is the sha256 hash of TOS text.
 }
 Object.freeze(appenv);

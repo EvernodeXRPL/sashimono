@@ -209,10 +209,14 @@ WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 
+# In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
+# Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us
+cores=$(grep -c ^processor /proc/cpuinfo)
+cpu_quota=$(expr $(expr $cores \* $cpu) / 10)
 echo "Setting up user cgroup resources."
 ! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "1000000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-    echo "$cpu" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
+    echo "100000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
+    echo "$cpu_quota" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
 ! (cgcreate -g memory:$user$cgroupsuffix &&
     echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
     echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"

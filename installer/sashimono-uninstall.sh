@@ -28,6 +28,24 @@ function cgrulesengd_servicename() {
     fi
 }
 
+function remove_evernode_auto_updater() {
+
+    echo "Removing Evernode auto update timer..."
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
+    rm $service_path
+
+    echo "Removing Evernode auto update service..."
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
+    rm $service_path
+
+    # Reload the systemd daemon.
+    systemctl daemon-reload
+}
+
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
 
 # Message board---------------------
@@ -87,8 +105,10 @@ rm $service_path
 # Reload the systemd daemon after removing the service
 systemctl daemon-reload
 
-echo "Removing Sashimono private docker registry..."
-$SASHIMONO_BIN/docker-registry-uninstall.sh
+if [ -f $SASHIMONO_BIN/docker-registry-uninstall.sh ]; then
+    echo "Removing Sashimono private docker registry..."
+    $SASHIMONO_BIN/docker-registry-uninstall.sh
+fi
 
 # Delete binaries except message board and sashimnono uninstall script.
 # We keep uninstall script so user can uninstall again if error occured at later steps.
@@ -153,5 +173,8 @@ fi
 groupdel $SASHIADMIN_GROUP
 
 [ "$UPGRADE" == "0" ] && echo "Sashimono uninstalled successfully." || echo "Sashimono uninstalled successfully. Your data has been preserved."
+
+# Remove the Evernode Auto Updater Service.
+[ "$UPGRADE" == "0" ] && remove_evernode_auto_updater
 
 exit 0

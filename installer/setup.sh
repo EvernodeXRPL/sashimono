@@ -12,10 +12,13 @@ instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta"
-script_url="$cloud_storage/setup.sh"
+setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
-version_timestamp_file="version.timestamp"
+installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
+
+
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -33,6 +36,7 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="r3cNR2bdao1NyvQ5ZuQvCUgqkoWGmgF34E"
+export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -96,7 +100,7 @@ function confirm() {
     echo -en $1" [Y/n] "
     local yn=""
     read yn </dev/tty
-    
+
     # Default choice is 'y'
     [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
@@ -346,16 +350,18 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    # Send HTTP HEAD request and get last modified timestamp of the installer package.
-    curl --silent --head $installer_url | grep 'Last-Modified:' | sed 's/[^ ]* //'
+    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
+    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
 }
 
 function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local version_timestamp=$(online_version_timestamp)
-    [ -z "$version_timestamp" ] && echo "Online installer not found." && exit 1
+    local installer_version_timestamp=$(online_version_timestamp $installer_url)
+    [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
+    # Get setup version (timestamp).
+    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
@@ -375,7 +381,7 @@ function install_evernode() {
 
     # Create evernode cli alias at the begining.
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
-    create_evernode_alias
+    ! create_evernode_alias && install_failure
 
     # Adding ip address as the host description.
     description=$inetaddr
@@ -393,7 +399,8 @@ function install_evernode() {
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
-    echo $version_timestamp > $SASHIMONO_DATA/$version_timestamp_file
+    echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
+    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function uninstall_evernode() {
@@ -425,18 +432,30 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest=$(online_version_timestamp)
-    [ -z "$latest" ] && echo "Could not check for updates. Online installer not found." && exit 1
+    local latest_installer_script_version=$(online_version_timestamp $installer_url)
+    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
+    [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
-    local current=$(cat $SASHIMONO_DATA/$version_timestamp_file)
-    [ "$latest" == "$current" ] && echo "Your $evernode installation is up to date." && exit 0
+    local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
+    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
 
-    uninstall_evernode 1
     echo "Starting upgrade..."
-    install_evernode 1
+    # Alias for setup.sh is created during 'install_evernode' too. 
+    # If only the setup.sh is updated but not the installer, then the alias should be created again.
+    if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
+        uninstall_evernode 1
+        install_evernode 1
+    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
+        [ -d $log_dir ] || mkdir -p $log_dir
+        logfile="$log_dir/installer-$(date +%s).log"
+        ! create_evernode_alias && echo "Alias creation failed."
+        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
+    fi
+
     echo "Upgrade complete."
 }
 
@@ -464,8 +483,9 @@ function create_log() {
 
 # Create a copy of this same script as a command.
 function create_evernode_alias() {
-    ! curl -fsSL $script_url --output $evernode_alias >> $logfile 2>&1 && install_failure
-    ! chmod +x $evernode_alias >> $logfile 2>&1 && install_failure
+    ! curl -fsSL $setup_script_url --output $evernode_alias >> $logfile 2>&1 && echo "Error in creating alias." && return 1
+    ! chmod +x $evernode_alias >> $logfile 2>&1 && echo "Error in changing permission for the alias." && return 1
+    return 0
 }
 
 function remove_evernode_alias() {
@@ -497,6 +517,7 @@ function reg_info() {
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
+
 
 # Begin setup execution flow --------------------
 

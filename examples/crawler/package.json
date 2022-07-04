@@ -1,0 +1,13 @@
+{
+    "dependencies": {
+        "evernode-js-client": "0.4.40",
+        "hotpocket-js-client": "0.5.3",
+        "bson": "4.6.1",
+        "uuid": "8.3.2"
+    },
+    "scripts": {
+        "bundle-contract": "npm --prefix ./contract run bundle",
+        "build": "ncc build app.js --minify -o dist",
+        "bundle": "npm run build && npm run bundle-contract"
+    }
+}

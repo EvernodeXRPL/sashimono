@@ -81,12 +81,12 @@ class MessageBoard {
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
             if (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment)) {
-                this.lastHeartbeatMoment = currentMoment;
 
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
 
                 try {
                     await this.hostClient.heartbeat();
+                    this.lastHeartbeatMoment = currentMoment;
                 }
                 catch (err) {
                     if (err.code === 'tecHOOK_REJECTED')

@@ -42,37 +42,19 @@ export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
 
-# Configuring the sashimono service is the last stage of the installation.
-# So if the service exists, Previous sashimono installation has been complete.
-[ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
-
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
     echo -e $1
 }
 
-# The set of commands supported differs based on whether Sashimono is installed or not.
-if ! $sashimono_installed ; then
-    # If sashimono is not installed but there's a sashimono binary directory, The previous installation is a failed attempt.
-    # So, user can reinstall or uninstall the previous partial failed attempt.
-    if [ ! -d $SASHIMONO_BIN ] ; then
-        [ "$1" != "install" ] \
-            && echomult "$evernode host management tool
-                    \nYour system is not registered on $evernode.
-                    \nSupported commands:
-                    \ninstall - Install Sashimono and register on $evernode"\
-            && exit 1
-    else
-        [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
-            && echomult "$evernode host management tool
-                    \nYour system has a previous failed partial $evernode installation.
-                    \nSupported commands:
-                    \ninstall - Re-install Sashimono and register on $evernode
-                    \nuninstall - Uninstall previous $evernode installations"\
-            && exit 1
-    fi
-else
+# Configuring the sashimono service is the last stage of the installation.
+# Removing the sashimono service is the first stage of ununstallation.
+# So if the service exists, Previous sashimono installation has been complete.
+# Creating bin dir is the first stage of installation.
+# Removing bin dir is the last stage of uninstalltion.
+# So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
+if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] ; then
     [ "$1" == "install" ] \
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
@@ -86,6 +68,21 @@ else
                 \nlog - Generate evernode log file.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
+        && exit 1
+elif [ ! -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] ; then
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
+        && echomult "$evernode host management tool
+                \nYour system has a previous failed partial $evernode installation.
+                \nSupported commands:
+                \ninstall - Re-install Sashimono and register on $evernode
+                \nuninstall - Uninstall previous $evernode installations"\
+        && exit 1
+else
+    [ "$1" != "install" ] \
+        && echomult "$evernode host management tool
+                \nYour system is not registered on $evernode.
+                \nSupported commands:
+                \ninstall - Install Sashimono and register on $evernode"\
         && exit 1
 fi
 mode=$1

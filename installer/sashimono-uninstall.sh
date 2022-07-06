@@ -156,6 +156,7 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
     echo "Deleting message board user..."
     pkill -u $MB_XRPL_USER # Kill any running processes.
+    sleep .5
     userdel -f "$MB_XRPL_USER"
     rm -r /home/"${MB_XRPL_USER:?}"
 

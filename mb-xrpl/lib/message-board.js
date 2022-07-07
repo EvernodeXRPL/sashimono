@@ -73,6 +73,7 @@ class MessageBoard {
         await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
+        let ongoingHeartbeat = false;
         // Check for instance expiry.
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
@@ -80,9 +81,10 @@ class MessageBoard {
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment)) {
-
-                console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`)
+            if ( ! ongoingHeartbeat &&
+                (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
+                ongoingHeartbeat = true;
+                console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
 
                 try {
                     await this.hostClient.heartbeat();
@@ -93,6 +95,9 @@ class MessageBoard {
                         console.log("Heartbeat rejected by the hook.");
                     else
                         console.log("Heartbeat tx error", err);
+                }
+                finally {
+                    ongoingHeartbeat = false;
                 }
             }
 

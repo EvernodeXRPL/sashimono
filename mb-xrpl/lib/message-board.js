@@ -83,7 +83,7 @@ class MessageBoard {
             const currentMoment = await this.hostClient.getMoment(e.ledger_index);
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if ( ! ongoingHeartbeat &&
+            if (!ongoingHeartbeat &&
                 (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
                 ongoingHeartbeat = true;
                 console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
@@ -195,37 +195,46 @@ class MessageBoard {
     }
 
     async #pruneOrphanLeases() {
+        // Need to add lock until instance is acquiring and actually created
         // Note: If this is soft deletion we need to handle the destroyed status and replace deleteLeaseRecord with changing the status.
+
+        // Get the records which are created before an acquire timeout.
+        // Take the xrpl ledger time as 4 seconds.
+        const timeoutSecs = this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
+        const timeMargin = new Date(Date.now() - (1000 * timeoutSecs));
+
         this.sashiDb.open();
-        const runningInstances = (await this.sashiDb.getValues(this.sashiTable));
+        const runningInstances = (await this.sashiDb.getValues(this.sashiTable, { time: timeMargin }, '<'));
         this.sashiDb.close();
         for (const instance of runningInstances) {
             try {
-                const lease = (await this.getLeaseRecords({ container_name: instance.name }));
+                this.db.open();
+                const leases = (await this.getLeaseRecords({ container_name: instance.name }));
+                this.db.close();
+                const lease = (leases && leases.length) ? leases[0] : null;
                 // If there's a lease record this is created from message board.
                 if (lease) {
                     const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getNfts())?.find(n => n.NFTokenID == instance.name);
+
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
-                    // So destroy the instance.
-                    // If the NFT is still owned by the tenant, burn the NFT and recreate and refund the tenant.
-                    if (lease.status === LeaseStatus.ACQUIRING && nft) {
-                        console.log(`Pruning oprhan instance ${instance.name}...`);
-                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                        await this.destroyInstance(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex);
-                        await this.deleteLeaseRecord(lease.tx_hash);
-
-                        console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                        await this.hostClient.xrplAcc.makePayment(lease.tenant_xrp_address,
-                            uriInfo.leaseAmount,
-                            evernode.XrplConstants.EVR,
-                            this.hostClient.config.evrIssuerAddress);
-
-                    }
-                    // If tenant does not own the nft, destroy the instance.
-                    else if (lease.status === LeaseStatus.ACQUIRING || !nft) {
-                        console.log(`Pruning oprhan instance ${instance.name}...`);
+                    // If the NFT is not owned by the tenant we destroy the instance since this is not a valid lease.
+                    // In these cases, destroy the instance.
+                    if ((lease.timestamp < timeMargin && lease.status === LeaseStatus.ACQUIRING) || !nft) {
+                        console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
+
+                        this.db.open();
                         await this.deleteLeaseRecord(lease.tx_hash);
+                        this.db.close();
+
+                        // After destroying, If the NFT is owned by the tenant, burn the NFT and recreate and refund the tenant.
+                        if (nft) {
+                            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                            await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex);
+
+                            console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
+                            await this.hostClient.pruneInstance(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                        }
                     }
                 }
                 else {
@@ -233,7 +242,7 @@ class MessageBoard {
                     // This is created from the message board but lease record is missing.
                     const namePrefix = this.hostClient.getLeaseNFTokenIdPrefix();
                     if (instance.name.startsWith(namePrefix)) {
-                        console.log(`Pruning oprhan instance ${instance.name}...`);
+                        console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
                     }
                 }

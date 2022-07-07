@@ -1,4 +1,5 @@
 const process = require('process');
+const path = require('path');
 
 let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",
@@ -16,7 +17,7 @@ appenv = {
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',
     DB_TABLE_NAME: 'leases',
     DB_UTIL_TABLE_NAME: 'util_data',
-    SASHI_DB_PATH: (appenv.IS_DEV_MODE ? "../build/" : appenv.DATA_DIR.substring(0, appenv.DATA_DIR.lastIndexOf('/'))) + "sa.sqlite",
+    SASHI_DB_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.sqlite",
     SASHI_TABLE_NAME: 'instances',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,

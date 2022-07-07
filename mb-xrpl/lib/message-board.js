@@ -223,10 +223,11 @@ class MessageBoard {
                         console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
 
-                        this.db.open();
-                        await this.deleteLeaseRecord(lease.tx_hash);
-                        this.db.close();
-
+                        if (leases) {
+                            this.db.open();
+                            await this.deleteLeaseRecord(lease.tx_hash);
+                            this.db.close();
+                        }
                         // After destroying, If the NFT is owned by the tenant, burn the NFT and recreate and refund the tenant.
                         if (nft) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);

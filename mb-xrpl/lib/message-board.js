@@ -195,39 +195,40 @@ class MessageBoard {
     }
 
     async #pruneOrphanLeases() {
-        // Need to add lock until instance is acquiring and actually created
         // Note: If this is soft deletion we need to handle the destroyed status and replace deleteLeaseRecord with changing the status.
 
-        // Get the records which are created before an acquire timeout.
+        // Get the records which are created before an acquire timeout x 2.
         // Take the xrpl ledger time as 4 seconds.
-        const timeoutSecs = this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
+        const timeoutSecs = (this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD) * 2;
         const timeMargin = new Date(Date.now() - (1000 * timeoutSecs));
 
         this.sashiDb.open();
-        const runningInstances = (await this.sashiDb.getValues(this.sashiTable, { time: timeMargin }, '<'));
+        const instances = (await this.sashiDb.getValues(this.sashiTable));
         this.sashiDb.close();
-        for (const instance of runningInstances) {
+        this.db.open();
+        const leases = (await this.db.getValues(this.leaseTable));
+        this.db.close();
+
+        let activeInstanceCount = leases.filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED)).length;
+
+        // Remove the instances which are orphan.
+        // Only consider the older ones.
+        for (const instance of instances.filter(i => i.time < timeMargin)) {
             try {
-                this.db.open();
-                const leases = (await this.getLeaseRecords({ container_name: instance.name }));
-                this.db.close();
-                const lease = (leases && leases.length) ? leases[0] : null;
+                const leaseIndex = leases.findIndex(l => l.container_name === instance.name);
+                const lease = leaseIndex >= 0 ? leases[leaseIndex] : null;
                 // If there's a lease record this is created from message board.
                 if (lease) {
+                    leases.splice(leaseIndex, 1);
                     const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getNfts())?.find(n => n.NFTokenID == instance.name);
 
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                     // If the NFT is not owned by the tenant we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
-                    if ((lease.timestamp < timeMargin && lease.status === LeaseStatus.ACQUIRING) || !nft) {
+                    if (lease.status === LeaseStatus.ACQUIRING || !nft) {
                         console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
 
-                        if (leases) {
-                            this.db.open();
-                            await this.deleteLeaseRecord(lease.tx_hash);
-                            this.db.close();
-                        }
                         // After destroying, If the NFT is owned by the tenant, burn the NFT and recreate and refund the tenant.
                         if (nft) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
@@ -235,6 +236,16 @@ class MessageBoard {
 
                             console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
                             await this.hostClient.pruneInstance(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                        }
+
+                        // Remove the lease record.
+                        if (lease) {
+                            this.db.open();
+                            await this.deleteLeaseRecord(lease.tx_hash);
+                            this.db.close();
+
+                            if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
+                                activeInstanceCount--;
                         }
                     }
                 }
@@ -251,6 +262,49 @@ class MessageBoard {
             catch (e) {
                 console.error(e);
             }
+        }
+
+        // Remove the leases which are orphan (Does not have an instance).
+        // Only consider the older ones.
+        for (const lease of leases.filter(l => l.timestamp < timeMargin && (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED))) {
+            try {
+                // If lease does not have an instance.
+                this.sashiDb.open();
+                const instances = (await this.sashiDb.getValues(this.sashiTable, { name: lease.container_name }));
+                this.sashiDb.close();
+
+                if (!instances || instances.length === 0) {
+                    console.log(`Pruning orphan lease ${lease.container_name}...`);
+
+                    this.db.open();
+                    await this.deleteLeaseRecord(lease.tx_hash);
+                    this.db.close();
+
+                    if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
+                        activeInstanceCount--;
+
+                    const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getNfts())?.find(n => n.NFTokenID == lease.container_name);
+                    if (nft) {
+                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                        await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex);
+
+                        // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
+                        if (lease.status === LeaseStatus.ACQUIRING) {
+                            console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
+                            await this.hostClient.pruneInstance(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                        }
+                    }
+                }
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
+
+        // If active instance count is updated, Send the update registration transaction.
+        if (this.activeInstanceCount !== activeInstanceCount) {
+            this.activeInstanceCount = activeInstanceCount;
+            await this.hostClient.updateRegInfo(this.activeInstanceCount);
         }
     }
 

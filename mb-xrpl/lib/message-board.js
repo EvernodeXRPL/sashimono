@@ -235,7 +235,7 @@ class MessageBoard {
                             await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex);
 
                             console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                            await this.hostClient.pruneInstance(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                            await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
                         }
 
                         // Remove the lease record.
@@ -291,7 +291,7 @@ class MessageBoard {
                         // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                         if (lease.status === LeaseStatus.ACQUIRING) {
                             console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                            await this.hostClient.pruneInstance(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                            await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
                         }
                     }
                 }

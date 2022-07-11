@@ -72,7 +72,7 @@ class SqliteDatabase {
         });
     }
 
-    getValues(tableName, filter = null) {
+    getValues(tableName, filter = null, op = '=') {
         if (!this.db)
             throw 'Database connection is not open.';
 
@@ -81,7 +81,7 @@ class SqliteDatabase {
         if (filter) {
             const columnNames = Object.keys(filter);
             for (const columnName of columnNames) {
-                filterStr += `${columnName} = ? AND `;
+                filterStr += `${columnName} ${op} ? AND `;
                 values.push(filter[columnName] ? filter[columnName] : 'NULL');
             }
         }

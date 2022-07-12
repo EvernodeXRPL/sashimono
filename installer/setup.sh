@@ -588,11 +588,11 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
+    # echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
+    #         stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
+    #         secret elsewhere before proceeding.\n"
 
-    $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+    # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
     # Force uninstall on quiet mode.

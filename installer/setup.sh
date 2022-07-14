@@ -197,8 +197,9 @@ function set_inet_addr() {
 }
 
 function check_port_validity() {
-    # inert address cannot be empty and cannot contain spaces.
-    [[ $1 =~ ^[0-9]+$ ]] && [ $1 -ge 1024 ] && [ $1 -lt 65535 ] && return 0
+    # Port should be a number and between 1 through 65535.
+    # 1 through 1023 are used by system-supplied TCP/IP applications.
+    [[ $1 =~ ^[0-9]+$ ]] && [ $1 -ge 1024 ] && [ $1 -le 65535 ] && return 0
     return 1
 }
 

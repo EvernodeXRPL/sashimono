@@ -11,7 +11,7 @@ namespace msg::json
     constexpr const char *DOUBLE_QUOTE = "\"";
     constexpr uint16_t MOMENT_SIZE = 900;         // XRP ledgers per Moment.
     constexpr uint16_t LEDGER_TIME_APPROX = 4000; // Approx. milliseconds per XRP ledger.
-    constexpr uint16_t INSTANCE_INFO_SIZE = 488;  // size of a single instance info
+    constexpr uint16_t INSTANCE_INFO_SIZE = 488;  // Size of a single instance info
     /**
      * Parses a json message sent by the message board.
      * @param d Jsoncons document to which the parsed json should be loaded.

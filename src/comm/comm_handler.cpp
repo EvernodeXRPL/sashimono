@@ -301,13 +301,17 @@ namespace comm
         // Convert message length to a byte array
         uint32_to_bytes(length_buffer, message.length());
 
-        const int ret_l = write(ctx.data_socket, length_buffer, 8);
-        const int ret_m = write(ctx.data_socket, message.data(), message.length());
+        int res = write(ctx.data_socket, length_buffer, 8);
+        if (res == -1) {
+            disconnect();
+            return -1;
+        }
 
+        res = write(ctx.data_socket, message.data(), message.length());
         // Close connection after sending the response to the client.
         disconnect();
-
-        return ret_l == -1 || ret_m == -1 ? -1 : 0;
+        
+        return res ==  -1 ? -1 : 0;
     }
 
 

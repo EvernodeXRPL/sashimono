@@ -167,18 +167,18 @@ namespace cli
         int res = read(ctx.socket_fd, length_buffer, 8);
         if (res == -1)
         {
-            std::cerr << errno << " :Error while reading from the sashimono socket.\n";
+            std::cerr << errno << " :Error while reading message length from the sashimono socket.\n";
             return -1;
         }
 
-        uint32_t message_length = uint32_from_bytes(length_buffer);   
+        const uint32_t message_length = uint32_from_bytes(length_buffer);   
 
         // Resize the message buffer to fit to the message length
         message.resize(message_length);
         res = read(ctx.socket_fd, message.data(), message_length);
         if (res == -1)
         {
-            std::cerr << errno << " :Error while reading from the sashimono socket.\n";
+            std::cerr << errno << " :Error while reading the message from the sashimono socket.\n";
             return -1;
         }
 

@@ -11,6 +11,7 @@ namespace msg::json
     constexpr const char *DOUBLE_QUOTE = "\"";
     constexpr uint16_t MOMENT_SIZE = 900;         // XRP ledgers per Moment.
     constexpr uint16_t LEDGER_TIME_APPROX = 4000; // Approx. milliseconds per XRP ledger.
+    constexpr uint16_t INSTANCE_INFO_SIZE = 488;  // size of a single instance info
     /**
      * Parses a json message sent by the message board.
      * @param d Jsoncons document to which the parsed json should be loaded.
@@ -576,7 +577,8 @@ namespace msg::json
      */
     void build_response(std::string &msg, std::string_view response_type, std::string_view content, const bool json_content)
     {
-        msg.reserve(1024);
+        // Extra 50 bytes added for the other data included, in addition to the content here
+        msg.reserve(content.length() + 50);
         msg += "{\"";
         msg += msg::FLD_TYPE;
         msg += SEP_COLON;
@@ -663,7 +665,9 @@ namespace msg::json
      */
     void build_list_response(std::string &msg, const std::vector<hp::instance_info> &instances, const std::vector<hp::lease_info> &leases)
     {
-        msg.reserve(1024);
+        const uint32_t message_size = (INSTANCE_INFO_SIZE * instances.size()) + 2;
+        msg.reserve(message_size);
+
         msg += "[";
         for (size_t i = 0; i < instances.size(); i++)
         {

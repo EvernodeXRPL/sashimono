@@ -577,8 +577,8 @@ namespace msg::json
      */
     void build_response(std::string &msg, std::string_view response_type, std::string_view content, const bool json_content)
     {
-        // Extra 37 bytes added for the other data included, in addition to the content here
-        msg.reserve(content.length() + 37);
+        // Extra 40 bytes added for the other data included, in addition to the content here
+        msg.reserve(content.length() + 40);
         msg += "{\"";
         msg += msg::FLD_TYPE;
         msg += SEP_COLON;

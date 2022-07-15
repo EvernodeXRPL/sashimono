@@ -33,8 +33,8 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create(std::string_view host_addr, const uint16_t docker_registry_port, const size_t inst_count,
-               const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes)
+    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port, const uint16_t docker_registry_port,
+               const size_t inst_count, const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes)
     {
         if (util::is_file_exists(ctx.config_file))
         {
@@ -60,8 +60,8 @@ namespace conf
             cfg.version = version::AGENT_VERSION;
 
             cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
-            cfg.hp.init_peer_port = 22861;
-            cfg.hp.init_user_port = 8081;
+            cfg.hp.init_peer_port = init_peer_port;
+            cfg.hp.init_user_port = init_user_port;
 
             cfg.system.max_instance_count = !inst_count ? 3 : inst_count;
             cfg.system.max_mem_kbytes = !ram_kbytes ? 1048576 : ram_kbytes;

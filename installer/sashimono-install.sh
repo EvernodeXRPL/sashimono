@@ -4,15 +4,17 @@
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
-inetaddr=$1
-countrycode=$2
-inst_count=$3
-cpuMicroSec=$4
-ramKB=$5
-swapKB=$6
-diskKB=$7
-description=$8
-lease_amount=$9
+inetaddr=${1}
+init_peer_port=${2}
+init_user_port=${3}
+countrycode=${4}
+inst_count=${5}
+cpuMicroSec=${6}
+ramKB=${7}
+swapKB=${8}
+diskKB=${9}
+description=${10}
+lease_amount=${11}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -220,7 +222,7 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then

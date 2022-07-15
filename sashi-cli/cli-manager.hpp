@@ -38,6 +38,8 @@ namespace cli
     const std::string value_to_string(const jsoncons::json &val);
 
     void deinit();
+    
+    uint32_t uint32_from_bytes(const uint8_t *data);
 }
 
 #endif

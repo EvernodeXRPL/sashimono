@@ -91,7 +91,7 @@ namespace comm
      * This accepts connections to the socket.
      * This only gets called whithin the comm handler thread.
      * @return 0 on success -1 on error.
-    */
+     */
     int connect()
     {
         ctx.data_socket = accept(ctx.connection_socket, NULL, NULL);
@@ -106,7 +106,7 @@ namespace comm
     /**
      * Disconnect the session.
      * This only gets called whithin the comm handler thread.
-    */
+     */
     void disconnect()
     {
         close(ctx.data_socket);
@@ -178,7 +178,7 @@ namespace comm
      * Handles the received message.
      * @param message_size Message size.
      * @return 0 on success -1 on error.
-    */
+     */
     int handle_message(const int message_size)
     {
         std::string_view msg((char *)read_buffer.data(), message_size);
@@ -283,7 +283,7 @@ namespace comm
         }
         else
             __HANDLE_RESPONSE("error", TYPE_ERROR, -1);
-
+        
         return 0;
     }
 
@@ -297,10 +297,35 @@ namespace comm
         if (ctx.data_socket == -1)
             return -1;
 
-        const int ret = write(ctx.data_socket, message.data(), message.length());
+        uint8_t length_buffer[8];
+        // Convert message length to a byte array
+        uint32_to_bytes(length_buffer, message.length());
+
+        int res = write(ctx.data_socket, length_buffer, 8);
+        if (res == -1) {
+            disconnect();
+            return -1;
+        }
+
+        res = write(ctx.data_socket, message.data(), message.length());
         // Close connection after sending the response to the client.
         disconnect();
-        return ret == -1 ? -1 : 0;
+        
+        return res ==  -1 ? -1 : 0;
+    }
+
+
+    /**
+     * Convert the given uint32_t number to bytes in big endian format.
+     * @param dest Byte array pointer.
+     * @param x Number to be converted.
+    */
+    void uint32_to_bytes(uint8_t *dest, const uint32_t x)
+    {
+        dest[0] = (uint8_t)((x >> 24) & 0xff);
+        dest[1] = (uint8_t)((x >> 16) & 0xff);
+        dest[2] = (uint8_t)((x >> 8) & 0xff);
+        dest[3] = (uint8_t)((x >> 0) & 0xff);
     }
 
     /**

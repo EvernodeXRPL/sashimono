@@ -34,6 +34,8 @@ namespace comm
 
     int read_socket();
 
+    void uint32_to_bytes(uint8_t *dest, const uint32_t x);
+
 } // namespace comm
 
 #endif

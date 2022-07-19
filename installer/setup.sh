@@ -196,6 +196,45 @@ function set_inet_addr() {
     fi
 }
 
+function check_port_validity() {
+    # Port should be a number and between 1 through 65535.
+    # 1 through 1023 are used by system-supplied TCP/IP applications.
+    [[ $1 =~ ^[0-9]+$ ]] && [ $1 -ge 1024 ] && [ $1 -le 65535 ] && return 0
+    return 1
+}
+
+function set_init_ports() {
+
+    # Take default ports in interactive mode or if 'default' is specified.
+    # Picked default ports according to https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
+    # (22223 - 23073) and (26000 - 26822) range is uncommon.
+    ([ "$init_peer_port" == "default" ] || $interactive) && init_peer_port=22861
+    ([ "$init_user_port" == "default" ] || $interactive) && init_user_port=26200
+
+    if $interactive ; then
+
+        if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
+                                            This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?" ; then
+            return 0
+        fi
+
+        init_peer_port=""
+        init_user_port=""
+        while [ -z "$init_peer_port" ]; do
+            read -p "Please specify the starting port of the public 'Peer port range' your server is reachable at: " init_peer_port </dev/tty
+            ! check_port_validity $init_peer_port && init_peer_port="" && echo "Invalid port."
+        done
+        while [ -z "$init_user_port" ]; do
+            read -p "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
+            ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
+        done
+
+    else
+        [ -z "$init_peer_port" ] && echo "Invalid starting peer port '$init_peer_port'" && exit 1
+        [ -z "$init_user_port" ] && echo "Invalid starting user port '$init_user_port'" && exit 1
+    fi
+}
+
 # Validate country code and convert to uppercase if valid.
 function resolve_countrycode() {
     # If invalid, reset countrycode and return with non-zero code.
@@ -389,7 +428,7 @@ function install_evernode() {
     echo "Installing Sashimono..."
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-    ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $countrycode $alloc_instcount \
+    ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
@@ -527,13 +566,15 @@ if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
         inetaddr=${3}           # IP or DNS address.
-        countrycode=${4}        # 2-letter country code.
-        alloc_cpu=${5}          # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${6}        # RAM to allocate for contract instances.
-        alloc_swapKB=${7}       # Swap to allocate for contract instances.
-        alloc_diskKB=${8}       # Disk space to allocate for contract instances.
-        alloc_instcount=${9}    # Total contract instance count.
-        lease_amount=${10}      # Contract instance lease amount in EVRs.
+        init_peer_port=${4}     # Starting peer port for instances.
+        init_user_port=${5}     # Starting user port for instances.
+        countrycode=${6}        # 2-letter country code.
+        alloc_cpu=${7}          # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}        # RAM to allocate for contract instances.
+        alloc_swapKB=${9}       # Swap to allocate for contract instances.
+        alloc_diskKB=${10}      # Disk space to allocate for contract instances.
+        alloc_instcount=${11}   # Total contract instance count.
+        lease_amount=${12}      # Contract instance lease amount in EVRs.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -575,6 +616,9 @@ if [ "$mode" == "install" ]; then
     set_instance_alloc
     echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
 
+    set_init_ports
+    echo -e "Using port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).\n"
+
     set_lease_amount
     # Commented for future consideration.
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
@@ -588,11 +632,11 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
+    # echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
+    #         stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
+    #         secret elsewhere before proceeding.\n"
 
-    $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+    # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
     # Force uninstall on quiet mode.

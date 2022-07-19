@@ -85,8 +85,8 @@ namespace conf
     struct docker_config
     {
         std::unordered_map<std::string, std::string> images;
-        uint16_t registry_port = 0;     // 0 means bypass private docker registry.
-        std::string registry_address;   // This is dynamically constructed at load time.
+        uint16_t registry_port = 0;   // 0 means bypass private docker registry.
+        std::string registry_address; // This is dynamically constructed at load time.
     };
 
     struct sa_config
@@ -125,8 +125,8 @@ namespace conf
 
     int init();
 
-    int create(std::string_view host_addr, const uint16_t docker_registry_port, const size_t inst_count,
-               const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes);
+    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port, const uint16_t docker_registry_port,
+               const size_t inst_count, const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes);
 
     void set_dir_paths(std::string exepath, std::string datadir);
 

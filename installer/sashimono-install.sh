@@ -310,9 +310,11 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-echo "Sashimono installed successfully."
+stage "Configuring auto updater service."
 
 # Enable the Evernode Auto Updater Service.
 [ "$UPGRADE" == "0" ] &&  enable_evernode_auto_updater
+
+echo "Sashimono installed successfully."
 
 exit 0

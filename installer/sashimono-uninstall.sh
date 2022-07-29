@@ -162,7 +162,6 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     sleep 0.5
     userdel -f "$MB_XRPL_USER"
     rm -r /home/"${MB_XRPL_USER:?}"
-    echo "Deleting message board user...-----------+++--------------"
 
 fi
 

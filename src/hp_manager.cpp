@@ -56,6 +56,7 @@ namespace hp
     constexpr const char *CONTRACT_ID_INVALID = "contractid_bad_format";
     constexpr const char *DOCKER_IMAGE_INVALID = "docker_image_invalid";
     constexpr const char *DOCKER_CONTAINER_NOT_FOUND = "container_not_found";
+    constexpr const char *INSTANCE_ALREADY_EXISTS = "instance_already_exists";
 
     // Cgrules check related constants.
     constexpr const char *CGRULE_ACTIVE = "service=$(grep \"ExecStart.*=.*/cgrulesengd$\" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ') && [ ! -z $service ] && systemctl is-active $(basename $service)";
@@ -120,7 +121,17 @@ namespace hp
      */
     int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
-        // If the max alloved instance count is already allocated. We won't allow more.
+
+        // Creating an instance with same name is not allowed.
+        hp::instance_info existingInstance;
+        if (sqlite::get_instance(db, container_name, existingInstance) == 0)
+        {
+            error_msg = INSTANCE_ALREADY_EXISTS;
+            LOG_ERROR << "Found another instance with name: " << container_name << ".";
+            return -1;
+        }
+
+        // If the max allowed instance count is already allocated. We won't allow more.
         const int allocated_count = sqlite::get_allocated_instance_count(db);
         if (allocated_count == -1)
         {

@@ -209,7 +209,7 @@ function set_init_ports() {
     # Picked default ports according to https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
     # (22223 - 23073) and (26000 - 26822) range is uncommon.
     ([ "$init_peer_port" == "default" ] || $interactive) && init_peer_port=22861
-    ([ "$init_user_port" == "default" ] || $interactive) && init_user_port=26200
+    ([ "$init_user_port" == "default" ] || $interactive) && init_user_port=26201
 
     if $interactive ; then
 
@@ -516,6 +516,9 @@ function create_log() {
         echo ""
         echo "Message board log:"
         sudo -u sashimbxrpl bash -c  journalctl --user -u sashimono-mb-xrpl | tail -n 200
+        echo ""
+        echo "Auto updater service log:"
+        journalctl -u evernode-auto-update | tail -n 200
     } > "$tempfile" 2>&1
     echo "Evernode log saved to $tempfile"
 }

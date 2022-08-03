@@ -23,9 +23,10 @@ const char *__HP_PATCH_FILE_PATH = "../patch.cfg";
 
 // Public constants.
 #define HP_NPL_MSG_MAX_SIZE __HP_SEQPKT_MAX_SIZE
-#define HP_KEY_SIZE 66         // Hex pubkey size. (64 char key + 2 chars for key type prfix)
-#define HP_HASH_SIZE 64        // Hex hash size.
-#define HP_CONTRACT_ID_SIZE 36 // Contract Id UUIDv4 string length.
+#define HP_PUBLIC_KEY_SIZE 66   // Hex public_key size. (64 char key + 2 chars for key type prefix)
+#define HP_PRIVATE_KEY_SIZE 130 // Hex public_key size. (128 char key + 2 chars for key type prefix)
+#define HP_HASH_SIZE 64         // Hex hash size.
+#define HP_CONTRACT_ID_SIZE 36  // Contract Id UUIDv4 string length.
 const char *HP_POST_EXEC_SCRIPT_NAME = "post_exec.sh";
 
 #define __HP_ASSIGN_STRING(dest, elem)                                                        \
@@ -96,6 +97,12 @@ const char *HP_POST_EXEC_SCRIPT_NAME = "post_exec.sh";
         return -1;                    \
     }
 
+enum MODE
+{
+    PUBLIC,
+    PRIVATE
+};
+
 struct hp_user_input
 {
     off_t offset;
@@ -108,15 +115,20 @@ struct hp_user_inputs_collection
     size_t count;
 };
 
-struct hp_pubkey
+struct hp_public_key
 {
-    char data[HP_KEY_SIZE + 1]; // +1 for null char.
+    char data[HP_PUBLIC_KEY_SIZE + 1]; // +1 for null char.
+};
+
+struct hp_private_key
+{
+    char data[HP_PRIVATE_KEY_SIZE + 1]; // +1 for null char.
 };
 
 // Represents a user that is connected to HP cluster.
 struct hp_user
 {
-    struct hp_pubkey pubkey;
+    struct hp_public_key public_key;
     int outfd;
     struct hp_user_inputs_collection inputs;
 };
@@ -124,7 +136,7 @@ struct hp_user
 // Represents a node that's part of unl.
 struct hp_unl_node
 {
-    struct hp_pubkey pubkey;
+    struct hp_public_key public_key;
     uint64_t active_on;
 };
 
@@ -135,9 +147,9 @@ struct hp_users_collection
     int in_fd;
 };
 
-struct hp_pubkey_collection
+struct hp_public_key_collection
 {
-    struct hp_pubkey *list;
+    struct hp_public_key *list;
     size_t count;
 };
 
@@ -158,17 +170,30 @@ struct hp_round_limits_config
     size_t proc_ofd_count;
 };
 
+struct consensus_config
+{
+    enum MODE mode;
+    uint32_t roundtime;
+    uint32_t stage_slice;
+    uint16_t threshold;
+};
+
+struct npl_config
+{
+    enum MODE mode;
+};
+
 struct hp_config
 {
     char *version;
-    struct hp_pubkey_collection unl;
+    struct hp_public_key_collection unl;
     char *bin_path;
     char *bin_args;
     char *environment;
     uint32_t roundtime;
     uint32_t stage_slice;
-    char *consensus;
-    char *npl;
+    struct consensus_config consensus;
+    struct npl_config npl;
     uint16_t max_input_ledger_offset;
     struct hp_round_limits_config round_limits;
 };
@@ -178,9 +203,10 @@ struct hp_contract_context
     bool readonly;
     uint64_t timestamp;
     char contract_id[HP_CONTRACT_ID_SIZE + 1]; // +1 for null char.
-    char pubkey[HP_KEY_SIZE + 1];              // +1 for null char.
-    uint64_t lcl_seq_no;                       // lcl sequence no.
-    char lcl_hash[HP_HASH_SIZE + 1];           // +1 for null char.
+    struct hp_public_key public_key;
+    struct hp_private_key private_key;
+    uint64_t lcl_seq_no;             // lcl sequence no.
+    char lcl_hash[HP_HASH_SIZE + 1]; // +1 for null char.
     struct hp_users_collection users;
     struct hp_unl_collection unl;
 };
@@ -202,12 +228,12 @@ int hp_write_user_msg(const struct hp_user *user, const void *buf, const uint32_
 int hp_writev_user_msg(const struct hp_user *user, const struct iovec *bufs, const int buf_count);
 int hp_write_npl_msg(const void *buf, const uint32_t len);
 int hp_writev_npl_msg(const struct iovec *bufs, const int buf_count);
-int hp_read_npl_msg(void *msg_buf, char *pubkey_buf, const int timeout);
+int hp_read_npl_msg(void *msg_buf, char *public_key_buf, const int timeout);
 struct hp_config *hp_get_config();
 int hp_update_config(const struct hp_config *config);
 int hp_update_peers(const char *add_peers[], const size_t add_peers_count, const char *remove_peers[], const size_t remove_peers_count);
 void hp_set_config_string(char **config_str, const char *value, const size_t value_size);
-void hp_set_config_unl(struct hp_config *config, const struct hp_pubkey *new_unl, const size_t new_unl_count);
+void hp_set_config_unl(struct hp_config *config, const struct hp_public_key *new_unl, const size_t new_unl_count);
 void hp_free_config(struct hp_config *config);
 
 void __hp_parse_args_json(const struct json_object_s *object);
@@ -394,39 +420,39 @@ int hp_writev_npl_msg(const struct iovec *bufs, const int buf_count)
 /**
  * Reads a NPL message while waiting for 'timeout' milliseconds.
  * @param msg_buf The buffer to place the incoming message. Must be of at least 'HP_NPL_MSG_MAX_SIZE' length.
- * @param pubkey_buf The buffer to place the sender pubkey (hex). Must be of at least 'HP_KEY_SIZE' length.
+ * @param public_key_buf The buffer to place the sender public_key (hex). Must be of at least 'HP_PUBLIC_KEY_SIZE' length.
  * @param timeout Maximum milliseoncds to wait until a message arrives. If 0, returns immediately.
  *                If -1, waits forever until message arrives.
  * @return Message length on success. 0 if no message arrived within timeout. -1 on error.
  */
-int hp_read_npl_msg(void *msg_buf, char *pubkey_buf, const int timeout)
+int hp_read_npl_msg(void *msg_buf, char *public_key_buf, const int timeout)
 {
     struct pollfd pfd = {__hpc.cctx->unl.npl_fd, POLLIN, 0};
 
-    // NPL messages consist of alternating SEQ packets of pubkey and data.
-    // So we need to wait for both pubkey and data packets to form a complete NPL message.
+    // NPL messages consist of alternating SEQ packets of public_key and data.
+    // So we need to wait for both public_key and data packets to form a complete NPL message.
 
-    // Wait for the pubkey.
+    // Wait for the public_key.
     if (poll(&pfd, 1, timeout) == -1)
     {
-        perror("NPL channel pubkey poll error");
+        perror("NPL channel public_key poll error");
         return -1;
     }
     else if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL))
     {
-        fprintf(stderr, "NPL channel pubkey poll returned error: %d\n", pfd.revents);
+        fprintf(stderr, "NPL channel public_key poll returned error: %d\n", pfd.revents);
         return -1;
     }
     else if (pfd.revents & POLLIN)
     {
-        // Read pubkey.
-        if (read(pfd.fd, pubkey_buf, HP_KEY_SIZE) == -1)
+        // Read public_key.
+        if (read(pfd.fd, public_key_buf, HP_PUBLIC_KEY_SIZE) == -1)
         {
-            perror("Error reading pubkey from NPL channel");
+            perror("Error reading public_key from NPL channel");
             return -1;
         }
 
-        // Wait for data. (data should be available immediately because we have received the pubkey)
+        // Wait for data. (data should be available immediately because we have received the public_key)
         pfd.revents = 0;
         if (poll(&pfd, 1, 100) == -1)
         {
@@ -444,7 +470,7 @@ int hp_read_npl_msg(void *msg_buf, char *pubkey_buf, const int timeout)
             const int readres = read(pfd.fd, msg_buf, HP_NPL_MSG_MAX_SIZE);
             if (readres == -1)
             {
-                perror("Error reading pubkey from NPL channel");
+                perror("Error reading public_key from NPL channel");
                 return -1;
             }
             return readres;
@@ -457,7 +483,7 @@ int hp_read_npl_msg(void *msg_buf, char *pubkey_buf, const int timeout)
 /**
  * Get the existing config file values.
  * @return returns a pointer to a config structure, returns NULL on error.
-*/
+ */
 struct hp_config *hp_get_config()
 {
     const int fd = open(__HP_PATCH_FILE_PATH, O_RDONLY);
@@ -477,8 +503,8 @@ struct hp_config *hp_get_config()
 
 /**
  * Update the params of the existing config file.
- * @param config Pointer to the updated config struct. 
-*/
+ * @param config Pointer to the updated config struct.
+ */
 int hp_update_config(const struct hp_config *config)
 {
     struct hp_contract_context *cctx = __hpc.cctx;
@@ -498,23 +524,23 @@ int hp_update_config(const struct hp_config *config)
     {
         for (size_t i = 0; i < config->unl.count; i++)
         {
-            const char *pubkey = config->unl.list[i].data;
-            const size_t pubkey_len = strlen(pubkey);
-            if (pubkey_len == 0)
-                __HP_UPDATE_CONFIG_ERROR("Unl pubkey cannot be empty.");
+            const char *public_key = config->unl.list[i].data;
+            const size_t public_key_len = strlen(public_key);
+            if (public_key_len == 0)
+                __HP_UPDATE_CONFIG_ERROR("Unl public_key cannot be empty.");
 
-            if (pubkey_len != HP_KEY_SIZE)
-                __HP_UPDATE_CONFIG_ERROR("Unl pubkey invalid. Invalid length.");
+            if (public_key_len != HP_PUBLIC_KEY_SIZE)
+                __HP_UPDATE_CONFIG_ERROR("Unl public_key invalid. Invalid length.");
 
-            if (pubkey[0] != 'e' || pubkey[1] != 'd')
-                __HP_UPDATE_CONFIG_ERROR("Unl pubkey invalid. Invalid format.");
+            if (public_key[0] != 'e' || public_key[1] != 'd')
+                __HP_UPDATE_CONFIG_ERROR("Unl public_key invalid. Invalid format.");
 
             // Checking the validity of hexadecimal portion. (without 'ed').
-            for (size_t j = 2; j < HP_KEY_SIZE; j++)
+            for (size_t j = 2; j < HP_PUBLIC_KEY_SIZE; j++)
             {
-                const char current_char = pubkey[j];
+                const char current_char = public_key[j];
                 if ((current_char < 'A' || current_char > 'F') && (current_char < 'a' || current_char > 'f') && (current_char < '0' || current_char > '9'))
-                    __HP_UPDATE_CONFIG_ERROR("Unl pubkey invalid. Invalid character.");
+                    __HP_UPDATE_CONFIG_ERROR("Unl public_key invalid. Invalid character.");
             }
         }
     }
@@ -522,20 +548,23 @@ int hp_update_config(const struct hp_config *config)
     if (!config->bin_path || strlen(config->bin_path) == 0)
         __HP_UPDATE_CONFIG_ERROR("Binary path cannot be empty.");
 
-    if (config->roundtime <= 0 || config->roundtime > 3600000)
+    if (config->consensus.roundtime <= 0 || config->consensus.roundtime > 3600000)
         __HP_UPDATE_CONFIG_ERROR("Round time must be between 1 and 3600000ms inclusive.");
 
-    if (config->stage_slice <= 0 || config->stage_slice > 33)
+    if (config->consensus.stage_slice <= 0 || config->consensus.stage_slice > 33)
         __HP_UPDATE_CONFIG_ERROR("Stage slice must be between 1 and 33 percent inclusive");
+
+    if (config->consensus.threshold <= 0 || config->consensus.threshold > 100)
+        __HP_UPDATE_CONFIG_ERROR("Threshold must be between 1 and 100 percent inclusive");
 
     if (config->max_input_ledger_offset < 0)
         __HP_UPDATE_CONFIG_ERROR("Invalid max input ledger offset.");
 
-    if (!config->consensus || strlen(config->consensus) == 0 || (strcmp(config->consensus, "public") != 0 && strcmp(config->consensus, "private") != 0))
-        __HP_UPDATE_CONFIG_ERROR("Invalid consensus flag. Valid values: public|private");
+    if (config->consensus.mode != PUBLIC && config->consensus.mode != PRIVATE)
+        __HP_UPDATE_CONFIG_ERROR("Invalid consensus mode. Valid values: public|private");
 
-    if (!config->npl || strlen(config->npl) == 0 || (strcmp(config->npl, "public") != 0 && strcmp(config->npl, "private")) != 0)
-        __HP_UPDATE_CONFIG_ERROR("Invalid npl flag. Valid values: public|private");
+    if (config->npl.mode != PRIVATE && config->npl.mode != PUBLIC)
+        __HP_UPDATE_CONFIG_ERROR("Invalid npl mode. Valid values: public|private");
 
     if (config->round_limits.user_input_bytes < 0 || config->round_limits.user_output_bytes < 0 || config->round_limits.npl_output_bytes < 0 ||
         config->round_limits.proc_cpu_seconds < 0 || config->round_limits.proc_mem_bytes < 0 || config->round_limits.proc_ofd_count < 0)
@@ -570,13 +599,13 @@ void hp_set_config_string(char **config_str, const char *value, const size_t val
 /**
  * Populates the config unl list with the specified values.
  * @param config The config struct to populate the unl to.
- * @param new_unl Pointer to array of unl pubkeys.
- * @param new_unl_count No. of entries in the new unl pubkey array.
+ * @param new_unl Pointer to array of unl public_keys.
+ * @param new_unl_count No. of entries in the new unl public_key array.
  */
-void hp_set_config_unl(struct hp_config *config, const struct hp_pubkey *new_unl, const size_t new_unl_count)
+void hp_set_config_unl(struct hp_config *config, const struct hp_public_key *new_unl, const size_t new_unl_count)
 {
-    const size_t mem_size = sizeof(struct hp_pubkey) * new_unl_count;
-    config->unl.list = (struct hp_pubkey *)realloc(config->unl.list, mem_size);
+    const size_t mem_size = sizeof(struct hp_public_key) * new_unl_count;
+    config->unl.list = (struct hp_public_key *)realloc(config->unl.list, mem_size);
     memcpy(config->unl.list, new_unl, mem_size);
     config->unl.count = new_unl_count;
 }
@@ -584,7 +613,7 @@ void hp_set_config_unl(struct hp_config *config, const struct hp_pubkey *new_unl
 /**
  * Frees the memory allocated for the config structure.
  * @param config Pointer to the config to be freed.
-*/
+ */
 void hp_free_config(struct hp_config *config)
 {
     __HP_FREE(config->version);
@@ -592,8 +621,6 @@ void hp_free_config(struct hp_config *config)
     __HP_FREE(config->bin_path);
     __HP_FREE(config->bin_args);
     __HP_FREE(config->environment);
-    __HP_FREE(config->consensus);
-    __HP_FREE(config->npl);
     __HP_FREE(config);
 }
 
@@ -678,7 +705,7 @@ int __hp_encode_json_string_array(char *buf, const char *elems[], const size_t c
  * Read the values from the existing patch file.
  * @param fd File discriptor of the patch.cfg file.
  * @return returns a pointer to a patch_config structure, returns NULL on error.
-*/
+ */
 struct hp_config *__hp_read_from_patch_file(const int fd)
 {
     char buf[4096];
@@ -708,10 +735,10 @@ struct hp_config *__hp_read_from_patch_file(const int fd)
  * Write values of the given patch config struct to the file discriptor given.
  * @param fd File discriptor of the patch.cfg file.
  * @param config Patch config structure.
-*/
+ */
 int __hp_write_to_patch_file(const int fd, const struct hp_config *config)
 {
-    struct iovec iov_vec[4];
+    struct iovec iov_vec[6];
     // {version: + newline + 4 spaces => 21;
     const size_t version_len = 21 + strlen(config->version);
     char version_buf[version_len];
@@ -732,8 +759,8 @@ int __hp_write_to_patch_file(const int fd, const struct hp_config *config)
         memcpy(unl_buf + pos, "\n        ", 9);
         pos += 9;
         unl_buf[pos++] = '"';
-        memcpy(unl_buf + pos, config->unl.list[i].data, HP_KEY_SIZE);
-        pos += HP_KEY_SIZE;
+        memcpy(unl_buf + pos, config->unl.list[i].data, HP_PUBLIC_KEY_SIZE);
+        pos += HP_PUBLIC_KEY_SIZE;
         unl_buf[pos++] = '"';
     }
 
@@ -743,27 +770,51 @@ int __hp_write_to_patch_file(const int fd, const struct hp_config *config)
 
     // Top-level field values.
 
-    const char *json_string = "    \"bin_path\": \"%s\",\n    \"bin_args\": \"%s\",\n    \"environment\": \"%s\",\n    \"roundtime\": %s,\n    \"stage_slice\": %s,\n"
-                              "    \"consensus\": \"%s\",\n    \"npl\": \"%s\",\n    \"max_input_ledger_offset\": %s,\n";
-
-    char roundtime_str[16];
-    sprintf(roundtime_str, "%d", config->roundtime);
-
-    char stage_slice_str[16];
-    sprintf(stage_slice_str, "%d", config->stage_slice);
+    const char *json_string = "    \"bin_path\": \"%s\",\n    \"bin_args\": \"%s\",\n    \"environment\": \"%s\",\n"
+                              "    \"max_input_ledger_offset\": %s,\n";
 
     char max_input_ledger_offset_str[16];
     sprintf(max_input_ledger_offset_str, "%d", config->max_input_ledger_offset);
 
-    const size_t json_string_len = 172 + strlen(config->bin_path) + strlen(config->bin_args) + strlen(config->environment) +
-                                   strlen(roundtime_str) + strlen(stage_slice_str) +
-                                   strlen(config->consensus) + strlen(config->npl) + strlen(max_input_ledger_offset_str);
+    const size_t json_string_len = 96 + strlen(config->bin_path) + strlen(config->bin_args) + strlen(config->environment) + strlen(max_input_ledger_offset_str);
     char json_buf[json_string_len];
-    sprintf(json_buf, json_string, config->bin_path, config->bin_args, config->environment, roundtime_str, stage_slice_str, config->consensus, config->npl, max_input_ledger_offset_str);
+    sprintf(json_buf, json_string, config->bin_path, config->bin_args, config->environment, max_input_ledger_offset_str);
     iov_vec[2].iov_base = json_buf;
     iov_vec[2].iov_len = json_string_len;
 
-    // Round limits field valies.
+    // Consensus fields
+
+    const char *consensus_json = "    \"consensus\": {\n"
+                                 "        \"mode\": %s,\n        \"roundtime\": %s,\n        \"stage_slice\": %s,\n"
+                                 "        \"threshold\": %s\n    },\n";
+
+    char consensus_mode_str[9], roundtime_str[16], stage_slice_str[16], threshold_str[3];
+
+    sprintf(consensus_mode_str, "\"%s\"", config->consensus.mode == PUBLIC ? "public" : "private");
+    sprintf(roundtime_str, "%d", config->consensus.roundtime);
+    sprintf(stage_slice_str, "%d", config->consensus.stage_slice);
+    sprintf(threshold_str, "%d", config->consensus.threshold);
+
+    const size_t consensus_json_len = 114 + strlen(consensus_mode_str) + strlen(roundtime_str) + strlen(stage_slice_str) + strlen(threshold_str);
+    char consensus_buf[consensus_json_len];
+    sprintf(consensus_buf, consensus_json, consensus_mode_str, roundtime_str, stage_slice_str, threshold_str);
+    iov_vec[3].iov_base = consensus_buf;
+    iov_vec[3].iov_len = consensus_json_len;
+
+    // npl field values
+
+    const char *npl_json = "    \"npl\": {\n"
+                           "        \"mode\": %s\n    },\n";
+
+    char npl_mode_str[9];
+    sprintf(npl_mode_str, "\"%s\"", config->npl.mode == PUBLIC ? "public" : "private");
+    const size_t npl_json_len = 37 + strlen(npl_mode_str);
+    char npl_buf[npl_json_len];
+    sprintf(npl_buf, npl_json, npl_mode_str);
+    iov_vec[4].iov_base = npl_buf;
+    iov_vec[4].iov_len = npl_json_len;
+
+    // Round limits field values.
 
     const char *round_limits_json = "    \"round_limits\": {\n"
                                     "        \"user_input_bytes\": %s,\n        \"user_output_bytes\": %s,\n        \"npl_output_bytes\": %s,\n"
@@ -786,11 +837,11 @@ int __hp_write_to_patch_file(const int fd, const struct hp_config *config)
     sprintf(round_limits_buf, round_limits_json,
             user_input_bytes_str, user_output_bytes_str, npl_output_bytes_str,
             proc_cpu_seconds_str, proc_mem_bytes_str, proc_ofd_count_str);
-    iov_vec[3].iov_base = round_limits_buf;
-    iov_vec[3].iov_len = round_limits_json_len;
+    iov_vec[5].iov_base = round_limits_buf;
+    iov_vec[5].iov_len = round_limits_json_len;
 
     if (ftruncate(fd, 0) == -1 ||         // Clear any previous content in the file.
-        pwritev(fd, iov_vec, 4, 0) == -1) // Start writing from begining.
+        pwritev(fd, iov_vec, 6, 0) == -1) // Start writing from begining.
         return -1;
 
     return 0;
@@ -800,7 +851,7 @@ int __hp_write_to_patch_file(const int fd, const struct hp_config *config)
  * Populate the given patch struct file from the json_object obtained from the existing patch.cfg file.
  * @param config Pointer to the patch config sturct to be populated.
  * @param object Pointer to the json object.
-*/
+ */
 void __hp_populate_patch_from_json_object(struct hp_config *config, const struct json_object_s *object)
 {
     const struct json_object_element_s *elem = object->start;
@@ -820,7 +871,7 @@ void __hp_populate_patch_from_json_object(struct hp_config *config, const struct
                 const size_t unl_count = unl_array->length;
 
                 config->unl.count = unl_count;
-                config->unl.list = unl_count ? (struct hp_pubkey *)malloc(sizeof(struct hp_pubkey) * unl_count) : NULL;
+                config->unl.list = unl_count ? (struct hp_public_key *)malloc(sizeof(struct hp_public_key) * unl_count) : NULL;
 
                 if (unl_count > 0)
                 {
@@ -845,16 +896,6 @@ void __hp_populate_patch_from_json_object(struct hp_config *config, const struct
         {
             __HP_ASSIGN_CHAR_PTR(config->environment, elem);
         }
-        else if (strcmp(k->string, "roundtime") == 0)
-        {
-            const struct json_number_s *value = (struct json_number_s *)elem->value->payload;
-            config->roundtime = strtol(value->number, NULL, 0);
-        }
-        else if (strcmp(k->string, "stage_slice") == 0)
-        {
-            const struct json_number_s *value = (struct json_number_s *)elem->value->payload;
-            config->stage_slice = strtol(value->number, NULL, 0);
-        }
         else if (strcmp(k->string, "max_input_ledger_offset") == 0)
         {
             const struct json_number_s *value = (struct json_number_s *)elem->value->payload;
@@ -862,11 +903,49 @@ void __hp_populate_patch_from_json_object(struct hp_config *config, const struct
         }
         else if (strcmp(k->string, "consensus") == 0)
         {
-            __HP_ASSIGN_CHAR_PTR(config->consensus, elem);
+            struct json_object_s *object = (struct json_object_s *)elem->value->payload;
+            struct json_object_element_s *sub_ele = object->start;
+            do
+            {
+                if (strcmp(sub_ele->name->string, "roundtime") == 0)
+                {
+                    __HP_ASSIGN_UINT64(config->consensus.roundtime, sub_ele);
+                }
+                else if (strcmp(sub_ele->name->string, "stage_slice") == 0)
+                {
+                    __HP_ASSIGN_UINT64(config->consensus.stage_slice, sub_ele);
+                }
+                else if (strcmp(sub_ele->name->string, "threshold") == 0)
+                {
+                    __HP_ASSIGN_UINT64(config->consensus.threshold, sub_ele);
+                }
+                else if (strcmp(sub_ele->name->string, "mode") == 0)
+                {
+                    if (sub_ele->value->type == json_type_string)
+                    {
+                        const struct json_string_s *value = (struct json_string_s *)sub_ele->value->payload;
+                        config->consensus.mode = (strcmp(value->string, "public") == 0) ? PUBLIC : PRIVATE;
+                    }
+                }
+                sub_ele = sub_ele->next;
+            } while (sub_ele);
         }
         else if (strcmp(k->string, "npl") == 0)
         {
-            __HP_ASSIGN_CHAR_PTR(config->npl, elem);
+            struct json_object_s *object = (struct json_object_s *)elem->value->payload;
+            struct json_object_element_s *sub_ele = object->start;
+            do
+            {
+                if (strcmp(sub_ele->name->string, "mode") == 0)
+                {
+                    if (sub_ele->value->type == json_type_string)
+                    {
+                        const struct json_string_s *value = (struct json_string_s *)sub_ele->value->payload;
+                        config->npl.mode = (strcmp(value->string, "public") == 0) ? PUBLIC : PRIVATE;
+                    }
+                }
+                sub_ele = sub_ele->next;
+            } while (sub_ele);
         }
         else if (strcmp(k->string, "round_limits") == 0)
         {
@@ -919,9 +998,13 @@ void __hp_parse_args_json(const struct json_object_s *object)
         {
             __HP_ASSIGN_STRING(cctx->contract_id, elem);
         }
-        else if (strcmp(k->string, "pubkey") == 0)
+        else if (strcmp(k->string, "public_key") == 0)
         {
-            __HP_ASSIGN_STRING(cctx->pubkey, elem);
+            __HP_ASSIGN_STRING(cctx->public_key.data, elem);
+        }
+        else if (strcmp(k->string, "private_key") == 0)
+        {
+            __HP_ASSIGN_STRING(cctx->private_key.data, elem);
         }
         else if (strcmp(k->string, "timestamp") == 0)
         {
@@ -959,7 +1042,7 @@ void __hp_parse_args_json(const struct json_object_s *object)
                     for (size_t i = 0; i < user_count; i++)
                     {
                         struct hp_user *user = &cctx->users.list[i];
-                        memcpy(user->pubkey.data, user_elem->name->string, HP_KEY_SIZE);
+                        memcpy(user->public_key.data, user_elem->name->string, HP_PUBLIC_KEY_SIZE);
 
                         if (user_elem->value->type == json_type_array)
                         {
@@ -998,7 +1081,7 @@ void __hp_parse_args_json(const struct json_object_s *object)
         }
         else if (strcmp(k->string, "unl") == 0)
         {
-            // unl is an object with pubkeys as keys. Each key contains an object with that node statistics.
+            // unl is an object with public_keys as keys. Each key contains an object with that node statistics.
             if (elem->value->type == json_type_object)
             {
                 const struct json_object_s *unl_obj = (struct json_object_s *)elem->value->payload;
@@ -1012,8 +1095,8 @@ void __hp_parse_args_json(const struct json_object_s *object)
                     struct json_object_element_s *unl_elem = unl_obj->start;
                     for (size_t i = 0; i < unl_count; i++)
                     {
-                        // Each element(key) is named by the pubkey.
-                        strncpy(cctx->unl.list[i].pubkey.data, unl_elem->name->string, unl_elem->name->string_size);
+                        // Each element(key) is named by the public_key.
+                        strncpy(cctx->unl.list[i].public_key.data, unl_elem->name->string, unl_elem->name->string_size);
 
                         if (unl_elem->value->type == json_type_object)
                         {

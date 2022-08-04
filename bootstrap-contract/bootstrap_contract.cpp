@@ -31,7 +31,7 @@ int main(int argc, char **argv)
         const struct hp_user *user = &ctx->users.list[u];
 
         // We allow only the owner of the instance to upload the bundle.zip
-        if (strcmp(user->pubkey.data, argv[1]) != 0)
+        if (strcmp(user->public_key.data, argv[1]) != 0)
             continue;
 
         // Iterate through all inputs from this user.

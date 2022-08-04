@@ -59,7 +59,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "install" ] && [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -69,12 +69,11 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] ; then
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
-elif [ ! -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] ; then
-    [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
+elif [ -d $SASHIMONO_BIN ] ; then
+    [ "$1" != "uninstall" ] \
         && echomult "$evernode host management tool
                 \nYour system has a previous failed partial $evernode installation.
                 \nSupported commands:
-                \ninstall - Re-install Sashimono and register on $evernode
                 \nuninstall - Uninstall previous $evernode installations"\
         && exit 1
 else

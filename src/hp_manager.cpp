@@ -122,8 +122,8 @@ namespace hp
     int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
     {
         // Creating an instance with same name is not allowed.
-        hp::instance_info existingInstance;
-        if (sqlite::get_instance(db, container_name, existingInstance) == 0)
+        hp::instance_info existing_instance;
+        if (sqlite::get_instance(db, container_name, existing_instance) == 0)
         {
             error_msg = INSTANCE_ALREADY_EXISTS;
             LOG_ERROR << "Found another instance with name: " << container_name << ".";

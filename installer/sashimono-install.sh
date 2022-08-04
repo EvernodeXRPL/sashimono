@@ -4,15 +4,17 @@
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
-inetaddr=$1
-countrycode=$2
-inst_count=$3
-cpuMicroSec=$4
-ramKB=$5
-swapKB=$6
-diskKB=$7
-description=$8
-lease_amount=$9
+inetaddr=${1}
+init_peer_port=${2}
+init_user_port=${3}
+countrycode=${4}
+inst_count=${5}
+cpuMicroSec=${6}
+ramKB=${7}
+swapKB=${8}
+diskKB=${9}
+description=${10}
+lease_amount=${11}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -65,9 +67,11 @@ RefuseManualStart=no
 RefuseManualStop=no
 [Timer]
 Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
-OnCalendar=0/2:00:00
+OnCalendar=0/12:00:00
 # Execute job if it missed a run due to machine being off
 Persistent=true
+# To prevent rush time, adding 2 hours delay
+RandomizedDelaySec=7200
 [Install]
 WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
@@ -220,7 +224,7 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
@@ -308,9 +312,11 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-echo "Sashimono installed successfully."
+stage "Configuring auto updater service."
 
 # Enable the Evernode Auto Updater Service.
-[ "$UPGRADE" == "0" ] &&  enable_evernode_auto_updater
+enable_evernode_auto_updater
+
+echo "Sashimono installed successfully."
 
 exit 0

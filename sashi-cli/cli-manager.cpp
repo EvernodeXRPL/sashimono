@@ -162,17 +162,36 @@ namespace cli
             return -1;
         }
 
-        // Resize the message to max length and resize to original read length after reading.
-        message.resize(BUFFER_SIZE);
-        const int res = read(ctx.socket_fd, message.data(), message.length());
+        // Read the length of the message to a buffer
+        uint8_t  length_buffer[8];
+        int res = read(ctx.socket_fd, length_buffer, 8);
         if (res == -1)
         {
-            std::cerr << errno << " :Error while reading from the sashimono socket.\n";
+            std::cerr << errno << " :Error while reading message length from the sashimono socket.\n";
             return -1;
         }
-        message.resize(res);
+
+        const uint32_t message_length = uint32_from_bytes(length_buffer);   
+
+        // Resize the message buffer to fit to the message length
+        message.resize(message_length);
+        res = read(ctx.socket_fd, message.data(), message_length);
+        if (res == -1)
+        {
+            std::cerr << errno << " :Error while reading the message from the sashimono socket.\n";
+            return -1;
+        }
 
         return res;
+    }
+
+    // Convert byte buffer to uint32_t
+    uint32_t uint32_from_bytes(const uint8_t *data)
+    {
+        return ((uint32_t)data[0] << 24) +
+               ((uint32_t)data[1] << 16) +
+               ((uint32_t)data[2] << 8) +
+               ((uint32_t)data[3]);
     }
 
     int get_json_output(std::string_view json_msg, std::string &output)
@@ -229,7 +248,7 @@ namespace cli
                 return -1;
             }
 
-            jsoncons::json content = jsoncons::json::parse(d["content"].as<std::string>(), jsoncons::strict_json_parsing());
+            jsoncons::json content = d["content"];
             std::cout << jsoncons::pretty_print(content) << std::endl;
         }
         catch (const std::exception &e)

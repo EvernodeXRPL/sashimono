@@ -155,7 +155,11 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     fi
 
     echo "Deleting message board user..."
-    killall -u $MB_XRPL_USER # Kill any running processes.
+    # Killall command is not found in every linux systems, therefore pkill command is used. 
+    # A small timeout(0.5 second) is applied before deleting the user because it takes some time to kill all the processes
+    loginctl disable-linger  $MB_XRPL_USER
+    pkill -u $MB_XRPL_USER # Kill any running processes.
+    sleep 0.5
     userdel -f "$MB_XRPL_USER"
     rm -r /home/"${MB_XRPL_USER:?}"
 

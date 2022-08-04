@@ -9,18 +9,33 @@ patch_cfg="../patch.cfg"
 patch_cfg_bk="../patch.cfg.bk"
 contract_config="contract.config"
 self_original_name="bootstrap_upgrade.sh" # Original name of this script before it was renamed to post_exec.sh
-self_path=$(realpath $0) # Full path of this script.
-self_name=$(basename $self_path) # File name of this script.
-self_dir=$(dirname $self_path) # Parent path of this script.
+self_path=$(realpath $0)                  # Full path of this script.
+self_name=$(basename $self_path)          # File name of this script.
+self_dir=$(dirname $self_path)            # Parent path of this script.
 
 # If field exists, append to patch json.
 function append_string_field() {
     local field=$1
     local req=$2 # '1' if empty value not allowed.
     val=$(jq ".$field" $contract_config)
-    if [ "$val" != "null" ] ; then
+    if [ "$val" != "null" ]; then
         if [ "$req" == "1" ] && [ ${#val} -eq 2 ]; then # Empty means "" or ''
             echo "$field cannot be empty."
+            return 1
+        fi
+        [ "${patch_json: -1}" != "{" ] && patch_json="$patch_json,"
+        patch_json="$patch_json${field##*.}:$val" # Append last . component field name with value.
+    fi
+    return 0
+}
+
+# If field exists, append to patch json.
+function append_mode_field() {
+    local field=$1
+    val=$(jq ".$field" $contract_config)
+    if [ "$val" != "null" ]; then
+        if [ ${#val} -eq 2 ] || { [ "$val" != "\"public\"" ] && [ "$val" != "\"private\"" ]; }; then
+            echo "Invalid $field mode. Valid values: public|private."
             return 1
         fi
         [ "${patch_json: -1}" != "{" ] && patch_json="$patch_json,"
@@ -33,7 +48,7 @@ function append_string_field() {
 function append_gt0_field() {
     local field=$1
     local val=$(jq ".$field" $contract_config)
-    if [ "$val" != "null" ] ; then
+    if [ "$val" != "null" ]; then
         if [ "$val" -lt 0 ]; then
             echo "Invalid $field. Should be greater than zero."
             return 1
@@ -51,7 +66,7 @@ function append_range_field() {
     local max=$3
 
     local val=$(jq ".$field" $contract_config)
-    if [ "$val" != "null" ] ; then
+    if [ "$val" != "null" ]; then
         if [ "$val" -le $min ] || [ "$val" -gt $max ]; then
             echo "$field must be between $min and $max inclusive."
             return 1
@@ -102,32 +117,24 @@ function upgrade() {
             patch_json="{bin_path:$bin_path"
         fi
 
-        if ! append_string_field "bin_args" ; then
+        if ! append_string_field "bin_args"; then
             return 1
         fi
 
-        if ! append_string_field "environment" ; then
-            return 1
-        fi
-        
-        if ! append_string_field "version" 1 ; then
+        if ! append_string_field "environment"; then
             return 1
         fi
 
-        if ! append_range_field "roundtime" 0 3600000 ; then
+        if ! append_string_field "version" 1; then
             return 1
         fi
 
-        if ! append_range_field "stage_slice" 0 33 ; then
-            return 1
-        fi
-
-        if ! append_gt0_field "max_input_ledger_offset" ; then
+        if ! append_gt0_field "max_input_ledger_offset"; then
             return 1
         fi
 
         local unl=$(jq '.unl' $contract_config)
-        if [ "$unl" != "null" ] ; then
+        if [ "$unl" != "null" ]; then
             unl_res=$(jq '.unl? | map(length == 66 and startswith("ed")) | index(false)' $contract_config)
             if [ "$unl_res" != "null" ]; then
                 echo "Unl pubkey invalid. Invalid format. Key should be 66 in length with ed prefix"
@@ -136,44 +143,57 @@ function upgrade() {
             patch_json="$patch_json,unl:$unl"
         fi
 
-        local consensus=$(jq '.consensus' $contract_config)
-        if [ "$consensus" != "null" ] ; then
-            if [ ${#consensus} -eq 2 ] || { [ "$consensus" != "\"public\"" ] && [ "$consensus" != "\"private\"" ]; }; then
-                echo "Invalid consensus flag. Valid values: public|private."
+        local consensus_config=$(jq '.consensus' $contract_config)
+        if [ "$consensus_config" != "null" ]; then
+            patch_json="$patch_json,consensus:{"
+
+            if ! append_mode_field "consensus.mode"; then
                 return 1
             fi
-            patch_json="$patch_json,consensus:$consensus"
+            if ! append_range_field "consensus.roundtime" 0 3600000; then
+                return 1
+            fi
+            if ! append_range_field "consensus.stage_slice" 0 33; then
+                return 1
+            fi
+            if ! append_range_field "consensus.threshold" 1 100; then
+                return 1
+            fi
+
+            patch_json="$patch_json}"
         fi
 
-        local npl=$(jq '.npl' $contract_config)
-        if [ "$npl" != "null" ] ; then
-            if [ ${#npl} -eq 2 ] || { [ "$npl" != "\"public\"" ] && [ "$npl" != "\"private\"" ]; }; then
-                echo "Invalid npl flag. Valid values: public|private."
+        local npl_config=$(jq '.npl' $contract_config)
+        if [ "$npl_config" != "null" ]; then
+            patch_json="$patch_json,npl:{"
+
+            if ! append_mode_field "npl.mode"; then
                 return 1
             fi
-            patch_json="$patch_json,npl:$npl"
+
+            patch_json="$patch_json}"
         fi
 
         local round_limits=$(jq '.round_limits' $contract_config)
-        if [ "$round_limits" != "null" ] ; then
+        if [ "$round_limits" != "null" ]; then
             patch_json="$patch_json,round_limits:{"
 
-            if ! append_gt0_field "round_limits.user_input_bytes" ; then
+            if ! append_gt0_field "round_limits.user_input_bytes"; then
                 return 1
             fi
-            if ! append_gt0_field "round_limits.user_output_bytes" ; then
+            if ! append_gt0_field "round_limits.user_output_bytes"; then
                 return 1
             fi
-            if ! append_gt0_field "round_limits.npl_output_bytes" ; then
+            if ! append_gt0_field "round_limits.npl_output_bytes"; then
                 return 1
             fi
-            if ! append_gt0_field "round_limits.proc_cpu_seconds" ; then
+            if ! append_gt0_field "round_limits.proc_cpu_seconds"; then
                 return 1
             fi
-            if ! append_gt0_field "round_limits.proc_mem_bytes" ; then
+            if ! append_gt0_field "round_limits.proc_mem_bytes"; then
                 return 1
             fi
-            if ! append_gt0_field "round_limits.proc_ofd_count" ; then
+            if ! append_gt0_field "round_limits.proc_ofd_count"; then
                 return 1
             fi
 
@@ -186,7 +206,7 @@ function upgrade() {
 
         echo "Updating $patch_cfg file."
         local new_patch=$(jq -M ". + $patch_json" $patch_cfg) # Merge jsons
-        cp $patch_cfg $patch_cfg_bk # Make a backup.
+        cp $patch_cfg $patch_cfg_bk                           # Make a backup.
         echo "$new_patch" >$patch_cfg
 
         # Remove contract.config after patch file update.
@@ -200,7 +220,7 @@ function upgrade() {
         chmod +x $install_script
         ./$install_script
         installcode=$?
-        
+
         rm $install_script
 
         if [ "$installcode" -eq "0" ]; then
@@ -229,7 +249,7 @@ function rollback() {
 upgrade
 upgradecode=$?
 
-pushd $self_dir > /dev/null 2>&1
+pushd $self_dir >/dev/null 2>&1
 if [ "$upgradecode" -eq "0" ]; then
     # We have upgraded the contract successfully. Cleanup bootstrap contract resources.
     echo "Upgrade successful. Cleaning up."
@@ -239,6 +259,6 @@ else
     rollback
 fi
 finalcode=$?
-popd > /dev/null 2>&1
+popd >/dev/null 2>&1
 
 exit $finalcode

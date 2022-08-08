@@ -24,7 +24,9 @@ function stage() {
 
 stage "Installing dependencies"
 
-apt-get update
+# Added --allow-releaseinfo-change
+# To fix - Repository 'https://apprepo.vultr.com/ubuntu universal InRelease' changed its 'Codename' value from 'buster' to 'universal'
+apt-get update --allow-releaseinfo-change
 apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 # uidmap        # Required for rootless docker.
 # slirp4netns   # Required for high performance rootless networking.

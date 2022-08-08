@@ -88,13 +88,13 @@ elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
         && echomult "$evernode host management tool
                 \nYour system has a previous failed partial $evernode installation.
+                \nYou can repair previous $evernode installation by installing again.
                 \nSupported commands:
-                \ninstall - Repair previous $evernode installation
                 \nuninstall - Uninstall previous $evernode installation" \
         && exit 1
 
     # If partially installed and interactive mode, Allow user to repair.
-    $interactive && [ "$1" == "install" ] \
+    [ "$2" != "-q" ]  && [ "$1" == "install" ] \
         && ! confirm "$evernode host management tool
                 \nYour system has a previous failed partial $evernode installation.
                 \nYou can run:
@@ -120,6 +120,17 @@ fi
 # Format the given KB number into GB units.
 function GB() {
     echo "$(bc <<<"scale=2; $1 / 1000000") GB"
+}
+
+function check_prereq() {
+    # Check if node js installed.
+    if command -v node &>/dev/null; then
+        version=$(node -v)
+        if [[ ! $version =~ v16\..* ]]; then
+            echo "$evernode requires NodeJs 16.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 16.x."
+            exit 1
+        fi
+    fi
 }
 
 function check_sys_req() {
@@ -596,6 +607,7 @@ if [ "$mode" == "install" ]; then
             \nContinue?" && exit 1
 
     check_sys_req
+    check_prereq
 
     # Check bc command is installed.
     if ! command -v bc &>/dev/null; then

@@ -7,16 +7,18 @@
 force=$1
 
 function confirm() {
-    echo -en $1" [y/n] "
+    echo -en $1" [Y/n] "
     local yn=""
-
     read yn </dev/tty
+
+    # Default choice is 'y'
+    [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
         read -p "'y' or 'n' expected: " yn </dev/tty
     done
 
-    echo ""                                     # Insert new line after answering.
-    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
+    echo "" # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
 }
 
 function cgrulesengd_servicename() {

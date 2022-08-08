@@ -11,7 +11,7 @@ ramKB_per_instance=524288
 instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f72e-430e-b297-9210468a4cbb"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -48,13 +48,28 @@ function echomult() {
     echo -e $1
 }
 
+function confirm() {
+    echo -en $1" [Y/n] "
+    local yn=""
+    read yn </dev/tty
+
+    # Default choice is 'y'
+    [ -z $yn ] && yn="y"
+    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
+        read -p "'y' or 'n' expected: " yn </dev/tty
+    done
+
+    echo "" # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
+}
+
 # Configuring the sashimono service is the last stage of the installation.
 # Removing the sashimono service is the first stage of ununstallation.
 # So if the service exists, Previous sashimono installation has been complete.
 # Creating bin dir is the first stage of installation.
 # Removing bin dir is the last stage of uninstalltion.
 # So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
-if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] ; then
+if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] ; then
     [ "$1" == "install" ] \
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
@@ -70,11 +85,21 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] ; then
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
-    [ "$1" != "uninstall" ] \
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
         && echomult "$evernode host management tool
                 \nYour system has a previous failed partial $evernode installation.
                 \nSupported commands:
-                \nuninstall - Uninstall previous $evernode installations"\
+                \ninstall - Repair previous $evernode installation
+                \nuninstall - Uninstall previous $evernode installation" \
+        && exit 1
+
+    # If partially installed and interactive mode, Allow user to repair.
+    $interactive && [ "$1" == "install" ] \
+        && ! confirm "$evernode host management tool
+                \nYour system has a previous failed partial $evernode installation.
+                \nYou can run:
+                \nuninstall - Uninstall previous $evernode installation.
+                \n\nDo you want to repair previous $evernode installation?" \
         && exit 1
 else
     [ "$1" != "install" ] \
@@ -91,21 +116,6 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
-
-function confirm() {
-    echo -en $1" [Y/n] "
-    local yn=""
-    read yn </dev/tty
-
-    # Default choice is 'y'
-    [ -z $yn ] && yn="y"
-    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
-        read -p "'y' or 'n' expected: " yn </dev/tty
-    done
-
-    echo "" # Insert new line after answering.
-    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
-}
 
 # Format the given KB number into GB units.
 function GB() {
@@ -487,6 +497,7 @@ function update_evernode() {
     elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
         [ -d $log_dir ] || mkdir -p $log_dir
         logfile="$log_dir/installer-$(date +%s).log"
+        remove_evernode_alias
         ! create_evernode_alias && echo "Alias creation failed."
         echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi

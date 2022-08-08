@@ -42,59 +42,11 @@ export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
 
-# Configuring the sashimono service is the last stage of the installation.
-# So if the service exists, Previous sashimono installation has been complete.
-[ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && sashimono_installed=true || sashimono_installed=false
-
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
     echo -e $1
 }
-
-# The set of commands supported differs based on whether Sashimono is installed or not.
-if ! $sashimono_installed ; then
-    # If sashimono is not installed but there's a sashimono binary directory, The previous installation is a failed attempt.
-    # So, user can reinstall or uninstall the previous partial failed attempt.
-    if [ ! -d $SASHIMONO_BIN ] ; then
-        [ "$1" != "install" ] \
-            && echomult "$evernode host management tool
-                    \nYour system is not registered on $evernode.
-                    \nSupported commands:
-                    \ninstall - Install Sashimono and register on $evernode"\
-            && exit 1
-    else
-        [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
-            && echomult "$evernode host management tool
-                    \nYour system has a previous failed partial $evernode installation.
-                    \nSupported commands:
-                    \ninstall - Re-install Sashimono and register on $evernode
-                    \nuninstall - Uninstall previous $evernode installations"\
-            && exit 1
-    fi
-else
-    [ "$1" == "install" ] \
-        && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
-        && exit 1
-
-    [ "$1" != "install" ] && [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
-        && echomult "$evernode host management tool
-                \nYour host is registered on $evernode.
-                \nSupported commands:
-                \nstatus - View $evernode registration info
-                \nlist - View contract instances running on this system
-                \nlog - Generate evernode log file.
-                \nupdate - Check and install $evernode software updates
-                \nuninstall - Uninstall and deregister from $evernode" \
-        && exit 1
-fi
-mode=$1
-
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
-    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
-    [ "$2" == "-q" ] && interactive=false || interactive=true
-    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-fi
 
 function confirm() {
     echo -en $1" [Y/n] "
@@ -111,9 +63,74 @@ function confirm() {
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
 }
 
+# Configuring the sashimono service is the last stage of the installation.
+# Removing the sashimono service is the first stage of ununstallation.
+# So if the service exists, Previous sashimono installation has been complete.
+# Creating bin dir is the first stage of installation.
+# Removing bin dir is the last stage of uninstalltion.
+# So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
+if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] ; then
+    [ "$1" == "install" ] \
+        && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
+        && exit 1
+
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+        && echomult "$evernode host management tool
+                \nYour host is registered on $evernode.
+                \nSupported commands:
+                \nstatus - View $evernode registration info
+                \nlist - View contract instances running on this system
+                \nlog - Generate evernode log file.
+                \nupdate - Check and install $evernode software updates
+                \nuninstall - Uninstall and deregister from $evernode" \
+        && exit 1
+elif [ -d $SASHIMONO_BIN ] ; then
+    [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
+        && echomult "$evernode host management tool
+                \nYour system has a previous failed partial $evernode installation.
+                \nYou can repair previous $evernode installation by installing again.
+                \nSupported commands:
+                \nuninstall - Uninstall previous $evernode installation" \
+        && exit 1
+
+    # If partially installed and interactive mode, Allow user to repair.
+    [ "$2" != "-q" ]  && [ "$1" == "install" ] \
+        && ! confirm "$evernode host management tool
+                \nYour system has a previous failed partial $evernode installation.
+                \nYou can run:
+                \nuninstall - Uninstall previous $evernode installation.
+                \n\nDo you want to repair previous $evernode installation?" \
+        && exit 1
+else
+    [ "$1" != "install" ] \
+        && echomult "$evernode host management tool
+                \nYour system is not registered on $evernode.
+                \nSupported commands:
+                \ninstall - Install Sashimono and register on $evernode"\
+        && exit 1
+fi
+mode=$1
+
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
+    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
+    [ "$2" == "-q" ] && interactive=false || interactive=true
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+fi
+
 # Format the given KB number into GB units.
 function GB() {
     echo "$(bc <<<"scale=2; $1 / 1000000") GB"
+}
+
+function check_prereq() {
+    # Check if node js installed.
+    if command -v node &>/dev/null; then
+        version=$(node -v)
+        if [[ ! $version =~ v16\..* ]]; then
+            echo "$evernode requires NodeJs 16.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 16.x."
+            exit 1
+        fi
+    fi
 }
 
 function check_sys_req() {
@@ -491,6 +508,7 @@ function update_evernode() {
     elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
         [ -d $log_dir ] || mkdir -p $log_dir
         logfile="$log_dir/installer-$(date +%s).log"
+        remove_evernode_alias
         ! create_evernode_alias && echo "Alias creation failed."
         echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
@@ -589,6 +607,7 @@ if [ "$mode" == "install" ]; then
             \nContinue?" && exit 1
 
     check_sys_req
+    check_prereq
 
     # Check bc command is installed.
     if ! command -v bc &>/dev/null; then

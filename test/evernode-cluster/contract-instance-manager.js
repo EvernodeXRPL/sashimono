@@ -10,7 +10,7 @@ const uploadTimeout = 30000;
 
 class ContractInstanceManager {
 
-    #ownerPrivKeyHex;
+    #ownerKeys;
     #instancePubKeyHex;
     #ip;
     #userPort;
@@ -18,8 +18,8 @@ class ContractInstanceManager {
     #contractBundle;
     #tmpdir;
 
-    constructor(ownerPrivKeyHex, instancePubKeyHex, ip, userPort, contractId, contractBundle) {
-        this.#ownerPrivKeyHex = ownerPrivKeyHex;
+    constructor(ownerKeys, instancePubKeyHex, ip, userPort, contractId, contractBundle) {
+        this.#ownerKeys = ownerKeys;
         this.#instancePubKeyHex = instancePubKeyHex;
         this.#ip = ip;
         this.#userPort = userPort;
@@ -45,8 +45,7 @@ class ContractInstanceManager {
 
     async #getHotPocketConnection() {
         const server = `wss://${this.#ip}:${this.#userPort}`
-        const keys = await HotPocket.generateKeys(this.#ownerPrivKeyHex);
-        const hpc = await HotPocket.createClient([server], keys, {
+        const hpc = await HotPocket.createClient([server], this.#ownerKeys, {
             contractId: this.#contractId,
             trustedServerKeys: [this.#instancePubKeyHex],
             protocol: HotPocket.protocols.bson

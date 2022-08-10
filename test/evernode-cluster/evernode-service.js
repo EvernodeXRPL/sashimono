@@ -2,54 +2,63 @@ const evernode = require("evernode-js-client");
 
 class EvernodeService {
 
-    registryAddress;
-    evrIssuerAddress;
-    foundationAddress;
-    foundationSecret;
-    
-    tenantAddress;
-    tenantSecret;
+    #xrplApi;
 
-    registryClient;
-    tenantClient;
+    #registryAddress;
+    #foundationAddress;
+    #foundationSecret;
     
-    async fundTenant(tenant, fundAmount) {
+    #tenantAddress;
+    #tenantSecret;
+
+    #registryClient;
+    #tenantClient;
+    
+    async #fundTenant(tenant, fundAmount) {
         // Send evers to tenant if needed.
-        const lines = await tenant.xrplAcc.getTrustLines('EVR', evrIssuerAddress);
+        const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
         if (lines.length === 0 || parseInt(lines[0].balance) < 1) {
-            await tenant.xrplAcc.setTrustLine('EVR', evrIssuerAddress, "99999999");
-            await new evernode.XrplAccount(foundationAddress, foundationSecret).makePayment(tenantAddress, fundAmount, 'EVR', evrIssuerAddress);
+            await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
+            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount, 'EVR', tenant.config.evrIssuerAddress);
         }
     }
     
     constructor (accounts) {
-        this.registryAddress = accounts.registryAddress;
-        this.evrIssuerAddress = accounts.evrIssuerAddress;
-        this.foundationAddress = accounts.foundationAddress;
-        this.foundationSecret = accounts.foundationSecret;
-        this.tenantAddress = accounts.tenantAddress;
-        this.tenantSecret = accounts.tenantSecret;    
+        this.#registryAddress = accounts.registryAddress;
+        this.#foundationAddress = accounts.foundationAddress;
+        this.#foundationSecret = accounts.foundationSecret;
+        this.#tenantAddress = accounts.tenantAddress;
+        this.#tenantSecret = accounts.tenantSecret;    
+    }
+
+    async init() {
+        this.#xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
+        evernode.Defaults.set({
+            registryAddress: this.#registryAddress,
+            xrplApi: this.#xrplApi
+        })
+        await this.#xrplApi.connect();
+    
+        this.#tenantClient = new evernode.TenantClient(this.#tenantAddress, this.#tenantSecret);
+        await this.#tenantClient.connect();
+    
+        this.#registryClient = new evernode.RegistryClient();
+        await this.#registryClient.connect();
+    }
+
+    async deinit() {
+        await this.#tenantClient.disconnect();
+        await this.#registryClient.disconnect();
+        await this.#xrplApi.disconnect();
     }
     
     async prepareAccounts(fundAmount) {
-        const xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
-        evernode.Defaults.set({
-            registryAddress: this.registryAddress,
-            xrplApi: xrplApi
-        })
-        await xrplApi.connect();
-    
-        this.tenantClient = new evernode.TenantClient(this.tenantAddress, this.tenantSecret);
-        await this.tenantClient.connect();
-        await this.tenantClient.prepareAccount();
-        await fundTenant(this.tenantClient, fundAmount);
-    
-        this.registryClient = new evernode.RegistryClient();
-        await this.registryClient.connect()
+        await this.#tenantClient.prepareAccount();
+        await this.#fundTenant(this.#tenantClient, fundAmount);
     }
 
     async getHosts() {
-        const allHosts = await this.registryClient.getActiveHosts();
+        const allHosts = await this.#registryClient.getActiveHosts();
         return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version !== "0.5.2");
     }
 
@@ -63,7 +72,7 @@ class EvernodeService {
                 config: config ? config : {}
         };
 
-        const tenant = this.tenantClient;
+        const tenant = this.#tenantClient;
         console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
         const result = await tenant.acquireLease(host.address, requirement, { timeout: 60000 });
         console.log(`Tenant received instance '${result.instance.name}'`);
@@ -71,8 +80,7 @@ class EvernodeService {
     }
 
     async extendLease(hostAddress, instanceName, moments) {
-        const client = this.tenantClient;
-
+        const client = this.#tenantClient;
         console.log(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
         const result = await client.extendLease(hostAddress, moments, instanceName);
         console.log("Extend result", result);

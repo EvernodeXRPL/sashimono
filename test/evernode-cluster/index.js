@@ -1,29 +1,23 @@
-import fetch from "node-fetch";
-import fs from "fs";
-const process = require('process');
+const fs  = require('fs').promises;
 const { EvernodeService } = require('./evernode-service');
-
+const { ContractInstanceManager } = require('./contract-instance-manager');
 
 const configFile = "config.json";
 
-configs = {};
-hosts = [];
-evernodeService = null;
-unlList = [];
-peers = [];
-
+let configs = {};
+let hosts = [];
+let evernodeService = null;
+let unlList = [];
+let peers = [];
 
 async function readConfigs(configFile) {
-    const buf = await fs.readFile(configFile).catch(err => {
-        traceLog("Config file load error.");
-    });
+    const buf = await fs.readFile(configFile)
 
     if (buf) {
         return JSON.parse(buf);
         // Validation
     }
 }
-
 
 async function createCluster() {
     hosts = evernodeService.getHosts();
@@ -71,12 +65,19 @@ async function createCluster() {
 
 async function main() {
     // init();
-    configs = await readConfigs(configFile);
-    evernodeService = new EvernodeService(configs);
-    let fundAmount = "100000";   // Calculate
-    await evernodeService.prepareAccounts(fundAmount);
-    await createCluster();
+    const configs = await readConfigs(configFile);
+    // evernodeService = new EvernodeService(configs);
+    // let fundAmount = "100000";   // Calculate
+    // await evernodeService.prepareAccounts(fundAmount);
+    // await createCluster();
+    
+    const contract = configs.contracts[0];
+    const instance = contract.cluster[0];
+    const instanceMgr = new ContractInstanceManager(contract.owner_pvtkey, instance.pubkey, instance.ip, instance.user_port, instance.contractId, contract.bundle_path);
 
+    await instanceMgr.deployContract({
+        unl: contract.cluster.map(n => n.pubkey)
+    });
 }
 
-main();
+main().catch(console.error);

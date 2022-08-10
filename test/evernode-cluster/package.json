@@ -9,8 +9,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "evernode-js-client": "^0.4.50",
-    "node-fetch": "^3.2.10",
-    "uuid": "^8.3.2"
+    "bson": "4.6.5",
+    "evernode-js-client": "0.4.50",
+    "hotpocket-js-client": "0.5.4"
   }
 }

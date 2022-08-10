@@ -29,6 +29,8 @@ async function createCluster() {
     hosts = evernodeService.getHosts();
     contract = configs.contracts.filter(c => c.name === configs.selected)[0];
 
+    let instances = [];
+
     let createdInstanceCount = 0;
     while (createdInstanceCount < contract.target_instances_count) {
         const randomIndex = Math.floor(Math.random() * hosts.length);
@@ -43,17 +45,18 @@ async function createCluster() {
         else {
             instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.owner_pubkey, unlList);
         }
+        instances.push(instance);
         unlList.push(instance.pubkey);
         peers.push(`${instance.ip}:${instance.peer_port}`);
 
         // Extending moments
         let isExtendingSuccess = false;
         if (configs.target_moments_count > 1) {
-            isExtendingSuccess = await evernodeService.extendLease(host.address, instance.name, configs.target_moments_count - 1, options);    // options need to be defined]
+            isExtendingSuccess = await evernodeService.extendLease(host.address, instance.name, contract.target_moments_count - 1, options);    // options need to be defined]
         }
         if (!isExtendingSuccess) {
             // If extending fails in any instance, moment count is set to 1 for the rest of the instances
-            configs.target_moments_count = 1;
+            contract.target_moments_count = 1;
         }
 
         hosts[randomIndex].activeInstances++;

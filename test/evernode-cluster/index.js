@@ -1,28 +1,13 @@
 import fetch from "node-fetch";
-import { exec } from "child_process";
 import fs from "fs";
-// import evernode from "evernode-js-client";
 const process = require('process');
-// const { UserClient, XrplAccount, XrplApi, Defaults } = evernode;
-
-const { EvernodeManager } = require("./evernode-manager");
-const { ConfigManager } = require("./config-manager");
-const { EvernodeService }= require('./evernode-service');
-const { v4: uuidv4 } = require('uuid');
+const { EvernodeService } = require('./evernode-service');
 
 
 const configFile = "config.json";
 
-
-// Inputs
-target = process.argv[1];           // no. of instances
-contract_id = process.argv[2];     //  Contract ID
-roundtime;
-momentCount;
-
 configs = {};
 hosts = [];
-ConfigMan = new ConfigManager();
 evernodeService = null;
 unlList = [];
 peers = [];
@@ -44,19 +29,40 @@ async function createCluster() {
     hosts = evernodeService.getHosts();
     contract = configs.contracts.filter(c => c.name === configs.selected)[0];
 
-    for (const host in hosts) {
-        if(unlList.legth == 0) {
-            let instance = await evernodeMan.acquireLease(host, contract.name, contract.contract_id, contract.owner_pubkey)
-            unlList.push(instance.pubkey);
-            peers.push();
-        } 
-        else {
-            let result = await evernodeMan.acquireLease(host, instanceId, contract_id, ownerPubKey, unlList)
-            unlList.push(result.instance.pubkey);
-            peers.push();
+    let createdInstanceCount = 0;
+    while (createdInstanceCount < contract.target_instances_count) {
+        const randomIndex = Math.floor(Math.random() * hosts.length);
+        const host = hosts[randomIndex];
+        if (host.activeInstances == host.maxInstances)
+            continue;
 
+        let instance;
+        if (unlList.legth == 0) {
+            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.owner_pubkey);
         }
+        else {
+            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.owner_pubkey, unlList);
+        }
+        unlList.push(instance.pubkey);
+        peers.push(`${instance.ip}:${instance.peer_port}`);
+
+        // Extending moments
+        let isExtendingSuccess = false;
+        if (configs.target_moments_count > 1) {
+            isExtendingSuccess = await evernodeService.extendLease(host.address, instance.name, configs.target_moments_count - 1, options);    // op[tions need to be defined]
+        }
+        if (!isExtendingSuccess) {
+            // If extending fails in any instance, moment count is set to 1 for the rest of the instances
+            configs.target_moments_count = 1;
+        }
+
+        hosts[randomIndex].activeInstances++;
+        createdInstanceCount++;
     }
+
+
+
+
 }
 
 

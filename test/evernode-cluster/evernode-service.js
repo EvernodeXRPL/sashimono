@@ -57,24 +57,25 @@ class EvernodeService {
     }
 
     // Udith Added
-    async acquireLease(host, instanceId, contractId, ownerPubKey, unl = []) {
+    async acquireLease(host, contractId, image, ownerPubKey, unl = []) {
 
-        let cf;
-        if (unl.length === 0){
-            cf = {};
-        } else {
-            cf = {
-                contract: {
-                    unl: unl
-                }
-            };
-        }
+        let requirement = {
+                owner_pubkey: ownerPubKey,
+                contract_id: contractId,
+                image: image,
+        };
+
+        if (unl.length > 0)
+        requirement.config = {
+            contract: {
+                unl: unl.slice(0,1)
+            }
+        };
 
         try {
-            const tenant = await this.tenantClient();
+            const tenant = this.tenantClient;
             console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
             const result = await tenant.acquireLease(host.address, {
-                container_name: instanceId,
                 owner_pubkey: ownerPubKey,
                 contract_id: contractId,
                 image: "hp.latest-ubt.20.04-njs.16",
@@ -85,6 +86,28 @@ class EvernodeService {
         }
         catch (err) {
             console.log("Tenant recieved acquire error: ", err)
+        }
+    }
+
+    async extendLease(hostAddress, instanceName, moments, options) {
+        const client = this.tenantClient;
+
+        traceLog(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
+
+        try {
+            const result = await client.extendLease(hostAddress, moments, instanceName, {
+                // timeout: 120000,
+                transactionOptions: {
+                    sequence: options.sequence,
+                    maxLedgerIndex: options.maxLedgerIndex
+                }
+            });
+            traceLog("Extend result", result);
+            return true;
+        }
+        catch (err) {
+            traceLog("Lease extend error", err);
+            return false;
         }
     }
 }

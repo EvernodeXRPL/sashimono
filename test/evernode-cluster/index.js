@@ -40,10 +40,10 @@ async function createCluster() {
 
         let instance;
         if (unlList.legth == 0) {
-            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.owner_pubkey);
+            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.roundtime, contract.owner_pubkey);
         }
         else {
-            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.owner_pubkey, unlList);
+            instance = await evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, contract.roundtime, contract.owner_pubkey, unlList);
         }
         instances.push(instance);
         unlList.push(instance.pubkey);

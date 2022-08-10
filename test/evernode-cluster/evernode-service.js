@@ -57,30 +57,31 @@ class EvernodeService {
     }
 
     // Udith Added
-    async acquireLease(host, contractId, image, ownerPubKey, unl = []) {
+    async acquireLease(host, contractId, image, roundtime, ownerPubKey, unl = []) {
 
         let requirement = {
                 owner_pubkey: ownerPubKey,
                 contract_id: contractId,
                 image: image,
+                config: {
+                    contract: {
+                        roundtime: roundtime
+                    }
+                }
         };
 
         if (unl.length > 0)
         requirement.config = {
             contract: {
-                unl: unl.slice(0,1)
+                unl: unl.slice(0,1),
+                roundtime: roundtime
             }
         };
 
         try {
             const tenant = this.tenantClient;
             console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
-            const result = await tenant.acquireLease(host.address, {
-                owner_pubkey: ownerPubKey,
-                contract_id: contractId,
-                image: "hp.latest-ubt.20.04-njs.16",
-                config: cf
-            }, { timeout: 60000 });
+            const result = await tenant.acquireLease(host.address, requirement, { timeout: 60000 });
             console.log(`Tenant received instance '${result.instance.name}'`);
             return result.instance;
         }

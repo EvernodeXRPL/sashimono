@@ -11,7 +11,7 @@ let unlList = [];
 let peers = [];
 
 async function readConfigs(configFile) {
-    const buf = await fs.readFile(configFile)
+    const buf = await fs.readFile(configFile).catch(console.error);
 
     if (buf) {
         return JSON.parse(buf);
@@ -65,11 +65,11 @@ async function createCluster() {
 
 async function main() {
     // init();
-    const configs = await readConfigs(configFile);
-    // evernodeService = new EvernodeService(configs);
-    // let fundAmount = "100000";   // Calculate
-    // await evernodeService.prepareAccounts(fundAmount);
-    // await createCluster();
+    configs = await readConfigs(configFile);
+    evernodeService = new EvernodeService(configs);
+    let fundAmount = "100000";   // Calculate
+    await evernodeService.prepareAccounts(fundAmount);
+    await createCluster();
     
     const contract = configs.contracts[0];
     const instance = contract.cluster[0];

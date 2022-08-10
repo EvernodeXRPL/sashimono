@@ -89,7 +89,7 @@ class EvernodeService {
         }
     }
 
-    async extendLease(hostAddress, instanceName, moments, options) {
+    async extendLease(hostAddress, instanceName, moments, options) {     // options ???
         const client = this.tenantClient;
 
         traceLog(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);

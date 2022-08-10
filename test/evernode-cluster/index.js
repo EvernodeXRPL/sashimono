@@ -49,7 +49,7 @@ async function createCluster() {
         // Extending moments
         let isExtendingSuccess = false;
         if (configs.target_moments_count > 1) {
-            isExtendingSuccess = await evernodeService.extendLease(host.address, instance.name, configs.target_moments_count - 1, options);    // op[tions need to be defined]
+            isExtendingSuccess = await evernodeService.extendLease(host.address, instance.name, configs.target_moments_count - 1, options);    // options need to be defined]
         }
         if (!isExtendingSuccess) {
             // If extending fails in any instance, moment count is set to 1 for the rest of the instances

@@ -22,16 +22,13 @@ class EvernodeService {
         }
     }
     
-    constructor (configs) {
-        let acc = configs.accounts;
-        this.registryAddress = acc.registryAddress;
-        this.evrIssuerAddress = acc.evrIssuerAddress;
-        this.foundationAddress = acc.foundationAddress;
-        this.foundationSecret = acc.foundationSecret;
-        this.tenantAddress = acc.tenantAddress;
-        this.tenantSecret = acc.tenantSecret;
-    
-    
+    constructor (accounts) {
+        this.registryAddress = accounts.registryAddress;
+        this.evrIssuerAddress = accounts.evrIssuerAddress;
+        this.foundationAddress = accounts.foundationAddress;
+        this.foundationSecret = accounts.foundationSecret;
+        this.tenantAddress = accounts.tenantAddress;
+        this.tenantSecret = accounts.tenantSecret;    
     }
     
     async prepareAccounts(fundAmount) {
@@ -57,59 +54,29 @@ class EvernodeService {
     }
 
     // Udith Added
-    async acquireLease(host, contractId, image, roundtime, ownerPubKey, unl = []) {
+    async acquireLease(host, contractId, image, ownerPubKey, config) {
 
         let requirement = {
                 owner_pubkey: ownerPubKey,
                 contract_id: contractId,
                 image: image,
-                config: {
-                    contract: {
-                        roundtime: roundtime
-                    }
-                }
+                config: config ? config : {}
         };
 
-        if (unl.length > 0)
-        requirement.config = {
-            contract: {
-                unl: unl.slice(0,1),
-                roundtime: roundtime
-            }
-        };
-
-        try {
-            const tenant = this.tenantClient;
-            console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
-            const result = await tenant.acquireLease(host.address, requirement, { timeout: 60000 });
-            console.log(`Tenant received instance '${result.instance.name}'`);
-            return result.instance;
-        }
-        catch (err) {
-            console.log("Tenant recieved acquire error: ", err)
-        }
+        const tenant = this.tenantClient;
+        console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
+        const result = await tenant.acquireLease(host.address, requirement, { timeout: 60000 });
+        console.log(`Tenant received instance '${result.instance.name}'`);
+        return result.instance;
     }
 
-    async extendLease(hostAddress, instanceName, moments, options) {     // options ???
+    async extendLease(hostAddress, instanceName, moments) {
         const client = this.tenantClient;
 
-        traceLog(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
-
-        try {
-            const result = await client.extendLease(hostAddress, moments, instanceName, {
-                // timeout: 120000,
-                transactionOptions: {
-                    sequence: options.sequence,
-                    maxLedgerIndex: options.maxLedgerIndex
-                }
-            });
-            traceLog("Extend result", result);
-            return true;
-        }
-        catch (err) {
-            traceLog("Lease extend error", err);
-            return false;
-        }
+        console.log(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
+        const result = await client.extendLease(hostAddress, moments, instanceName);
+        console.log("Extend result", result);
+        return result;
     }
 }
 

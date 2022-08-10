@@ -26,26 +26,16 @@ async function createCluster(contractIdx) {
     if (contractIdx < 0)
         throw `Contract ${config.selected} is invalid.`
 
-    let unavailabilityCount = 0;
-
     let createdInstanceCount = 0;
     while (createdInstanceCount < config.contracts[contractIdx].target_instances_count) {
+        if (!hosts || !hosts.length)
+            throw "All the contract slots are occupied.";
+
         const contract = config.contracts[contractIdx];
-        let randomIndex = Math.floor(Math.random() * hosts.length);
-
-        // If availability checvk failed 5 times, terminate and throw error.
-        if (unavailabilityCount > 5) {
-            randomIndex = hosts.findIndex(h => host.maxInstances - host.activeInstances > 0);
-            if (randomIndex < 0)
-                throw "All the slots are occupied";
-        }
-
+        const randomIndex = Math.floor(Math.random() * hosts.length);
         const host = hosts[randomIndex];
-        if (host.activeInstances == host.maxInstances) {
-            unavailabilityCount++;
+        if (host.activeInstances == host.maxInstances)
             continue;
-        }
-        unavailabilityCount = 0;
 
         let instance;
         let config = contract.config;
@@ -73,6 +63,8 @@ async function createCluster(contractIdx) {
 
         config.contracts[contractIdx].cluster.push(instance);
         hosts[randomIndex].activeInstances++;
+        if (hosts[randomIndex].activeInstances == hosts[randomIndex].maxInstances)
+            hosts.splice(randomIndex, 1);
         createdInstanceCount++;
     }
 }

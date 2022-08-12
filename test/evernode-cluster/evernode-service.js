@@ -14,6 +14,14 @@ class EvernodeService {
     #registryClient;
     #tenantClient;
     
+    constructor (accounts) {
+        this.#registryAddress = accounts.registryAddress;
+        this.#foundationAddress = accounts.foundationAddress;
+        this.#foundationSecret = accounts.foundationSecret;
+        this.#tenantAddress = accounts.tenantAddress;
+        this.#tenantSecret = accounts.tenantSecret;    
+    }
+
     async #fundTenant(tenant, fundAmount) {
         // Send evers to tenant if needed.
         const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
@@ -21,14 +29,6 @@ class EvernodeService {
             await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
             await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount, 'EVR', tenant.config.evrIssuerAddress);
         }
-    }
-    
-    constructor (accounts) {
-        this.#registryAddress = accounts.registryAddress;
-        this.#foundationAddress = accounts.foundationAddress;
-        this.#foundationSecret = accounts.foundationSecret;
-        this.#tenantAddress = accounts.tenantAddress;
-        this.#tenantSecret = accounts.tenantSecret;    
     }
 
     async init() {

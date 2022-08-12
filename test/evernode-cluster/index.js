@@ -48,6 +48,7 @@ class ClusterManager {
             throw `Contract ${this.#config.selected} is invalid.`
 
         const ownerPubKeyHex = Buffer.from(ownerKeys.publicKey).toString('hex');
+        const primaryHostAddress = this.#config.accounts.primaryHostAddress;
 
         let createdInstanceCount = 0;
 
@@ -57,14 +58,26 @@ class ClusterManager {
                 throw "All the contract slots are occupied.";
 
             const contract = this.#config.contracts[contractIdx];
-            const randomIndex = Math.floor(Math.random() * hosts.length);
+
+            let randomIndex = 0;
+            if (createdInstanceCount === 0 && primaryHostAddress) {
+                randomIndex = hosts.findIndex(h => h.address === primaryHostAddress);
+                if (randomIndex < 0)
+                    throw `Host ${primaryHostAddress} not found`;
+            }
+            else
+                randomIndex = Math.floor(Math.random() * hosts.length);
+
             const host = hosts[randomIndex];
-            if (host.activeInstances == host.maxInstances)
+            if (host.activeInstances == host.maxInstances || host.acquiring)
                 continue;
 
             console.log(`Creating contract instance ${createdInstanceCount + 1} in ${host.address}`);
 
-            let config = contract.config;
+            hosts[randomIndex].acquiring = true;
+
+            let config = {};
+            Object.assign(config, contract.config);
 
             if (!config.contract) {
                 config.contract = {}
@@ -109,6 +122,8 @@ class ClusterManager {
             createdInstanceCount++;
 
             console.log(`Created contract instance ${createdInstanceCount} in ${host.address}`);
+
+            hosts[randomIndex].acquiring = false;
         }
     }
 
@@ -117,12 +132,14 @@ class ClusterManager {
         const contract = this.#config.contracts[contractIdx];
         const ownerKeys = await HotPocket.generateKeys(contract.owner_privatekey);
 
-        await this.#createCluster(contractIdx, ownerKeys, this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0)).catch(e => {
-            console.error(`Cluster create failed with.`, e);
-        }).finally(async () => {
-            await this.#writeConfig();
-            return;
-        });
+        await this.#createCluster(contractIdx,
+            ownerKeys,
+            this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0)).catch(e => {
+                console.error(`Cluster create failed with.`, e);
+            }).finally(async () => {
+                await this.#writeConfig();
+                return;
+            });
 
         if (!contract.cluster || !contract.cluster.length) {
             console.error(`Contract ${this.#config.selected} cluster is empty.`);

@@ -85,14 +85,14 @@ class ContractInstanceManager {
                     catch (e) {
                         failure(e);
                     }
-                    if (result.type == "uploadResult") {
+                    if (result?.type == "uploadResult") {
                         if (result.status == "ok")
                             success();
                         else
                             failure(`Zip upload failed. reason: ${result.status}`);
                     }
                     else {
-                        console.log("Unknown contract output.");
+                        console.log("Unknown contract output.", result);
                     }
                 });
             });

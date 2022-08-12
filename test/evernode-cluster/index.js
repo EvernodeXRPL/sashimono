@@ -1,15 +1,58 @@
 const fs = require('fs').promises;
+const { constants } = require('fs');
 const { EvernodeService } = require('./evernode-service');
 const { ContractInstanceManager } = require('./contract-instance-manager');
 const HotPocket = require('hotpocket-js-client');
 
 const CONFIG_FILE = "config.json";
+const EVR_PER_MOMENT = 2;
 
 class ClusterManager {
     #config = {};
     #evernodeService = null;
 
     async #readConfig() {
+        let isConfigExists;
+        try {
+            await fs.access(CONFIG_FILE, constants.R_OK);
+            isConfigExists = true;
+        } catch {
+            isConfigExists = false;
+        }
+
+        if (!isConfigExists) {
+            console.log('File config.json not found.\nCreating a sample config.json...');
+            const configStructure = {
+                "selected": "",
+                "contracts": [
+                    {
+                        "name": "",
+                        "owner_privatekey": "",
+                        "contract_id": "",
+                        "bundle_path": "",
+                        "docker_image": "",
+                        "config": {},
+                        "target_nodes_count": 1,
+                        "target_moments_count": 1,
+                        "cluster": []
+                    }
+                ],
+                "accounts": {
+                    "registryAddress": "",
+                    "foundationAddress": "",
+                    "foundationSecret": "",
+                    "tenantAddress": "",
+                    "tenantSecret": "",
+                    "primaryHostAddress": ""
+                }
+            };
+
+            await fs.writeFile(CONFIG_FILE, JSON.stringify(configStructure, null, 2)).catch(console.error);
+            console.log("Complete the config.json created and rerun the program.");
+            process.exit(1);
+
+        }
+
         const buf = await fs.readFile(CONFIG_FILE).catch(console.error);
         this.#config = JSON.parse(buf);
     }
@@ -18,11 +61,18 @@ class ClusterManager {
         await fs.writeFile(CONFIG_FILE, JSON.stringify(this.#config, null, 2)).catch(console.error);
     }
 
+    #getFundAmount() {
+        const contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
+        const contract = this.#config.contracts[contractIdx];
+        const totalEvers = (contract.target_nodes_count * contract.target_moments_count * EVR_PER_MOMENT) + 100;
+
+        return totalEvers;
+    }
+
     async init() {
         await this.#readConfig();
         this.#evernodeService = new EvernodeService(this.#config.accounts);
-
-        let fundAmount = "1000";   // Calculate
+        const fundAmount = this.#getFundAmount();
         await this.#evernodeService.init();
         await this.#evernodeService.prepareAccounts(fundAmount);
     }
@@ -153,7 +203,6 @@ class ClusterManager {
         console.log('Successfully deployed the contract...');
     }
 }
-
 
 async function main() {
     const clusterMgr = new ClusterManager();

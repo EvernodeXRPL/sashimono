@@ -17,7 +17,7 @@ class EvernodeService {
     async #fundTenant(tenant, fundAmount) {
         // Send evers to tenant if needed.
         const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
-        if (lines.length === 0 || parseInt(lines[0].balance) < 1) {
+        if (lines.length === 0 || parseInt(lines[0].balance) < fundAmount) {
             await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
             await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount, 'EVR', tenant.config.evrIssuerAddress);
         }

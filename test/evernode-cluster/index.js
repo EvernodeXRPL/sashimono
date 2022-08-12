@@ -4,6 +4,7 @@ const { ContractInstanceManager } = require('./contract-instance-manager');
 const HotPocket = require('hotpocket-js-client');
 
 const CONFIG_FILE = "config.json";
+const EVR_PER_MOMENT = 2;
 
 class ClusterManager {
     #config = {};
@@ -18,11 +19,19 @@ class ClusterManager {
         await fs.writeFile(CONFIG_FILE, JSON.stringify(this.#config, null, 2)).catch(console.error);
     }
 
+    #getFundAmount() {
+        const contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
+        const contract = this.#config.contracts[contractIdx];
+        const totalEvers = contract.target_instances_count * contract.target_moments_count * EVR_PER_MOMENT;
+
+
+        return totalEvers;
+    }
+
     async init() {
         await this.#readConfig();
         this.#evernodeService = new EvernodeService(this.#config.accounts);
-
-        let fundAmount = "100000";   // Calculate
+        const fundAmount = this.#getFundAmount();
         await this.#evernodeService.init();
         await this.#evernodeService.prepareAccounts(fundAmount);
     }

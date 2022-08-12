@@ -22,7 +22,7 @@ class ClusterManager {
         await this.#readConfig();
         this.#evernodeService = new EvernodeService(this.#config.accounts);
 
-        let fundAmount = "100000";   // Calculate
+        let fundAmount = "1000";   // Calculate
         await this.#evernodeService.init();
         await this.#evernodeService.prepareAccounts(fundAmount);
     }
@@ -30,6 +30,38 @@ class ClusterManager {
     async deinit() {
         await this.#evernodeService.deinit();
         await this.#writeConfig();
+    }
+
+    async #createNode(host, ownerPubkey, contract, weakCluster = false) {
+        let config = JSON.parse(JSON.stringify(contract.config));
+
+        if (!config.contract) {
+            config.contract = {}
+        }
+        if (contract.cluster.length == 0)
+            delete config.contract['unl'];
+        else
+            config.contract.unl = [contract.cluster[0].pubkey];
+
+        if (!config.mesh) {
+            config.mesh = {}
+        }
+        config.mesh.known_peers = contract.cluster.map(n => `${n.ip}:${n.peer_port}`);
+        if (weakCluster)
+            config.mesh.msg_forwarding = true;
+
+        const instance = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubkey, config);
+        if (!instance)
+            throw 'Error while creating the intance.';
+
+        // Extending moments
+        if (this.#config.target_moments_count > 1) {
+            const result = await this.#evernodeService.extendLease(host.address, instance.name, contract.target_moments_count - 1);
+            if (!result)
+                throw 'Error while extending the intance.';
+        }
+
+        return instance;
     }
 
     async #createCluster(contractIdx, ownerKeys, targetNodesCount) {
@@ -48,8 +80,6 @@ class ClusterManager {
             if (!hosts || !hosts.length)
                 throw "All the contract slots are occupied.";
 
-            const contract = this.#config.contracts[contractIdx];
-
             let randomIndex = 0;
             if (createdInstanceCount === 0 && primaryHostAddress) {
                 randomIndex = hosts.findIndex(h => h.address === primaryHostAddress);
@@ -60,50 +90,18 @@ class ClusterManager {
                 randomIndex = Math.floor(Math.random() * hosts.length);
 
             const host = hosts[randomIndex];
-            if (host.activeInstances == host.maxInstances || host.acquiring)
+            if (host.activeInstances == host.maxInstances)
                 continue;
 
-            console.log(`Creating contract instance ${createdInstanceCount + 1} in ${host.address}`);
+            console.log(`Creating node ${createdInstanceCount + 1} in ${host.address}`);
 
-            hosts[randomIndex].acquiring = true;
-
-            let config = {};
-            Object.assign(config, contract.config);
-
-            if (!config.contract) {
-                config.contract = {}
-            }
-            if (contract.cluster.length == 0)
-                delete config.contract['unl'];
-            else
-                config.contract.unl = [contract.cluster[0].pubkey];
-
-            if (!config.mesh) {
-                config.mesh = {}
-            }
-            config.mesh.known_peers = contract.cluster.map(n => `${n.ip}:${n.peer_port}`);
-
-            let instance
+            let instance;
             try {
-                instance = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubKeyHex, config);
-                if (!instance)
-                    continue;
+                instance = await this.#createNode(host, ownerPubKeyHex, this.#config.contracts[contractIdx]);
             }
             catch (e) {
-                console.error(e);
+                console.error(`Node ${createdInstanceCount + 1} creation in ${host.address} failed.`, e);
                 continue;
-            }
-
-            // Extending moments
-            if (this.#config.target_moments_count > 1) {
-                try {
-                    const result = await this.#evernodeService.extendLease(host.address, instance.name, contract.target_moments_count - 1);
-                    if (!result)
-                        continue;
-                } catch (e) {
-                    console.error(e);
-                    continue;
-                };
             }
 
             this.#config.contracts[contractIdx].cluster.push(instance);
@@ -112,9 +110,7 @@ class ClusterManager {
                 hosts.splice(randomIndex, 1);
             createdInstanceCount++;
 
-            console.log(`Created contract instance ${createdInstanceCount} in ${host.address}`);
-
-            hosts[randomIndex].acquiring = false;
+            console.log(`Created node ${createdInstanceCount} in ${host.address}`);
         }
     }
 
@@ -152,6 +148,7 @@ class ClusterManager {
             unl: contract.cluster.map(n => n.pubkey)
         }).catch(e => {
             console.error(`Contract ${this.#config.selected} deployment failed with.`, e);
+            return;
         });
         console.log('Successfully deployed the contract...');
     }

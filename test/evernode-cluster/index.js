@@ -24,7 +24,6 @@ class ClusterManager {
         const contract = this.#config.contracts[contractIdx];
         const totalEvers = contract.target_instances_count * contract.target_moments_count * EVR_PER_MOMENT;
 
-
         return totalEvers;
     }
 

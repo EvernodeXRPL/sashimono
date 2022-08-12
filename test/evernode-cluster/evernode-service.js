@@ -1,7 +1,6 @@
 const evernode = require("evernode-js-client");
 
 class EvernodeService {
-
     #xrplApi;
 
     #registryAddress;
@@ -27,7 +26,7 @@ class EvernodeService {
         const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
         if (lines.length === 0 || parseInt(lines[0].balance) < fundAmount) {
             await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
-            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount, 'EVR', tenant.config.evrIssuerAddress);
+            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount.toString(), 'EVR', tenant.config.evrIssuerAddress);
         }
     }
 
@@ -62,9 +61,7 @@ class EvernodeService {
         return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version !== "0.5.2");
     }
 
-    // Udith Added
     async acquireLease(host, contractId, image, ownerPubKey, config) {
-
         let requirement = {
                 owner_pubkey: ownerPubKey,
                 contract_id: contractId,

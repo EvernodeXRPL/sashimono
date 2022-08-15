@@ -6,6 +6,15 @@ const HotPocket = require('hotpocket-js-client');
 
 const CONFIG_FILE = "config.json";
 const EVR_PER_MOMENT = 2;
+const MAX_MEMO_PEER_LIMIT = 10;
+
+async function sleep(ms) {
+    await new Promise(resolve => {
+        setTimeout(() => {
+            resolve();
+        }, ms);
+    });
+}
 
 class ClusterManager {
     #config = {};
@@ -34,21 +43,23 @@ class ClusterManager {
                         "config": {},
                         "target_nodes_count": 1,
                         "target_moments_count": 1,
+                        "parallel_mode": false,
                         "cluster": []
                     }
                 ],
                 "accounts": {
-                    "registryAddress": "",
-                    "foundationAddress": "",
-                    "foundationSecret": "",
-                    "tenantAddress": "",
-                    "tenantSecret": "",
-                    "primaryHostAddress": ""
+                    "registry_address": "",
+                    "foundation_address": "",
+                    "foundation_secret": "",
+                    "tenant_address": "",
+                    "tenant_secret": "",
+                    "primary_host_address": "",
+                    "blacklist_hosts": []
                 }
             };
 
             await fs.writeFile(CONFIG_FILE, JSON.stringify(configStructure, null, 2)).catch(console.error);
-            console.log("Complete the config.json created and rerun the program.");
+            console.log("config.json file created. Populate the config and run again.");
             process.exit(1);
 
         }
@@ -64,7 +75,8 @@ class ClusterManager {
     #getFundAmount() {
         const contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
         const contract = this.#config.contracts[contractIdx];
-        const totalEvers = (contract.target_nodes_count * contract.target_moments_count * EVR_PER_MOMENT) + 100;
+        const totalEvers = ((contract.target_nodes_count - contract.cluster.length) * EVR_PER_MOMENT) +
+            ((contract.target_nodes_count - contract.cluster.filter(c => c.extended)) * (contract.target_moments_count - 1) * EVR_PER_MOMENT);
 
         return totalEvers;
     }
@@ -82,86 +94,151 @@ class ClusterManager {
         await this.#writeConfig();
     }
 
-    async #createNode(host, ownerPubkey, contract, weakCluster = false) {
-        let config = JSON.parse(JSON.stringify(contract.config));
+    async #createNode(ctx, ownerPubKeyHex, weakCluster = false) {
+        if (!ctx.hosts || !ctx.hosts.length)
+            throw { exitCode: 1, message: "All the hosts are occupied." };
 
-        if (!config.contract) {
-            config.contract = {}
+        const primaryHostAddress = this.#config.accounts.primary_host_address;
+        const contract = this.#config.contracts[ctx.contractIdx];
+
+        let randomIndex = 0;
+        if (ctx.createdInstanceCount === 0 && primaryHostAddress) {
+            randomIndex = ctx.hosts.findIndex(h => h.address === primaryHostAddress);
+            if (randomIndex < 0)
+                throw { exitCode: 1, message: `Host ${primaryHostAddress} not found` };
         }
-        if (contract.cluster.length == 0)
-            delete config.contract['unl'];
         else
-            config.contract.unl = [contract.cluster[0].pubkey];
+            randomIndex = Math.floor(Math.random() * ctx.hosts.length);
 
-        if (!config.mesh) {
-            config.mesh = {}
+        const host = ctx.hosts[randomIndex];
+        if (host.activeInstances == host.maxInstances)
+            throw { exitCode: 0, message: `All the contract slots in ${host.address} are occupied.` };
+
+        // Wait until acquire completes.
+        console.log(`Waiting until ${host.address} is available.`);
+        while (ctx.hosts[randomIndex].acquiring)
+            await sleep(1000);
+
+        ctx.hosts[randomIndex].acquiring = true;
+
+        ctx.createdInstanceCount++;
+        const nodeNumber = ctx.createdInstanceCount;
+        console.log(`Creating node ${nodeNumber} in ${host.address}`);
+
+        let instance;
+        try {
+            let config = JSON.parse(JSON.stringify(contract.config));
+
+            if (!config.contract) {
+                config.contract = {}
+            }
+            if (contract.cluster.length == 0)
+                delete config.contract['unl'];
+            else
+                config.contract.unl = [contract.cluster[0].pubkey];
+
+            if (!config.mesh) {
+                config.mesh = {}
+            }
+            const cluster = [...contract.cluster];
+            // If cluster length is > MAX_MEMO_PEER_LIMIT pick MAX_MEMO_PEER_LIMIT random peers to limit the memo size.
+            if (cluster.length > MAX_MEMO_PEER_LIMIT) {
+                config.mesh.known_peers = cluster.sort(() => Math.random() - 0.5).slice(0, MAX_MEMO_PEER_LIMIT).map(n => `${n.ip}:${n.peer_port}`);
+            }
+            else {
+                config.mesh.known_peers = cluster.map(n => `${n.ip}:${n.peer_port}`);
+            }
+            if (weakCluster)
+                config.mesh.msg_forwarding = true;
+
+            instance = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubKeyHex, config);
+            if (!instance)
+                throw { exitCode: 0, message: 'Error while creating the intance.' };
         }
-        config.mesh.known_peers = contract.cluster.map(n => `${n.ip}:${n.peer_port}`);
-        if (weakCluster)
-            config.mesh.msg_forwarding = true;
-
-        const instance = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubkey, config);
-        if (!instance)
-            throw 'Error while creating the intance.';
-
-        // Extending moments
-        if (this.#config.target_moments_count > 1) {
-            const result = await this.#evernodeService.extendLease(host.address, instance.name, contract.target_moments_count - 1);
-            if (!result)
-                throw 'Error while extending the intance.';
+        catch (e) {
+            console.error(`Node ${nodeNumber} creation in ${host.address} failed.`);
+            ctx.createdInstanceCount--;
+            ctx.hosts[randomIndex].acquiring = false;
+            throw e;
         }
 
-        return instance;
+        this.#config.contracts[ctx.contractIdx].cluster.push({ host: host.address, ...instance });
+        ctx.hosts[randomIndex].activeInstances++;
+        ctx.hosts[randomIndex].acquiring = false;
+
+        console.log(`Created node ${nodeNumber} in ${host.address}`);
     }
 
-    async #createCluster(contractIdx, ownerKeys, targetNodesCount) {
-        let hosts = await this.#evernodeService.getHosts();
-
+    async #createCluster(contractIdx, ownerKeys, targetNodesCount, parallel = false) {
         if (contractIdx < 0)
             throw `Contract ${this.#config.selected} is invalid.`
 
-        const ownerPubKeyHex = Buffer.from(ownerKeys.publicKey).toString('hex');
-        const primaryHostAddress = this.#config.accounts.primaryHostAddress;
-
-        let createdInstanceCount = 0;
-
-        while (createdInstanceCount < targetNodesCount) {
-
-            if (!hosts || !hosts.length)
-                throw "All the contract slots are occupied.";
-
-            let randomIndex = 0;
-            if (createdInstanceCount === 0 && primaryHostAddress) {
-                randomIndex = hosts.findIndex(h => h.address === primaryHostAddress);
-                if (randomIndex < 0)
-                    throw `Host ${primaryHostAddress} not found`;
-            }
-            else
-                randomIndex = Math.floor(Math.random() * hosts.length);
-
-            const host = hosts[randomIndex];
-            if (host.activeInstances == host.maxInstances)
-                continue;
-
-            console.log(`Creating node ${createdInstanceCount + 1} in ${host.address}`);
-
-            let instance;
-            try {
-                instance = await this.#createNode(host, ownerPubKeyHex, this.#config.contracts[contractIdx]);
-            }
-            catch (e) {
-                console.error(`Node ${createdInstanceCount + 1} creation in ${host.address} failed.`, e);
-                continue;
-            }
-
-            this.#config.contracts[contractIdx].cluster.push(instance);
-            hosts[randomIndex].activeInstances++;
-            if (hosts[randomIndex].activeInstances == hosts[randomIndex].maxInstances)
-                hosts.splice(randomIndex, 1);
-            createdInstanceCount++;
-
-            console.log(`Created node ${createdInstanceCount} in ${host.address}`);
+        let ctx = {
+            hosts: await this.#evernodeService.getHosts(),
+            createdInstanceCount: 0,
+            contractIdx: contractIdx
         }
+
+        if (this.#config.accounts.blacklist_hosts && this.#config.accounts.blacklist_hosts.length > 0)
+            ctx.hosts = ctx.hosts.filter(h => !this.#config.accounts.blacklist_hosts.includes(h.address))
+
+        const ownerPubKeyHex = Buffer.from(ownerKeys.publicKey).toString('hex');
+
+        if (!parallel) {
+            while (ctx.createdInstanceCount < targetNodesCount) {
+                try {
+                    await this.#createNode(ctx, ownerPubKeyHex, targetNodesCount > MAX_MEMO_PEER_LIMIT);
+                }
+                catch (e) {
+                    if (e.exitCode && e.exitCode === 1)
+                        throw e.message || e;
+                    else
+                        console.error(e.message || e)
+                }
+            }
+        }
+        else {
+            const createNodes = async (nodesCount) => {
+                await Promise.all([...Array(nodesCount).keys()].map(async (v, i) => {
+                    await sleep(1000 * i);
+                    await this.#createNode(ctx, ownerPubKeyHex, true);
+                }));
+            };
+
+            if (this.#config.accounts.primary_host_address && ctx.createdInstanceCount < targetNodesCount) {
+                try {
+                    await createNodes(1);
+                }
+                catch (e) {
+                    throw `Instance creation on primary host ${this.#config.accounts.primary_host_address} failed. ${e.message || e}`;
+                }
+            }
+            while (ctx.createdInstanceCount < targetNodesCount) {
+                const count = (targetNodesCount - ctx.createdInstanceCount) > 2 ? Math.ceil((targetNodesCount - ctx.createdInstanceCount) / 2) : (targetNodesCount - ctx.createdInstanceCount);
+                try {
+                    await createNodes(count);
+                }
+                catch (e) {
+                    if (e.exitCode && e.exitCode === 1)
+                        throw e.message || e;
+                    else
+                        console.error(e.message || e)
+                }
+            }
+        }
+    }
+
+    async #extendCluster(contractIdx) {
+        const contract = this.#config.contracts[contractIdx];
+        await Promise.all(contract.cluster.map(async (c, i) => {
+            if (!c.extended) {
+                await sleep(1000 * i);
+                const result = await this.#evernodeService.extendLease(c.host, c.name, contract.target_moments_count - 1);
+                if (!result)
+                    console.error(`Error while extending the intance ${c.name} in ${c.host}.`);
+                this.#config.contracts[contractIdx].cluster[i].extended = true;
+            }
+        }));
     }
 
     async deploy() {
@@ -169,37 +246,66 @@ class ClusterManager {
         const contract = this.#config.contracts[contractIdx];
         const ownerKeys = await HotPocket.generateKeys(contract.owner_privatekey);
 
-        await this.#createCluster(contractIdx,
-            ownerKeys,
-            this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0)).catch(e => {
-                console.error(`Cluster create failed with.`, e);
-            }).finally(async () => {
+        const targetCount = this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0);
+        let waitBeforeDeploy = false;
+
+        if (targetCount > 0) {
+            console.log('Creating the cluster...');
+            try {
+                await this.#createCluster(contractIdx,
+                    ownerKeys,
+                    this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0),
+                    contract.parallel_mode);
                 await this.#writeConfig();
+            }
+            catch (e) {
+                await this.#writeConfig();
+                console.error(e);
+                console.error(`Cluster create failed.`);
                 return;
-            });
+            }
+            waitBeforeDeploy = true;
+            await sleep(1000);
+        }
 
         if (!contract.cluster || !contract.cluster.length) {
-            console.error(`Contract ${this.#config.selected} cluster is empty.`);
+            console.error(`Contract ${contract.name} cluster is empty.`);
             return;
+        }
+
+        if (contract.target_moments_count > 1 && contract.cluster.findIndex(c => !c.extended) > 0) {
+            console.log('Extending the cluster...');
+            try {
+                await this.#extendCluster(contractIdx);
+                await this.#writeConfig();
+            }
+            catch (e) {
+                await this.#writeConfig();
+                console.error(e);
+                console.error(`Cluster extend failed.`);
+                return;
+            }
+        }
+
+        if (waitBeforeDeploy) {
+            console.log('Waiting 15 seconds until nodes are synced...');
+            await sleep(15000);
         }
 
         const instance = contract.cluster[0];
         const instanceMgr = new ContractInstanceManager(ownerKeys, instance.pubkey, instance.ip, instance.user_port, instance.contractId, contract.bundle_path);
 
-        console.log('Waiting 5 seconds until node are synced...');
-        await new Promise(resolve => {
-            setTimeout(() => {
-                resolve();
-            }, 5000);
-        });
-
         console.log('Deploying the contract...');
-        await instanceMgr.deployContract({
-            unl: contract.cluster.map(n => n.pubkey)
-        }).catch(e => {
+        try {
+            await instanceMgr.deployContract({
+                unl: contract.cluster.map(n => n.pubkey)
+            });
+        }
+        catch (e) {
             console.error(`Contract ${this.#config.selected} deployment failed with.`, e);
             return;
-        });
+        }
+
         console.log('Successfully deployed the contract...');
     }
 }

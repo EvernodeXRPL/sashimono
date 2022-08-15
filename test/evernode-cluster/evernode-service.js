@@ -6,19 +6,19 @@ class EvernodeService {
     #registryAddress;
     #foundationAddress;
     #foundationSecret;
-    
+
     #tenantAddress;
     #tenantSecret;
 
     #registryClient;
     #tenantClient;
-    
-    constructor (accounts) {
-        this.#registryAddress = accounts.registryAddress;
-        this.#foundationAddress = accounts.foundationAddress;
-        this.#foundationSecret = accounts.foundationSecret;
-        this.#tenantAddress = accounts.tenantAddress;
-        this.#tenantSecret = accounts.tenantSecret;    
+
+    constructor(accounts) {
+        this.#registryAddress = accounts.registry_address;
+        this.#foundationAddress = accounts.foundation_address;
+        this.#foundationSecret = accounts.foundation_secret;
+        this.#tenantAddress = accounts.tenant_address;
+        this.#tenantSecret = accounts.tenant_secret;
     }
 
     async #fundTenant(tenant, fundAmount) {
@@ -37,10 +37,10 @@ class EvernodeService {
             xrplApi: this.#xrplApi
         })
         await this.#xrplApi.connect();
-    
+
         this.#tenantClient = new evernode.TenantClient(this.#tenantAddress, this.#tenantSecret);
         await this.#tenantClient.connect();
-    
+
         this.#registryClient = new evernode.RegistryClient();
         await this.#registryClient.connect();
     }
@@ -50,7 +50,7 @@ class EvernodeService {
         await this.#registryClient.disconnect();
         await this.#xrplApi.disconnect();
     }
-    
+
     async prepareAccounts(fundAmount) {
         await this.#tenantClient.prepareAccount();
         await this.#fundTenant(this.#tenantClient, fundAmount);
@@ -63,10 +63,10 @@ class EvernodeService {
 
     async acquireLease(host, contractId, image, ownerPubKey, config) {
         let requirement = {
-                owner_pubkey: ownerPubKey,
-                contract_id: contractId,
-                image: image,
-                config: config ? config : {}
+            owner_pubkey: ownerPubKey,
+            contract_id: contractId,
+            image: image,
+            config: config ? config : {}
         };
 
         const tenant = this.#tenantClient;
@@ -80,7 +80,7 @@ class EvernodeService {
         const client = this.#tenantClient;
         console.log(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
         const result = await client.extendLease(hostAddress, moments, instanceName);
-        console.log("Extend result", result);
+        console.log(`Instance ${instanceName} expiry set to ${result.expiryMoment}`);
         return result;
     }
 }

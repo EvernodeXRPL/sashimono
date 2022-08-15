@@ -273,7 +273,7 @@ class ClusterManager {
             return;
         }
 
-        if (contract.target_moments_count > 1 && contract.cluster.findIndex(c => !c.extended) > 0) {
+        if (contract.target_moments_count > 1 && this.#config.contracts[contractIdx].cluster.findIndex(c => !c.extended) >= 0) {
             console.log('Extending the cluster...');
             try {
                 await this.#extendCluster(contractIdx);

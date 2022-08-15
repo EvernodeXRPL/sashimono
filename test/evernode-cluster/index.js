@@ -247,7 +247,6 @@ class ClusterManager {
         const ownerKeys = await HotPocket.generateKeys(contract.owner_privatekey);
 
         const targetCount = this.#config.contracts[contractIdx].target_nodes_count - (contract?.cluster?.length || 0);
-        let waitBeforeDeploy = false;
 
         if (targetCount > 0) {
             console.log('Creating the cluster...');
@@ -264,8 +263,9 @@ class ClusterManager {
                 console.error(`Cluster create failed.`);
                 return;
             }
-            waitBeforeDeploy = true;
-            await sleep(1000);
+
+            console.log('Waiting 15 seconds until nodes are synced...');
+            await sleep(15000);
         }
 
         if (!contract.cluster || !contract.cluster.length) {
@@ -285,11 +285,6 @@ class ClusterManager {
                 console.error(`Cluster extend failed.`);
                 return;
             }
-        }
-
-        if (waitBeforeDeploy) {
-            console.log('Waiting 15 seconds until nodes are synced...');
-            await sleep(15000);
         }
 
         const instance = contract.cluster[0];

@@ -89,8 +89,8 @@ class ClusterManager {
         await this.#evernodeService.prepareAccounts(fundAmount);
     }
 
-    async deinit() {
-        await this.#evernodeService.deinit();
+    async terminate() {
+        await this.#evernodeService.terminate();
         await this.#writeConfig();
     }
 
@@ -294,7 +294,7 @@ class ClusterManager {
         try {
             await instanceMgr.deployContract({
                 unl: contract.cluster.map(n => n.pubkey)
-            });
+            }, 60000);
         }
         catch (e) {
             console.error(`Contract ${this.#config.selected} deployment failed with.`, e);
@@ -309,7 +309,7 @@ async function main() {
     const clusterMgr = new ClusterManager();
     await clusterMgr.init();
     await clusterMgr.deploy();
-    await clusterMgr.deinit();
+    await clusterMgr.terminate();
 }
 
 main().catch(console.error);

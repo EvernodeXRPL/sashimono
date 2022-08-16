@@ -45,7 +45,7 @@ class EvernodeService {
         await this.#registryClient.connect();
     }
 
-    async deinit() {
+    async terminate() {
         await this.#tenantClient.disconnect();
         await this.#registryClient.disconnect();
         await this.#xrplApi.disconnect();

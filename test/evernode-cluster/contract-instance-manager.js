@@ -6,7 +6,7 @@ const bson = require('bson');
 const HotPocket = require('hotpocket-js-client');
 const { execSync } = require('child_process');
 
-const uploadTimeout = 30000;
+const UPLOAD_TIMEOUT = 30000;
 
 class ContractInstanceManager {
 
@@ -27,12 +27,12 @@ class ContractInstanceManager {
         this.#contractBundle = contractBundle;
     }
 
-    async deployContract(config) {
+    async deployContract(config, uploadTimeout = null) {
         this.#tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), 'evncluster'));
 
         try {
             const hpc = await this.#getHotPocketConnection();
-            await this.#uploadBundle(hpc, this.#contractBundle, config);
+            await this.#uploadBundle(hpc, this.#contractBundle, config, uploadTimeout);
             await hpc.close();
         }
         catch (e) {
@@ -58,15 +58,19 @@ class ContractInstanceManager {
         return hpc;
     }
 
-    async #uploadBundle(hpc, bundleZipFile, config) {
+    async #uploadBundle(hpc, bundleZipFile, config, uploadTimeout = null) {
 
         return new Promise(async (resolve, reject) => {
 
-            const uploadTimer = setTimeout(() => reject("Upload timeout."), uploadTimeout);
+            const uploadTimer = setTimeout(() => {
+                reject("Upload timeout.");
+                hpc.clear(HotPocket.events.contractOutput);
+            }, uploadTimeout || UPLOAD_TIMEOUT);
 
             const failure = (e) => {
                 clearTimeout(uploadTimer);
                 reject(e);
+                hpc.clear(HotPocket.events.contractOutput);
             }
             const success = () => {
                 console.log("Upload complete");
@@ -120,7 +124,7 @@ class ContractInstanceManager {
                 updateConfig(readConfig, config);
                 await fs.writeFile(configFile, JSON.stringify(readConfig, null, 2));
 
-                execSync(`zip -j ${bundlePath} ${bundleDir}/*`);
+                execSync(`cd ${bundleDir} && zip -r ${bundlePath} ./*`);
             }
             else {
                 await copyFileSync(bundleZipFile, `${bundleDir}/`);

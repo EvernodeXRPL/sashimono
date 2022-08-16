@@ -26,7 +26,9 @@ class EvernodeService {
         const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
         if (lines.length === 0 || parseInt(lines[0].balance) < fundAmount) {
             await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
-            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, fundAmount.toString(), 'EVR', tenant.config.evrIssuerAddress);
+            const amount = (fundAmount - lines[0].balance).toString();
+            console.log(`Funding ${amount} EVRs to ${this.#tenantAddress}`)
+            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, amount, 'EVR', tenant.config.evrIssuerAddress);
         }
     }
 
@@ -61,7 +63,7 @@ class EvernodeService {
         return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version !== "0.5.2");
     }
 
-    async acquireLease(host, contractId, image, ownerPubKey, config) {
+    async acquireLease(host, contractId, image, ownerPubKey, config, timeout = 60000) {
         let requirement = {
             owner_pubkey: ownerPubKey,
             contract_id: contractId,
@@ -71,7 +73,7 @@ class EvernodeService {
 
         const tenant = this.#tenantClient;
         console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
-        const result = await tenant.acquireLease(host.address, requirement, { timeout: 60000 });
+        const result = await tenant.acquireLease(host.address, requirement, { timeout: timeout });
         console.log(`Tenant received instance '${result.instance.name}'`);
         return result.instance;
     }

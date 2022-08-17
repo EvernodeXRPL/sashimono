@@ -226,9 +226,11 @@ class ClusterManager {
                 }
             }
             while (ctx.createdInstanceCount < targetNodesCount) {
-                const count = (targetNodesCount - ctx.createdInstanceCount) > 2 ? Math.ceil((targetNodesCount - ctx.createdInstanceCount) / 2) : (targetNodesCount - ctx.createdInstanceCount);
+                const count = targetNodesCount - ctx.createdInstanceCount;
                 try {
-                    await createNodes(count);
+                    await createNodes(count > 2 ? Math.ceil(count / 2) : count);
+                    if (targetNodesCount - ctx.createdInstanceCount > 0)
+                        await createNodes(targetNodesCount - ctx.createdInstanceCount);
                 }
                 catch (e) {
                     throw e;

@@ -9,8 +9,8 @@ namespace msg::json
     constexpr const char *SEP_COMMA_NOQUOTE = ",\"";
     constexpr const char *SEP_COLON_NOQUOTE = "\":";
     constexpr const char *DOUBLE_QUOTE = "\"";
-    constexpr uint16_t MOMENT_SIZE = 1190;        // XRP ledgers per Moment.
-    constexpr uint16_t INSTANCE_INFO_SIZE = 488;  // Size of a single instance info
+    constexpr uint16_t MOMENT_SIZE = 1190;       // XRP ledgers per Moment.
+    constexpr uint16_t INSTANCE_INFO_SIZE = 488; // Size of a single instance info
     /**
      * Parses a json message sent by the message board.
      * @param d Jsoncons document to which the parsed json should be loaded.
@@ -296,8 +296,59 @@ namespace msg::json
             if (contract.contains(msg::FLD_EXECUTE))
                 msg.config.contract.execute = contract[msg::FLD_EXECUTE].as<bool>();
 
+            if (contract.contains(msg::FLD_ENVIRONMENT))
+                msg.config.contract.environment = contract[msg::FLD_ENVIRONMENT].as<std::string>();
+
+            if (contract.contains(msg::FLD_MAX_INP_LEDGER_OFFSET))
+                msg.config.contract.max_input_ledger_offset = contract[msg::FLD_MAX_INP_LEDGER_OFFSET].as<uint16_t>();
+
             if (contract.contains(msg::FLD_ROUNDTIME))
                 msg.config.contract.roundtime = contract[msg::FLD_ROUNDTIME].as<uint32_t>();
+
+            if (contract.contains(msg::FLD_CONSENSUS))
+            {
+                const jsoncons::json &consensus = contract[msg::FLD_CONSENSUS];
+                if (consensus.contains(msg::FLD_MODE))
+                    msg.config.contract.consensus.mode = consensus[msg::FLD_MODE].as<std::string>();
+
+                if (consensus.contains(msg::FLD_ROUNDTIME))
+                    msg.config.contract.consensus.roundtime = consensus[msg::FLD_ROUNDTIME].as<uint32_t>();
+
+                if (consensus.contains(msg::FLD_STAGE_SLICE))
+                    msg.config.contract.consensus.stage_slice = consensus[msg::FLD_STAGE_SLICE].as<uint32_t>();
+
+                if (consensus.contains(msg::FLD_THRESHOLD))
+                    msg.config.contract.consensus.threshold = consensus[msg::FLD_THRESHOLD].as<uint16_t>();
+            }
+
+            if (contract.contains(msg::FLD_NPL))
+            {
+                const jsoncons::json &npl = contract[msg::FLD_NPL];
+                if (npl.contains(msg::FLD_MODE))
+                    msg.config.contract.npl.mode = npl[msg::FLD_MODE].as<std::string>();
+            }
+
+            if (contract.contains(msg::FLD_ROUND_LIMITS))
+            {
+                const jsoncons::json &round_limits = contract[msg::FLD_ROUND_LIMITS];
+                if (round_limits.contains(msg::FLD_USER_INP_BYTES))
+                    msg.config.contract.round_limits.user_input_bytes = round_limits[msg::FLD_USER_INP_BYTES].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_USER_OUTP_BYTES))
+                    msg.config.contract.round_limits.user_output_bytes = round_limits[msg::FLD_USER_OUTP_BYTES].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_NPL_OUTP_BYTES))
+                    msg.config.contract.round_limits.npl_output_bytes = round_limits[msg::FLD_NPL_OUTP_BYTES].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_PROC_CPU_SECS))
+                    msg.config.contract.round_limits.proc_cpu_seconds = round_limits[msg::FLD_PROC_CPU_SECS].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_PROC_MEM_BYTES))
+                    msg.config.contract.round_limits.proc_mem_bytes = round_limits[msg::FLD_PROC_MEM_BYTES].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_PROC_OFD_COUNT))
+                    msg.config.contract.round_limits.proc_ofd_count = round_limits[msg::FLD_PROC_OFD_COUNT].as<uint64_t>();
+            }
 
             if (contract.contains(msg::FLD_LOG))
             {

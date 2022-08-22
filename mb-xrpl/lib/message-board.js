@@ -15,6 +15,8 @@ const LeaseStatus = {
 }
 
 class MessageBoard {
+    #leaseUpdateLock = false; // This locking mechanism is temporary, can be removed when acquire queue is implemented
+
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
         this.configPath = configPath;
         this.secretConfigPath = secretConfigPath;
@@ -109,6 +111,7 @@ class MessageBoard {
                 this.expiryList = this.expiryList.filter(x => x.expiryLedger >= e.ledger_index);
 
                 this.db.open();
+                await this.#acquireLeaseUpdateLock();
                 for (const x of expired) {
                     try {
                         console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
@@ -138,6 +141,7 @@ class MessageBoard {
                         console.error(e);
                     }
                 }
+                await this.#releaseLeaseUpdateLock();
                 this.db.close();
             }
         });
@@ -182,7 +186,10 @@ class MessageBoard {
 
         const scheduler = async () => {
             console.log(`Starting the scheduled prune job...`);
-            await this.#pruneOrphanLeases().catch(console.error);
+            await this.#acquireLeaseUpdateLock();
+            await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
+                await this.#releaseLeaseUpdateLock();
+            });
             console.log(`Stopped the scheduled prune job.`);
             setTimeout(async () => {
                 await scheduler();
@@ -192,6 +199,26 @@ class MessageBoard {
         setTimeout(async () => {
             await scheduler();
         }, timeout);
+    }
+
+    // Try to acquire the lease update lock.
+    async #acquireLeaseUpdateLock() {
+        await new Promise(async resolve => {
+            while (this.#leaseUpdateLock) {
+                await new Promise(resolveSleep => {
+                    setTimeout(() => {
+                        resolveSleep();
+                    }, 1000);
+                })
+            }
+            resolve();
+        });
+        this.#leaseUpdateLock = true;
+    }
+
+    // Release the lease update lock.
+    async #releaseLeaseUpdateLock() {
+        this.#leaseUpdateLock = false;
     }
 
     async #pruneOrphanLeases() {
@@ -330,6 +357,7 @@ class MessageBoard {
         this.db.open();
 
         try {
+            await this.#acquireLeaseUpdateLock();
 
             if (r.host !== this.cfg.xrpl.address)
                 throw "Invalid host in the lease aquire.";
@@ -426,6 +454,7 @@ class MessageBoard {
             await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
         }
         finally {
+            await this.#releaseLeaseUpdateLock();
             this.db.close();
         }
     }

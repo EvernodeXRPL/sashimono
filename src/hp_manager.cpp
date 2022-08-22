@@ -701,11 +701,44 @@ namespace hp
             if (config.contract.execute.has_value())
                 d["contract"]["execute"] = config.contract.execute.value();
 
-            if (config.contract.roundtime.has_value())
-                d["contract"]["roundtime"] = config.contract.roundtime.value();
+            if (config.contract.environment.has_value())
+                d["contract"]["environment"] = config.contract.environment.value();
 
-            if (config.contract.log.enable.has_value())
-                d["contract"]["log"]["enable"] = config.contract.log.enable.value();
+            if (config.contract.max_input_ledger_offset.has_value())
+                d["contract"]["max_input_ledger_offset"] = config.contract.max_input_ledger_offset.value();
+
+            if (config.contract.consensus.mode.has_value())
+                d["contract"]["consensus"]["mode"] = config.contract.consensus.mode.value();
+
+            if (config.contract.consensus.roundtime.has_value())
+                d["contract"]["consensus"]["roundtime"] = config.contract.consensus.roundtime.value();
+
+            if (config.contract.consensus.stage_slice.has_value())
+                d["contract"]["consensus"]["stage_slice"] = config.contract.consensus.stage_slice.value();
+
+            if (config.contract.consensus.threshold.has_value())
+                d["contract"]["consensus"]["threshold"] = config.contract.consensus.threshold.value();
+
+            if (config.contract.npl.mode.has_value())
+                d["contract"]["npl"]["mode"] = config.contract.npl.mode.value();
+
+            if (config.contract.round_limits.user_input_bytes.has_value())
+                d["contract"]["round_limits"]["user_input_bytes"] = config.contract.round_limits.user_input_bytes.value();
+
+            if (config.contract.round_limits.user_output_bytes.has_value())
+                d["contract"]["round_limits"]["user_output_bytes"] = config.contract.round_limits.user_output_bytes.value();
+
+            if (config.contract.round_limits.npl_output_bytes.has_value())
+                d["contract"]["round_limits"]["npl_output_bytes"] = config.contract.round_limits.npl_output_bytes.value();
+
+            if (config.contract.round_limits.proc_cpu_seconds.has_value())
+                d["contract"]["round_limits"]["proc_cpu_seconds"] = config.contract.round_limits.proc_cpu_seconds.value();
+
+            if (config.contract.round_limits.proc_mem_bytes.has_value())
+                d["contract"]["round_limits"]["proc_mem_bytes"] = config.contract.round_limits.proc_mem_bytes.value();
+
+            if (config.contract.round_limits.proc_ofd_count.has_value())
+                d["contract"]["round_limits"]["proc_ofd_count"] = config.contract.round_limits.proc_ofd_count.value();
 
             if (config.contract.log.max_mbytes_per_file.has_value())
                 d["contract"]["log"]["max_mbytes_per_file"] = config.contract.log.max_mbytes_per_file.value();

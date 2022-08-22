@@ -76,7 +76,7 @@ class ClusterManager {
         const contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
         const contract = this.#config.contracts[contractIdx];
         const totalEvers = ((contract.target_nodes_count - contract.cluster.length) * EVR_PER_MOMENT) +
-            ((contract.target_nodes_count - contract.cluster.filter(c => c.extended)) * (contract.target_moments_count - 1) * EVR_PER_MOMENT);
+            ((contract.target_nodes_count - contract.cluster.filter(c => c.extended).length) * (contract.target_moments_count - 1) * EVR_PER_MOMENT);
 
         return totalEvers + Math.ceil(totalEvers * 25 / 100);
     }
@@ -258,7 +258,9 @@ class ClusterManager {
         }));
         const err = res.find(e => e?.error);
         if (err) {
-            throw (err.error || err);
+            // throw (err.error || err);
+            // Do not terminate the execution if there're extend errors, Because there can be extend timeouts as well.
+            console.error(res.filter(e => e?.error))
         }
     }
 

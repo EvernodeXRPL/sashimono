@@ -259,7 +259,7 @@ class ClusterManager {
         const err = res.find(e => e?.error);
         if (err) {
             // throw (err.error || err);
-            // Do not terminate the execution if there's extend errors, Because there can be extend timeouts as well.
+            // Do not terminate the execution if there're extend errors, Because there can be extend timeouts as well.
             console.error(res.filter(e => e?.error))
         }
     }

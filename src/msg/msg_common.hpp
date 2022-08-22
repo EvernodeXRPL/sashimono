@@ -35,12 +35,40 @@ namespace msg
         std::optional<size_t> max_file_count;
     };
 
+    struct consensus_config
+    {
+        std::optional<std::string> mode;
+        std::optional<uint32_t> roundtime;
+        std::optional<uint32_t> stage_slice;
+        std::optional<uint16_t> threshold;
+    };
+
+    struct npl_config
+    {
+        std::optional<std::string> mode;
+    };
+
+    struct round_limits_config
+    {
+        std::optional<size_t> user_input_bytes;
+        std::optional<size_t> user_output_bytes;
+        std::optional<size_t> npl_output_bytes;
+        std::optional<size_t> proc_cpu_seconds;
+        std::optional<size_t> proc_mem_bytes;
+        std::optional<size_t> proc_ofd_count;
+    };
+
     struct contract_config
     {
-        std::optional<uint32_t> roundtime; 
+        std::optional<uint32_t> roundtime;
         std::set<std::string> unl;
         std::optional<bool> execute;
+        std::optional<std::string> environment;
+        std::optional<uint16_t> max_input_ledger_offset;
         c_log_config log;
+        consensus_config consensus;
+        npl_config npl;
+        round_limits_config round_limits;
     };
 
     struct peer_discovery_config
@@ -147,7 +175,21 @@ namespace msg
     constexpr const char *FLD_MESH = "mesh";
     constexpr const char *FLD_USER = "user";
     constexpr const char *FLD_EXECUTE = "execute";
+    constexpr const char *FLD_ENVIRONMENT = "environment";
+    constexpr const char *FLD_MAX_INP_LEDGER_OFFSET = "max_input_ledger_offset";
+    constexpr const char *FLD_CONSENSUS = "consensus";
+    constexpr const char *FLD_NPL = "npl";
+    constexpr const char *FLD_MODE = "mode";
     constexpr const char *FLD_ROUNDTIME = "roundtime";
+    constexpr const char *FLD_STAGE_SLICE = "stage_slice";
+    constexpr const char *FLD_THRESHOLD = "threshold";
+    constexpr const char *FLD_ROUND_LIMITS = "round_limits";
+    constexpr const char *FLD_USER_INP_BYTES = "user_input_bytes";
+    constexpr const char *FLD_USER_OUTP_BYTES = "user_output_bytes";
+    constexpr const char *FLD_NPL_OUTP_BYTES = "npl_output_bytes";
+    constexpr const char *FLD_PROC_CPU_SECS = "proc_cpu_seconds";
+    constexpr const char *FLD_PROC_MEM_BYTES = "proc_mem_bytes";
+    constexpr const char *FLD_PROC_OFD_COUNT = "proc_ofd_count";
     constexpr const char *FLD_LOG = "log";
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";

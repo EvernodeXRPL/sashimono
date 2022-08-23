@@ -87,10 +87,17 @@ if [ "$UPGRADE" == "0" ]; then
 
         echo "Deleting $ucount contract instances..."
         for user in "${sashiusers[@]}"; do
-            output=$($SASHIMONO_BIN/user-uninstall.sh $user | tee /dev/stderr)
+            homedir=$(eval echo ~$user)
+            cfgpath=$(find $homedir/ -type f -regex ^$homedir/[^/]+/cfg/hp.cfg$ | head -n 1)
+            instancename=$(echo $cfgpath | rev | cut -d '/' -f 3 | rev)
+            peerport=$(jq .mesh.port $cfgpath)
+            userport=$(jq .user.port $cfgpath)
+            output=$($SASHIMONO_BIN/user-uninstall.sh $user $peerport $userport $instancename 2>/dev/null | tee /dev/stderr)
             [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
         done
     fi
+
+    # ToDo: Remove if there're garbage port rules.
 fi
 
 echo "Removing Sashimono cgroup creation service..."

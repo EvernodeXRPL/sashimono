@@ -17,8 +17,8 @@ function confirm() {
         read -p "'y' or 'n' expected: " yn </dev/tty
     done
 
-    echo "" # Insert new line after answering.
-    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
+    echo ""                                     # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
 function cgrulesengd_servicename() {
@@ -88,7 +88,7 @@ if [ "$UPGRADE" == "0" ]; then
         echo "Deleting $ucount contract instances..."
         for user in "${sashiusers[@]}"; do
             homedir=$(eval echo ~$user)
-            cfgpath=$(find $homedir/ -type f -regex ^$homedir/[^/]+/cfg/hp.cfg$ | head -n 1)
+            cfgpath=$(find $homedir/ -type f -regex ^$homedir/[^/]+/cfg/hp.cfg$ 2>/dev/null | head -n 1)
             instancename=$(echo $cfgpath | rev | cut -d '/' -f 3 | rev)
             peerport=$(jq .mesh.port $cfgpath)
             userport=$(jq .user.port $cfgpath)
@@ -97,7 +97,15 @@ if [ "$UPGRADE" == "0" ]; then
         done
     fi
 
-    # ToDo: Remove if there're garbage port rules.
+    # Find if there are any garbage rules that are created by sashimono and remove them.
+    prefix="sashi"
+    ufw status | grep -E ^[0-9]+,[0-9]+/tcp\\s+ALLOW\\s+Anywhere\\s+\#\\s$prefix-.+$ | while read -r line; do
+        ports=$(echo $line | cut -d ' ' -f 1)
+        echo "Removing found garbage ufw $ports rule..."
+        p1=$(echo $ports | cut -d ',' -f 1)
+        p2=$(echo $ports | cut -d ',' -f 2 | cut -d '/' -f 1)
+        ufw delete allow "$p1","$p2"/tcp
+    done
 fi
 
 echo "Removing Sashimono cgroup creation service..."
@@ -164,9 +172,9 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     fi
 
     echo "Deleting message board user..."
-    # Killall command is not found in every linux systems, therefore pkill command is used. 
+    # Killall command is not found in every linux systems, therefore pkill command is used.
     # A small timeout(0.5 second) is applied before deleting the user because it takes some time to kill all the processes
-    loginctl disable-linger  $MB_XRPL_USER
+    loginctl disable-linger $MB_XRPL_USER
     pkill -u $MB_XRPL_USER # Kill any running processes.
     sleep 0.5
     userdel -f "$MB_XRPL_USER"

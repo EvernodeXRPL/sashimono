@@ -63,6 +63,12 @@ if [[ -z "$(lsmod | grep br_netfilter)" ]]; then
     echo "br_netfilter" >/etc/modules-load.d/br_netfilter.conf
 fi
 
+# Install ufw
+if ! command -v ufw &>/dev/null; then
+    stage "Installing ufw"
+    apt-get install -y ufw
+fi
+
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.

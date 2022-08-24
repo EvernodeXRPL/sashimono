@@ -92,7 +92,7 @@ if [ "$UPGRADE" == "0" ]; then
             instancename=$(echo $cfgpath | rev | cut -d '/' -f 3 | rev)
             peerport=$(jq .mesh.port $cfgpath)
             userport=$(jq .user.port $cfgpath)
-            output=$($SASHIMONO_BIN/user-uninstall.sh $user $peerport $userport $instancename 2>/dev/null | tee /dev/stderr)
+            output=$($SASHIMONO_BIN/user-uninstall.sh $user $peerport $userport $instancename | tee /dev/stderr)
             [ "${output: -10}" != "UNINST_SUC" ] && echo "Uninstall user '$user' failed. Aborting." && exit 1
         done
     fi

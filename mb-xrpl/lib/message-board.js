@@ -24,7 +24,7 @@ class MessageBoard {
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
         this.activeInstanceCount = 0;
-
+        this.activeInstanceCountFromSashiDb = 0;
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
@@ -71,10 +71,25 @@ class MessageBoard {
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
 
-        this.activeInstanceCount = leaseRecords.length;
-        console.log(`Active instance count: ${this.activeInstanceCount}`);
+        // Getting active intance count from sashiDb instead of in memory variable.    
+        this.sashiDb.open();
+        const instances = (await this.sashiDb.getValues(this.sashiTable));
+        this.sashiDb.close();
+
+        for(let i=0; i < instances.length; i++)
+        {
+            if(instances[i].status == "running"){
+                this.activeInstanceCountFromSashiDb++;
+            }
+        }  
+        console.log(`Active instance count: ${this.activeInstanceCountFromSashiDb}`);  
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
+        await this.hostClient.updateRegInfo(this.activeInstanceCountFromSashiDb, this.cfg.version);
+
+        // this.activeInstanceCount = leaseRecords.length;
+        // console.log(`Active instance count: ${this.activeInstanceCount}`);
+        // Update the registry with the active instance count.
+        // await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
         let ongoingHeartbeat = false;
@@ -106,7 +121,7 @@ class MessageBoard {
             }
 
             // Filter out instances which needed to be expired and destroy them.
-            const expired = this.expiryList.filter(x => x.expiryLedger < e.ledger_index);
+            const expired = this.expiryList.filter(x => x.expiryLedger < e.ledger_index);            
             if (expired && expired.length) {
                 this.expiryList = this.expiryList.filter(x => x.expiryLedger >= e.ledger_index);
 
@@ -125,7 +140,7 @@ class MessageBoard {
                             await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
                         }
 
-                        this.activeInstanceCount--;
+                        //this.activeInstanceCount--;
                         /**
                          * Soft deletion for debugging purpose.
                          */
@@ -134,7 +149,9 @@ class MessageBoard {
                         // Delete the lease record related to this instance (Permanent Delete).
                         await this.deleteLeaseRecord(x.txHash);
 
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                        this.activeInstanceCountFromSashiDb--;
+                        await this.hostClient.updateRegInfo(this.activeInstanceCountFromSashiDb);
+                        //await this.hostClient.updateRegInfo(this.activeInstanceCount);
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {

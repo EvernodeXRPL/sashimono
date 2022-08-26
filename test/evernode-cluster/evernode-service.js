@@ -78,10 +78,10 @@ class EvernodeService {
         return result.instance;
     }
 
-    async extendLease(hostAddress, instanceName, moments) {
-        const client = this.#tenantClient;
+    async extendLease(hostAddress, instanceName, moments, timeout = 60000) {
+        const tenant = this.#tenantClient;
         console.log(`Extending lease ${instanceName} of host ${hostAddress} by ${moments} Moments.`);
-        const result = await client.extendLease(hostAddress, moments, instanceName);
+        const result = await tenant.extendLease(hostAddress, moments, instanceName, { timeout: timeout });
         console.log(`Instance ${instanceName} expiry set to ${result.expiryMoment}`);
         return result;
     }

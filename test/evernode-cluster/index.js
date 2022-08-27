@@ -9,6 +9,7 @@ const EVR_PER_MOMENT = 2;
 const MAX_MEMO_PEER_LIMIT = 10;
 const FAIL_THRESHOLD = 1;
 const DEF_TIMEOUT = 60000;
+const CLUSTER_CHUNK_DEVIDER = 5;
 
 async function sleep(ms) {
     await new Promise(resolve => {
@@ -213,14 +214,13 @@ class ClusterManager {
                 throw { message: 'Error while creating the primary node.', innerException: e };
             }
 
+            const clusterChunkSize = Math.ceil(targetCount / CLUSTER_CHUNK_DEVIDER)
+
             while (targetCount > 0) {
                 try {
-                    await this.#createNodes(targetCount > 2 ? Math.ceil(targetCount / 2) : targetCount, ownerPubKeyHex);
+                    const curTarget = clusterChunkSize < targetCount ? clusterChunkSize : targetCount;
+                    await this.#createNodes(curTarget, ownerPubKeyHex);
                     targetCount = contract.target_nodes_count - this.#instanceCount;
-                    if (targetCount > 0) {
-                        await this.#createNodes(targetCount, ownerPubKeyHex);
-                        targetCount = contract.target_nodes_count - this.#instanceCount;
-                    }
                 }
                 catch (e) {
                     console.error(e);

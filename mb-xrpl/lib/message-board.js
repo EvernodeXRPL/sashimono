@@ -24,7 +24,6 @@ class MessageBoard {
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
         this.activeInstanceCount = 0;
-        this.activeInstanceCountFromSashiDb = 0;
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
@@ -71,25 +70,10 @@ class MessageBoard {
         for (const lease of leaseRecords)
             this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
 
-        // Getting active intance count from sashiDb instead of in memory variable.    
-        this.sashiDb.open();
-        const instances = (await this.sashiDb.getValues(this.sashiTable));
-        this.sashiDb.close();
-
-        for(let i=0; i < instances.length; i++)
-        {
-            if(instances[i].status == "running"){
-                this.activeInstanceCountFromSashiDb++;
-            }
-        }  
-        console.log(`Active instance count: ${this.activeInstanceCountFromSashiDb}`);  
+        this.activeInstanceCount = leaseRecords.length;
+        console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCountFromSashiDb, this.cfg.version);
-
-        // this.activeInstanceCount = leaseRecords.length;
-        // console.log(`Active instance count: ${this.activeInstanceCount}`);
-        // Update the registry with the active instance count.
-        // await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
+        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
         let ongoingHeartbeat = false;
@@ -148,16 +132,17 @@ class MessageBoard {
 
                         // Delete the lease record related to this instance (Permanent Delete).
                         await this.deleteLeaseRecord(x.txHash);
-
-                        this.activeInstanceCountFromSashiDb--;
-                        await this.hostClient.updateRegInfo(this.activeInstanceCountFromSashiDb);
-                        //await this.hostClient.updateRegInfo(this.activeInstanceCount);
                         console.log(`Destroyed ${x.containerName}`);
                     }
                     catch (e) {
                         console.error(e);
                     }
                 }
+
+                let activeInstanceCountFromLeaseDb = 0;
+                activeInstanceCountFromLeaseDb = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED)).length;
+                
+                await this.hostClient.updateRegInfo(activeInstanceCountFromLeaseDb);
                 await this.#releaseLeaseUpdateLock();
                 this.db.close();
             }

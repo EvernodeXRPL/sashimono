@@ -124,7 +124,6 @@ class MessageBoard {
                             await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
                         }
 
-                        //this.activeInstanceCount--;
                         /**
                          * Soft deletion for debugging purpose.
                          */

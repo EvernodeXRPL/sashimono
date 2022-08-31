@@ -125,8 +125,9 @@ function GB() {
 function check_prereq() {
     # Check if node js installed.
     if command -v node &>/dev/null; then
-        version=$(node -v)
-        if [[ ! $version =~ v16\..* ]]; then
+        version=$(node -v | cut -d '.' -f1)
+        version=${version:1}
+        if [[ $version -lt 16 ]]; then
             echo "$evernode requires NodeJs 16.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 16.x."
             exit 1
         fi

@@ -9,7 +9,7 @@ const EVR_PER_MOMENT = 2;
 const MAX_MEMO_PEER_LIMIT = 10;
 const FAIL_THRESHOLD = 1;
 const DEF_TIMEOUT = 60000;
-const CLUSTER_CHUNK_DEVIDER = 5;
+const CLUSTER_CHUNK_RATIO = 0.2;
 
 async function sleep(ms) {
     await new Promise(resolve => {
@@ -59,7 +59,8 @@ class ClusterManager {
                     "tenant_address": "",
                     "tenant_secret": "",
                     "primary_host_address": "",
-                    "blacklist_hosts": []
+                    "blacklist_hosts": [],
+                    "preferred_hosts": []
                 }
             };
 
@@ -94,7 +95,10 @@ class ClusterManager {
         await this.#evernodeService.prepareAccounts(fundAmount);
         this.#contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
         this.#instanceCount = this.#config.contracts[this.#contractIdx]?.cluster?.length || 0;
-        this.#hosts = (await this.#evernodeService.getHosts()).filter(h => !this.#config.accounts.blacklist_hosts.includes(h.address)).sort(() => Math.random() - 0.5);
+        this.#hosts = (await this.#evernodeService.getHosts()).filter(h =>
+            !this.#config.accounts.blacklist_hosts.includes(h.address) &&
+            (!this.#config.accounts.preferred_hosts || !this.#config.accounts.preferred_hosts.length || this.#config.accounts.preferred_hosts.includes(h.address)))
+            .sort(() => Math.random() - 0.5);
     }
 
     async terminate() {
@@ -214,7 +218,7 @@ class ClusterManager {
                 throw { message: 'Error while creating the primary node.', innerException: e };
             }
 
-            const clusterChunkSize = Math.ceil(targetCount / CLUSTER_CHUNK_DEVIDER)
+            const clusterChunkSize = Math.ceil(targetCount * CLUSTER_CHUNK_RATIO)
 
             while (targetCount > 0) {
                 try {

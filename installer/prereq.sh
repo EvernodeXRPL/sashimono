@@ -44,9 +44,10 @@ if ! command -v node &>/dev/null; then
     curl -sL https://deb.nodesource.com/setup_16.x | bash -
     apt-get -y install nodejs
 else
-    version=$(node -v)
-    if [[ ! $version =~ v16\..* ]]; then
-        echo "Found node $version, recommended node v16.x.x"
+    version=$(node -v | cut -d '.' -f1)
+    version=${version:1}
+    if [[ $version -lt 16 ]]; then
+        echo "Found node $version, recommended node v16.x.x or later"
     fi
 fi
 
@@ -61,6 +62,12 @@ if [[ -z "$(lsmod | grep br_netfilter)" ]]; then
     echo "Adding br_netfilter"
     modprobe br_netfilter
     echo "br_netfilter" >/etc/modules-load.d/br_netfilter.conf
+fi
+
+# Install ufw
+if ! command -v ufw &>/dev/null; then
+    stage "Installing ufw"
+    apt-get install -y ufw
 fi
 
 # -------------------------------

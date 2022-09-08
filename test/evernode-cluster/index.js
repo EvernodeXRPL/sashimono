@@ -133,10 +133,6 @@ class ClusterManager {
         }
         catch (e) {
             this.#hosts[hostIndex].acquiring = false;
-            if (!this.#hosts[hostIndex].failcount)
-                this.#hosts[hostIndex].failcount = 1;
-            else
-                this.#hosts[hostIndex].failcount++;
             throw { message: `Error while creating the node ${nodeNumber} in ${host.address}.`, innerException: e };
         }
     }
@@ -195,6 +191,10 @@ class ClusterManager {
                 hostIndex = Math.floor(Math.random() * this.#hosts.length);
             }
             await this.#createNode(nodeNumber, hostIndex, contract, ownerPubKeyHex, config).catch(e => {
+                if (!this.#hosts[hostIndex].failcount)
+                    this.#hosts[hostIndex].failcount = 1;
+                else
+                    this.#hosts[hostIndex].failcount++;
                 console.error(e);
             });
         });

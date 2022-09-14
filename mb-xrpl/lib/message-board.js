@@ -376,9 +376,16 @@ class MessageBoard {
                                     await this.handleAcquireLease({ ...acquireReq, payload: decrypted });
                                 }
                             } else {
-                                console.log(`Refund for the acquire request (Hash : ${trx.hash}).`)
-                                await this.hostClient.expireLease(acquireReq.nfTokenId, acquireReq.tenant);
-                                await this.hostClient.xrplAcc.makePayment(acquireReq.tenant, `${acquireReq.leaseAmount}`, 'EVR', this.hostClient.config.evrIssuerAddress)
+                                const tenantXrplAcc = new evernode.XrplAccount(acquireReq.tenant);
+                                const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === acquireReq.nfTokenId);
+                                if (nft) {
+                                    const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                                    // We have to recreate the NFT Offer for the lease as previous one was not utilized.
+                                    await this.recreateLeaseOffer(acquireReq.nfTokenId, acquireReq.tenant, uriInfo.leaseIndex);
+
+                                    console.log(`Refunding tenant ${acquireReq.tenant} for acquire...`);
+                                    await this.hostClient.refundTenant(trx.hash, acquireReq.tenant, uriInfo.leaseAmount.toString());
+                                }
                             }
 
                         } else if (evernode.TransactionHelper.hexToASCII(memo.Memo.MemoType) == evernode.MemoTypes.EXTEND_LEASE) {
@@ -406,9 +413,8 @@ class MessageBoard {
                                     if (calculatedExpiryLedger > this.lastValidatedLedgerIndex) {
                                         await this.handleExtendLease(extendReq);
                                     } else {
-                                        console.log(`Refund for the extension request (Hash : ${trx.hash}).`)
-                                        await this.hostClient.expireLease(extendReq.nfTokenId, extendReq.tenant);
-                                        await this.hostClient.xrplAcc.makePayment(extendReq.tenant, `${extendReq.payment}`, 'EVR', this.hostClient.config.evrIssuerAddress)
+                                        console.log(`Refunding tenant ${extendReq.tenant} for extend...`);
+                                        await this.hostClient.refundTenant(trx.hash, extendReq.tenant, extendReq.payment.toString());
                                     }
 
                                 } else {
@@ -420,6 +426,8 @@ class MessageBoard {
                         }
                     }
 
+                    // Update last watched ledger sequence number.
+                    await this.updateLastIndexRecord(trx.LastLedgerSequence);
                 }
             }
         } catch (e) {

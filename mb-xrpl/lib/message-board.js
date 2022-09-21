@@ -355,73 +355,72 @@ class MessageBoard {
                 // Perform missed acquired and extensions.
                 for (const record of transactionHistory) {
                     const trx = record.tx;
-                    if (!trx.Memos)
-                        continue;
-                    for (const memo of trx.Memos) {
-                        if (evernode.TransactionHelper.hexToASCII(memo.Memo.MemoType) == evernode.MemoTypes.ACQUIRE_LEASE) {
-                            const memoData = evernode.TransactionHelper.hexToASCII(memo.Memo.MemoData);
-                            const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === (trx.NFTokenSellOffer));
-                            const acquireReq = {
-                                transaction: trx,
-                                host: this.cfg.xrpl.address,
-                                nfTokenId: offer.NFTokenID,
-                                leaseAmount: offer.Amount.value,
-                                acquireRefId: trx.hash,
-                                tenant: trx.Account
-                            }
+                    trx.Memos = evernode.TransactionHelper.deserializeMemos(trx.Memos);
+                    console.log(trx.Memos);
+                    const memoTypes = trx.Memos.map(m => m.type);
+                    console.log(memoTypes);
+
+                    if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE) || memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) {
+
+                        trx.Destination = this.cfg.xrpl.address;
+
+                        // Find and bind the NFTSellOffer or the NFTBuyOffer
+                        const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
+                        if (trx.NFTokenSellOffer)
+                            trx.NFTokenSellOffer = offer;
+
+                        if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
+                            const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.AcquireLease, trx);
+
                             const calculatedExpiryLedger = this.getExpiryLedger(trx.ledger_index, 1);
-                            if (calculatedExpiryLedger > this.lastValidatedLedgerIndex) {
-                                const decrypted = this.hostClient.accKeyPair && await evernode.EncryptionHelper.decrypt(this.hostClient.accKeyPair.privateKey, memoData);
-                                if (decrypted) {
-                                    await this.handleAcquireLease({ ...acquireReq, payload: decrypted });
-                                }
+
+                            const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+
+                            // If the calculated expiry ledger index is greater than current ledger index the transaction is accepted.
+                            if (calculatedExpiryLedger > this.lastValidatedLedgerIndex && !lease) { // Also there is a already created lease for this request we reject this transaction.
+                                await this.handleAcquireLease(eventInfo.data);
                             } else {
-                                const tenantXrplAcc = new evernode.XrplAccount(acquireReq.tenant);
-                                const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === acquireReq.nfTokenId);
+                                const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
+                                const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === eventInfo.data.nfTokenId);
                                 if (nft) {
                                     const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                                    // We have to recreate the NFT Offer for the lease as previous one was not utilized.
-                                    await this.recreateLeaseOffer(acquireReq.nfTokenId, acquireReq.tenant, uriInfo.leaseIndex);
+                                    // Have to recreate the NFT Offer for the lease as previous one was not utilized.
+                                    await this.recreateLeaseOffer(eventInfo.data.nfTokenId, eventInfo.data.tenant, uriInfo.leaseIndex);
 
-                                    console.log(`Refunding tenant ${acquireReq.tenant} for acquire...`);
-                                    await this.hostClient.refundTenant(trx.hash, acquireReq.tenant, uriInfo.leaseAmount.toString());
+                                    console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
+                                    await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString());
                                 }
                             }
 
-                        } else if (evernode.TransactionHelper.hexToASCII(memo.Memo.MemoType) == evernode.MemoTypes.EXTEND_LEASE) {
+                        } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) {
 
-                            const nfTokenId = memo.Memo.MemoData;
-                            const lease = leases.find(l => l.container_name === nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+                            const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.ExtendLease, trx);
+
+                            const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
                             if (lease) {
-                                const extendReq = {
-                                    transaction: trx,
-                                    extendRefId: trx.hash,
-                                    tenant: trx.Account,
-                                    currency: trx.Amount.currency,
-                                    payment: parseFloat(trx.Amount.value),
-                                    nfTokenId: nfTokenId
-                                }
 
-                                const tenantXrplAcc = new evernode.XrplAccount(extendReq.tenant);
-                                const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === extendReq.nfTokenId);
+                                const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
+                                const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === eventInfo.data.nfTokenId);
                                 if (nft) {
                                     const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                                     const leaseAmount = uriInfo.leaseAmount;
-                                    const extendingMoments = Math.floor(extendReq.payment / leaseAmount);
+                                    const extendingMoments = Math.floor(eventInfo.data.payment / leaseAmount);
                                     const calculatedExpiryLedger = this.getExpiryLedger(lease.created_on_ledger, (lease.life_moments + extendingMoments));
+
+                                    // If the calculated expiry ledger index is greater than current ledger index the extension is accepted.
                                     if (calculatedExpiryLedger > this.lastValidatedLedgerIndex) {
-                                        await this.handleExtendLease(extendReq);
+                                        await this.handleExtendLease(eventInfo.data);
                                     } else {
-                                        console.log(`Refunding tenant ${extendReq.tenant} for extend...`);
-                                        await this.hostClient.refundTenant(trx.hash, extendReq.tenant, extendReq.payment.toString());
+                                        console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
+                                        await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString());
                                     }
 
                                 } else {
-                                    console.log(`No such NFT (${nfTokenId}) was found.`);
+                                    console.log(`No such NFT (${eventInfo.data.nfTokenI}) was found.`);
                                 }
                             } else {
-                                console.log(`No lease was found: (NFT : ${nfTokenId}).`);
+                                console.log(`No lease was found: (NFT : ${eventInfo.data.nfTokenId}).`);
                             }
                         }
                     }

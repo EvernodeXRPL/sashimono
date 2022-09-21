@@ -364,11 +364,12 @@ class MessageBoard {
 
                         trx.Destination = this.cfg.xrpl.address;
 
-                        // Find and bind the NFTSellOffer or the NFTBuyOffer
+                        // Find and bind the NFTSellOffer (If the trx. is  an ACQUIRE, there should be an NFTSellOffer)
                         const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
                         if (trx.NFTokenSellOffer)
                             trx.NFTokenSellOffer = offer;
 
+                        // Handle Acquires.
                         if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
                             const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.AcquireLease, trx);
 
@@ -392,7 +393,7 @@ class MessageBoard {
                                 }
                             }
 
-                        } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) {
+                        } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) { // Handle Extensions.
 
                             const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.ExtendLease, trx);
 

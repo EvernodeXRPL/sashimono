@@ -370,13 +370,13 @@ class MessageBoard {
 
                             // Handle Acquires.
                             if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
-                                const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.AcquireLease, trx);
+                                const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
                                 const calculatedExpiryLedger = this.getExpiryLedger(trx.ledger_index, 1);
 
                                 const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
-                                // If the calculated expiry ledger index is greater than current ledger index the transaction is accepted.
+                                // The transaction is accepted, if the calculated expiry ledger index is greater than current ledger index.
                                 if (calculatedExpiryLedger > this.lastValidatedLedgerIndex && !lease) { // Also there is a already created lease for this request we reject this transaction.
                                     await this.handleAcquireLease(eventInfo.data);
                                 } else {
@@ -394,7 +394,7 @@ class MessageBoard {
 
                             } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) { // Handle Extensions.
 
-                                const eventInfo = await this.hostClient.extractClientEvent(evernode.HostEvents.ExtendLease, trx);
+                                const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
                                 const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
@@ -408,7 +408,7 @@ class MessageBoard {
                                         const extendingMoments = Math.floor(eventInfo.data.payment / leaseAmount);
                                         const calculatedExpiryLedger = this.getExpiryLedger(lease.created_on_ledger, (lease.life_moments + extendingMoments));
 
-                                        // If the calculated expiry ledger index is greater than current ledger index the extension is accepted.
+                                        // The extension is accepted, if the calculated expiry ledger index is greater than current ledger index.
                                         if (calculatedExpiryLedger > this.lastValidatedLedgerIndex) {
                                             await this.handleExtendLease(eventInfo.data);
                                         } else {

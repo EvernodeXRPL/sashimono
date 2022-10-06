@@ -379,21 +379,22 @@ class MessageBoard {
                                     if (extendRef === trx.hash)
                                         continue loop1;
 
-                                    const catchupRef = this.#getTrxMemoData(tx, evernode.MemoTypes.REFUND_REF);
-                                    if (catchupRef === trx.hash)
+                                    const refundRef = this.#getTrxMemoData(tx, evernode.MemoTypes.REFUND_REF);
+                                    if (refundRef === trx.hash)
                                         continue loop1;
                                 }
                             }
 
                             trx.Destination = this.cfg.xrpl.address;
 
-                            // Find and bind the NFTSellOffer (If the trx. is  an ACQUIRE, there should be an NFTSellOffer)
-                            const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
-                            if (trx.NFTokenSellOffer)
-                                trx.NFTokenSellOffer = offer;
-
                             // Handle Acquires.
                             if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
+
+                                // Find and bind the NFTSellOffer (If the trx. is  an ACQUIRE, there should be an NFTSellOffer)
+                                const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
+                                if (trx.NFTokenSellOffer)
+                                    trx.NFTokenSellOffer = offer;
+
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
                                 const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));

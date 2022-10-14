@@ -15,7 +15,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror")
 #-------Bootstrap contract-------
 
 add_executable(bootstrap_contract
-    bootstrap-contract/bootstrap_contract.cpp
+    evernode-bootstrap-contract/src/bootstrap_contract.cpp
 )
 
 #-------Sashi CLI-------
@@ -66,7 +66,7 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND bash -c "cp -r ./dependencies/{hpfs,user-install.sh,user-uninstall.sh} ./build/"
     COMMAND tar xf ./dependencies/contract_template.tar -C ./build/ --no-same-owner
     COMMAND cp ./dependencies/hp.cfg ./build/contract_template/cfg/
-    COMMAND cp ./bootstrap-contract/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
+    COMMAND cp ./evernode-bootstrap-contract/src/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
     COMMAND npm  --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build

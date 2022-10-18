@@ -701,8 +701,8 @@ namespace hp
             if (config.contract.execute.has_value())
                 d["contract"]["execute"] = config.contract.execute.value();
 
-            if (config.contract.environment.has_value())
-                d["contract"]["environment"] = config.contract.environment.value();
+            if (!config.contract.environment.empty())
+                d["contract"]["environment"] = config.contract.environment;
 
             if (config.contract.max_input_ledger_offset.has_value())
                 d["contract"]["max_input_ledger_offset"] = config.contract.max_input_ledger_offset.value();

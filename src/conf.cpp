@@ -60,8 +60,8 @@ namespace conf
             cfg.version = version::AGENT_VERSION;
 
             cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
-            cfg.hp.init_peer_port = init_peer_port;
-            cfg.hp.init_user_port = init_user_port;
+            cfg.hp.init_peer_port = !init_peer_port ? 22861 : init_peer_port;
+            cfg.hp.init_user_port = !init_user_port ? 26201 : init_user_port;
 
             cfg.system.max_instance_count = !inst_count ? 3 : inst_count;
             cfg.system.max_mem_kbytes = !ram_kbytes ? 1048576 : ram_kbytes;

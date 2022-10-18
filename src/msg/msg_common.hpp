@@ -63,7 +63,7 @@ namespace msg
         std::optional<uint32_t> roundtime;
         std::set<std::string> unl;
         std::optional<bool> execute;
-        std::optional<std::map<std::string, std::string>> environment;
+        std::map<std::string, std::string> environment;
         std::optional<uint16_t> max_input_ledger_offset;
         c_log_config log;
         consensus_config consensus;

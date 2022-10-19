@@ -69,7 +69,7 @@ class MessageBoard {
 
         const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
-            this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
+            this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryTimestamp(lease.timestamp, lease.life_moments));
 
         // Catch up missed transactions based on the previously updated "last_watched_ledger" record (checkpoint).
         await this.#catchupMissedLeases().catch(console.error);
@@ -107,53 +107,69 @@ class MessageBoard {
                     ongoingHeartbeat = false;
                 }
             }
-
-            // Filter out instances which needed to be expired and destroy them.
-            const expired = this.expiryList.filter(x => x.expiryLedger < e.ledger_index);
-            if (expired && expired.length) {
-                this.expiryList = this.expiryList.filter(x => x.expiryLedger >= e.ledger_index);
-
-                this.db.open();
-                await this.#acquireLeaseUpdateLock();
-                for (const x of expired) {
-                    try {
-                        console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
-                        // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
-                        const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.NFTokenID == x.containerName);
-                        // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
-                        if (!nft)
-                            console.log(`Cannot find a NFT for ${x.containerName}`);
-                        else {
-                            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                            await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
-                        }
-
-                        this.activeInstanceCount--;
-                        /**
-                         * Soft deletion for debugging purpose.
-                         */
-                        // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
-
-                        // Delete the lease record related to this instance (Permanent Delete).
-                        await this.deleteLeaseRecord(x.txHash);
-
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
-                        console.log(`Destroyed ${x.containerName}`);
-                    }
-                    catch (e) {
-                        console.error(e);
-                    }
-                }
-                await this.#releaseLeaseUpdateLock();
-                this.db.close();
-            }
         });
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+
+        // Start a job to expire instances
+        this.#startInstanceExpiringScheduler();
+
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
+    }
+
+    // Expire leases
+    async #expireInstances() {
+        const currentTime = Date.now();
+        console.log(currentTime)
+
+        // Filter out instances which needed to be expired and destroy them.
+        console.log(this.expiryList)
+        const expired = this.expiryList.filter(x => x.timestamp < currentTime);
+        console.log(expired);
+        if (expired && expired.length) {
+            this.expiryList = this.expiryList.filter(x => x.timestamp >= currentTime);
+
+            this.db.open();
+            await this.#acquireLeaseUpdateLock();
+            for (const x of expired) {
+                await this.#expireInstance(x, currentTime);
+            }
+            await this.#releaseLeaseUpdateLock();
+            this.db.close();
+        }
+    }
+
+    async #expireInstance(lease, currentTime = Date.now()) {
+        try {
+            console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.timestamp}). Destroying ${lease.containerName}`);
+            // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
+            const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
+            // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
+            if (!nft)
+                console.log(`Cannot find a NFT for ${lease.containerName}`);
+            else {
+                const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
+            }
+
+            this.activeInstanceCount--;
+            /**
+             * Soft deletion for debugging purpose.
+             */
+            // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+            // Delete the lease record related to this instance (Permanent Delete).
+            await this.deleteLeaseRecord(lease.txHash);
+
+            await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            console.log(`Destroyed ${lease.containerName}`);
+        }
+        catch (e) {
+            console.error(e);
+        }
     }
 
     // Connect the host and trying to reconnect in the event of account not found error.
@@ -194,6 +210,23 @@ class MessageBoard {
                 await this.#releaseLeaseUpdateLock();
             });
             console.log(`Stopped the scheduled prune job.`);
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+        };
+
+        setTimeout(async () => {
+            await scheduler();
+        }, timeout);
+    }
+
+    #startInstanceExpiringScheduler() {
+        const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+
+        const scheduler = async () => {
+            console.log(`Starting the expring instances job...`);
+            await this.#expireInstances();
+            console.log(`Stopped the expring instances job.`);
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -541,11 +574,14 @@ class MessageBoard {
                     // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
+                    // Lease created Timestamp
+                    const createdTimestamp = Date.now();
+
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryLedger(currentLedgerIndex, moments));
+                    this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
 
                     // Update the database for acquired record.
-                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
+                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex, createdTimestamp);
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
@@ -662,14 +698,14 @@ class MessageBoard {
         }
     }
 
-    addToExpiryList(txHash, containerName, tenant, expiryLedger) {
+    addToExpiryList(txHash, containerName, tenant, expiryTimestamp) {
         this.expiryList.push({
             txHash: txHash,
             containerName: containerName,
             tenant: tenant,
-            expiryLedger: expiryLedger,
+            expiryTimestamp: expiryTimestamp
         });
-        console.log(`Container ${containerName} expiry set at ledger ${expiryLedger}`);
+        console.log(`Container ${containerName} expiry set at ${expiryTimestamp}th timestamp`);
     }
 
     async createLeaseTableIfNotExists() {
@@ -714,7 +750,7 @@ class MessageBoard {
 
     async createLeaseRecord(txHash, txTenantAddress, containerName, moments) {
         await this.db.insertValue(this.leaseTable, {
-            timestamp: Date.now(),
+            timestamp: 0,
             tx_hash: txHash,
             tenant_xrp_address: txTenantAddress,
             life_moments: moments,
@@ -729,10 +765,11 @@ class MessageBoard {
         }, { name: appenv.LAST_WATCHED_LEDGER });
     }
 
-    async updateAcquiredRecord(txHash, ledgerIndex) {
+    async updateAcquiredRecord(txHash, ledgerIndex, timestamp) {
         await this.db.updateValue(this.leaseTable, {
             created_on_ledger: ledgerIndex,
-            status: LeaseStatus.ACQUIRED
+            status: LeaseStatus.ACQUIRED,
+            timestamp: timestamp
         }, { tx_hash: txHash });
     }
 
@@ -758,9 +795,21 @@ class MessageBoard {
         await this.db.deleteValues(this.leaseTable, { tx_hash: txHash });
     }
 
+    // Depreciated
     getExpiryLedger(ledgerIndex, moments) {
         return ledgerIndex + moments * this.hostClient.config.momentSize;
     }
+
+    /**
+     * Calculate and return the expiring timestamp from createdTimestamp and momet count
+     * @param {*} createdTimestamp Timestamp 
+     * @param { integer } moments Lifespan of the instance in moments
+     * @returns 
+     */
+    getExpiryTimestamp(createdTimestamp, moments) {
+        return createdTimestamp + moments * this.hostClient.config.momentSize;
+    }
+
 
     readConfig() {
         this.cfg = ConfigHelper.readConfig(this.configPath, this.secretConfigPath);

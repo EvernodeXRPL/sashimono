@@ -122,15 +122,12 @@ class MessageBoard {
 
     // Expire leases
     async #expireInstances() {
-        const currentTime = Date.now();
-        console.log(currentTime)
+        const currentTime = this.getCurrentUnixTime();
 
         // Filter out instances which needed to be expired and destroy them.
-        console.log(this.expiryList)
-        const expired = this.expiryList.filter(x => x.timestamp < currentTime);
-        console.log(expired);
+        const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
         if (expired && expired.length) {
-            this.expiryList = this.expiryList.filter(x => x.timestamp >= currentTime);
+            this.expiryList = this.expiryList.filter(x => x.expiryTimestamp >= currentTime);
 
             this.db.open();
             await this.#acquireLeaseUpdateLock();
@@ -142,9 +139,9 @@ class MessageBoard {
         }
     }
 
-    async #expireInstance(lease, currentTime = Date.now()) {
+    async #expireInstance(lease, currentTime = this.getCurrentUnixTime()) {
         try {
-            console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.timestamp}). Destroying ${lease.containerName}`);
+            console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
             const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
             // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
@@ -224,9 +221,9 @@ class MessageBoard {
         const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
-            console.log(`Starting the expring instances job...`);
+            console.log(`Starting the expiring instances job...`);
             await this.#expireInstances();
-            console.log(`Stopped the expring instances job.`);
+            console.log(`Stopped the expiring instances job.`);
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -263,7 +260,7 @@ class MessageBoard {
         // Get the records which are created before an acquire timeout x 2.
         // Take the xrpl ledger time as 4 seconds.
         const timeoutSecs = (this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD) * 2;
-        const timeMargin = new Date(Date.now() - (1000 * timeoutSecs));
+        const timeMargin = new Date(this.getCurrentUnixTime() - timeoutSecs);
 
         this.sashiDb.open();
         const instances = (await this.sashiDb.getValues(this.sashiTable));
@@ -575,7 +572,7 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Lease created Timestamp
-                    const createdTimestamp = Date.now();
+                    const createdTimestamp = this.getCurrentUnixTime();
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                     this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
@@ -705,7 +702,7 @@ class MessageBoard {
             tenant: tenant,
             expiryTimestamp: expiryTimestamp
         });
-        console.log(`Container ${containerName} expiry set at ${expiryTimestamp}th timestamp`);
+        console.log(`Container ${containerName} expiry set at ${expiryTimestamp} th timestamp`);
     }
 
     async createLeaseTableIfNotExists() {
@@ -817,6 +814,18 @@ class MessageBoard {
 
     persistConfig() {
         ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
+    }
+
+    /**
+     * Get the current UNIX time of the machine as a timestamp
+     * @param {string} format [Optional] Format of the Timestamp ('sec' or 'milli', defaults to 'sec')
+     * @returns The timestamp fo the current time
+     */
+    getCurrentUnixTime(format = 'sec') {
+        if (format == 'sec')
+            return Math.floor(Date.now() / 1000);
+        else if (format == 'milli')
+            return Date.now();
     }
 }
 

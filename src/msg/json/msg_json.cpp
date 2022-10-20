@@ -9,8 +9,8 @@ namespace msg::json
     constexpr const char *SEP_COMMA_NOQUOTE = ",\"";
     constexpr const char *SEP_COLON_NOQUOTE = "\":";
     constexpr const char *DOUBLE_QUOTE = "\"";
-    constexpr uint16_t MOMENT_SIZE = 1190;       // XRP ledgers per Moment.
-    constexpr uint16_t INSTANCE_INFO_SIZE = 488; // Size of a single instance info
+    constexpr uint16_t MOMENT_SIZE = 3600;       // Seconds per Moment.
+    constexpr uint16_t INSTANCE_INFO_SIZE = 495; // Size of a single instance info
     /**
      * Parses a json message sent by the message board.
      * @param d Jsoncons document to which the parsed json should be loaded.
@@ -706,7 +706,7 @@ namespace msg::json
      *              "contract_id": "<evernode contract id>",
      *              "expiry_approx_timestamp": <approx UNIX timestamp for expiration>,
      *              "created_ledger": <created on xrpl ledger>,
-     *              "expiry_ledger": <expires upon xrpl ledger>,
+     *              "expiry_timestamp": <expires at the mentioned UNIX time>,
      *              "tenant": "<tenant xrp account address>",
      *             }
      *           ]
@@ -766,9 +766,9 @@ namespace msg::json
                 msg += SEP_COLON_NOQUOTE;
                 msg += std::to_string(lease->created_on_ledger);
                 msg += SEP_COMMA_NOQUOTE;
-                msg += "expiry_ledger";
+                msg += "expiry_timestamp";
                 msg += SEP_COLON_NOQUOTE;
-                msg += std::to_string(lease->created_on_ledger + (lease->life_moments * MOMENT_SIZE));
+                msg += std::to_string(lease->timestamp + (lease->life_moments * MOMENT_SIZE));
                 msg += SEP_COMMA_NOQUOTE;
                 msg += "tenant";
                 msg += SEP_COLON;

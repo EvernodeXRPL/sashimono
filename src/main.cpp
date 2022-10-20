@@ -132,7 +132,7 @@ int main(int argc, char **argv)
 
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
-        uint16_t init_peer_port, init_user_port, docker_registry_port = 0;
+        uint16_t init_peer_port = 0, init_user_port = 0, docker_registry_port = 0;
         size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
         if (((argc >= 5) && util::stoul(argv[4], init_peer_port) != 0) ||

@@ -260,7 +260,7 @@ class MessageBoard {
         // Get the records which are created before an acquire timeout x 2.
         // Take the xrpl ledger time as 4 seconds.
         const timeoutSecs = (this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD) * 2;
-        const timeMargin = new Date(this.getCurrentUnixTime() - timeoutSecs);
+        const timeMargin = new Date(Date.now() - (1000 * timeoutSecs));
 
         this.sashiDb.open();
         const instances = (await this.sashiDb.getValues(this.sashiTable));

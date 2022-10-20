@@ -297,7 +297,24 @@ namespace msg::json
                 msg.config.contract.execute = contract[msg::FLD_EXECUTE].as<bool>();
 
             if (contract.contains(msg::FLD_ENVIRONMENT))
-                msg.config.contract.environment = contract[msg::FLD_ENVIRONMENT].as<std::string>();
+            {
+                if (!contract[msg::FLD_ENVIRONMENT].is_object())
+                {
+                    LOG_ERROR << "Invalid environment variable value.";
+                    return -1;
+                }
+                for (const auto &obj : contract[msg::FLD_ENVIRONMENT].object_range())
+                {
+                    // Environment variable values should be strings.
+                    if (!obj.value().is_string())
+                    {
+                        LOG_ERROR << obj.key() << " environment variable should be a string.";
+                        return -1;
+                    }
+
+                    msg.config.contract.environment.emplace(obj.key(), obj.value().as<std::string>());
+                }
+            }
 
             if (contract.contains(msg::FLD_MAX_INP_LEDGER_OFFSET))
                 msg.config.contract.max_input_ledger_offset = contract[msg::FLD_MAX_INP_LEDGER_OFFSET].as<uint16_t>();

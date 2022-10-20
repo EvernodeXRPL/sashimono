@@ -666,8 +666,8 @@ class MessageBoard {
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    item.expiryLedger = this.getExpiryLedger(item.expiryLedger, extendingMoments);
-                    expiryMoment = (await this.hostClient.getMoment(item.expiryLedger));
+                    item.expiryTimestamp = this.getExpiryTimestamp(item.timestamp, extendingMoments);
+                    expiryMoment = (await this.hostClient.getMoment(item.expiryTimestamp));
 
                     let obj = {
                         status: LeaseStatus.EXTENDED,
@@ -790,11 +790,6 @@ class MessageBoard {
 
     async deleteLeaseRecord(txHash) {
         await this.db.deleteValues(this.leaseTable, { tx_hash: txHash });
-    }
-
-    // Depreciated
-    getExpiryLedger(ledgerIndex, moments) {
-        return ledgerIndex + moments * this.hostClient.config.momentSize;
     }
 
     /**

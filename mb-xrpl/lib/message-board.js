@@ -16,6 +16,8 @@ const LeaseStatus = {
 
 class MessageBoard {
     #leaseUpdateLock = false; // This locking mechanism is temporary, can be removed when acquire queue is implemented
+    #isXRPLHalted = false;
+    #instanceExpirationQueue = [];
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
         this.configPath = configPath;
@@ -122,24 +124,23 @@ class MessageBoard {
 
     // Expire leases
     async #expireInstances() {
-        const currentTime = this.getCurrentUnixTime();
-
-        // Filter out instances which needed to be expired and destroy them.
-        const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
-        if (expired && expired.length) {
-            this.expiryList = this.expiryList.filter(x => x.expiryTimestamp >= currentTime);
-
-            this.db.open();
-            await this.#acquireLeaseUpdateLock();
-            for (const x of expired) {
-                await this.#expireInstance(x, currentTime);
+        if (this.#instanceExpirationQueue && this.#instanceExpirationQueue.length) {
+            if (!this.#isXRPLHalted) {
+                this.db.open();
+                await this.#acquireLeaseUpdateLock();
+                for (const x of expired) {
+                    await this.#expireInstance(x);
+                }
+                await this.#releaseLeaseUpdateLock();
+                this.db.close();
+            } else {
+                // Logic to check for halt and once XRPLHalt = false, call back this function.
             }
-            await this.#releaseLeaseUpdateLock();
-            this.db.close();
         }
     }
 
-    async #expireInstance(lease, currentTime = this.getCurrentUnixTime()) {
+    async #expireInstance(lease) {
+        const currentTime = this.getCurrentUnixTime()
         try {
             console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
@@ -161,8 +162,12 @@ class MessageBoard {
             // Delete the lease record related to this instance (Permanent Delete).
             await this.deleteLeaseRecord(lease.txHash);
 
+            // Remove from the queue
+            this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
+
             await this.hostClient.updateRegInfo(this.activeInstanceCount);
             console.log(`Destroyed ${lease.containerName}`);
+
         }
         catch (e) {
             console.error(e);
@@ -222,6 +227,9 @@ class MessageBoard {
 
         const scheduler = async () => {
             console.log(`Starting the expiring instances job...`);
+            const currentTime = this.getCurrentUnixTime();
+            this.#instanceExpirationQueue.push(...this.expiryList.filter(x => x.expiryTimestamp < currentTime));
+            this.expiryList = this.expiryList.filter(x => x.expiryTimestamp >= currentTime);
             await this.#expireInstances();
             console.log(`Stopped the expiring instances job.`);
             setTimeout(async () => {

@@ -63,18 +63,19 @@ class ContractInstanceManager {
         return new Promise(async (resolve, reject) => {
 
             const uploadTimer = setTimeout(() => {
-                reject("Upload timeout.");
+                clearTimeout(uploadTimer);
                 hpc.clear(HotPocket.events.contractOutput);
+                reject("Upload timeout.");
             }, uploadTimeout || UPLOAD_TIMEOUT);
 
             const failure = (e) => {
                 clearTimeout(uploadTimer);
-                reject(e);
                 hpc.clear(HotPocket.events.contractOutput);
+                reject(e);
             }
             const success = () => {
-                console.log("Upload complete");
                 clearTimeout(uploadTimer);
+                console.log("Upload complete");
                 resolve();
             }
 

@@ -10,7 +10,7 @@
   "license": "ISC",
   "dependencies": {
     "bson": "4.6.5",
-    "evernode-js-client": "0.4.50",
+    "evernode-js-client": "0.5.2",
     "hotpocket-js-client": "0.5.4"
   }
 }

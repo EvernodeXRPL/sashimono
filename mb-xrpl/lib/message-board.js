@@ -16,6 +16,8 @@ const LeaseStatus = {
 
 class MessageBoard {
     #leaseUpdateLock = false; // This locking mechanism is temporary, can be removed when acquire queue is implemented
+    #xrplHalted = false;
+    #instanceExpirationQueue = [];
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
         this.configPath = configPath;
@@ -127,15 +129,34 @@ class MessageBoard {
         // Filter out instances which needed to be expired and destroy them.
         const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
         if (expired && expired.length) {
+            console.log(`Starting the expiring instances job...`);
+            this.#instanceExpirationQueue.push(...expired);
             this.expiryList = this.expiryList.filter(x => x.expiryTimestamp >= currentTime);
+        }
 
+        if (!this.#xrplHalted && this.#instanceExpirationQueue.length) {
             this.db.open();
             await this.#acquireLeaseUpdateLock();
-            for (const x of expired) {
-                await this.#expireInstance(x, currentTime);
+            for (let item of this.#instanceExpirationQueue) {
+                try {
+                    if (!this.#xrplHalted) {
+                        await this.#expireInstance(item, currentTime);
+                        // Remove from the queue
+                        this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != item.containerName);
+                    }
+                    else {
+                        console.log("XRPL is halted.")
+                        break
+                    }
+                }
+                catch(e) {
+                    if (false) // If xrpl halt detected.
+                        this.#xrplHalted = true;
+                }
             }
             await this.#releaseLeaseUpdateLock();
             this.db.close();
+            console.log(`Stopping the expiring instances job...`);
         }
     }
 
@@ -161,8 +182,12 @@ class MessageBoard {
             // Delete the lease record related to this instance (Permanent Delete).
             await this.deleteLeaseRecord(lease.txHash);
 
+            // Remove from the queue
+            this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
+
             await this.hostClient.updateRegInfo(this.activeInstanceCount);
             console.log(`Destroyed ${lease.containerName}`);
+
         }
         catch (e) {
             console.error(e);
@@ -221,9 +246,7 @@ class MessageBoard {
         const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
-            console.log(`Starting the expiring instances job...`);
             await this.#expireInstances();
-            console.log(`Stopped the expiring instances job.`);
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -662,12 +685,10 @@ class MessageBoard {
             console.log(`Received extend lease from ${tenantAddress}`);
 
             let expiryItemFound = false;
-            let expiryMoment;
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
                     item.expiryTimestamp = this.getExpiryTimestamp(item.timestamp, extendingMoments);
-                    expiryMoment = (await this.hostClient.getMoment(item.expiryTimestamp));
 
                     let obj = {
                         status: LeaseStatus.EXTENDED,
@@ -683,7 +704,7 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             // Send the extend success response
-            await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
+            await this.hostClient.extendSuccess(extendRefId, tenantAddress, item.expiryTimestamp);
 
         }
         catch (e) {

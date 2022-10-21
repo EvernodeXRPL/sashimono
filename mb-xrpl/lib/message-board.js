@@ -85,7 +85,7 @@ class MessageBoard {
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
 
-            const currentMoment = await this.hostClient.getMoment(e.ledger_index);
+            const currentMoment = await this.hostClient.getMoment();
 
             // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
             if (!ongoingHeartbeat &&

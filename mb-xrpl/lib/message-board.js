@@ -16,6 +16,8 @@ const LeaseStatus = {
 
 class MessageBoard {
     #leaseUpdateLock = false; // This locking mechanism is temporary, can be removed when acquire queue is implemented
+    #xrplHalted = false;
+    #instanceExpirationQueue = [];
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
         this.configPath = configPath;
@@ -69,7 +71,7 @@ class MessageBoard {
 
         const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
-            this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryLedger(lease.created_on_ledger, lease.life_moments));
+            this.addToExpiryList(lease.tx_hash, lease.container_name, lease.tenant_xrp_address, this.getExpiryTimestamp(lease.timestamp, lease.life_moments));
 
         // Catch up missed transactions based on the previously updated "last_watched_ledger" record (checkpoint).
         await this.#catchupMissedLeases().catch(console.error);
@@ -107,53 +109,89 @@ class MessageBoard {
                     ongoingHeartbeat = false;
                 }
             }
-
-            // Filter out instances which needed to be expired and destroy them.
-            const expired = this.expiryList.filter(x => x.expiryLedger < e.ledger_index);
-            if (expired && expired.length) {
-                this.expiryList = this.expiryList.filter(x => x.expiryLedger >= e.ledger_index);
-
-                this.db.open();
-                await this.#acquireLeaseUpdateLock();
-                for (const x of expired) {
-                    try {
-                        console.log(`Moments exceeded (current ledger:${e.ledger_index}, expiry ledger:${x.expiryLedger}). Destroying ${x.containerName}`);
-                        // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
-                        const nft = (await (new evernode.XrplAccount(x.tenant)).getNfts())?.find(n => n.NFTokenID == x.containerName);
-                        // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
-                        if (!nft)
-                            console.log(`Cannot find a NFT for ${x.containerName}`);
-                        else {
-                            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                            await this.destroyInstance(x.containerName, x.tenant, uriInfo.leaseIndex);
-                        }
-
-                        this.activeInstanceCount--;
-                        /**
-                         * Soft deletion for debugging purpose.
-                         */
-                        // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
-
-                        // Delete the lease record related to this instance (Permanent Delete).
-                        await this.deleteLeaseRecord(x.txHash);
-
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
-                        console.log(`Destroyed ${x.containerName}`);
-                    }
-                    catch (e) {
-                        console.error(e);
-                    }
-                }
-                await this.#releaseLeaseUpdateLock();
-                this.db.close();
-            }
         });
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+
+        // Start a job to expire instances
+        this.#startInstanceExpiringScheduler();
+
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
+    }
+
+    // Expire leases
+    async #expireInstances() {
+        const currentTime = this.getCurrentUnixTime();
+
+        // Filter out instances which needed to be expired and destroy them.
+        const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
+        if (expired && expired.length) {
+            console.log(`Starting the expiring instances job...`);
+            this.#instanceExpirationQueue.push(...expired);
+            this.expiryList = this.expiryList.filter(x => x.expiryTimestamp >= currentTime);
+        }
+
+        if (!this.#xrplHalted && this.#instanceExpirationQueue.length) {
+            this.db.open();
+            await this.#acquireLeaseUpdateLock();
+            for (let item of this.#instanceExpirationQueue) {
+                try {
+                    if (!this.#xrplHalted) {
+                        await this.#expireInstance(item, currentTime);
+                        // Remove from the queue
+                        this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != item.containerName);
+                    }
+                    else {
+                        console.log("XRPL is halted.")
+                        break
+                    }
+                }
+                catch(e) {
+                    if (false) // If xrpl halt detected.
+                        this.#xrplHalted = true;
+                }
+            }
+            await this.#releaseLeaseUpdateLock();
+            this.db.close();
+            console.log(`Stopping the expiring instances job...`);
+        }
+    }
+
+    async #expireInstance(lease, currentTime = this.getCurrentUnixTime()) {
+        try {
+            console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
+            // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
+            const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
+            // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
+            if (!nft)
+                console.log(`Cannot find a NFT for ${lease.containerName}`);
+            else {
+                const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
+            }
+
+            this.activeInstanceCount--;
+            /**
+             * Soft deletion for debugging purpose.
+             */
+            // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
+
+            // Delete the lease record related to this instance (Permanent Delete).
+            await this.deleteLeaseRecord(lease.txHash);
+
+            // Remove from the queue
+            this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
+
+            await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            console.log(`Destroyed ${lease.containerName}`);
+
+        }
+        catch (e) {
+            console.error(e);
+        }
     }
 
     // Connect the host and trying to reconnect in the event of account not found error.
@@ -194,6 +232,21 @@ class MessageBoard {
                 await this.#releaseLeaseUpdateLock();
             });
             console.log(`Stopped the scheduled prune job.`);
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+        };
+
+        setTimeout(async () => {
+            await scheduler();
+        }, timeout);
+    }
+
+    #startInstanceExpiringScheduler() {
+        const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+
+        const scheduler = async () => {
+            await this.#expireInstances();
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -541,11 +594,14 @@ class MessageBoard {
                     // Save the value to a local variable to prevent the value being updated between two calls ending up with two different values.
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
+                    // Lease created Timestamp
+                    const createdTimestamp = this.getCurrentUnixTime();
+
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
-                    this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryLedger(currentLedgerIndex, moments));
+                    this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
 
                     // Update the database for acquired record.
-                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex);
+                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex, createdTimestamp);
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
@@ -629,12 +685,10 @@ class MessageBoard {
             console.log(`Received extend lease from ${tenantAddress}`);
 
             let expiryItemFound = false;
-            let expiryMoment;
 
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    item.expiryLedger = this.getExpiryLedger(item.expiryLedger, extendingMoments);
-                    expiryMoment = (await this.hostClient.getMoment(item.expiryLedger));
+                    item.expiryTimestamp = this.getExpiryTimestamp(item.timestamp, extendingMoments);
 
                     let obj = {
                         status: LeaseStatus.EXTENDED,
@@ -650,7 +704,7 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             // Send the extend success response
-            await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
+            await this.hostClient.extendSuccess(extendRefId, tenantAddress, item.expiryTimestamp);
 
         }
         catch (e) {
@@ -662,14 +716,14 @@ class MessageBoard {
         }
     }
 
-    addToExpiryList(txHash, containerName, tenant, expiryLedger) {
+    addToExpiryList(txHash, containerName, tenant, expiryTimestamp) {
         this.expiryList.push({
             txHash: txHash,
             containerName: containerName,
             tenant: tenant,
-            expiryLedger: expiryLedger,
+            expiryTimestamp: expiryTimestamp
         });
-        console.log(`Container ${containerName} expiry set at ledger ${expiryLedger}`);
+        console.log(`Container ${containerName} expiry set at ${expiryTimestamp} th timestamp`);
     }
 
     async createLeaseTableIfNotExists() {
@@ -714,7 +768,7 @@ class MessageBoard {
 
     async createLeaseRecord(txHash, txTenantAddress, containerName, moments) {
         await this.db.insertValue(this.leaseTable, {
-            timestamp: Date.now(),
+            timestamp: 0,
             tx_hash: txHash,
             tenant_xrp_address: txTenantAddress,
             life_moments: moments,
@@ -729,10 +783,11 @@ class MessageBoard {
         }, { name: appenv.LAST_WATCHED_LEDGER });
     }
 
-    async updateAcquiredRecord(txHash, ledgerIndex) {
+    async updateAcquiredRecord(txHash, ledgerIndex, timestamp) {
         await this.db.updateValue(this.leaseTable, {
             created_on_ledger: ledgerIndex,
-            status: LeaseStatus.ACQUIRED
+            status: LeaseStatus.ACQUIRED,
+            timestamp: timestamp
         }, { tx_hash: txHash });
     }
 
@@ -758,9 +813,16 @@ class MessageBoard {
         await this.db.deleteValues(this.leaseTable, { tx_hash: txHash });
     }
 
-    getExpiryLedger(ledgerIndex, moments) {
-        return ledgerIndex + moments * this.hostClient.config.momentSize;
+    /**
+     * Calculate and return the expiring timestamp from createdTimestamp and momet count
+     * @param {*} createdTimestamp Timestamp 
+     * @param { integer } moments Lifespan of the instance in moments
+     * @returns 
+     */
+    getExpiryTimestamp(createdTimestamp, moments) {
+        return createdTimestamp + moments * this.hostClient.config.momentSize;
     }
+
 
     readConfig() {
         this.cfg = ConfigHelper.readConfig(this.configPath, this.secretConfigPath);
@@ -768,6 +830,18 @@ class MessageBoard {
 
     persistConfig() {
         ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
+    }
+
+    /**
+     * Get the current UNIX time of the machine as a timestamp
+     * @param {string} format [Optional] Format of the Timestamp ('sec' or 'milli', defaults to 'sec')
+     * @returns The timestamp fo the current time
+     */
+    getCurrentUnixTime(format = 'sec') {
+        if (format == 'sec')
+            return Math.floor(Date.now() / 1000);
+        else if (format == 'milli')
+            return Date.now();
     }
 }
 

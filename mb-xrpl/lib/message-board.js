@@ -82,35 +82,6 @@ class MessageBoard {
         await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
-        let ongoingHeartbeat = false;
-        // Check for instance expiry.
-        this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
-            this.lastValidatedLedgerIndex = e.ledger_index;
-
-            const currentMoment = await this.hostClient.getMoment();
-
-            // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (!ongoingHeartbeat &&
-                (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
-                ongoingHeartbeat = true;
-                console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
-
-                try {
-                    await this.hostClient.heartbeat();
-                    this.lastHeartbeatMoment = currentMoment;
-                }
-                catch (err) {
-                    if (err.code === 'tecHOOK_REJECTED')
-                        console.log("Heartbeat rejected by the hook.");
-                    else
-                        console.log("Heartbeat tx error", err);
-                }
-                finally {
-                    ongoingHeartbeat = false;
-                }
-            }
-        });
-
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
@@ -118,8 +89,12 @@ class MessageBoard {
         // Start a job to expire instances
         this.#startInstanceExpiringScheduler();
 
+        // Start heartbeat job
+        this.#startHeartBeatScheduler();
+
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
+
     }
 
     // Expire leases
@@ -157,6 +132,42 @@ class MessageBoard {
             await this.#releaseLeaseUpdateLock();
             this.db.close();
             console.log(`Stopping the expiring instances job...`);
+        }
+    }
+
+    // Heartbeat sender
+    async #hearBeatSender() {
+        let ongoingHeartbeat = false;
+ 
+        // This part needs to be modified after the first transition happened.
+        if (this.xrplApi.ledgerIndex > this.config.momentTransitionInfo.transitionIndex) {
+            this.lastValidatedLedgerIndex = ConfigHelper.getCurrentUnixTime();
+        }
+        else {
+            this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
+        }
+        
+        const currentMoment = await this.hostClient.getMoment();
+
+        // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
+        if (!ongoingHeartbeat &&
+            (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
+            ongoingHeartbeat = true;
+            console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
+
+            try {
+                await this.hostClient.heartbeat();
+                this.lastHeartbeatMoment = currentMoment;
+            }
+            catch (err) {
+                if (err.code === 'tecHOOK_REJECTED')
+                    console.log("Heartbeat rejected by the hook.");
+                else
+                    console.log("Heartbeat tx error", err);
+            }
+            finally {
+                ongoingHeartbeat = false;
+            }
         }
     }
 
@@ -247,6 +258,21 @@ class MessageBoard {
 
         const scheduler = async () => {
             await this.#expireInstances();
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+        };
+
+        setTimeout(async () => {
+            await scheduler();
+        }, timeout);
+    }
+
+    #startHeartBeatScheduler() {
+        const timeout = appenv.HEARTBEAT_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+
+        const scheduler = async () => {
+            await this.#hearBeatSender();
             setTimeout(async () => {
                 await scheduler();
             }, timeout);

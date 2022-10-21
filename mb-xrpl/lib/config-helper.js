@@ -39,6 +39,16 @@ class ConfigHelper {
         fs.writeFileSync(secretConfigPath, JSON.stringify(secretCfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
         fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
+
+    static getCurrentUnixTime(format = "sec") {
+        const time = Date.now();
+        switch (format) {
+            case "sec":
+                return Math.floor(time / 1000);
+            default:
+                return time;
+        }
+    }
 }
 
 module.exports = {

@@ -281,8 +281,8 @@ class MessageBoard {
         // Note: If this is soft deletion we need to handle the destroyed status and replace deleteLeaseRecord with changing the status.
 
         // Get the records which are created before an acquire timeout x 2.
-        // Take the xrpl ledger time as 4 seconds.
-        const timeoutSecs = (this.hostClient.config.leaseAcquireWindow * 4 * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD) * 2;
+        // leaseAcqureWindow is in seconds.
+        const timeoutSecs = (this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD) * 2;
         const timeMargin = new Date(Date.now() - (1000 * timeoutSecs));
 
         this.sashiDb.open();
@@ -560,17 +560,17 @@ class MessageBoard {
             await this.createLeaseRecord(acquireRefId, tenantAddress, containerName, moments);
 
             // The last validated ledger when we receive the acquire request.
-            const startingValidatedLedger = this.lastValidatedLedgerIndex;
+            const startingValidatedTime = this.getCurrentUnixTime();
 
             // Wait until the sashi cli is available.
             await this.sashiCli.wait();
 
             // Number of validated ledgers passed while processing the last request.
-            let diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
-            // Give-up the acquiring process if processing the last request takes more than 40% of allowed window.
+            let diff = this.getCurrentUnixTime() - startingValidatedTime;
+            // Give-up the acquiring process if processing the last request takes more than 40% of allowed window(Window is in seconds).
             let threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
-                console.error(`Sashimono busy timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                console.error(`Sashimono busy timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                 // Update the lease status of the request to 'SashiTimeout'.
                 await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
                 await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex);
@@ -580,11 +580,11 @@ class MessageBoard {
                 createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
-                diff = this.lastValidatedLedgerIndex - startingValidatedLedger;
-                // Give-up the acquiringing porocess if the instance creation itself takes more than 80% of allowed window.
+                diff = this.getCurrentUnixTime() - startingValidatedTime;
+                // Give-up the acquiringing porocess if the instance creation itself takes more than 80% of allowed window(in seconds).
                 threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
-                    console.error(`Instance creation timeout. Took: ${diff} ledgers. Threshold: ${threshold}`);
+                    console.error(`Instance creation timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
                     await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex);

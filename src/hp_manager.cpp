@@ -155,14 +155,13 @@ namespace hp
             return -1;
         }
 
-        const auto img_itr = conf::cfg.docker.images.find(image_key);
-        if (img_itr == conf::cfg.docker.images.end())
+        if (image_key.substr(0, conf::cfg.docker.image_prefix.size()) != conf::cfg.docker.image_prefix)
         {
             error_msg = DOCKER_IMAGE_INVALID;
             LOG_ERROR << "Provided docker image is not allowed.";
             return -1;
         }
-        const std::string image_name = img_itr->second;
+        const std::string image_name = conf::cfg.docker.image_prefix + image_key;
 
         ports instance_ports;
         if (!vacant_ports.empty())

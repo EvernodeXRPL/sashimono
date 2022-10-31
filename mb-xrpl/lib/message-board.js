@@ -17,7 +17,11 @@ const LeaseStatus = {
 class MessageBoard {
     #leaseUpdateLock = false; // This locking mechanism is temporary, can be removed when acquire queue is implemented
     #xrplHalted = false;
+    #graceThreshold = 0.25;
+    #haltTimeout = 60; // In seconds
     #instanceExpirationQueue = [];
+    #ledgerTimeoutId = null;
+    #lastHaltedTime = null;
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
         this.configPath = configPath;
@@ -86,6 +90,7 @@ class MessageBoard {
         // Check for instance expiry.
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
+            this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');;
 
             const currentMoment = await this.hostClient.getMoment();
 
@@ -115,11 +120,37 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
 
-        // Start a job to expire instances
-        this.#startInstanceExpiringScheduler();
+        // Start a job to expire instances and check for halts
+        this.#startInstanceExpiringAndHaltScheduler();
 
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
+
+    }
+
+    // Check for xrpl halts
+    #checkLedgersForHalt() {
+        const currentTime = evernode.UtilHelpers.getCurrentUnixTime('milli');
+        const lastLedgerTimeDifference = currentTime - this.lastLedgerTime;
+
+        if (lastLedgerTimeDifference >= this.#haltTimeout * 1000) {
+            if (!this.#xrplHalted) {
+                this.#xrplHalted = true;
+                this.#lastHaltedTime = this.lastLedgerTime;
+            } else if (this.#ledgerTimeoutId) {
+                clearTimeout(this.#ledgerTimeoutId);
+                this.#ledgerTimeoutId = null;
+            }
+        }
+
+        if (this.#xrplHalted && lastLedgerTimeDifference < (this.#haltTimeout * 1000) && !this.#ledgerTimeoutId) {
+            const haltedDuration = currentTime - this.#lastHaltedTime; // in milliSec
+            const gracePeriod = haltedDuration * this.#graceThreshold;
+            this.#ledgerTimeoutId = setTimeout(() => {
+                this.#xrplHalted = false;
+                this.#ledgerTimeoutId = null;
+            }, gracePeriod);
+        }
     }
 
     // Expire leases
@@ -146,12 +177,11 @@ class MessageBoard {
                     }
                     else {
                         console.log("XRPL is halted.")
-                        break
+                        break;
                     }
                 }
-                catch(e) {
-                    if (false) // If xrpl halt detected.
-                        this.#xrplHalted = true;
+                catch (e) {
+                    console.log(`Error "${e}", occured in expiring the item : ${item}.`)
                 }
             }
             await this.#releaseLeaseUpdateLock();
@@ -242,10 +272,11 @@ class MessageBoard {
         }, timeout);
     }
 
-    #startInstanceExpiringScheduler() {
+    #startInstanceExpiringAndHaltScheduler() {
         const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
+            this.#checkLedgersForHalt();
             await this.#expireInstances();
             setTimeout(async () => {
                 await scheduler();

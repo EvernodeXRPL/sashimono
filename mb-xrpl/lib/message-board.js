@@ -82,6 +82,18 @@ class MessageBoard {
         await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
+        this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
+            this.lastValidatedLedgerIndex = e.ledger_index;
+
+            // This part needs to be modified after the first transition happened.
+            if (this.xrplApi.ledgerIndex > this.config.momentTransitionInfo.transitionIndex) {
+                this.lastValidatedLedgerIndex = evernode.UtilHelpers.getCurrentUnixTime();
+            }
+            else {
+                this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
+            }
+        });
+
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
@@ -99,7 +111,7 @@ class MessageBoard {
 
     // Expire leases
     async #expireInstances() {
-        const currentTime = this.getCurrentUnixTime();
+        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
 
         // Filter out instances which needed to be expired and destroy them.
         const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
@@ -137,16 +149,7 @@ class MessageBoard {
 
     // Heartbeat sender
     async #hearBeatSender() {
-        let ongoingHeartbeat = false;
- 
-        // This part needs to be modified after the first transition happened.
-        if (this.xrplApi.ledgerIndex > this.config.momentTransitionInfo.transitionIndex) {
-            this.lastValidatedLedgerIndex = ConfigHelper.getCurrentUnixTime();
-        }
-        else {
-            this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
-        }
-        
+        let ongoingHeartbeat = false;        
         const currentMoment = await this.hostClient.getMoment();
 
         // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
@@ -171,7 +174,7 @@ class MessageBoard {
         }
     }
 
-    async #expireInstance(lease, currentTime = this.getCurrentUnixTime()) {
+    async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
         try {
             console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
@@ -268,8 +271,8 @@ class MessageBoard {
         }, timeout);
     }
 
-    #startHeartBeatScheduler() {
-        const timeout = appenv.HEARTBEAT_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+    async #startHeartBeatScheduler() {
+        const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
             await this.#hearBeatSender();
@@ -278,9 +281,11 @@ class MessageBoard {
             }, timeout);
         };
 
+        let currentMoment = await this.hostClient.getMoment();
+        let momentStartupTimeStamp = await this.hostClient.getMomentStartIndex(currentMoment+1);
         setTimeout(async () => {
             await scheduler();
-        }, timeout);
+        }, (evernode.UtilHelpers.getCurrentUnixTime() - momentStartupTimeStamp)*1000);
     }
 
     // Try to acquire the lease update lock.
@@ -621,7 +626,7 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Lease created Timestamp
-                    const createdTimestamp = this.getCurrentUnixTime();
+                    const createdTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                     this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
@@ -857,18 +862,6 @@ class MessageBoard {
 
     persistConfig() {
         ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
-    }
-
-    /**
-     * Get the current UNIX time of the machine as a timestamp
-     * @param {string} format [Optional] Format of the Timestamp ('sec' or 'milli', defaults to 'sec')
-     * @returns The timestamp fo the current time
-     */
-    getCurrentUnixTime(format = 'sec') {
-        if (format == 'sec')
-            return Math.floor(Date.now() / 1000);
-        else if (format == 'milli')
-            return Date.now();
     }
 }
 

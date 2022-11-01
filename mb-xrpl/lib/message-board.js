@@ -86,34 +86,9 @@ class MessageBoard {
         await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
         this.db.close();
 
-        let ongoingHeartbeat = false;
-        // Check for instance expiry.
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
-            this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');;
-
-            const currentMoment = await this.hostClient.getMoment();
-
-            // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-            if (!ongoingHeartbeat &&
-                (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
-                ongoingHeartbeat = true;
-                console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
-
-                try {
-                    await this.hostClient.heartbeat();
-                    this.lastHeartbeatMoment = currentMoment;
-                }
-                catch (err) {
-                    if (err.code === 'tecHOOK_REJECTED')
-                        console.log("Heartbeat rejected by the hook.");
-                    else
-                        console.log("Heartbeat tx error", err);
-                }
-                finally {
-                    ongoingHeartbeat = false;
-                }
-            }
+            this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');
         });
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
@@ -122,6 +97,9 @@ class MessageBoard {
 
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
+
+        // Start heartbeat job
+        this.#startHeartBeatScheduler();
 
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
@@ -155,7 +133,7 @@ class MessageBoard {
 
     // Expire leases
     async #expireInstances() {
-        const currentTime = this.getCurrentUnixTime();
+        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
 
         // Filter out instances which needed to be expired and destroy them.
         const expired = this.expiryList.filter(x => x.expiryTimestamp < currentTime);
@@ -190,7 +168,34 @@ class MessageBoard {
         }
     }
 
-    async #expireInstance(lease, currentTime = this.getCurrentUnixTime()) {
+    // Heartbeat sender
+    async #sendHeartbeat() {
+        let ongoingHeartbeat = false;        
+        const currentMoment = await this.hostClient.getMoment();
+
+        // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
+        if (!ongoingHeartbeat &&
+            (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
+            ongoingHeartbeat = true;
+            console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
+
+            try {
+                await this.hostClient.heartbeat();
+                this.lastHeartbeatMoment = currentMoment;
+            }
+            catch (err) {
+                if (err.code === 'tecHOOK_REJECTED')
+                    console.log("Heartbeat rejected by the hook.");
+                else
+                    console.log("Heartbeat tx error", err);
+            }
+            finally {
+                ongoingHeartbeat = false;
+            }
+        }
+    }
+
+    async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
         try {
             console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
@@ -286,6 +291,26 @@ class MessageBoard {
         setTimeout(async () => {
             await scheduler();
         }, timeout);
+    }
+
+    async #startHeartBeatScheduler() {
+        // Sending a heartbeat at startup
+        await this.#sendHeartbeat();
+
+        const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
+
+        const scheduler = async () => {
+            await this.#sendHeartbeat();
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+        };
+
+        let currentMoment = await this.hostClient.getMoment();
+        let momentStartupTimeStamp = await this.hostClient.getMomentStartIndex(currentMoment+1);
+        setTimeout(async () => {
+            await scheduler();
+        }, (evernode.UtilHelpers.getCurrentUnixTime() - momentStartupTimeStamp)*1000);
     }
 
     // Try to acquire the lease update lock.
@@ -626,7 +651,7 @@ class MessageBoard {
                     const currentLedgerIndex = this.lastValidatedLedgerIndex;
 
                     // Lease created Timestamp
-                    const createdTimestamp = this.getCurrentUnixTime();
+                    const createdTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
 
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                     this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
@@ -717,10 +742,11 @@ class MessageBoard {
 
             let expiryItemFound = false;
 
+            let expiryTimeStamp;
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
                     item.expiryTimestamp = this.getExpiryTimestamp(item.timestamp, extendingMoments);
-
+                    expiryTimeStamp = item.expiryTimestamp;
                     let obj = {
                         status: LeaseStatus.EXTENDED,
                         life_moments: (instance.life_moments + extendingMoments)
@@ -735,7 +761,7 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             // Send the extend success response
-            await this.hostClient.extendSuccess(extendRefId, tenantAddress, item.expiryTimestamp);
+            await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryTimeStamp);
 
         }
         catch (e) {
@@ -861,18 +887,6 @@ class MessageBoard {
 
     persistConfig() {
         ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
-    }
-
-    /**
-     * Get the current UNIX time of the machine as a timestamp
-     * @param {string} format [Optional] Format of the Timestamp ('sec' or 'milli', defaults to 'sec')
-     * @returns The timestamp fo the current time
-     */
-    getCurrentUnixTime(format = 'sec') {
-        if (format == 'sec')
-            return Math.floor(Date.now() / 1000);
-        else if (format == 'milli')
-            return Date.now();
     }
 }
 

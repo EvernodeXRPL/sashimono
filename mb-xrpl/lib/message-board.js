@@ -170,7 +170,7 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
-        let ongoingHeartbeat = false;        
+        let ongoingHeartbeat = false;
         const currentMoment = await this.hostClient.getMoment();
 
         // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
@@ -306,11 +306,10 @@ class MessageBoard {
             }, timeout);
         };
 
-        let currentMoment = await this.hostClient.getMoment();
-        let momentStartupTimeStamp = await this.hostClient.getMomentStartIndex(currentMoment+1);
+        const nextMomentStartIdx = await this.hostClient.getMomentStartIndex() + this.hostClient.config.momentSize;
         setTimeout(async () => {
             await scheduler();
-        }, (evernode.UtilHelpers.getCurrentUnixTime() - momentStartupTimeStamp)*1000);
+        }, (nextMomentStartIdx - evernode.UtilHelpers.getCurrentUnixTime()) * 1000);
     }
 
     // Try to acquire the lease update lock.

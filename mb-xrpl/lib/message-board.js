@@ -84,14 +84,6 @@ class MessageBoard {
 
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
-
-            // This part needs to be modified after the first transition happened.
-            if (this.xrplApi.ledgerIndex > this.config.momentTransitionInfo.transitionIndex) {
-                this.lastValidatedLedgerIndex = evernode.UtilHelpers.getCurrentUnixTime();
-            }
-            else {
-                this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
-            }
         });
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
@@ -148,7 +140,7 @@ class MessageBoard {
     }
 
     // Heartbeat sender
-    async #hearBeatSender() {
+    async #sendHeartbeat() {
         let ongoingHeartbeat = false;        
         const currentMoment = await this.hostClient.getMoment();
 
@@ -272,10 +264,13 @@ class MessageBoard {
     }
 
     async #startHeartBeatScheduler() {
+        // Sending a heartbeat at startup
+        await this.#sendHeartbeat();
+
         const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
-            await this.#hearBeatSender();
+            await this.#sendHeartbeat();
             setTimeout(async () => {
                 await scheduler();
             }, timeout);

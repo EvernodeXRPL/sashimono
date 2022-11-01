@@ -20,7 +20,7 @@ class MessageBoard {
     #graceThreshold = 0.25;
     #haltTimeout = 60; // In seconds
     #instanceExpirationQueue = [];
-    #ledgerTimeoutId = null;
+    #graceTimeoutRef = null;
     #lastHaltedTime = null;
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
@@ -121,7 +121,7 @@ class MessageBoard {
 
 
         // Start a job to expire instances and check for halts
-        this.#startInstanceExpiringAndHaltScheduler();
+        this.#startSashimonoClockScheduler();
 
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
@@ -137,18 +137,18 @@ class MessageBoard {
             if (!this.#xrplHalted) {
                 this.#xrplHalted = true;
                 this.#lastHaltedTime = this.lastLedgerTime;
-            } else if (this.#ledgerTimeoutId) {
-                clearTimeout(this.#ledgerTimeoutId);
-                this.#ledgerTimeoutId = null;
+            } else if (this.#graceTimeoutRef) {
+                clearTimeout(this.#graceTimeoutRef);
+                this.#graceTimeoutRef = null;
             }
         }
 
-        if (this.#xrplHalted && lastLedgerTimeDifference < (this.#haltTimeout * 1000) && !this.#ledgerTimeoutId) {
+        if (this.#xrplHalted && lastLedgerTimeDifference < (this.#haltTimeout * 1000) && !this.#graceTimeoutRef) {
             const haltedDuration = currentTime - this.#lastHaltedTime; // in milliSec
             const gracePeriod = haltedDuration * this.#graceThreshold;
-            this.#ledgerTimeoutId = setTimeout(() => {
+            this.#graceTimeoutRef = setTimeout(() => {
                 this.#xrplHalted = false;
-                this.#ledgerTimeoutId = null;
+                this.#graceTimeoutRef = null;
             }, gracePeriod);
         }
     }
@@ -272,7 +272,7 @@ class MessageBoard {
         }, timeout);
     }
 
-    #startInstanceExpiringAndHaltScheduler() {
+    #startSashimonoClockScheduler() {
         const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {

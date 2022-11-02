@@ -177,7 +177,7 @@ class MessageBoard {
         if (!ongoingHeartbeat &&
             (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
             ongoingHeartbeat = true;
-            console.log(`Reporting heartbeat at Moment ${this.lastHeartbeatMoment}...`);
+            console.log(`Reporting heartbeat at Moment ${currentMoment}...`);
 
             try {
                 await this.hostClient.heartbeat();

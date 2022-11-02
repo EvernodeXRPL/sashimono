@@ -64,7 +64,7 @@ class MessageBoard {
             throw "Host is not registered.";
 
         // Get moment only if heartbeat info is not 0.
-        this.lastHeartbeatMoment = hostInfo.lastHeartbeatLedger ? await this.hostClient.getMoment(hostInfo.lastHeartbeatLedger) : 0;
+        this.lastHeartbeatMoment = hostInfo.lastHeartbeatIndex ? await this.hostClient.getMoment(hostInfo.lastHeartbeatIndex) : 0;
 
         this.db.open();
         // Create lease table if not exist.

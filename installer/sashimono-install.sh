@@ -15,8 +15,9 @@ swapKB=${8}
 diskKB=${9}
 description=${10}
 lease_amount=${11}
-tls_cert_file=${12}
-tls_key_file=${13}
+tls_cabundle_file=${12}
+tls_cert_file=${13}
+tls_key_file=${14}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -93,12 +94,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 function setup_tls_certs() {
     mkdir -p $SASHIMONO_DATA/tls
 
-    # If user has not provided certs we generate self-signed ones.
-    if [ -f $tls_cert_file ] && [ -f $tls_key_file ] ; then
+    if [ -f "$tls_cabundle_file" ] && [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
+
         stage "Transfering certificate files to $SASHIMONO_DATA/tls/"
         cp $tls_cert_file $SASHIMONO_DATA/tls/tlscert.pem
+        cat $tls_cabundle_file >> $SASHIMONO_DATA/tls/tlscert.pem
         cp $tls_key_file $SASHIMONO_DATA/tls/tlskey.pem
     else
+        # If user has not provided certs we generate self-signed ones.
         stage "Generating self-signed certificate in $SASHIMONO_DATA/tls/"
         ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/tls/tlskey.pem \
             -out $SASHIMONO_DATA/tls/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
@@ -340,7 +343,7 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-stage "Configuring auto updater service."
+stage "Configuring auto updater service"
 
 # Enable the Evernode Auto Updater Service.
 enable_evernode_auto_updater

@@ -615,13 +615,13 @@ class MessageBoard {
             await this.createLeaseRecord(acquireRefId, tenantAddress, containerName, moments);
 
             // The last validated ledger when we receive the acquire request.
-            const startingValidatedTime = this.getCurrentUnixTime();
+            const startingValidatedTime = evernode.UtilHelpers.getCurrentUnixTime();
 
             // Wait until the sashi cli is available.
             await this.sashiCli.wait();
 
             // Number of validated ledgers passed while processing the last request.
-            let diff = this.getCurrentUnixTime() - startingValidatedTime;
+            let diff = evernode.UtilHelpers.getCurrentUnixTime() - startingValidatedTime;
             // Give-up the acquiring process if processing the last request takes more than 40% of allowed window(Window is in seconds).
             let threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD;
             if (diff > threshold) {
@@ -635,7 +635,7 @@ class MessageBoard {
                 createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
-                diff = this.getCurrentUnixTime() - startingValidatedTime;
+                diff = evernode.UtilHelpers.getCurrentUnixTime() - startingValidatedTime;
                 // Give-up the acquiringing porocess if the instance creation itself takes more than 80% of allowed window(in seconds).
                 threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
@@ -744,7 +744,7 @@ class MessageBoard {
             let expiryTimeStamp;
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    item.expiryTimestamp = this.getExpiryTimestamp(item.timestamp, extendingMoments);
+                    item.expiryTimestamp = this.getExpiryTimestamp(instance.timestamp, extendingMoments);
                     expiryTimeStamp = item.expiryTimestamp;
                     let obj = {
                         status: LeaseStatus.EXTENDED,

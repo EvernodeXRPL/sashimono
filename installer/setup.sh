@@ -183,21 +183,23 @@ function validate_inet_addr() {
 function set_inet_addr() {
 
     if $interactive ; then
-        echo "For greater compatiblity with a wide range of clients, it is recommended that you own a domain name that others can use to reach your host over internet."
-        if confirm "Do you own a domain name for this host?" ; then
+        echo ""
+        if confirm "For greater compatibility with a wide range of clients, it is recommended that you own a domain name
+            that others can use to reach your host over internet. If you don't, your host will not be accepted by some clients
+            including web browsers. \n\nDo you own a domain name for this host?" ; then
             while [ -z "$inetaddr" ]; do
                 read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
                 validate_inet_addr && return 0
                 echo "Invalid domain name."
             done
-        else
+        fi
     fi
 
     # Attempt auto-detection.
     if [ "$inetaddr" == "auto" ] || $interactive ; then
         inetaddr=$(hostname -I | awk '{print $1}')
-        validate_inet_addr && interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
-                                internet. \n\nIs this the ip address you want to use?" && return 0
+        validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
         inetaddr=""
     fi
 
@@ -304,7 +306,7 @@ function set_country_code() {
 function resolve_filepath() {
     local filepath=""
     while [ -z "$filepath" ]; do
-        read -p $1 filepath </dev/tty
+        read -p "$@" filepath </dev/tty
         [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
     done
     echo $filepath
@@ -312,14 +314,17 @@ function resolve_filepath() {
 
 function set_tls_certs() {
     if $interactive ; then
-        echo "For greater compatiblity with a wide range of clients, it is recommended to obtain an SSL certificate for your host's domain name from a trusted certificate authority."
-        echo "If you don't provide such certificates, $evernode will generate a self-signed certificate which would not be accepted by some clients including web browsers."
-        if confirm "Have you obtained an SSL certificate from a trusted authority" ; then
+        echo ""
+        echo ""
+        if confirm "For greater compatibility with a wide range of clients, it is recommended to obtain an SSL certificate
+            for your host's domain name from a trusted certificate authority. If you don't provide such certificates, $evernode
+            will generate a self-signed certificate which would not be accepted by some clients including web browsers.
+            \n\nHave you obtained an SSL certificate from a trusted authority for your domain?" ; then
             tls_cabundle_file=$(resolve_filepath "Please specify location of ca bundle (usually ends with .ca-bundle): ")
             tls_cert_file=$(resolve_filepath "Please specify location of the certificate (usually ends with .crt): ")
             tls_key_file=$(resolve_filepath "Please specify location of the private key (usually ends with .key): ")
         else
-            echo "SSL certificate not provided. $evernode will generate self-signed certificate."
+            echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
         fi
     fi
 }

@@ -96,22 +96,16 @@ function setup_tls_certs() {
 
     if [ -f "$tls_cabundle_file" ] && [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
 
-        stage "Transfering certificate files to $SASHIMONO_DATA/tls/"
-        cp $tls_cert_file $SASHIMONO_DATA/tls/tlscert.pem
-        cat $tls_cabundle_file >> $SASHIMONO_DATA/tls/tlscert.pem
-        cp $tls_key_file $SASHIMONO_DATA/tls/tlskey.pem
+        stage "Transfering certificate files"
+        cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
     else
         # If user has not provided certs we generate self-signed ones.
-        stage "Generating self-signed certificate in $SASHIMONO_DATA/tls/"
-        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/tls/tlskey.pem \
-            -out $SASHIMONO_DATA/tls/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
+        stage "Generating self-signed certificates"
+        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
             echo "Error when generating self-signed certificate." && rollback
-    fi
-
-    # Create symlinks for certs in contract_template.
-    if [ ! ln -s $SASHIMONO_DATA/tls/tlscert.pem contract_template/cfg/tlscert.pem ] || \
-        [ ! ln -s $SASHIMONO_DATA/tls/tlskey.pem contract_template/cfg/tlskey.pem ] ; then
-        echo "Error when setting up tls certs." && rollback
     fi
 }
 

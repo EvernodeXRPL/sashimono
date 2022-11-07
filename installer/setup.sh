@@ -167,6 +167,35 @@ function check_sys_req() {
     echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
+function resolve_filepath() {
+    # name reference the variable name provided as first argument.
+    local -n filepath=$1
+    local prompt="${*:2} "
+    while [ -z "$filepath" ]; do
+        read -p "$prompt" filepath </dev/tty
+        [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
+    done
+}
+
+function set_domain_certs() {
+    if confirm "\nIt is recommended that you obtain an SSL certificate for '$inetaddr' from a trusted certificate authority.
+        If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
+        by some clients including web browsers.
+        \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
+        resolve_filepath tls_cabundle_file "Please specify location of ca bundle (usually ends with .ca-bundle):"
+        resolve_filepath tls_cert_file "Please specify location of the certificate (usually ends with .crt):"
+        resolve_filepath tls_key_file "Please specify location of the private key (usually ends with .key):"
+    else
+        echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
+    fi
+    return 0
+}
+
+function validate_inet_addr_domain() {
+    host $inetaddr 2>&1 > /dev/null && return 0
+    inetaddr="" && return 1
+}
+
 function validate_inet_addr() {
     # inert address cannot be empty and cannot contain spaces.
     [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] && inetaddr="" && return 1
@@ -189,8 +218,8 @@ function set_inet_addr() {
             including web browsers. \n\nDo you own a domain name for this host?" ; then
             while [ -z "$inetaddr" ]; do
                 read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
-                validate_inet_addr && return 0
-                echo "Invalid domain name."
+                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+                echo "Invalid or unreachable domain name."
             done
         fi
     fi
@@ -300,32 +329,6 @@ function set_country_code() {
 
     else
         resolve_countrycode || (echo "Invalid country code '$countrycode'" && exit 1)
-    fi
-}
-
-function resolve_filepath() {
-    local filepath=""
-    while [ -z "$filepath" ]; do
-        read -p "$@" filepath </dev/tty
-        [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
-    done
-    echo $filepath
-}
-
-function set_tls_certs() {
-    if $interactive ; then
-        echo ""
-        echo ""
-        if confirm "For greater compatibility with a wide range of clients, it is recommended to obtain an SSL certificate
-            for your host's domain name from a trusted certificate authority. If you don't provide such certificates, $evernode
-            will generate a self-signed certificate which would not be accepted by some clients including web browsers.
-            \n\nHave you obtained an SSL certificate from a trusted authority for your domain?" ; then
-            tls_cabundle_file=$(resolve_filepath "Please specify location of ca bundle (usually ends with .ca-bundle): ")
-            tls_cert_file=$(resolve_filepath "Please specify location of the certificate (usually ends with .crt): ")
-            tls_key_file=$(resolve_filepath "Please specify location of the private key (usually ends with .key): ")
-        else
-            echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
-        fi
     fi
 }
 
@@ -661,8 +664,6 @@ if [ "$mode" == "install" ]; then
 
     set_country_code
     echo -e "Using '$countrycode' as country code.\n"
-
-    set_tls_certs
 
     set_cgrules_svc
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"

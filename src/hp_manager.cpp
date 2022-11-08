@@ -116,10 +116,10 @@ namespace hp
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
-     * @param image_key Docker image name to use (must exist in the config iamge list).
+     * @param image Docker image name to use (must exist in the config image list).
      * @return 0 on success and -1 on error.
      */
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key)
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image)
     {
         // Creating an instance with same name is not allowed.
         hp::instance_info existing_instance;
@@ -155,13 +155,14 @@ namespace hp
             return -1;
         }
 
-        if (image_key.substr(0, conf::cfg.docker.image_prefix.size()) != conf::cfg.docker.image_prefix)
+        if (image.substr(0, conf::cfg.docker.image_prefix.size()) != conf::cfg.docker.image_prefix)
         {
             error_msg = DOCKER_IMAGE_INVALID;
             LOG_ERROR << "Provided docker image is not allowed.";
             return -1;
         }
-        const std::string image_name = conf::cfg.docker.image_prefix + image_key;
+
+        const std::string image_name = image;
 
         ports instance_ports;
         if (!vacant_ports.empty())

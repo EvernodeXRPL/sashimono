@@ -744,7 +744,7 @@ class MessageBoard {
             let expiryTimeStamp;
             for (const item of this.expiryList) {
                 if (item.containerName === instance.container_name) {
-                    item.expiryTimestamp = this.getExpiryTimestamp(instance.timestamp, extendingMoments);
+                    item.expiryTimestamp = this.getExpiryTimestamp(item.expiryTimestamp, extendingMoments);
                     expiryTimeStamp = item.expiryTimestamp;
                     let obj = {
                         status: LeaseStatus.EXTENDED,

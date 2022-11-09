@@ -70,8 +70,8 @@ namespace conf
             cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
             const std::string img_prefix = "evernodedev";
-            cfg.docker.images["hp.latest-ubt.20.04"] = img_prefix + "/sashimono:hp.latest-ubt.20.04";
-            cfg.docker.images["hp.latest-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.latest-ubt.20.04-njs.16";
+            cfg.docker.images["hp.0.6.0-ubt.20.04"] = img_prefix + "/sashimono:hp.0.6.0-ubt.20.04";
+            cfg.docker.images["hp.0.6.0-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.0.6.0-ubt.20.04-njs.16";
             cfg.docker.registry_port = docker_registry_port;
 
             cfg.log.max_file_count = 50;

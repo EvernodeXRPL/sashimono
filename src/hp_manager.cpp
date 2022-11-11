@@ -116,7 +116,7 @@ namespace hp
      * @param info Structure holding the generated instance info.
      * @param owner_pubkey Public key of the instance owner.
      * @param contract_id Contract id to be configured.
-     * @param image Docker image name to use (must exist in the config image list).
+     * @param image Docker image name to use (image prefix name must exists).
      * @return 0 on success and -1 on error.
      */
     int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image)

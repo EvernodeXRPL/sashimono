@@ -375,18 +375,19 @@ function set_instance_alloc() {
 
 function set_lease_amount() {
     # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    [ -z $lease_amount ] && lease_amount=0
+    # [ -z $lease_amount ] && lease_amount=0
 
+    # Lease amount is mandatory field set by the user
     if $interactive; then
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
-        echo "Default contract instance lease amount is taken from purchaser service target price."
+        # echo "Default contract instance lease amount is taken from purchaser service target price."
 
-        ! confirm "Do you want to specify a contract instance lease amount?" && return 0
+        # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
+        echo "It's required to set a price for contract instance leases."
         local amount=0
-
         while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
+            read -p "Specify the lease amount in EVRs for your contract instances (Price of one instance): " amount </dev/tty
             ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
         done
 

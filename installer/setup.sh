@@ -17,6 +17,7 @@ installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
+default_ripple_url="wss://hooks-testnet-v2.xrpl-labs.com"
 
 
 
@@ -389,11 +390,34 @@ function set_lease_amount() {
 
         # while true ; do
         #     read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
-        #     ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
         # done
 
         # lease_amount=$amount
     # fi
+}
+
+function set_ripple_url() {
+    [ -z $rippled_address ] && rippled_address=$default_ripple_url
+
+    if $interactive; then
+        # Temperory disable option to take lease amount from purchaser service.
+
+        # If user hasn't specified, the default ripple url is taken from evernode js lib constants.
+        # echo "Default ripple URL is taken from evernode constants."
+
+        confirm "Do you want to connect to the default rippled server ('$default_ripple_url')?" && return 0
+
+        local newURL=""
+
+        while true ; do
+            read -p "Specify the rippled URL: " newURL </dev/tty
+            ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+        done
+
+        rippled_address=$newURL
+    fi
+
 }
 
 function install_failure() {
@@ -447,7 +471,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_address 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -597,6 +621,7 @@ if [ "$mode" == "install" ]; then
         alloc_diskKB=${10}      # Disk space to allocate for contract instances.
         alloc_instcount=${11}   # Total contract instance count.
         lease_amount=${12}      # Contract instance lease amount in EVRs.
+        rippled_address=${13}    # Ripple URL
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -646,6 +671,9 @@ if [ "$mode" == "install" ]; then
     # Commented for future consideration.
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
     (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+
+    set_ripple_url
+    echo -e "Using the rippled address '$rippled_address'.\n"
 
     echo "Starting installation..."
     install_evernode 0

@@ -60,22 +60,22 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0) {
+    newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0, rippledAddress = null) {
         this.#saveConfig({
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
                 secret: secret,
                 registryAddress: registryAddress,
-                rippledServer: appenv.DEFAULT_RIPPLED_SERVER,
+                rippledServer: rippledAddress || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
             }
         });
     }
 
-    async generateBetaHostAccount(registryAddress, domain) {
+    async generateBetaHostAccount(rippledAddress, registryAddress, domain) {
 
-        setEvernodeDefaults(registryAddress);
+        setEvernodeDefaults(registryAddress, rippledAddress);
 
         const acc = await this.#generateFaucetAccount();
 

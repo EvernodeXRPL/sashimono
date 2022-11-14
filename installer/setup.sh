@@ -384,10 +384,9 @@ function set_lease_amount() {
 
         # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
-        echo "It's required to set a price for contract instance leases."
         local amount=0
         while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances (Price of one instance): " amount </dev/tty
+            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
             ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
         done
 

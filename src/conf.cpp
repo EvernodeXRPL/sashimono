@@ -69,9 +69,7 @@ namespace conf
             cfg.system.max_cpu_us = !cpu_us ? 900000 : cpu_us; // Total CPU allocation out of 1000000 microsec (1 sec).
             cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
-            const std::string img_prefix = "evernodedev";
-            cfg.docker.images["hp.0.6.0-ubt.20.04"] = img_prefix + "/sashimono:hp.0.6.0-ubt.20.04";
-            cfg.docker.images["hp.0.6.0-ubt.20.04-njs.16"] = img_prefix + "/sashimono:hp.0.6.0-ubt.20.04-njs.16";
+            cfg.docker.image_prefix = "evernodedev/sashimono:";
             cfg.docker.registry_port = docker_registry_port;
 
             cfg.log.max_file_count = 50;
@@ -268,9 +266,6 @@ namespace conf
             {
                 const jsoncons::ojson &docker = d["docker"];
 
-                for (const auto &elem : docker["images"].object_range())
-                    cfg.docker.images[elem.key()] = elem.value().as<std::string>();
-
                 if (docker.contains("registry_port"))
                     cfg.docker.registry_port = docker["registry_port"].as<uint16_t>();
             }
@@ -349,13 +344,7 @@ namespace conf
         // Docker configs.
         {
             jsoncons::ojson docker_config;
-
-            jsoncons::ojson images;
-            for (const auto &[key, name] : cfg.docker.images)
-                images.insert_or_assign(key, name);
-            docker_config.insert_or_assign("images", images);
             docker_config.insert_or_assign("registry_port", cfg.docker.registry_port);
-
             d.insert_or_assign("docker", docker_config);
         }
 

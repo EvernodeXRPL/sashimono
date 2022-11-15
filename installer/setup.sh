@@ -74,13 +74,14 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
+                \napplyssl - Apply new SSL certificates for contracts.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
@@ -170,11 +171,18 @@ function check_sys_req() {
 function resolve_filepath() {
     # name reference the variable name provided as first argument.
     local -n filepath=$1
-    local prompt="${*:2} "
-    while [ -z "$filepath" ]; do
-        read -p "$prompt" filepath </dev/tty
-        [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
-    done
+    local option=$2
+    local prompt="${*:3} "
+
+    # o means optional
+    if [ "$option" == "o" ] && [ -z "$filepath" ]; then
+        filepath="-"
+    else
+        while [ -z "$filepath" ]; do
+            read -p "$prompt" filepath </dev/tty
+            [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
+        done
+    fi
 }
 
 function set_domain_certs() {
@@ -182,9 +190,9 @@ function set_domain_certs() {
         If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
         by some clients including web browsers.
         \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
-        resolve_filepath tls_cabundle_file "Please specify location of ca bundle (usually ends with .ca-bundle):"
-        resolve_filepath tls_cert_file "Please specify location of the certificate (usually ends with .crt):"
-        resolve_filepath tls_key_file "Please specify location of the private key (usually ends with .key):"
+        resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
+        resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
+        resolve_filepath tls_cabundle_file o "[Optional] Please specify location of ca bundle (usually ends with .ca-bundle):"
     else
         echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi
@@ -476,7 +484,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $tls_cabundle_file $tls_cert_file $tls_key_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -608,6 +616,31 @@ function reg_info() {
     fi
 }
 
+function apply_ssl() {
+    local tls_key_file=$1
+    local tls_cert_file=$2
+    local tls_cabundle_file=$3
+
+    ([ ! -f "$tls_key_file" ] || [ ! -f "$tls_cert_file" ] || \
+        ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
+            echo "One or more invalid files provided." && exit 1
+
+    cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
+    cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
+    # ca bundle is optional.
+    [ "$tls_cabundle_file" != "" ] && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
+
+    sashi list | jq -rc '.[]' | while read -r inst; do \
+        local instuser=$(echo $inst | jq -r '.user'); \
+        local instname=$(echo $inst | jq -r '.name'); \
+        echo -e "\nStopping contract instance $instname" && sashi stop -n $instname && \
+            echo "Updating SSL certificates" && \
+            cp $SASHIMONO_DATA/contract_template/cfg/tlskey.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem /home/$instuser/$instname/cfg/ && \
+            chmod 644 /home/$instuser/$instname/cfg/tlscert.pem && chmod 600 /home/$instuser/$instname/cfg/tlskey.pem && \
+            chown -R $instuser:$instuser /home/$instuser/$instname/cfg/*.pem && \
+            echo -e "Starting contract instance $instname" && sashi start -n $instname; \
+    done
+}
 
 # Begin setup execution flow --------------------
 
@@ -626,9 +659,9 @@ if [ "$mode" == "install" ]; then
         alloc_diskKB=${10}      # Disk space to allocate for contract instances.
         alloc_instcount=${11}   # Total contract instance count.
         lease_amount=${12}      # Contract instance lease amount in EVRs.
-        tls_cabundle_file=${13} # File path to the tls ca bundle.
+        tls_key_file=${13}      # File path to the tls private key.
         tls_cert_file=${14}     # File path to the tls certificate.
-        tls_key_file=${15}      # File path to the tls private key.
+        tls_cabundle_file=${15} # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -709,6 +742,9 @@ elif [ "$mode" == "update" ]; then
 
 elif [ "$mode" == "log" ]; then
     create_log
+
+elif [ "$mode" == "applyssl" ]; then
+    apply_ssl $2 $3 $4
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

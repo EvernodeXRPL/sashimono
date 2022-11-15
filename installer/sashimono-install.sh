@@ -15,9 +15,9 @@ swapKB=${8}
 diskKB=${9}
 description=${10}
 lease_amount=${11}
-tls_cabundle_file=${12}
-tls_cert_file=${13}
-tls_key_file=${14}
+tls_key_file=${13}
+tls_cert_file=${14}
+tls_cabundle_file=${15}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -94,12 +94,16 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 function setup_tls_certs() {
     mkdir -p $SASHIMONO_DATA/tls
 
-    if [ -f "$tls_cabundle_file" ] && [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
+    if [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
 
         stage "Transfering certificate files"
-        cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
-        cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+
         cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
+        cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        # ca bundle is optional.
+        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] && \
+            cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+            
     else
         # If user has not provided certs we generate self-signed ones.
         stage "Generating self-signed certificates"

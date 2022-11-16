@@ -17,7 +17,7 @@ installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
-default_rippled_url="wss://hooks-testnet-v2.xrpl-labs.com"
+default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
 
 
 
@@ -395,11 +395,11 @@ function set_lease_amount() {
     fi
 }
 
-function set_rippled_url() {
-    [ -z $rippled_server ] && rippled_server=$default_rippled_url
+function set_rippled_server() {
+    [ -z $rippled_server ] && rippled_server=$default_rippled_server
 
     if $interactive; then
-        confirm "Do you want to connect to the default rippled server ('$default_rippled_url')?" && return 0
+        confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
 
         local newURL=""
 
@@ -665,7 +665,7 @@ if [ "$mode" == "install" ]; then
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
     (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
 
-    set_rippled_url
+    set_rippled_server
     echo -e "Using the rippled address '$rippled_server'.\n"
 
     echo "Starting installation..."

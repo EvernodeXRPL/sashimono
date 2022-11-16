@@ -17,6 +17,7 @@ installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
+default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
 
 
 
@@ -375,25 +376,41 @@ function set_instance_alloc() {
 
 function set_lease_amount() {
     # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    [ -z $lease_amount ] && lease_amount=0
+    # [ -z $lease_amount ] && lease_amount=0
 
-    # if $interactive; then
-        # Temperory disable option to take lease amount from purchaser service.
-
+    # Lease amount is mandatory field set by the user
+    if $interactive; then
         # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
         # echo "Default contract instance lease amount is taken from purchaser service target price."
 
         # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
-        # local amount=0
+        local amount=0
+        while true ; do
+            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
+            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+        done
 
-        # while true ; do
-        #     read -p "Specify the lease amount in EVRs for your contract instances: " amount </dev/tty
-        #     ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
-        # done
+        lease_amount=$amount
+    fi
+}
 
-        # lease_amount=$amount
-    # fi
+function set_rippled_server() {
+    [ -z $rippled_server ] && rippled_server=$default_rippled_server
+
+    if $interactive; then
+        confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
+
+        local newURL=""
+
+        while true ; do
+            read -p "Specify the rippled URL: " newURL </dev/tty
+            ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+        done
+
+        rippled_server=$newURL
+    fi
+
 }
 
 function install_failure() {
@@ -447,7 +464,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -597,6 +614,7 @@ if [ "$mode" == "install" ]; then
         alloc_diskKB=${10}      # Disk space to allocate for contract instances.
         alloc_instcount=${11}   # Total contract instance count.
         lease_amount=${12}      # Contract instance lease amount in EVRs.
+        rippled_server=${13}    # Ripple URL
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -646,6 +664,9 @@ if [ "$mode" == "install" ]; then
     # Commented for future consideration.
     # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
     (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+
+    set_rippled_server
+    echo -e "Using the rippled address '$rippled_server'.\n"
 
     echo "Starting installation..."
     install_evernode 0

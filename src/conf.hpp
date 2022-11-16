@@ -84,7 +84,7 @@ namespace conf
 
     struct docker_config
     {
-        std::unordered_map<std::string, std::string> images;
+        std::string image_prefix;     // Docker image prefixes allowed to be used for contracts.
         uint16_t registry_port = 0;   // 0 means bypass private docker registry.
         std::string registry_address; // This is dynamically constructed at load time.
     };

@@ -52,7 +52,7 @@ async function acquireLease(tenant, host, instanceId, contractId, ownerPubKey) {
                 container_name: instanceId,
                 owner_pubkey: ownerPubKey,
                 contract_id: contractId,
-                image: "hp.latest-ubt.20.04-njs.16",
+                image: "hp.0.6.0-ubt.20.04-njs.16",
                 config: {}
             }, { timeout: 60000 });
             console.log(`Tenant received instance '${result.instance.name}'`);

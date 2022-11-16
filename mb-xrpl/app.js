@@ -27,6 +27,10 @@ async function main() {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]),  parseInt(process.argv[11]),  process.argv[12]);
             }
+            else if (process.argv.length === 4 && process.argv[2] === 'transfer') {
+                const transfereeAddress = process.argv[3];
+                await new Setup().transfer(transfereeAddress);
+            }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();
             }
@@ -46,6 +50,7 @@ async function main() {
         node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
         node index.js betagen [registryAddress] [domain or ip] [leaseAmount] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
+        node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.

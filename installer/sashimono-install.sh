@@ -15,7 +15,7 @@ swapKB=${8}
 diskKB=${9}
 description=${10}
 lease_amount=${11}
-rippled_address=${12}
+rippled_server=${12}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -132,7 +132,7 @@ if [ "$NO_MB" == "" ]; then
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_address && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

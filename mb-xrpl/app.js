@@ -19,10 +19,10 @@ async function main() {
                 const registryAddress = process.argv[3];
                 const domain = process.argv[4];
                 const leaseAmount = process.argv[5];
-                const rippledAddress = process.argv[6];
+                const rippledServer = process.argv[6];
                 const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(rippledAddress, registryAddress, domain);
-                setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledAddress);
+                const acc = await setup.generateBetaHostAccount(rippledServer, registryAddress, domain);
+                setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
@@ -45,7 +45,7 @@ async function main() {
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
-        node index.js betagen [registryAddress] [domain or ip] [leaseAmount] [rippledAddress] - Generate beta host account and populate the configs.
+        node index.js betagen [registryAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.

@@ -17,7 +17,7 @@ installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
-default_ripple_url="wss://hooks-testnet-v2.xrpl-labs.com"
+default_rippled_url="wss://hooks-testnet-v2.xrpl-labs.com"
 
 
 
@@ -396,10 +396,10 @@ function set_lease_amount() {
 }
 
 function set_rippled_url() {
-    [ -z $rippled_server ] && rippled_server=$default_ripple_url
+    [ -z $rippled_server ] && rippled_server=$default_rippled_url
 
     if $interactive; then
-        confirm "Do you want to connect to the default rippled server ('$default_ripple_url')?" && return 0
+        confirm "Do you want to connect to the default rippled server ('$default_rippled_url')?" && return 0
 
         local newURL=""
 

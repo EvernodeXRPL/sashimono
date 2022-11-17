@@ -159,7 +159,7 @@ class MessageBoard {
                     }
                 }
                 catch (e) {
-                    console.log(`Error "${e}", occured in expiring the item : ${item}.`)
+                    console.log(`Error "${e}", occurred in expiring the item : ${item}.`)
                 }
             }
             await this.#releaseLeaseUpdateLock();
@@ -300,16 +300,17 @@ class MessageBoard {
         const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
-            await this.#sendHeartbeat();
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
+            await this.#sendHeartbeat();
         };
 
         const nextMomentStartIdx = await this.hostClient.getMomentStartIndex() + this.hostClient.config.momentSize;
         setTimeout(async () => {
             await scheduler();
-        }, (nextMomentStartIdx - evernode.UtilHelpers.getCurrentUnixTime()) * 1000);
+        }, (nextMomentStartIdx - evernode.UtilHelpers.getCurrentUnixTime() + 60) * 1000);
+        // Delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
     }
 
     // Try to acquire the lease update lock.

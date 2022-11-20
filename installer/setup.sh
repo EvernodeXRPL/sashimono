@@ -12,8 +12,8 @@ instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f72e-430e-b297-9210468a4cbb"
-setup_script_url="$cloud_storage/setup-ravin.sh"
-installer_url="$cloud_storage/installer-ravin.tar.gz"
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
@@ -635,13 +635,15 @@ function reg_info() {
 }
 
 function apply_ssl() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    
     local tls_key_file=$1
     local tls_cert_file=$2
     local tls_cabundle_file=$3
 
     ([ ! -f "$tls_key_file" ] || [ ! -f "$tls_cert_file" ] || \
         ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
-            echo "One or more invalid files provided." && exit 1
+            echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
 
     cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
     cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1

@@ -12,8 +12,8 @@ instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f72e-430e-b297-9210468a4cbb"
-setup_script_url="$cloud_storage/setup.sh"
-installer_url="$cloud_storage/installer.tar.gz"
+setup_script_url="$cloud_storage/setup-ravin.sh"
+installer_url="$cloud_storage/installer-ravin.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
@@ -174,15 +174,16 @@ function resolve_filepath() {
     local option=$2
     local prompt="${*:3} "
 
-    # o means optional
-    if [ "$option" == "o" ] && [ -z "$filepath" ]; then
-        filepath="-"
-    else
-        while [ -z "$filepath" ]; do
-            read -p "$prompt" filepath </dev/tty
-            [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
-        done
-    fi
+    while [ -z "$filepath" ]; do
+        read -p "$prompt" filepath </dev/tty
+
+        # if optional accept empty path as "-"
+        [ "$option" == "o" ] && [ -z "$filepath" ] && filepath="-"
+        
+        # Check for valid path.
+        ([ "$option" == "r" ] || ([ "$option" == "o" ] && [ "$filepath" != "-" ])) \
+            && [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
+    done
 }
 
 function set_domain_certs() {
@@ -192,7 +193,7 @@ function set_domain_certs() {
         \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
         resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
         resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
-        resolve_filepath tls_cabundle_file o "[Optional] Please specify location of ca bundle (usually ends with .ca-bundle):"
+        resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"
     else
         echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi

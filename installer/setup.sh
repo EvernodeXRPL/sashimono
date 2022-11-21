@@ -703,7 +703,8 @@ elif [ "$mode" == "uninstall" ]; then
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
-    $interactive && ! confirm "\nAre you sure you want to transfer $evernode from this machine?" && exit 1
+    $interactive && ! confirm "This will uninstall Sashimono, Evernode's contract instance management software and
+            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
     if ! $interactive ; then
         transferee_address=${3}           # Address of the transferee.
@@ -715,7 +716,7 @@ elif [ "$mode" == "transfer" ]; then
 
     uninstall_evernode 0
 
-    echo "Initiated a transfer."
+    echo "Transfer process was sucessfully initiated."
 
 elif [ "$mode" == "status" ]; then
     reg_info

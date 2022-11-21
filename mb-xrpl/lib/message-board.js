@@ -261,7 +261,7 @@ class MessageBoard {
         while (true) {
             try {
                 attempts++;
-                const ret = await this.client.connect();
+                const ret = await client.connect();
                 if (ret)
                     break;
             } catch (error) {

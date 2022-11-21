@@ -75,13 +75,14 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
+                \napplyssl - Apply new SSL certificates for contracts.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
@@ -168,51 +169,88 @@ function check_sys_req() {
     echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
-function resolve_ip_addr() {
-    # Attempt to resolve ip (in case inetaddr is a DNS address)
-    # This will resolve correctly if inetaddr is a valid ip or dns address.
-    local ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+function resolve_filepath() {
+    # name reference the variable name provided as first argument.
+    local -n filepath=$1
+    local option=$2
+    local prompt="${*:3} "
 
-    # If invalid, reset inetaddr and return with non-zero code.
-    if [ -z "$ipaddr" ] ; then
-        inetaddr=""
-        return 1
-    fi
+    while [ -z "$filepath" ]; do
+        read -p "$prompt" filepath </dev/tty
+
+        # if optional accept empty path as "-"
+        [ "$option" == "o" ] && [ -z "$filepath" ] && filepath="-"
+        
+        # Check for valid path.
+        ([ "$option" == "r" ] || ([ "$option" == "o" ] && [ "$filepath" != "-" ])) \
+            && [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
+    done
 }
 
-function check_inet_addr_validity() {
-    # inert address cannot be empty and cannot contain spaces.
-    if [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] ; then
-        inetaddr=""
-        return 1
+function set_domain_certs() {
+    if confirm "\nIt is recommended that you obtain an SSL certificate for '$inetaddr' from a trusted certificate authority.
+        If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
+        by some clients including web browsers.
+        \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
+        resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
+        resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
+        resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"
     else
-        return 0
+        echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi
+    return 0
+}
+
+function validate_inet_addr_domain() {
+    host $inetaddr 2>&1 > /dev/null && return 0
+    inetaddr="" && return 1
+}
+
+function validate_inet_addr() {
+    # inert address cannot be empty and cannot contain spaces.
+    [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] && inetaddr="" && return 1
+
+    # Attempt to resolve ip (in case inetaddr is a DNS address)
+    # This will resolve correctly if inetaddr is a valid ip or dns address.
+    local resolved=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+    # If invalid, reset inetaddr and return with non-zero code.
+    [ -z "$resolved" ] && inetaddr="" && return 1
+
+    return 0
 }
 
 function set_inet_addr() {
 
-    # Attempt to auto-detect in interactive mode or if 'auto' is specified.
-    ([ "$inetaddr" == "auto" ] || $interactive) && inetaddr=$(hostname -I | awk '{print $1}')
-    resolve_ip_addr
+    if $interactive ; then
+        echo ""
+        if confirm "For greater compatibility with a wide range of clients, it is recommended that you own a domain name
+            that others can use to reach your host over internet. If you don't, your host will not be accepted by some clients
+            including web browsers. \n\nDo you own a domain name for this host?" ; then
+            while [ -z "$inetaddr" ]; do
+                read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+                echo "Invalid or unreachable domain name."
+            done
+        fi
+    fi
+
+    # Attempt auto-detection.
+    if [ "$inetaddr" == "auto" ] || $interactive ; then
+        inetaddr=$(hostname -I | awk '{print $1}')
+        validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
+        inetaddr=""
+    fi
 
     if $interactive ; then
-
-        if [ -n "$inetaddr" ] && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
-                                            internet. \n\nIs this the IP/DNS address you want to use?" ; then
-            return 0
-        fi
-
-        inetaddr=""
         while [ -z "$inetaddr" ]; do
-            # This will be asked if auto-detection fails or if user wants to specify manually.
-            read -p "Please specify the public IP/DNS address your server is reachable at: " inetaddr </dev/tty
-            check_inet_addr_validity || echo "Invalid IP/DNS address."
+            read -p "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && return 0
+            echo "Invalid ip/domain address."
         done
-
-    else
-        [ -z "$inetaddr" ] && echo "Invalid IP/DNS address '$inetaddr'" && exit 1
     fi
+
+   ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
 }
 
 function check_port_validity() {
@@ -464,7 +502,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -596,6 +634,33 @@ function reg_info() {
     fi
 }
 
+function apply_ssl() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    
+    local tls_key_file=$1
+    local tls_cert_file=$2
+    local tls_cabundle_file=$3
+
+    ([ ! -f "$tls_key_file" ] || [ ! -f "$tls_cert_file" ] || \
+        ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
+            echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
+
+    cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
+    cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
+    # ca bundle is optional.
+    [ "$tls_cabundle_file" != "" ] && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
+
+    sashi list | jq -rc '.[]' | while read -r inst; do \
+        local instuser=$(echo $inst | jq -r '.user'); \
+        local instname=$(echo $inst | jq -r '.name'); \
+        echo -e "\nStopping contract instance $instname" && sashi stop -n $instname && \
+            echo "Updating SSL certificates" && \
+            cp $SASHIMONO_DATA/contract_template/cfg/tlskey.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem /home/$instuser/$instname/cfg/ && \
+            chmod 644 /home/$instuser/$instname/cfg/tlscert.pem && chmod 600 /home/$instuser/$instname/cfg/tlskey.pem && \
+            chown -R $instuser:$instuser /home/$instuser/$instname/cfg/*.pem && \
+            echo -e "Starting contract instance $instname" && sashi start -n $instname; \
+    done
+}
 
 # Begin setup execution flow --------------------
 
@@ -615,6 +680,9 @@ if [ "$mode" == "install" ]; then
         alloc_instcount=${11}   # Total contract instance count.
         lease_amount=${12}      # Contract instance lease amount in EVRs.
         rippled_server=${13}    # Ripple URL
+        tls_key_file=${14}      # File path to the tls private key.
+        tls_cert_file=${15}     # File path to the tls certificate.
+        tls_cabundle_file=${16} # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -698,6 +766,9 @@ elif [ "$mode" == "update" ]; then
 
 elif [ "$mode" == "log" ]; then
     create_log
+
+elif [ "$mode" == "applyssl" ]; then
+    apply_ssl $2 $3 $4
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

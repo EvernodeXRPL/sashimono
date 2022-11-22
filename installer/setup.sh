@@ -792,7 +792,7 @@ elif [ "$mode" == "uninstall" ]; then
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
-    $interactive && ! confirm "This will uninstall Sashimono, Evernode's contract instance management software and
+    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
             transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
     if ! $interactive ; then

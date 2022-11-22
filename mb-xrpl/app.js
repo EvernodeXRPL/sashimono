@@ -26,10 +26,10 @@ async function main() {
             }
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
-                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]),  parseInt(process.argv[11]),  process.argv[12]);
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12]);
             }
-            else if (process.argv.length === 4 && process.argv[2] === 'transfer') {
-                const transfereeAddress = process.argv[3];
+            else if (process.argv.length >= 3 && process.argv[2] === 'transfer') {
+                const transfereeAddress = (process.argv[3]) ? process.argv[3] : null;
                 await new Setup().transfer(transfereeAddress);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {

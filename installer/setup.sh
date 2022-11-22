@@ -456,12 +456,12 @@ function set_rippled_server() {
 
 function set_transferee_address() {
     # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
-    [ -z $transferee_address ] && transferee_address='CURRENT_HOST_ADDRESS'
+    [ -z $transferee_address ] && transferee_address=''
 
     if $interactive; then
         confirm "\nDo you want to set the current host account as the transferee's account also?" && return 0
 
-        local address='CURRENT_HOST_ADDRESS'
+        local address=''
         while true ; do
             read -p "Specify the XRPL account address of the transferee: " address </dev/tty
             ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break

@@ -16,8 +16,12 @@ diskKB=${9}
 description=${10}
 lease_amount=${11}
 rippled_server=${12}
+tls_key_file=${13}
+tls_cert_file=${14}
+tls_cabundle_file=${15}
 
 script_dir=$(dirname "$(realpath "$0")")
+
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -88,6 +92,28 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
 }
 
+function setup_tls_certs() {
+    mkdir -p $SASHIMONO_DATA/tls
+
+    if [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
+
+        stage "Transfering certificate files"
+
+        cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
+        cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        # ca bundle is optional.
+        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] && \
+            cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+            
+    else
+        # If user has not provided certs we generate self-signed ones.
+        stage "Generating self-signed certificates"
+        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
+            echo "Error when generating self-signed certificate." && rollback
+    fi
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -104,6 +130,45 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
 
 ! set_cpu_info && echo "Fetching CPU info failed" && rollback
+
+# Copy contract template and licence file (delete existing)
+rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
+cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
+
+# Setup tls certs used for contract instance websockets.
+setup_tls_certs
+
+# Install Sashimono agent binaries into sashimono bin dir.
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
+chmod -R +x $SASHIMONO_BIN
+
+# Copy Blake3 and update linker library cache.
+[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
+
+# Install Sashimono CLI binaries into user bin dir.
+cp "$script_dir"/sashi $USER_BIN
+
+# Download and install rootless dockerd.
+stage "Installing docker packages"
+# Create docker bin directory.
+mkdir -p $DOCKER_BIN
+"$script_dir"/docker-install.sh $DOCKER_BIN
+
+# Check whether docker installation dir is still empty.
+[ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
+
+# Install private docker registry.
+if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
+    stage "Installing private docker registry"
+    # TODO: secure registry configuration
+    "$script_dir"/docker-registry-install.sh
+    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+else
+    echo "Private docker registry installation skipped"
+fi
+
+# If installing with sudo, add current logged-in user to Sashimono admin group.
+[ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
 # Register host only if NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
@@ -152,42 +217,6 @@ if [ "$NO_MB" == "" ]; then
         echo "Registered host on Evernode."
     fi
 fi
-
-# Copy contract template and licence file (delete existing)
-rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
-cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
-
-# Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
-chmod -R +x $SASHIMONO_BIN
-
-# Copy Blake3 and update linker library cache.
-[ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
-
-# Install Sashimono CLI binaries into user bin dir.
-cp "$script_dir"/sashi $USER_BIN
-
-# Download and install rootless dockerd.
-stage "Installing docker packages"
-# Create docker bin directory.
-mkdir -p $DOCKER_BIN
-"$script_dir"/docker-install.sh $DOCKER_BIN
-
-# Check whether docker installation dir is still empty.
-[ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
-
-# Install private docker registry.
-if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
-    stage "Installing private docker registry"
-    # TODO: secure registry configuration
-    "$script_dir"/docker-registry-install.sh
-    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
-else
-    echo "Private docker registry installation skipped"
-fi
-
-# If installing with sudo, add current logged-in user to Sashimono admin group.
-[ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
 stage "Configuring Sashimono services"
 
@@ -313,7 +342,7 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-stage "Configuring auto updater service."
+stage "Configuring auto updater service"
 
 # Enable the Evernode Auto Updater Service.
 enable_evernode_auto_updater

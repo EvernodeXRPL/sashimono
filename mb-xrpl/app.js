@@ -26,7 +26,7 @@ async function main() {
             }
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
-                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]),  parseInt(process.argv[11]),  process.argv[12]);
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12]);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();
@@ -40,6 +40,12 @@ async function main() {
             else if (process.argv.length === 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
+            else if (process.argv.length === 5 && process.argv[2] === 'reconfig') {
+                await new Setup().changeConfig({
+                    leaseAmount: process.argv[3],
+                    rippledServer: process.argv[4]
+                });
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
@@ -50,6 +56,7 @@ async function main() {
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.
+        node index.js reconfig [leaseAmount] [rippledServer] - Update message board configuration.
         node index.js help - Print help.`);
             }
             else {

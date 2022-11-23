@@ -75,7 +75,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "reconfig" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -83,6 +83,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
+                \reconfig - Change the host configurations.
                 \nupdate - Check and install $evernode software updates
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
@@ -113,7 +114,7 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "reconfig" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
@@ -352,6 +353,34 @@ function set_cgrules_svc() {
     [ -z "$cgrulesengd_service" ] && cgrulesengd_service=$cgrulesengd_default || echo "cgroups rules engine service found: '$cgrulesengd_service'"
 }
 
+function read_instance_alloc() {
+    local ramMB=0 swapMB=0 diskMB=0
+
+    while true ; do
+        read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
+        ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
+    done
+
+    while true ; do
+        read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
+        ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
+    done
+
+    while true ; do
+        read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
+        ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." || break
+    done
+
+    while true ; do
+        read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
+        ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
+    done
+
+    alloc_ramKB=$(( ramMB * 1000 ))
+    alloc_swapKB=$(( swapMB * 1000 ))
+    alloc_diskKB=$(( diskMB * 1000 ))
+}
+
 function set_instance_alloc() {
     [ -z $alloc_ramKB ] && alloc_ramKB=$(( (ramKB / 100) * alloc_ratio ))
     [ -z $alloc_swapKB ] && alloc_swapKB=$(( (swapKB / 100) * alloc_ratio ))
@@ -379,37 +408,23 @@ function set_instance_alloc() {
                 Distributed among $alloc_instcount contract instances"
         confirm "\nIs this the allocation you want to use?" && return 0
 
-        local ramMB=0 swapMB=0 diskMB=0
-
-        while true ; do
-            read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
-            ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
-        done
-
-        while true ; do
-            read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
-        done
-
-        while true ; do
-            read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-            ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." || break
-        done
-
-        while true ; do
-            read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-            ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
-        done
-
-        alloc_ramKB=$(( ramMB * 1000 ))
-        alloc_swapKB=$(( swapMB * 1000 ))
-        alloc_diskKB=$(( diskMB * 1000 ))
+        read_instance_alloc
     fi
 
     if ! [[ $alloc_ramKB -gt 0 ]] || ! [[ $alloc_swapKB -gt 0 ]] || ! [[ $alloc_diskKB -gt 0 ]] ||
        ! [[ $alloc_cpu -gt 0 ]] || ! [[ $alloc_instcount -gt 0 ]]; then
         echo "Invalid allocation." && exit 1
     fi
+}
+
+function read_lease_amount() {
+    local amount=0
+    while true ; do
+        read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
+        ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+    done
+
+    lease_amount=$amount
 }
 
 function set_lease_amount() {
@@ -423,14 +438,19 @@ function set_lease_amount() {
 
         # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
 
-        local amount=0
-        while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
-            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
-        done
-
-        lease_amount=$amount
+        read_lease_amount
     fi
+}
+
+function read_rippled_server() {
+    local newURL=""
+
+    while true ; do
+        read -p "Specify the rippled URL: " newURL </dev/tty
+        ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+    done
+
+    rippled_server=$newURL
 }
 
 function set_rippled_server() {
@@ -439,14 +459,7 @@ function set_rippled_server() {
     if $interactive; then
         confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
 
-        local newURL=""
-
-        while true ; do
-            read -p "Specify the rippled URL: " newURL </dev/tty
-            ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
-        done
-
-        rippled_server=$newURL
+        read_rippled_server
     fi
 
 }
@@ -662,6 +675,44 @@ function apply_ssl() {
     done
 }
 
+function reconfig() {
+    ! $SASHIMONO_BIN/sagent reconfig $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+        echo "There was an error in updating sashimono configuration." && exit 1
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $rippled_server &&
+        echo "There was an error in updating message board configuration." && exit 1
+
+    # Update resources of the existing users.
+
+    # Update cgroup allocations.
+    ( ( [ ! -z "$alloc_ramKB" ] && [ $alloc_ramKB -gt 0 ] ) ||
+        ( [ ! -z "$alloc_swapKB" ] && [ $alloc_swapKB -gt 0 ] ) ||
+        ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) &&
+        ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echo "Error occured while upgrading cgroup allocations\n" && exit 1
+
+    # Update disk quotas.
+    if ( ( [ ! -z "$alloc_diskKB" ] && [ $alloc_diskKB -gt 0 ] ) ||
+        ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) ; then
+        users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+        readarray -t userarr <<<"$users"
+        sashiusers=()
+        for user in "${userarr[@]}"; do
+            [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+            sashiusers+=("$user")
+        done
+
+        saconfig="$SASHIMONO_DATA/sa.cfg"
+        max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+        max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+        disk=$(expr $max_storage_kbytes / $max_instance_count)
+        ucount=${#sashiusers[@]}
+        if [ $ucount -gt 0 ]; then
+            for user in "${sashiusers[@]}"; do
+                setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+            done
+        fi
+    fi
+}
+
 # Begin setup execution flow --------------------
 
 echo "Thank you for trying out $evernode!"
@@ -769,6 +820,38 @@ elif [ "$mode" == "log" ]; then
 
 elif [ "$mode" == "applyssl" ]; then
     apply_ssl $2 $3 $4
+
+elif [ "$mode" == "reconfig" ]; then
+    if ! $interactive ; then
+        alloc_cpu=${2}          # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${3}        # RAM to allocate for contract instances.
+        alloc_swapKB=${4}       # Swap to allocate for contract instances.
+        alloc_diskKB=${5}      # Disk space to allocate for contract instances.
+        alloc_instcount=${6}   # Total contract instance count.
+        lease_amount=${7}      # Contract instance lease amount in EVRs.
+        rippled_server=${8}    # Ripple URL
+    else
+        read_rippled_server
+        read_lease_amount
+        read_instance_alloc
+    fi
+
+    [ ! -z "$rippled_server" ] && echo -e "Using the rippled address '$rippled_server'.\n"
+    [ ! -z "$lease_amount" ] && [ $lease_amount -gt 0 ] && (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+    if ( ( [ ! -z "$alloc_ramKB" ] && [ $alloc_ramKB -gt 0 ] )  ||
+        ( [ ! -z "$alloc_swapKB" ] && [ $alloc_swapKB -gt 0 ] ) ||
+        ( [ ! -z "$alloc_diskKB" ] && [ $alloc_diskKB -gt 0 ] ) ||
+        ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) ; then
+        echo -e "Using allocation"
+        [ ! -z "$alloc_ramKB" ] && [ $alloc_ramKB -gt 0 ] && echo -e "$(GB $alloc_ramKB) RAM"
+        [ ! -z "$alloc_swapKB" ] && [ $alloc_swapKB -gt 0 ] && echo -e "$(GB $alloc_swapKB) Swap"
+        [ ! -z "$alloc_diskKB" ] && [ $alloc_diskKB -gt 0 ] && echo -e "$(GB $alloc_diskKB) disk space"
+        [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] && echo -e "$alloc_instcount contract instances\n"
+    fi
+
+    reconfig
+
+    echo "Successfully changed the configurations!"
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

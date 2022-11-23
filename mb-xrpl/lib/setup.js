@@ -235,6 +235,25 @@ class Setup {
         await Promise.resolve(); // async placeholder.
     }
 
+    // Change the message board configurations.
+    async changeConfig(config) {
+        const cfg = this.#getConfig();
+
+        if (config.leaseAmount && isNaN(config.leaseAmount))
+            throw 'Lease amount should be a number';
+        else if (config.rippledServer && config.rippledServer.match(/(ws(s)?:\/\/.*)/g))
+            throw 'Provided Rippled Server is invalid';
+
+        if (config.leaseAmount)
+            cfg.leaseAmount = config.leaseAmount;
+        if (config.rippledServer)
+            cfg.rippledServer = config.rippledServer;
+
+        this.#saveConfig(cfg);
+
+        await Promise.resolve(); // async placeholder.
+    }
+
     // Burn the host minted NFTs at the de-registration.
     async burnMintedNfts(xrplAcc) {
         // Get unsold NFTs.

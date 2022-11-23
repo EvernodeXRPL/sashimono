@@ -21,6 +21,7 @@
         std::cerr << "sagent new [data_dir] [host_addr] [registry_addr] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n"; \
         std::cerr << "sagent run [data_dir]\n";                                                                                            \
         std::cerr << "sagent upgrade [data_dir]\n";                                                                                        \
+        std::cerr << "sagent reconfig [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n";                                   \
         std::cerr << "Example: sagent run /etc/sashimono\n";                                                                               \
         return -1;                                                                                                                         \
     }
@@ -40,7 +41,8 @@ int parse_cmd(int argc, char **argv)
         if ((conf::ctx.command == "new" && argc >= 2 && argc <= 12) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
-            (conf::ctx.command == "version" && argc == 2))
+            (conf::ctx.command == "version" && argc == 2) ||
+            (conf::ctx.command == "reconfig" && argc >= 2 && argc <= 7))
             return 0;
     }
 
@@ -204,6 +206,57 @@ int main(int argc, char **argv)
 
         if (conf::cfg.docker.registry_port == 0)
             conf::cfg.docker.registry_port = 4444;
+
+        if (conf::write_config(conf::cfg) != 0)
+            return -1;
+    }
+    else if (conf::ctx.command == "reconfig")
+    {
+        conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
+
+        size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
+
+        if (((argc >= 4) && (util::stoull(argv[3], inst_count) != 0 || inst_count == 0)) ||
+            ((argc >= 5) && (util::stoull(argv[4], cpu_us) != 0 || cpu_us == 0)) ||
+            ((argc >= 6) && (util::stoull(argv[5], ram_kbytes) != 0 || ram_kbytes == 0)) ||
+            ((argc >= 7) && (util::stoull(argv[6], swap_kbytes) != 0 || swap_kbytes == 0)) ||
+            ((argc >= 8) && (util::stoull(argv[7], disk_kbytes) != 0 || disk_kbytes == 0)))
+        {
+            std::cerr << "Invalid Sashimono Agent config update args.\n";
+            std::cerr << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", "
+                      << swap_kbytes << ", " << disk_kbytes << "\n";
+            return 1;
+        }
+
+        if (conf::init() != 0)
+            return 1;
+
+        salog::init();
+
+        if (inst_count != 0 && inst_count < conf::cfg.system.max_instance_count)
+            std::cerr << "Instance count should be less than " << conf::cfg.system.max_instance_count << ".\n";
+        else if (inst_count != 0)
+            conf::cfg.system.max_instance_count = inst_count;
+
+        if (cpu_us != 0 && cpu_us < conf::cfg.system.max_cpu_us)
+            std::cerr << "CPU quota should be greater than " << conf::cfg.system.max_cpu_us << "us.\n";        
+        else if (cpu_us != 0)
+            conf::cfg.system.max_cpu_us = cpu_us;
+
+        if (ram_kbytes != 0 && ram_kbytes < conf::cfg.system.max_mem_kbytes)
+            std::cerr << "RAM should be greater than " << conf::cfg.system.max_mem_kbytes << "KB.\n";        
+        else if (ram_kbytes != 0)
+            conf::cfg.system.max_mem_kbytes = ram_kbytes;
+
+        if (swap_kbytes != 0 && swap_kbytes < conf::cfg.system.max_swap_kbytes)
+            std::cerr << "Swap should be greater than " << conf::cfg.system.max_swap_kbytes << "KB.\n";        
+        else if (swap_kbytes != 0)
+            conf::cfg.system.max_swap_kbytes = swap_kbytes;
+        
+        if (disk_kbytes != 0 && disk_kbytes < conf::cfg.system.max_storage_kbytes)
+            std::cerr << "Storage should be greater than " << conf::cfg.system.max_storage_kbytes << "KB.\n";        
+        else if (disk_kbytes != 0)
+            conf::cfg.system.max_storage_kbytes = disk_kbytes;
 
         if (conf::write_config(conf::cfg) != 0)
             return -1;

@@ -21,7 +21,7 @@
         std::cerr << "sagent new [data_dir] [host_addr] [registry_addr] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n"; \
         std::cerr << "sagent run [data_dir]\n";                                                                                            \
         std::cerr << "sagent upgrade [data_dir]\n";                                                                                        \
-        std::cerr << "sagent reconfig [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n";                                   \
+        std::cerr << "sagent reconfig [data_dir] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n";                        \
         std::cerr << "Example: sagent run /etc/sashimono\n";                                                                               \
         return -1;                                                                                                                         \
     }
@@ -233,28 +233,43 @@ int main(int argc, char **argv)
 
         salog::init();
 
-        if (inst_count != 0 && inst_count < conf::cfg.system.max_instance_count)
+        if (inst_count != 0 && inst_count > conf::cfg.system.max_instance_count)
+        {
             std::cerr << "Instance count should be less than " << conf::cfg.system.max_instance_count << ".\n";
+            return 1;
+        }
         else if (inst_count != 0)
             conf::cfg.system.max_instance_count = inst_count;
 
         if (cpu_us != 0 && cpu_us < conf::cfg.system.max_cpu_us)
-            std::cerr << "CPU quota should be greater than " << conf::cfg.system.max_cpu_us << "us.\n";        
+        {
+            std::cerr << "CPU quota should be greater than " << conf::cfg.system.max_cpu_us << "us.\n";
+            return 1;
+        }
         else if (cpu_us != 0)
             conf::cfg.system.max_cpu_us = cpu_us;
 
         if (ram_kbytes != 0 && ram_kbytes < conf::cfg.system.max_mem_kbytes)
-            std::cerr << "RAM should be greater than " << conf::cfg.system.max_mem_kbytes << "KB.\n";        
+        {
+            std::cerr << "RAM should be greater than " << conf::cfg.system.max_mem_kbytes << "KB.\n";
+            return 1;
+        }
         else if (ram_kbytes != 0)
             conf::cfg.system.max_mem_kbytes = ram_kbytes;
 
         if (swap_kbytes != 0 && swap_kbytes < conf::cfg.system.max_swap_kbytes)
-            std::cerr << "Swap should be greater than " << conf::cfg.system.max_swap_kbytes << "KB.\n";        
+        {
+            std::cerr << "Swap should be greater than " << conf::cfg.system.max_swap_kbytes << "KB.\n";
+            return 1;
+        }
         else if (swap_kbytes != 0)
             conf::cfg.system.max_swap_kbytes = swap_kbytes;
-        
+
         if (disk_kbytes != 0 && disk_kbytes < conf::cfg.system.max_storage_kbytes)
-            std::cerr << "Storage should be greater than " << conf::cfg.system.max_storage_kbytes << "KB.\n";        
+        {
+            std::cerr << "Storage should be greater than " << conf::cfg.system.max_storage_kbytes << "KB.\n";
+            return 1;
+        }
         else if (disk_kbytes != 0)
             conf::cfg.system.max_storage_kbytes = disk_kbytes;
 

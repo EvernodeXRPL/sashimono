@@ -676,7 +676,8 @@ function apply_ssl() {
 }
 
 function reconfig() {
-    ! $SASHIMONO_BIN/sagent reconfig $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+    echo "Staring reconfiguration..."
+    ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
         echo "There was an error in updating sashimono configuration." && exit 1
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $rippled_server &&
         echo "There was an error in updating message board configuration." && exit 1
@@ -687,11 +688,14 @@ function reconfig() {
     ( ( [ ! -z "$alloc_ramKB" ] && [ $alloc_ramKB -gt 0 ] ) ||
         ( [ ! -z "$alloc_swapKB" ] && [ $alloc_swapKB -gt 0 ] ) ||
         ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) &&
+        echo "Updating the cgroup configuration..." &&
         ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echo "Error occured while upgrading cgroup allocations\n" && exit 1
 
     # Update disk quotas.
     if ( ( [ ! -z "$alloc_diskKB" ] && [ $alloc_diskKB -gt 0 ] ) ||
         ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) ; then
+        echo "Updating the disk quotas..."
+
         users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
         readarray -t userarr <<<"$users"
         sashiusers=()
@@ -715,6 +719,8 @@ function reconfig() {
     # Restart the message board service.
     if ( ( [ ! -z "$lease_amount" ] && [ $lease_amount -gt 0 ] ) ||
         [ ! -z "$rippled_server" ] ) ; then
+        echo "Restarting the message board..."
+
         mb_user_id=$(id -u "$MB_XRPL_USER")
         mb_user_runtime_dir="/run/user/$mb_user_id"
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE

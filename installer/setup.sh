@@ -711,6 +711,14 @@ function reconfig() {
             done
         fi
     fi
+
+    # Restart the message board service.
+    if ( ( [ ! -z "$lease_amount" ] && [ $lease_amount -gt 0 ] ) ||
+        [ ! -z "$rippled_server" ] ) ; then
+        mb_user_id=$(id -u "$MB_XRPL_USER")
+        mb_user_runtime_dir="/run/user/$mb_user_id"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+    fi
 }
 
 # Begin setup execution flow --------------------

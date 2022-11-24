@@ -569,7 +569,7 @@ class MessageBoard {
         // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-        this.hostClient.refreshConfig();
+        await this.hostClient.refreshConfig();
         const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
         await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
     }

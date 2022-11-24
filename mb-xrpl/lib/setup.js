@@ -244,14 +244,16 @@ class Setup {
         else if (config.rippledServer && config.rippledServer.match(/(ws(s)?:\/\/.*)/g))
             throw 'Provided Rippled Server is invalid';
 
-        if (config.leaseAmount)
-            cfg.leaseAmount = config.leaseAmount;
+        const leaseAmount = config.leaseAmount ? parseInt(config.leaseAmount) : 0;
+        if (leaseAmount)
+            cfg.leaseAmount = leaseAmount;
         if (config.rippledServer)
             cfg.rippledServer = config.rippledServer;
 
         this.#saveConfig(cfg);
 
-        await Promise.resolve(); // async placeholder.
+        if (leaseAmount)
+            await this.recreateUnsoldLeases(leaseAmount);
     }
 
     // Burn the host minted NFTs at the de-registration.
@@ -288,6 +290,32 @@ class Setup {
             await xrplAcc.burnNft(nft.nfTokenId, sold ? nft.ownerAddress : null);
             console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting NFT (${nft.nfTokenId}) of ${nft.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
+    }
+
+    // Recreate unsold NFTs
+    async recreateUnsoldLeases(leaseAmount) {
+        const acc = this.#getConfig().xrpl;
+        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Get unsold NFTs.
+        const nfts = (await hostClient.xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
+            .map(o => { return { nfTokenId: o.NFTokenID, ownerAddress: hostClient.xrplAcc.address }; });
+
+        for (const nft of nfts) {
+            try {
+                await hostClient.expireLease(nft.nfTokenId);
+                await hostClient.refreshConfig();
+                await hostClient.offerLease(leaseIndex, leaseAmount ? leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice), appenv.TOS_HASH);
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
+
+        await hostClient.disconnect();
     }
 }
 

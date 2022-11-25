@@ -677,53 +677,69 @@ function reconfig() {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
     echo "Staring reconfiguration..."
-    ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
-        echo "There was an error in updating sashimono configuration." && exit 1
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $rippled_server $alloc_instcount &&
-        echo "There was an error in updating message board configuration." && exit 1
 
-    # Update resources of the existing users.
+    if ( [[ $alloc_cpu -gt 0 ]] || [[ $alloc_ramKB -gt 0 ]] || [[ $alloc_swapKB -gt 0 ]] || [[ $alloc_diskKB -gt 0 ]] || [[ $alloc_instcount -gt 0 ]] ) ; then
 
-    # Update cgroup allocations.
-    ( ( [ ! -z "$alloc_ramKB" ] && [ $alloc_ramKB -gt 0 ] ) ||
-        ( [ ! -z "$alloc_swapKB" ] && [ $alloc_swapKB -gt 0 ] ) ||
-        ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) &&
-        echo "Updating the cgroup configuration..." &&
-        ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echo "Error occured while upgrading cgroup allocations\n" && exit 1
+        echo -e "Using allocation"
+        [[ $alloc_cpu -gt 0 ]] && echo -e "$alloc_cpu US CPU"
+        [[ $alloc_ramKB -gt 0 ]] && echo -e "$(GB $alloc_ramKB) RAM"
+        [[ $alloc_swapKB -gt 0 ]] && echo -e "$(GB $alloc_swapKB) Swap"
+        [[ $alloc_diskKB -gt 0 ]] && echo -e "$(GB $alloc_diskKB) disk space"
+        [[ $alloc_instcount -gt 0 ]] && echo -e "Distributed among $alloc_instcount contract instances\n"
+        
+        echo "Configuaring sashimono..."
 
-    # Update disk quotas.
-    if ( ( [ ! -z "$alloc_diskKB" ] && [ $alloc_diskKB -gt 0 ] ) ||
-        ( [ ! -z "$alloc_instcount" ] && [ $alloc_instcount -gt 0 ] ) ) ; then
-        echo "Updating the disk quotas..."
+        ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+            echo "There was an error in updating sashimono configuration." && exit 1
 
-        users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
-        readarray -t userarr <<<"$users"
-        sashiusers=()
-        for user in "${userarr[@]}"; do
-            [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
-            sashiusers+=("$user")
-        done
+        # Update cgroup allocations.
+        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] [ $alloc_instcount -gt 0 ] ) &&
+            echo "Updating the cgroup configuration..." &&
+            ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echo "Error occured while upgrading cgroup allocations\n" && exit 1
 
-        saconfig="$SASHIMONO_DATA/sa.cfg"
-        max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
-        max_instance_count=$(jq '.system.max_instance_count' $saconfig)
-        disk=$(expr $max_storage_kbytes / $max_instance_count)
-        ucount=${#sashiusers[@]}
-        if [ $ucount -gt 0 ]; then
-            for user in "${sashiusers[@]}"; do
-                setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+        # Update disk quotas.
+        if ( [ $alloc_diskKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) ; then
+            echo "Updating the disk quotas..."
+
+            users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+            readarray -t userarr <<<"$users"
+            sashiusers=()
+            for user in "${userarr[@]}"; do
+                [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+                sashiusers+=("$user")
             done
+
+            saconfig="$SASHIMONO_DATA/sa.cfg"
+            max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+            max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+            disk=$(expr $max_storage_kbytes / $max_instance_count)
+            ucount=${#sashiusers[@]}
+            if [ $ucount -gt 0 ]; then
+                for user in "${sashiusers[@]}"; do
+                    setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+                done
+            fi
         fi
     fi
 
-    # Restart the message board service.
-    if ( ( [ ! -z "$lease_amount" ] && [ $lease_amount -gt 0 ] ) ||
-        [ ! -z "$rippled_server" ] ) ; then
-        echo "Restarting the message board..."
+    if ( [ ! -z "$rippled_server" ] || [[ $lease_amount -gt 0 ]] || [[ $alloc_instcount -gt 0 ]] ) ; then
 
-        mb_user_id=$(id -u "$MB_XRPL_USER")
-        mb_user_runtime_dir="/run/user/$mb_user_id"
-        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+        [ ! -z "$rippled_server" ] && echo -e "Using the rippled address '$rippled_server'.\n"
+        [[ $lease_amount -gt 0 ]] && (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+        
+        echo "Configuaring message board..."
+
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $rippled_server $alloc_instcount &&
+            echo "There was an error in updating message board configuration." && exit 1
+
+        # Restart the message board service.
+        if ( [ $lease_amount -gt 0 ] || [ ! -z "$rippled_server" ] ) ; then
+            echo "Restarting the message board..."
+
+            mb_user_id=$(id -u "$MB_XRPL_USER")
+            mb_user_runtime_dir="/run/user/$mb_user_id"
+            sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+        fi
     fi
 }
 
@@ -851,17 +867,6 @@ elif [ "$mode" == "reconfig" ]; then
     [ ! -z $alloc_instcount ] && [ $alloc_instcount != 0 ] && ! validate_positive_decimal $alloc_instcount && echo "Invalid instance count." && exit 1
     [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
     [ ! -z $rippled_server ] && ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
-
-    [ ! -z "$rippled_server" ] && echo -e "Using the rippled address '$rippled_server'.\n"
-    [[ $lease_amount -gt 0 ]] && (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
-    if ( [[ $alloc_cpu -gt 0 ]] || [[ $alloc_ramKB -gt 0 ]] || [[ $alloc_swapKB -gt 0 ]] || [[ $alloc_diskKB -gt 0 ]] || [[ $alloc_instcount -gt 0 ]] ) ; then
-        echo -e "Using allocation"
-        [[ $alloc_cpu -gt 0 ]] && echo -e "$alloc_cpu US CPU"
-        [[ $alloc_ramKB -gt 0 ]] && echo -e "$(GB $alloc_ramKB) RAM"
-        [[ $alloc_swapKB -gt 0 ]] && echo -e "$(GB $alloc_swapKB) Swap"
-        [[ $alloc_diskKB -gt 0 ]] && echo -e "$(GB $alloc_diskKB) disk space"
-        [[ $alloc_instcount -gt 0 ]] && echo -e "Distributed among $alloc_instcount contract instances\n"
-    fi
 
     reconfig
 

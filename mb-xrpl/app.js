@@ -40,11 +40,8 @@ async function main() {
             else if (process.argv.length === 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
-            else if (process.argv.length === 5 && process.argv[2] === 'reconfig') {
-                await new Setup().changeConfig({
-                    leaseAmount: process.argv[3],
-                    rippledServer: process.argv[4]
-                });
+            else if (process.argv.length === 6 && process.argv[2] === 'reconfig') {
+                await new Setup().changeConfig(process.argv[3], process.argv[4], process.argv[5]);
             }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
@@ -71,7 +68,7 @@ async function main() {
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
-            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH);
+            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH);
             await mb.init();
         }
 

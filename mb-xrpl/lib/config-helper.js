@@ -39,6 +39,13 @@ class ConfigHelper {
         fs.writeFileSync(secretConfigPath, JSON.stringify(secretCfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
         fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
+
+    static readSashiConfig(sashiConfigPath) {
+        if (!fs.existsSync(sashiConfigPath))
+            throw `Sashimono config file does not exist at ${sashiConfigPath}`;
+
+        return JSON.parse(fs.readFileSync(sashiConfigPath).toString());
+    }
 }
 
 module.exports = {

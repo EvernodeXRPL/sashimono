@@ -236,13 +236,15 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount) {
         const cfg = this.#getConfig();
 
         if (leaseAmount && isNaN(leaseAmount))
             throw 'Lease amount should be a number';
         else if (rippledServer && !rippledServer.match(/(ws(s)?:\/\/.*)/g))
             throw 'Provided Rippled Server is invalid';
+        else if (totalInstanceCount && isNaN(totalInstanceCount))
+            throw 'Mac instance count should be a number';
 
         const leaseAmountParsed = leaseAmount ? parseInt(leaseAmount) : 0;
         if (leaseAmountParsed)

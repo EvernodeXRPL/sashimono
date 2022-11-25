@@ -216,11 +216,11 @@ int main(int argc, char **argv)
 
         size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
-        if (((argc >= 4) && (util::stoull(argv[3], inst_count) != 0 || inst_count == 0)) ||
-            ((argc >= 5) && (util::stoull(argv[4], cpu_us) != 0 || cpu_us == 0)) ||
-            ((argc >= 6) && (util::stoull(argv[5], ram_kbytes) != 0 || ram_kbytes == 0)) ||
-            ((argc >= 7) && (util::stoull(argv[6], swap_kbytes) != 0 || swap_kbytes == 0)) ||
-            ((argc >= 8) && (util::stoull(argv[7], disk_kbytes) != 0 || disk_kbytes == 0)))
+        if (((argc >= 4) && (util::stoull(argv[3], inst_count) != 0)) ||
+            ((argc >= 5) && (util::stoull(argv[4], cpu_us) != 0)) ||
+            ((argc >= 6) && (util::stoull(argv[5], ram_kbytes) != 0)) ||
+            ((argc >= 7) && (util::stoull(argv[6], swap_kbytes) != 0)) ||
+            ((argc >= 8) && (util::stoull(argv[7], disk_kbytes) != 0)))
         {
             std::cerr << "Invalid Sashimono Agent config update args.\n";
             std::cerr << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", "
@@ -233,12 +233,29 @@ int main(int argc, char **argv)
 
         salog::init();
 
+        // Skip if new instance count is less than active instance count.
+        if (inst_count > 0)
+        {
+            if (hp::init() == -1)
+                return 1;
+
+            std::vector<hp::instance_info> instances;
+            hp::get_instance_list(instances);
+            hp::deinit();
+
+            if (instances.size() > inst_count)
+            {
+                std::cerr << "There are " << instances.size() << "active instances, So max instance count cannot be less than that.\n";
+                return 1;
+            }
+        }
+
         if (inst_count != 0 && inst_count > conf::cfg.system.max_instance_count)
         {
             std::cerr << "Instance count should be less than " << conf::cfg.system.max_instance_count << ".\n";
             return 1;
         }
-        else if (inst_count != 0)
+        else if (inst_count > 0)
             conf::cfg.system.max_instance_count = inst_count;
 
         if (cpu_us != 0 && cpu_us < conf::cfg.system.max_cpu_us)
@@ -246,7 +263,7 @@ int main(int argc, char **argv)
             std::cerr << "CPU quota should be greater than " << conf::cfg.system.max_cpu_us << "us.\n";
             return 1;
         }
-        else if (cpu_us != 0)
+        else if (cpu_us > 0)
             conf::cfg.system.max_cpu_us = cpu_us;
 
         if (ram_kbytes != 0 && ram_kbytes < conf::cfg.system.max_mem_kbytes)
@@ -254,7 +271,7 @@ int main(int argc, char **argv)
             std::cerr << "RAM should be greater than " << conf::cfg.system.max_mem_kbytes << "KB.\n";
             return 1;
         }
-        else if (ram_kbytes != 0)
+        else if (ram_kbytes > 0)
             conf::cfg.system.max_mem_kbytes = ram_kbytes;
 
         if (swap_kbytes != 0 && swap_kbytes < conf::cfg.system.max_swap_kbytes)
@@ -262,7 +279,7 @@ int main(int argc, char **argv)
             std::cerr << "Swap should be greater than " << conf::cfg.system.max_swap_kbytes << "KB.\n";
             return 1;
         }
-        else if (swap_kbytes != 0)
+        else if (swap_kbytes > 0)
             conf::cfg.system.max_swap_kbytes = swap_kbytes;
 
         if (disk_kbytes != 0 && disk_kbytes < conf::cfg.system.max_storage_kbytes)
@@ -270,7 +287,7 @@ int main(int argc, char **argv)
             std::cerr << "Storage should be greater than " << conf::cfg.system.max_storage_kbytes << "KB.\n";
             return 1;
         }
-        else if (disk_kbytes != 0)
+        else if (disk_kbytes > 0)
             conf::cfg.system.max_storage_kbytes = disk_kbytes;
 
         if (conf::write_config(conf::cfg) != 0)

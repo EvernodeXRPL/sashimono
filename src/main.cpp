@@ -42,7 +42,7 @@ int parse_cmd(int argc, char **argv)
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2) ||
-            (conf::ctx.command == "reconfig" && argc >= 2 && argc <= 7))
+            (conf::ctx.command == "reconfig" && argc >= 2 && argc <= 8))
             return 0;
     }
 
@@ -234,7 +234,7 @@ int main(int argc, char **argv)
         salog::init();
 
         // Skip if new instance count is less than active instance count.
-        if (inst_count > 0)
+        if (inst_count != 0)
         {
             if (hp::init() == -1)
                 return 1;

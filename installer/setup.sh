@@ -678,14 +678,16 @@ function reconfig() {
 
     echo "Staring reconfiguration..."
 
+    local updated=0
+
     if ( [[ $alloc_cpu -gt 0 ]] || [[ $alloc_ramKB -gt 0 ]] || [[ $alloc_swapKB -gt 0 ]] || [[ $alloc_diskKB -gt 0 ]] || [[ $alloc_instcount -gt 0 ]] ) ; then
 
         echo -e "Using allocation"
-        [[ $alloc_cpu -gt 0 ]] && echo -e "$alloc_cpu US CPU"
-        [[ $alloc_ramKB -gt 0 ]] && echo -e "$(GB $alloc_ramKB) RAM"
-        [[ $alloc_swapKB -gt 0 ]] && echo -e "$(GB $alloc_swapKB) Swap"
-        [[ $alloc_diskKB -gt 0 ]] && echo -e "$(GB $alloc_diskKB) disk space"
-        [[ $alloc_instcount -gt 0 ]] && echo -e "Distributed among $alloc_instcount contract instances\n"
+        [[ $alloc_cpu -gt 0 ]] && echo -e "$alloc_cpu US CPU" || alloc_cpu=0
+        [[ $alloc_ramKB -gt 0 ]] && echo -e "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
+        [[ $alloc_swapKB -gt 0 ]] && echo -e "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
+        [[ $alloc_diskKB -gt 0 ]] && echo -e "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
+        [[ $alloc_instcount -gt 0 ]] && echo -e "Distributed among $alloc_instcount contract instances\n" || alloc_instcount=0
         
         echo "Configuaring sashimono..."
 
@@ -720,26 +722,31 @@ function reconfig() {
                 done
             fi
         fi
+
+        updated=1
     fi
 
     if ( [ ! -z "$rippled_server" ] || [[ $lease_amount -gt 0 ]] || [[ $alloc_instcount -gt 0 ]] ) ; then
 
         [ ! -z "$rippled_server" ] && echo -e "Using the rippled address '$rippled_server'.\n"
-        [[ $lease_amount -gt 0 ]] && (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+        [[ $lease_amount -gt 0 ]] && echo -e "Using lease amount $lease_amount EVRs.\n" || lease_amount=0
+        [[ $alloc_instcount -gt 0 ]] || alloc_instcount=0
         
         echo "Configuaring message board..."
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $rippled_server $alloc_instcount &&
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
             echo "There was an error in updating message board configuration." && exit 1
 
-        # Restart the message board service.
-        if ( [ $lease_amount -gt 0 ] || [ ! -z "$rippled_server" ] ) ; then
-            echo "Restarting the message board..."
+        updated=1
+    fi
 
-            mb_user_id=$(id -u "$MB_XRPL_USER")
-            mb_user_runtime_dir="/run/user/$mb_user_id"
-            sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
-        fi
+    # Restart the message board service.
+    if [ $updated == 1 ] ; then
+        echo "Restarting the message board..."
+
+        mb_user_id=$(id -u "$MB_XRPL_USER")
+        mb_user_runtime_dir="/run/user/$mb_user_id"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
     fi
 }
 
@@ -859,6 +866,9 @@ elif [ "$mode" == "reconfig" ]; then
     alloc_instcount=${6}   # Total contract instance count.
     lease_amount=${7}      # Contract instance lease amount in EVRs.
     rippled_server=${8}    # Ripple URL
+
+    [ -z $alloc_cpu ] && [ -z $alloc_ramKB ] && [ -z $alloc_swapKB ] && [ -z $alloc_diskKB ] && [ -z $alloc_instcount ] && [ -z $lease_amount ] && [ -z $rippled_server ] &&
+        echomult "Invalid arguments.\n  Usage: sagent reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
 
     [ ! -z $alloc_cpu ] && [ $alloc_cpu != 0 ] && ( ! ( validate_positive_decimal $alloc_cpu && [[ $alloc_cpu -le 1000000 ]] ) ) && echo "Invalid cpu allocation." && exit 1
     [ ! -z $alloc_ramKB ] && [ $alloc_ramKB != 0 ] && ! validate_positive_decimal $alloc_ramKB && echo "Invalid ram size." && exit 1

@@ -41,7 +41,7 @@ async function main() {
                 await new Setup().upgrade();
             }
             else if (process.argv.length === 6 && process.argv[2] === 'reconfig') {
-                await new Setup().changeConfig(process.argv[3], process.argv[4], process.argv[5]);
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4]);
             }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
@@ -53,7 +53,7 @@ async function main() {
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.
-        node index.js reconfig [leaseAmount] [rippledServer] - Update message board configuration.
+        node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
         node index.js help - Print help.`);
             }
             else {

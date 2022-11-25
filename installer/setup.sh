@@ -451,6 +451,20 @@ function set_rippled_server() {
 
 }
 
+function set_host_xrpl_secret() {
+
+    if $interactive; then
+        local secret=''
+        while true ; do
+            read -p "Specify the XRPL account secret: " secret </dev/tty
+            ! [[ $secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." || break
+
+        done
+
+        xrpl_account_secret=$secret
+    fi
+}
+
 function install_failure() {
     echo "There was an error during installation. Please provide the file $logfile to Evernode team. Thank you."
     exit 1
@@ -502,7 +516,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -669,20 +683,21 @@ echo "Thank you for trying out $evernode!"
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}           # IP or DNS address.
-        init_peer_port=${4}     # Starting peer port for instances.
-        init_user_port=${5}     # Starting user port for instances.
-        countrycode=${6}        # 2-letter country code.
-        alloc_cpu=${7}          # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}        # RAM to allocate for contract instances.
-        alloc_swapKB=${9}       # Swap to allocate for contract instances.
-        alloc_diskKB=${10}      # Disk space to allocate for contract instances.
-        alloc_instcount=${11}   # Total contract instance count.
-        lease_amount=${12}      # Contract instance lease amount in EVRs.
-        rippled_server=${13}    # Ripple URL
-        tls_key_file=${14}      # File path to the tls private key.
-        tls_cert_file=${15}     # File path to the tls certificate.
-        tls_cabundle_file=${16} # File path to the tls ca bundle.
+        inetaddr=${3}             # IP or DNS address.
+        init_peer_port=${4}       # Starting peer port for instances.
+        init_user_port=${5}       # Starting user port for instances.
+        countrycode=${6}          # 2-letter country code.
+        alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}          # RAM to allocate for contract instances.
+        alloc_swapKB=${9}         # Swap to allocate for contract instances.
+        alloc_diskKB=${10}        # Disk space to allocate for contract instances.
+        alloc_instcount=${11}     # Total contract instance count.
+        lease_amount=${12}        # Contract instance lease amount in EVRs.
+        rippled_server=${13}      # Ripple URL
+        xrpl_account_secret=${14} # XRPL account secret.
+        tls_key_file=${15}        # File path to the tls private key.
+        tls_cert_file=${16}       # File path to the tls certificate.
+        tls_cabundle_file=${17}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -712,6 +727,9 @@ if [ "$mode" == "install" ]; then
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
             \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
+
+    set_host_xrpl_secret
+    echo -e "Using entered value as the XRPL account serect for the configuration.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"

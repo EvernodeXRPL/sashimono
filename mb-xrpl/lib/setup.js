@@ -73,6 +73,46 @@ class Setup {
         });
     }
 
+    async setupHostAccount(secret, rippledServer, registryAddress, domain) {
+
+        setEvernodeDefaults(registryAddress, rippledServer);
+
+        const xrplApi = new evernode.XrplApi(rippledServer);
+        const acc = new evernode.XrplAccount(null, secret, { xrplApi: xrplApi });
+
+        // Prepare host account.
+        {
+            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${registryAddress})`);
+            const hostClient = new evernode.HostClient(acc.address, acc.secret);
+            await hostClient.connect();
+
+            // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
+            // haven't still updated the ledger. In such cases, we retry several times before giving up.
+            {
+                let attempts = 0;
+                while (attempts >= 0) {
+                    try {
+                        await hostClient.prepareAccount(domain);
+                        break;
+                    }
+                    catch (err) {
+                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
+                            console.log("actNotFound - retrying...")
+                            // Wait and retry.
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
+            }
+
+            await hostClient.disconnect();
+        }
+
+        return acc;
+    }
+
     async generateBetaHostAccount(rippledServer, registryAddress, domain) {
 
         setEvernodeDefaults(registryAddress, rippledServer);

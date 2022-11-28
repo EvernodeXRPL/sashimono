@@ -16,9 +16,10 @@ diskKB=${9}
 description=${10}
 lease_amount=${11}
 rippled_server=${12}
-tls_key_file=${13}
-tls_cert_file=${14}
-tls_cabundle_file=${15}
+xrpl_account_secret=${13}
+tls_key_file=${14}
+tls_cert_file=${15}
+tls_cabundle_file=${16}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -104,7 +105,7 @@ function setup_tls_certs() {
         # ca bundle is optional.
         [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] && \
             cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
-            
+
     else
         # If user has not provided certs we generate self-signed ones.
         stage "Generating self-signed certificates"
@@ -193,11 +194,16 @@ if [ "$NO_MB" == "" ]; then
 
     # Betage and register if not upgrade mode.
     if [ "$UPGRADE" == "0" ]; then
-        # Generate beta host account (if not already setup).
+        # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+
+            # Commented for now, because 'betagen' will no longer be used.
+            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
+            # doreg=1
+
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

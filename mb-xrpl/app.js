@@ -40,7 +40,7 @@ async function main() {
             else if (process.argv.length === 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
-            else if (process.argv.length === 6 && process.argv[2] === 'reconfig') {
+            else if ((process.argv.length === 5 || process.argv.length === 6) && process.argv[2] === 'reconfig') {
                 await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4]);
             }
             else if (process.argv[2] === 'help') {

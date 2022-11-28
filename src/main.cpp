@@ -231,63 +231,72 @@ int main(int argc, char **argv)
         if (conf::init() != 0)
             return 1;
 
+        // Return if not changed.
+        if ((inst_count == 0 || conf::cfg.system.max_instance_count == inst_count) &&
+            (cpu_us == 0 || conf::cfg.system.max_cpu_us == cpu_us) &&
+            (ram_kbytes == 0 || conf::cfg.system.max_mem_kbytes == ram_kbytes) &&
+            (swap_kbytes == 0 || conf::cfg.system.max_swap_kbytes == swap_kbytes) &&
+            (disk_kbytes == 0 || conf::cfg.system.max_storage_kbytes == disk_kbytes))
+            return 0;
+
         salog::init();
 
-        // Skip if new instance count is less than active instance count.
-        if (inst_count != 0)
+        if (hp::init() == -1)
+            return 1;
+
+        std::vector<hp::instance_info> instances;
+        hp::get_instance_list(instances);
+        hp::deinit();
+
+        // If there are active instances, do not allow reducing the resources per instance. Otherwise we allow adjusting resources.
+        if (inst_count != 0 && instances.size() > inst_count)
         {
-            if (hp::init() == -1)
-                return 1;
+            std::cerr << "There are " << instances.size() << "active instances, So max instance count cannot be less than that.\n";
+            return 1;
+        }
+        else if (instances.size() > 0)
+        {
+            size_t new_count = inst_count != 0 ? inst_count : conf::cfg.system.max_instance_count;
+            size_t new_cpu = cpu_us != 0 ? cpu_us : conf::cfg.system.max_cpu_us;
+            size_t new_ram = ram_kbytes != 0 ? ram_kbytes : conf::cfg.system.max_mem_kbytes;
+            size_t new_swap = swap_kbytes != 0 ? swap_kbytes : conf::cfg.system.max_swap_kbytes;
+            size_t new_disk = disk_kbytes != 0 ? disk_kbytes : conf::cfg.system.max_storage_kbytes;
 
-            std::vector<hp::instance_info> instances;
-            hp::get_instance_list(instances);
-            hp::deinit();
-
-            if (instances.size() > inst_count)
+            if (new_cpu / new_count < conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count)
             {
-                std::cerr << "There are " << instances.size() << "active instances, So max instance count cannot be less than that.\n";
+                std::cerr << "CPU per instance should be greater than " << conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count << "us.\n";
+                return 1;
+            }
+            else if (new_ram / new_count < conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "RAM per instance should be greater than " << conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
+                return 1;
+            }
+            else if (new_swap / new_count < conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "Swap per instance should be greater than " << conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
+                return 1;
+            }
+            else if (new_disk / new_count < conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "Storage per instance should be greater than " << conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
                 return 1;
             }
         }
 
-        if (inst_count != 0 && inst_count > conf::cfg.system.max_instance_count)
-        {
-            std::cerr << "Instance count should be less than " << conf::cfg.system.max_instance_count << ".\n";
-            return 1;
-        }
-        else if (inst_count > 0)
+        if (inst_count > 0)
             conf::cfg.system.max_instance_count = inst_count;
 
-        if (cpu_us != 0 && cpu_us < conf::cfg.system.max_cpu_us)
-        {
-            std::cerr << "CPU quota should be greater than " << conf::cfg.system.max_cpu_us << "us.\n";
-            return 1;
-        }
-        else if (cpu_us > 0)
+        if (cpu_us > 0)
             conf::cfg.system.max_cpu_us = cpu_us;
 
-        if (ram_kbytes != 0 && ram_kbytes < conf::cfg.system.max_mem_kbytes)
-        {
-            std::cerr << "RAM should be greater than " << conf::cfg.system.max_mem_kbytes << "KB.\n";
-            return 1;
-        }
-        else if (ram_kbytes > 0)
+        if (ram_kbytes > 0)
             conf::cfg.system.max_mem_kbytes = ram_kbytes;
 
-        if (swap_kbytes != 0 && swap_kbytes < conf::cfg.system.max_swap_kbytes)
-        {
-            std::cerr << "Swap should be greater than " << conf::cfg.system.max_swap_kbytes << "KB.\n";
-            return 1;
-        }
-        else if (swap_kbytes > 0)
+        if (swap_kbytes > 0)
             conf::cfg.system.max_swap_kbytes = swap_kbytes;
 
-        if (disk_kbytes != 0 && disk_kbytes < conf::cfg.system.max_storage_kbytes)
-        {
-            std::cerr << "Storage should be greater than " << conf::cfg.system.max_storage_kbytes << "KB.\n";
-            return 1;
-        }
-        else if (disk_kbytes > 0)
+        if (disk_kbytes > 0)
             conf::cfg.system.max_storage_kbytes = disk_kbytes;
 
         if (conf::write_config(conf::cfg) != 0)

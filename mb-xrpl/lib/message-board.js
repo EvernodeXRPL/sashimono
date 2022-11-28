@@ -59,9 +59,13 @@ class MessageBoard {
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.#connectHost();
         // Get last heartbeat moment from the host info.
-        const hostInfo = await this.hostClient.getRegistration();
+        let hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
             throw "Host is not registered.";
+
+        this.regClient = new evernode.RegistryClient();
+        await this.#connectRegistry();
+        await this.regClient.subscribe();
 
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatIndex ? await this.hostClient.getMoment(hostInfo.lastHeartbeatIndex) : 0;
@@ -94,6 +98,26 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+        const checkAndRequestRebate = async () => {
+            // Send rebate request at startup if there's any pending rebates.
+            if (hostInfo?.registrationFee > hostRegFee) {
+                console.log(`Requesting rebate...`);
+                await this.hostClient.requestRebate();
+            }
+        }
+
+        let hostRegFee = this.hostClient.config.hostRegFee;
+        await checkAndRequestRebate();
+
+        // Listen to the host registrations and send rebate requests if registration fee updated.
+        this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
+            await this.hostClient.refreshConfig();
+            if (hostRegFee != this.hostClient.config.hostRegFee) {
+                hostRegFee = this.hostClient.config.hostRegFee;
+                hostInfo = await this.hostClient.getRegistration();
+                await checkAndRequestRebate();
+            }
+        });
 
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
@@ -231,13 +255,13 @@ class MessageBoard {
 
     // Connect the host and trying to reconnect in the event of account not found error.
     // Account not found error can be because of a network reset. (Dev and test nets)
-    async #connectHost() {
+    async #connect(client) {
         let attempts = 0;
         // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
                 attempts++;
-                const ret = await this.hostClient.connect();
+                const ret = await client.connect();
                 if (ret)
                     break;
             } catch (error) {
@@ -255,6 +279,14 @@ class MessageBoard {
                     throw error;
             }
         }
+    }
+
+    async #connectHost() {
+        await this.#connect(this.hostClient);
+    }
+
+    async #connectRegistry() {
+        await this.#connect(this.regClient);
     }
 
     #startPruneScheduler() {

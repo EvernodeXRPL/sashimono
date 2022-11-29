@@ -12,8 +12,15 @@ async function main() {
 
     try {
         if (process.argv.length >= 3) {
-            if (process.argv.length >= 3 && process.argv[2] === 'new') {
-                new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
+            if (process.argv.length == 8 && process.argv[2] === 'new') {
+                const accountSecret = process.argv[3];
+                const registryAddress = process.argv[4];
+                const domain = process.argv[5];
+                const leaseAmount = process.argv[6];
+                const rippledServer = process.argv[7];
+                const setup = new Setup();
+                const acc = await setup.setupHostAccount(accountSecret, rippledServer, registryAddress, domain);
+                setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const registryAddress = process.argv[3];
@@ -27,6 +34,10 @@ async function main() {
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12]);
+            }
+            else if (process.argv.length >= 3 && process.argv[2] === 'transfer') {
+                const transfereeAddress = (process.argv[3]) ? process.argv[3] : null;
+                await new Setup().transfer(transfereeAddress);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();
@@ -50,6 +61,7 @@ async function main() {
         node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
         node index.js betagen [registryAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
+        node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.

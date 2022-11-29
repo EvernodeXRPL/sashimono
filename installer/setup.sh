@@ -613,7 +613,7 @@ function update_evernode() {
     echo "Upgrade complete."
 }
 
-function init_evernode_tranfer() {
+function init_evernode_transfer() {
 
     if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
         [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
@@ -819,7 +819,7 @@ elif [ "$mode" == "transfer" ]; then
 
     set_transferee_address
 
-    init_evernode_tranfer
+    init_evernode_transfer
 
     uninstall_evernode 0
 

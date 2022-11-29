@@ -75,7 +75,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ]\
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -84,6 +84,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
                 \nupdate - Check and install $evernode software updates
+                \ntransfer - Initiate an $evernode transfer for your machine
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
@@ -113,9 +114,10 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
+    [ "$mode" == "transfer" ] && transfer=true || transfer=false
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -451,6 +453,26 @@ function set_rippled_server() {
 
 }
 
+
+function set_transferee_address() {
+    # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
+    [ -z $transferee_address ] && transferee_address=''
+
+    if $interactive; then
+        confirm "\nDo you want to set the current host account as the transferee's account also?" && return 0
+
+        local address=''
+        while true ; do
+            read -p "Specify the XRPL account address of the transferee: " address </dev/tty
+            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
+
+        done
+
+        transferee_address=$address
+    fi
+}
+
+
 function set_host_xrpl_secret() {
 
     if $interactive; then
@@ -544,13 +566,18 @@ function uninstall_evernode() {
     local ucount=${#sashiusers[@]}
 
     if [ "$upgrade" == "0" ] ; then
-        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to uninstall?" && exit 1
+        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to continue?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
 
-    [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
-    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-
+    if ! $transfer ; then
+        [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
+        ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    else
+        echo "Intiating Transfer..."
+        echo "Uninstalling for transfer..."
+        ! UPGRADE=$upgrade TRANSFER=1 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    fi
     # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
@@ -584,6 +611,15 @@ function update_evernode() {
     fi
 
     echo "Upgrade complete."
+}
+
+function init_evernode_transfer() {
+
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
+        [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
+            echo "Evernode transfer initiation was failed. Try again later." && exit 1
+    fi
+
 }
 
 function create_log() {
@@ -772,6 +808,22 @@ elif [ "$mode" == "uninstall" ]; then
     # Force uninstall on quiet mode.
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
+
+elif [ "$mode" == "transfer" ]; then
+    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
+            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+
+    if ! $interactive ; then
+        transferee_address=${3}           # Address of the transferee.
+    fi
+
+    set_transferee_address
+
+    init_evernode_transfer
+
+    uninstall_evernode 0
+
+    echo "Transfer process was sucessfully initiated."
 
 elif [ "$mode" == "status" ]; then
     reg_info

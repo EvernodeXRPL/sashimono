@@ -310,6 +310,20 @@ class Setup {
             console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting NFT (${nft.nfTokenId}) of ${nft.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
     }
+
+    // Initiate Host Machine Transfer.
+
+    async transfer(transfereeAddress) {
+        console.log("Transferring host...");
+        const acc = this.#getConfig().xrpl;
+        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+        await hostClient.transfer(transfereeAddress);
+        await this.burnMintedNfts(hostClient.xrplAcc);
+        await hostClient.disconnect();
+    }
 }
 
 module.exports = {

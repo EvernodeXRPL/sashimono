@@ -158,7 +158,7 @@ fi
 # Check whether mb user exists. If so deregister and remove the user.
 if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
-    if [ "$UPGRADE" == "0" ]; then
+    if [ "$UPGRADE" == "0" ] && [ "$TRANSFER" == "0" ]; then
         # Deregister evernode message board host registration.
         echo "Attempting Evernode host deregistration..."
         # Message board service is created at the end of the installation. So, if this exists previous installation is a successfull one.

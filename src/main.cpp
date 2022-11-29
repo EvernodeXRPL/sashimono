@@ -264,22 +264,22 @@ int main(int argc, char **argv)
 
             if (new_cpu / new_count < conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count)
             {
-                std::cerr << "CPU per instance should be greater than " << conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count << "us.\n";
+                std::cerr << "CPU per instance should be greater than " << conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count << " Micro Sec.\n";
                 return 1;
             }
             else if (new_ram / new_count < conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count)
             {
-                std::cerr << "RAM per instance should be greater than " << conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
+                std::cerr << "RAM per instance should be greater than " << conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
                 return 1;
             }
             else if (new_swap / new_count < conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count)
             {
-                std::cerr << "Swap per instance should be greater than " << conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
+                std::cerr << "Swap per instance should be greater than " << conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
                 return 1;
             }
             else if (new_disk / new_count < conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count)
             {
-                std::cerr << "Storage per instance should be greater than " << conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count << "KB.\n";
+                std::cerr << "Storage per instance should be greater than " << conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
                 return 1;
             }
         }

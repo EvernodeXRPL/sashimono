@@ -679,7 +679,7 @@ function reconfig() {
     local mb_user_id=$(id -u "$MB_XRPL_USER")
     local mb_user_runtime_dir="/run/user/$mb_user_id"
 
-    echo "Staring reconfiguration..."
+    echomult "\nStaring reconfiguration...\n"
 
     local saconfig="$SASHIMONO_DATA/sa.cfg"
     local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
@@ -690,7 +690,7 @@ function reconfig() {
 
     local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
     local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
-    local cfg_rippled_server=$(jq '.xrpl.rippledServer' $mbconfig)
+    local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
                 
     local update_sashi=0
     ( ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ||
@@ -706,42 +706,42 @@ function reconfig() {
         update_mb=1
 
     # Update only if changed
-    [ $update_sashi == 0 ] && [ $update_mb == 0 ] && echo "Given values are already configured!" && exit 0
+    [ $update_sashi == 0 ] && [ $update_mb == 0 ] && echomult "Given values are already configured!\n" && exit 0
 
     # Stop the services to stop any activities.
     # Stop the sashimono service.
     if [ $update_sashi == 1 ] ; then
-        echo "Stopping the sashimono..."
+        echomult "Stopping the sashimono...\n"
         systemctl stop $SASHIMONO_SERVICE
     fi
 
     # Stop the message board service.
     if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
-        echo "Stopping the message board..."
+        echomult "Stopping the message board...\n"
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
     fi
 
     if [ $update_sashi == 1 ] ; then
-        echo -e "\nUsing allocation"
-        [[ $alloc_cpu -gt 0 ]] && echo -e "$alloc_cpu US CPU" || alloc_cpu=0
-        [[ $alloc_ramKB -gt 0 ]] && echo -e "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
-        [[ $alloc_swapKB -gt 0 ]] && echo -e "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
-        [[ $alloc_diskKB -gt 0 ]] && echo -e "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
-        [[ $alloc_instcount -gt 0 ]] && echo -e "Distributed among $alloc_instcount contract instances\n" || alloc_instcount=0
+        echomult "Using allocation"
+        [[ $alloc_cpu -gt 0 ]] && echomult "$alloc_cpu Micro Sec CPU" || alloc_cpu=0
+        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
+        [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
+        [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
+        [[ $alloc_instcount -gt 0 ]] && echomult "Distributed among $alloc_instcount contract instances" || alloc_instcount=0
         
-        echo "Configuaring sashimono..."
+        echomult "\nConfiguaring sashimono...\n"
 
         ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
-            echo "There was an error in updating sashimono configuration." && exit 1
+            echomult "\nThere was an error in updating sashimono configuration.\n" && exit 1
 
         # Update cgroup allocations.
-        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] [ $alloc_instcount -gt 0 ] ) &&
-            echo "Updating the cgroup configuration..." &&
-            ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echo "Error occured while upgrading cgroup allocations\n" && exit 1
+        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) &&
+            echomult "Updating the cgroup configuration...\n" &&
+            ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echomult "\nError occured while upgrading cgroup allocations\n" && exit 1
 
         # Update disk quotas.
         if ( [ $alloc_diskKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) ; then
-            echo "Updating the disk quotas..."
+            echomult "Updating the disk quotas...\n"
 
             users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
             readarray -t userarr <<<"$users"
@@ -764,11 +764,11 @@ function reconfig() {
     fi
 
     if [ $update_mb == 1 ] ; then
-        [ ! -z "$rippled_server" ] && echo -e "Using the rippled address '$rippled_server'.\n"
-        [[ $lease_amount -gt 0 ]] && echo -e "Using lease amount $lease_amount EVRs.\n" || lease_amount=0
+        [ ! -z "$rippled_server" ] && echomult "Using the rippled address '$rippled_server'."
+        [[ $lease_amount -gt 0 ]] && echomult "Using lease amount $lease_amount EVRs." || lease_amount=0
         [[ $alloc_instcount -gt 0 ]] || alloc_instcount=0
         
-        echo "Configuaring message board..."
+        echomult "\nConfiguaring message board...\n"
 
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
             echo "There was an error in updating message board configuration." && exit 1
@@ -776,13 +776,13 @@ function reconfig() {
 
     # Start the sashimono service.
     if [ $update_sashi == 1 ] ; then
-        echo "Starting the sashimono..."
+        echomult "Starting the sashimono...\n"
         systemctl start $SASHIMONO_SERVICE
     fi
 
     # Start the message board service.
     if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
-        echo "Starting the message board..."
+        echomult "Starting the message board...\n"
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
     fi
 }

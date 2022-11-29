@@ -397,7 +397,7 @@ class Setup {
                 // If less than current count, Create only first chuck of the burned nfts.
                 // If greater than current count, create burned nfts plus extra nfts that are needed.
                 if (totalInstanceCount < soldCount + unsoldCount) {
-                    nftIndexesToCreate = nftIndexesToCreate.sort().slice(0, totalInstanceCount - soldCount);
+                    nftIndexesToCreate = nftIndexesToCreate.sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
                 }
                 else {
                     nftIndexesToCreate.push(...[...Array(totalInstanceCount - (soldCount + unsoldCount)).keys()].map(i => i + soldCount + unsoldCount));
@@ -407,7 +407,7 @@ class Setup {
         // If only instance count is changed decide whether we need to add or burn comparing the current count and updated count.
         else if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
             if (totalInstanceCount < soldCount + unsoldCount) {
-                nftsToBurn = unsoldNfts.sort((a, b) => a.leaseIndex < b.leaseIndex).slice(totalInstanceCount - soldCount);
+                nftsToBurn = unsoldNfts.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
                 nftIndexesToCreate = [];
             }
             else {

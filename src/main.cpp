@@ -21,6 +21,7 @@
         std::cerr << "sagent new [data_dir] [host_addr] [registry_addr] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n"; \
         std::cerr << "sagent run [data_dir]\n";                                                                                            \
         std::cerr << "sagent upgrade [data_dir]\n";                                                                                        \
+        std::cerr << "sagent reconfig [data_dir] [inst_count] [cpu_us] [ram_kbytes] [swap_kbytes] [disk_kbytes]\n";                        \
         std::cerr << "Example: sagent run /etc/sashimono\n";                                                                               \
         return -1;                                                                                                                         \
     }
@@ -40,7 +41,8 @@ int parse_cmd(int argc, char **argv)
         if ((conf::ctx.command == "new" && argc >= 2 && argc <= 12) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
-            (conf::ctx.command == "version" && argc == 2))
+            (conf::ctx.command == "version" && argc == 2) ||
+            (conf::ctx.command == "reconfig" && argc >= 2 && argc <= 8))
             return 0;
     }
 
@@ -204,6 +206,98 @@ int main(int argc, char **argv)
 
         if (conf::cfg.docker.registry_port == 0)
             conf::cfg.docker.registry_port = 4444;
+
+        if (conf::write_config(conf::cfg) != 0)
+            return -1;
+    }
+    else if (conf::ctx.command == "reconfig")
+    {
+        conf::set_dir_paths(argv[0], (argc >= 3) ? argv[2] : "");
+
+        size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
+
+        if (((argc >= 4) && (util::stoull(argv[3], inst_count) != 0)) ||
+            ((argc >= 5) && (util::stoull(argv[4], cpu_us) != 0)) ||
+            ((argc >= 6) && (util::stoull(argv[5], ram_kbytes) != 0)) ||
+            ((argc >= 7) && (util::stoull(argv[6], swap_kbytes) != 0)) ||
+            ((argc >= 8) && (util::stoull(argv[7], disk_kbytes) != 0)))
+        {
+            std::cerr << "Invalid Sashimono Agent config update args.\n";
+            std::cerr << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", "
+                      << swap_kbytes << ", " << disk_kbytes << "\n";
+            return 1;
+        }
+
+        if (conf::init() != 0)
+            return 1;
+
+        // Return if not changed.
+        if ((inst_count == 0 || conf::cfg.system.max_instance_count == inst_count) &&
+            (cpu_us == 0 || conf::cfg.system.max_cpu_us == cpu_us) &&
+            (ram_kbytes == 0 || conf::cfg.system.max_mem_kbytes == ram_kbytes) &&
+            (swap_kbytes == 0 || conf::cfg.system.max_swap_kbytes == swap_kbytes) &&
+            (disk_kbytes == 0 || conf::cfg.system.max_storage_kbytes == disk_kbytes))
+            return 0;
+
+        salog::init();
+
+        if (hp::init() == -1)
+            return 1;
+
+        std::vector<hp::instance_info> instances;
+        hp::get_instance_list(instances);
+        hp::deinit();
+
+        // If there are active instances, do not allow reducing the resources per instance. Otherwise we allow adjusting resources.
+        if (inst_count != 0 && instances.size() > inst_count)
+        {
+            std::cerr << "There are " << instances.size() << " active instances, So max instance count cannot be less than that.\n";
+            return 1;
+        }
+        else if (instances.size() > 0)
+        {
+            size_t new_count = inst_count != 0 ? inst_count : conf::cfg.system.max_instance_count;
+            size_t new_cpu = cpu_us != 0 ? cpu_us : conf::cfg.system.max_cpu_us;
+            size_t new_ram = ram_kbytes != 0 ? ram_kbytes : conf::cfg.system.max_mem_kbytes;
+            size_t new_swap = swap_kbytes != 0 ? swap_kbytes : conf::cfg.system.max_swap_kbytes;
+            size_t new_disk = disk_kbytes != 0 ? disk_kbytes : conf::cfg.system.max_storage_kbytes;
+
+            if (new_cpu / new_count < conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "CPU per instance should be greater than " << conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count << " Micro Sec.\n";
+                return 1;
+            }
+            else if (new_ram / new_count < conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "RAM per instance should be greater than " << conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
+                return 1;
+            }
+            else if (new_swap / new_count < conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "Swap per instance should be greater than " << conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
+                return 1;
+            }
+            else if (new_disk / new_count < conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count)
+            {
+                std::cerr << "Storage per instance should be greater than " << conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count << " KB.\n";
+                return 1;
+            }
+        }
+
+        if (inst_count > 0)
+            conf::cfg.system.max_instance_count = inst_count;
+
+        if (cpu_us > 0)
+            conf::cfg.system.max_cpu_us = cpu_us;
+
+        if (ram_kbytes > 0)
+            conf::cfg.system.max_mem_kbytes = ram_kbytes;
+
+        if (swap_kbytes > 0)
+            conf::cfg.system.max_swap_kbytes = swap_kbytes;
+
+        if (disk_kbytes > 0)
+            conf::cfg.system.max_storage_kbytes = disk_kbytes;
 
         if (conf::write_config(conf::cfg) != 0)
             return -1;

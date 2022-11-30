@@ -75,7 +75,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ]\
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "reconfig" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -83,6 +83,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
+                \reconfig - Change the host configuration.
                 \nupdate - Check and install $evernode software updates
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \nuninstall - Uninstall and deregister from $evernode" \
@@ -218,6 +219,16 @@ function validate_inet_addr() {
     # If invalid, reset inetaddr and return with non-zero code.
     [ -z "$resolved" ] && inetaddr="" && return 1
 
+    return 0
+}
+
+function validate_positive_decimal() {
+    ! [[ $1 =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && return 1
+    return 0
+}
+
+function validate_ws_url() {
+    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && return 1
     return 0
 }
 
@@ -390,17 +401,17 @@ function set_instance_alloc() {
 
         while true ; do
             read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid RAM size." || break
         done
 
         while true ; do
             read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-            ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
         done
 
         while true ; do
             read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-            ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
         done
 
         alloc_ramKB=$(( ramMB * 1000 ))
@@ -428,7 +439,7 @@ function set_lease_amount() {
         local amount=0
         while true ; do
             read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
-            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+            ! validate_positive_decimal $amount && echo "Lease amount should be a positive numerical value greater than zero." || break
         done
 
         lease_amount=$amount
@@ -445,7 +456,7 @@ function set_rippled_server() {
 
         while true ; do
             read -p "Specify the rippled URL: " newURL </dev/tty
-            ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+            ! validate_ws_url $newURL && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
         done
 
         rippled_server=$newURL
@@ -476,6 +487,7 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
+        echomult "In order to register in Evernode you need to have an XRPL account with EVRs.\n"
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty
@@ -712,6 +724,120 @@ function apply_ssl() {
     done
 }
 
+function reconfig() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+    echomult "\nStaring reconfiguration...\n"
+
+    local saconfig="$SASHIMONO_DATA/sa.cfg"
+    local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+    local max_cpu_us=$(jq '.system.max_cpu_us' $saconfig)
+    local max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)
+    local max_swap_kbytes=$(jq '.system.max_swap_kbytes' $saconfig)
+    local max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+
+    local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
+    local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
+    local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
+                
+    local update_sashi=0
+    ( ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ||
+        ( [[ $alloc_cpu -gt 0 ]] && [[ $max_cpu_us != $alloc_cpu ]] ) ||
+        ( [[ $alloc_ramKB -gt 0 ]] && [[ $max_mem_kbytes != $alloc_ramKB ]] ) ||
+        ( [[ $alloc_swapKB -gt 0 ]] && [[ $max_swap_kbytes != $alloc_swapKB ]] ) ||
+        ( [[ $alloc_diskKB -gt 0 ]] && [[ $max_storage_kbytes != $alloc_diskKB ]] ) ) &&
+        update_sashi=1
+    local update_mb=0
+    ( ( [ ! -z "$rippled_server" ] && [[ $cfg_rippled_server != $rippled_server ]] ) ||
+        ( [[ $lease_amount -gt 0 ]] && [[ $cfg_lease_amount != $lease_amount ]] ) ||
+        ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ) &&
+        update_mb=1
+
+    # Update only if changed
+    [ $update_sashi == 0 ] && [ $update_mb == 0 ] && echomult "Given values are already configured!\n" && exit 0
+
+    # Stop the services to stop any activities.
+    # Stop the sashimono service.
+    if [ $update_sashi == 1 ] ; then
+        echomult "Stopping the sashimono...\n"
+        systemctl stop $SASHIMONO_SERVICE
+    fi
+
+    # Stop the message board service.
+    if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
+        echomult "Stopping the message board...\n"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+    fi
+
+    if [ $update_sashi == 1 ] ; then
+        echomult "Using allocation"
+        [[ $alloc_cpu -gt 0 ]] && echomult "$alloc_cpu Micro Sec CPU" || alloc_cpu=0
+        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
+        [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
+        [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
+        [[ $alloc_instcount -gt 0 ]] && echomult "Distributed among $alloc_instcount contract instances" || alloc_instcount=0
+        
+        echomult "\nConfiguaring sashimono...\n"
+
+        ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+            echomult "\nThere was an error in updating sashimono configuration.\n" && exit 1
+
+        # Update cgroup allocations.
+        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) &&
+            echomult "Updating the cgroup configuration...\n" &&
+            ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echomult "\nError occured while upgrading cgroup allocations\n" && exit 1
+
+        # Update disk quotas.
+        if ( [ $alloc_diskKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) ; then
+            echomult "Updating the disk quotas...\n"
+
+            users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+            readarray -t userarr <<<"$users"
+            sashiusers=()
+            for user in "${userarr[@]}"; do
+                [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+                sashiusers+=("$user")
+            done
+
+            max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+            max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+            disk=$(expr $max_storage_kbytes / $max_instance_count)
+            ucount=${#sashiusers[@]}
+            if [ $ucount -gt 0 ]; then
+                for user in "${sashiusers[@]}"; do
+                    setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+                done
+            fi
+        fi
+    fi
+
+    if [ $update_mb == 1 ] ; then
+        [ ! -z "$rippled_server" ] && echomult "Using the rippled address '$rippled_server'."
+        [[ $lease_amount -gt 0 ]] && echomult "Using lease amount $lease_amount EVRs." || lease_amount=0
+        [[ $alloc_instcount -gt 0 ]] || alloc_instcount=0
+        
+        echomult "\nConfiguaring message board...\n"
+
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
+            echo "There was an error in updating message board configuration." && exit 1
+    fi
+
+    # Start the sashimono service.
+    if [ $update_sashi == 1 ] ; then
+        echomult "Starting the sashimono...\n"
+        systemctl start $SASHIMONO_SERVICE
+    fi
+
+    # Start the message board service.
+    if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
+        echomult "Starting the message board...\n"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+    fi
+}
+
 # Begin setup execution flow --------------------
 
 echo "Thank you for trying out $evernode!"
@@ -839,6 +965,30 @@ elif [ "$mode" == "log" ]; then
 
 elif [ "$mode" == "applyssl" ]; then
     apply_ssl $2 $3 $4
+
+elif [ "$mode" == "reconfig" ]; then
+    alloc_cpu=${2}          # CPU microsec to allocate for contract instances (max 1000000).
+    alloc_ramKB=${3}        # RAM to allocate for contract instances.
+    alloc_swapKB=${4}       # Swap to allocate for contract instances.
+    alloc_diskKB=${5}      # Disk space to allocate for contract instances.
+    alloc_instcount=${6}   # Total contract instance count.
+    lease_amount=${7}      # Contract instance lease amount in EVRs.
+    rippled_server=${8}    # Ripple URL
+
+    ( [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ] || [ -z $lease_amount ] ) &&
+        echomult "Invalid arguments.\n  Usage: sagent reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
+
+    [ ! -z $alloc_cpu ] && [ $alloc_cpu != 0 ] && ( ! ( validate_positive_decimal $alloc_cpu && [[ $alloc_cpu -le 1000000 ]] ) ) && echo "Invalid cpu allocation." && exit 1
+    [ ! -z $alloc_ramKB ] && [ $alloc_ramKB != 0 ] && ! validate_positive_decimal $alloc_ramKB && echo "Invalid ram size." && exit 1
+    [ ! -z $alloc_swapKB ] && [ $alloc_swapKB != 0 ] && ! validate_positive_decimal $alloc_swapKB && echo "Invalid swap size." && exit 1
+    [ ! -z $alloc_diskKB ] && [ $alloc_diskKB != 0 ] && ! validate_positive_decimal $alloc_diskKB && echo "Invalid disk size." && exit 1
+    [ ! -z $alloc_instcount ] && [ $alloc_instcount != 0 ] && ! validate_positive_decimal $alloc_instcount && echo "Invalid instance count." && exit 1
+    [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
+    [ ! -z $rippled_server ] && ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+
+    reconfig
+
+    echo "Successfully changed the configuration!"
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

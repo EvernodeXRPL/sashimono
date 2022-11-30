@@ -23,7 +23,7 @@ class MessageBoard {
     #graceTimeoutRef = null;
     #lastHaltedTime = null;
 
-    constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
+    constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
         this.secretConfigPath = secretConfigPath;
         this.leaseTable = appenv.DB_TABLE_NAME;
@@ -37,7 +37,8 @@ class MessageBoard {
         this.sashiCli = new SashiCLI(sashiCliPath);
         this.db = new SqliteDatabase(dbPath);
         this.sashiDb = new SqliteDatabase(sashiDbPath);
-        this.sashiTable = appenv.SASHI_TABLE_NAME
+        this.sashiTable = appenv.SASHI_TABLE_NAME;
+        this.sashiConfigPath = sashiConfigPath;
     }
 
     async init() {
@@ -84,10 +85,14 @@ class MessageBoard {
         // Catch up missed transactions based on the previously updated "last_watched_ledger" record (checkpoint).
         await this.#catchupMissedLeases().catch(console.error);
 
+        // Load the sashimono config.
+        const sashiConfig = ConfigHelper.readSashiConfig(this.sashiConfigPath);
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
+        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
+            sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
+            Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
         this.db.close();
 
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
@@ -601,7 +606,7 @@ class MessageBoard {
         // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-        this.hostClient.refreshConfig();
+        await this.hostClient.refreshConfig();
         const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
         await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
     }

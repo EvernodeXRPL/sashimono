@@ -185,6 +185,9 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
+        if (hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
+            throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
         let attempts = 0;
@@ -311,8 +314,8 @@ class Setup {
         }
     }
 
-    // Initiate Host Machine Transfer.
 
+    // Initiate Host Machine Transfer.
     async transfer(transfereeAddress) {
         console.log("Transferring host...");
         const acc = this.#getConfig().xrpl;
@@ -322,7 +325,162 @@ class Setup {
         await hostClient.connect();
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedNfts(hostClient.xrplAcc);
-        await hostClient.disconnect();
+    }
+
+    // Change the message board configurations.
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount) {
+
+        // Update the configuration.
+        const cfg = this.#getConfig();
+
+        if (leaseAmount && isNaN(leaseAmount))
+            throw 'Lease amount should be a number';
+        else if (rippledServer && !rippledServer.match(/^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$/g))
+            throw 'Provided Rippled Server is invalid';
+        else if (totalInstanceCount && isNaN(totalInstanceCount))
+            throw 'Maximum instance count should be a number';
+
+        const leaseAmountParsed = leaseAmount ? parseInt(leaseAmount) : 0;
+        const totalInstanceCountParsed = totalInstanceCount ? parseInt(totalInstanceCount) : 0;
+
+        // Return if not changed.
+        if (!totalInstanceCount &&
+            (!leaseAmount || cfg.xrpl.leaseAmount == leaseAmount) &&
+            (!rippledServer || cfg.xrpl.rippledServer == leaseAmount))
+            return;
+
+        await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, cfg);
+
+        if (leaseAmountParsed)
+            cfg.xrpl.leaseAmount = leaseAmountParsed;
+        if (rippledServer)
+            cfg.xrpl.rippledServer = rippledServer;
+        this.#saveConfig(cfg);
+    }
+
+    // Recreate unsold NFTs
+    async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, existingCfg) {
+        // Get sold NFTs.
+        const db = new SqliteDatabase(appenv.DB_PATH);
+        const leaseTable = appenv.DB_TABLE_NAME;
+
+        db.open();
+        const leaseRecords = (await db.getValues(leaseTable).finally(() => { db.close() })).filter(i => (i.status === "Acquired" || i.status === "Extended"));
+        const soldCount = leaseRecords.length;
+
+        if (totalInstanceCount && soldCount > totalInstanceCount)
+            throw `There are ${soldCount} active instances, So max instance count cannot be less than that.`;
+
+        const acc = existingCfg.xrpl;
+        let xrplApi;
+        let hostClient;
+
+        async function initClients(rippledServer) {
+            setEvernodeDefaults(acc.registryAddress, rippledServer);
+            xrplApi = new evernode.XrplApi();
+            hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
+            await xrplApi.connect();
+            await hostClient.connect();
+        }
+
+        async function deinitClients() {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        await initClients(acc.rippledServer);
+
+        // Get unsold NFTs.
+        const unsoldNfts = (await hostClient.xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
+            .map(n => { return { nfTokenId: n.NFTokenID, leaseIndex: evernode.UtilHelpers.decodeLeaseNftUri(n.URI).leaseIndex }; });
+        const unsoldCount = unsoldNfts.length;
+
+        // Return if not changed.
+        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount)) {
+            await deinitClients();
+            return;
+        }
+
+        async function getVacantLeaseIndexes(includeUnsold = true) {
+            let acquired = includeUnsold ? [] : unsoldNfts.map(n => n.leaseIndex);
+            let vacant = [];
+            for (const l of leaseRecords) {
+                try {
+                    const tenantAddress = l.tenant_xrp_address;
+                    const nfTokenId = l.container_name;
+                    const nft = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getNfts())?.find(n => n.NFTokenID == nfTokenId);
+                    if (nft) {
+                        const index = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI).leaseIndex;
+                        acquired.push(index);
+                    }
+                } catch {
+                }
+            }
+            let i = 0;
+            while (vacant.length + acquired.length < totalInstanceCount) {
+                if (!acquired.includes(i))
+                    vacant.push(i);
+                i++;
+            }
+            return vacant;
+        }
+
+        let nftsToBurn = [];
+        let nftIndexesToCreate = [];
+        // If lease amount is changed we need to burn all the unsold nfts
+        if ((leaseAmount && acc.leaseAmount !== leaseAmount) || (rippledServer && acc.rippledServer !== rippledServer)) {
+            nftsToBurn = unsoldNfts;
+
+            // If total instance count also changed decide the nfts that we need to create.
+            if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
+                // If less than current count, Create only first chuck of the burned nfts.
+                // If greater than current count, create burned nfts plus extra nfts that are needed.
+                if (totalInstanceCount < soldCount + unsoldCount) {
+                    nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex).sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
+                }
+                else {
+                    nftIndexesToCreate = await getVacantLeaseIndexes();
+                }
+            }
+        }
+        // If only instance count is changed decide whether we need to add or burn comparing the current count and updated count.
+        else if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
+            if (totalInstanceCount < soldCount + unsoldCount) {
+                nftsToBurn = unsoldNfts.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
+                nftIndexesToCreate = [];
+            }
+            else {
+                nftsToBurn = [];
+                nftIndexesToCreate = await getVacantLeaseIndexes(false);
+            }
+        }
+
+        for (const nft of nftsToBurn) {
+            try {
+                await hostClient.expireLease(nft.nfTokenId);
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
+
+        // If rippled server is changed, create new nfts from new server.
+        if (rippledServer && rippledServer !== acc.rippledServer) {
+            await initClients(rippledServer);
+        }
+
+        for (const idx of nftIndexesToCreate) {
+            try {
+                await hostClient.offerLease(idx,
+                    leaseAmount ? leaseAmount : (acc.leaseAmount ? acc.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice)),
+                    appenv.TOS_HASH);
+            }
+            catch (e) {
+                console.error(e);
+            }
+        }
+
+        await deinitClients();
     }
 }
 

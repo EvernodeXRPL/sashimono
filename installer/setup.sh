@@ -228,7 +228,7 @@ function validate_positive_decimal() {
 }
 
 function validate_ws_url() {
-    ! [[ $1 =~ ^(wss?:\/\/)([0-9]{1,3}(\.[0-9]{1,3}){3}|[^\/|^:]+)(:([0-9]{1,5}))?$ ]] && return 1
+    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && return 1
     return 0
 }
 

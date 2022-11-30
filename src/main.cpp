@@ -251,7 +251,7 @@ int main(int argc, char **argv)
         // If there are active instances, do not allow reducing the resources per instance. Otherwise we allow adjusting resources.
         if (inst_count != 0 && instances.size() > inst_count)
         {
-            std::cerr << "There are " << instances.size() << "active instances, So max instance count cannot be less than that.\n";
+            std::cerr << "There are " << instances.size() << " active instances, So max instance count cannot be less than that.\n";
             return 1;
         }
         else if (instances.size() > 0)

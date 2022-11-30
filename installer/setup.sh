@@ -75,7 +75,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ]\
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -84,6 +84,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
                 \nupdate - Check and install $evernode software updates
+                \ntransfer - Initiate an $evernode transfer for your machine
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
@@ -113,9 +114,10 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
+    [ "$mode" == "transfer" ] && transfer=true || transfer=false
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -465,6 +467,40 @@ function set_rippled_server() {
 
 }
 
+
+function set_transferee_address() {
+    # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
+    [ -z $transferee_address ] && transferee_address=''
+
+    if $interactive; then
+        confirm "\nDo you want to set the current host account as the transferee's account also?" && return 0
+
+        local address=''
+        while true ; do
+            read -p "Specify the XRPL account address of the transferee: " address </dev/tty
+            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
+
+        done
+
+        transferee_address=$address
+    fi
+}
+
+
+function set_host_xrpl_secret() {
+
+    if $interactive; then
+        local secret=''
+        while true ; do
+            read -p "Specify the XRPL account secret: " secret </dev/tty
+            ! [[ $secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." || break
+
+        done
+
+        xrpl_account_secret=$secret
+    fi
+}
+
 function install_failure() {
     echo "There was an error during installation. Please provide the file $logfile to Evernode team. Thank you."
     exit 1
@@ -516,7 +552,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -544,13 +580,18 @@ function uninstall_evernode() {
     local ucount=${#sashiusers[@]}
 
     if [ "$upgrade" == "0" ] ; then
-        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to uninstall?" && exit 1
+        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to continue?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
 
-    [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
-    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-
+    if ! $transfer ; then
+        [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
+        ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    else
+        echo "Intiating Transfer..."
+        echo "Uninstalling for transfer..."
+        ! UPGRADE=$upgrade TRANSFER=1 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    fi
     # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
@@ -584,6 +625,15 @@ function update_evernode() {
     fi
 
     echo "Upgrade complete."
+}
+
+function init_evernode_transfer() {
+
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
+        [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
+            echo "Evernode transfer initiation was failed. Try again later." && exit 1
+    fi
+
 }
 
 function create_log() {
@@ -683,21 +733,22 @@ echo "Thank you for trying out $evernode!"
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}           # IP or DNS address.
-        init_peer_port=${4}     # Starting peer port for instances.
-        init_user_port=${5}     # Starting user port for instances.
-        countrycode=${6}        # 2-letter country code.
-        alloc_cpu=${7}          # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}        # RAM to allocate for contract instances.
-        alloc_swapKB=${9}       # Swap to allocate for contract instances.
-        alloc_diskKB=${10}      # Disk space to allocate for contract instances.
-        alloc_instcount=${11}   # Total contract instance count.
-        lease_amount=${12}      # Contract instance lease amount in EVRs.
-        rippled_server=${13}    # Ripple URL
-        email_address=${14}     # User email address
-        tls_key_file=${15}      # File path to the tls private key.
-        tls_cert_file=${16}     # File path to the tls certificate.
-        tls_cabundle_file=${17} # File path to the tls ca bundle.
+        inetaddr=${3}             # IP or DNS address.
+        init_peer_port=${4}       # Starting peer port for instances.
+        init_user_port=${5}       # Starting user port for instances.
+        countrycode=${6}          # 2-letter country code.
+        alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}          # RAM to allocate for contract instances.
+        alloc_swapKB=${9}         # Swap to allocate for contract instances.
+        alloc_diskKB=${10}        # Disk space to allocate for contract instances.
+        alloc_instcount=${11}     # Total contract instance count.
+        lease_amount=${12}        # Contract instance lease amount in EVRs.
+        rippled_server=${13}      # Ripple URL
+        xrpl_account_secret=${14} # XRPL account secret.
+        email_address=${15}       # User email address
+        tls_key_file=${16}        # File path to the tls private key.
+        tls_cert_file=${17}       # File path to the tls certificate.
+        tls_cabundle_file=${18}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -727,6 +778,9 @@ if [ "$mode" == "install" ]; then
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
             \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
+
+    set_host_xrpl_secret
+    echo -e "Using entered value as the XRPL account serect for the configuration.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -772,6 +826,22 @@ elif [ "$mode" == "uninstall" ]; then
     # Force uninstall on quiet mode.
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
+
+elif [ "$mode" == "transfer" ]; then
+    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
+            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+
+    if ! $interactive ; then
+        transferee_address=${3}           # Address of the transferee.
+    fi
+
+    set_transferee_address
+
+    init_evernode_transfer
+
+    uninstall_evernode 0
+
+    echo "Transfer process was sucessfully initiated."
 
 elif [ "$mode" == "status" ]; then
     reg_info

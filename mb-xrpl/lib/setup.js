@@ -335,10 +335,10 @@ class Setup {
 
         if (leaseAmount && isNaN(leaseAmount))
             throw 'Lease amount should be a number';
-        else if (rippledServer && !rippledServer.match(/(ws(s)?:\/\/.*)/g))
+        else if (rippledServer && !rippledServer.match(/^(wss?:\/\/)([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[^\/|^:]+)(:([0-9]{1,5}))?$/g))
             throw 'Provided Rippled Server is invalid';
         else if (totalInstanceCount && isNaN(totalInstanceCount))
-            throw 'Mac instance count should be a number';
+            throw 'Maximum instance count should be a number';
 
         const leaseAmountParsed = leaseAmount ? parseInt(leaseAmount) : 0;
         const totalInstanceCountParsed = totalInstanceCount ? parseInt(totalInstanceCount) : 0;

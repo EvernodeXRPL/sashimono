@@ -42,7 +42,7 @@ class ConfigHelper {
 
     static readSashiConfig(sashiConfigPath) {
         if (!fs.existsSync(sashiConfigPath))
-            throw `Sashimono config file does not exist at ${sashiConfigPath}`;
+            throw `Sashimono configuration file does not exist at ${sashiConfigPath}`;
 
         return JSON.parse(fs.readFileSync(sashiConfigPath).toString());
     }

@@ -83,7 +83,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
-                \reconfig - Change the host configurations.
+                \reconfig - Change the host configuration.
                 \nupdate - Check and install $evernode software updates
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \nuninstall - Uninstall and deregister from $evernode" \
@@ -228,7 +228,7 @@ function validate_positive_decimal() {
 }
 
 function validate_ws_url() {
-    ! [[ $1 =~ ^(wss:\/\/.*)$ ]] && return 1
+    ! [[ $1 =~ ^(wss?:\/\/)([0-9]{1,3}(?:\.[0-9]{1,3}){3}|[^\/|^:]+)(:([0-9]{1,5}))?$ ]] && return 1
     return 0
 }
 
@@ -401,7 +401,7 @@ function set_instance_alloc() {
 
         while true ; do
             read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid ram size." || break
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid RAM size." || break
         done
 
         while true ; do
@@ -487,7 +487,7 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have a XRPL account with EVRs.\n"
+        echomult "In order to register in Evernode you need to have an XRPL account with EVRs.\n"
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty
@@ -988,7 +988,7 @@ elif [ "$mode" == "reconfig" ]; then
 
     reconfig
 
-    echo "Successfully changed the configurations!"
+    echo "Successfully changed the configuration!"
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

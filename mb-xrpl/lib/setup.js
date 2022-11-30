@@ -185,6 +185,9 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
+        if (hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
+            throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
         let attempts = 0;

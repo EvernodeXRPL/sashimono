@@ -487,6 +487,7 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
+        echomult "In order to register in Evernode you need to have a XRPL account with EVRs.\n"
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty

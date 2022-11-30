@@ -19,8 +19,6 @@ installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
 
-
-
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
@@ -194,15 +192,15 @@ function set_domain_certs() {
     if confirm "\n$evernode can automatically setup free SSL certificates and renewals for '$inetaddr'
             using Let's Encrypt (https://letsencrypt.org/).
             \nDo you want to setup Let's Encrypt automatic SSL (recommended)?" && \
-        confirm "\nDo you agree to have Let's Encrypt send SSL certificate notifications to your email '$email' (required)?" && \
-        confirm "\nDo you agree with Let's Encrypt Terms of Service at https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf ?" ; then
+        confirm "Do you agree to have Let's Encrypt send SSL certificate notifications to your email 'sashimono@evernode.org' (required)?" && \
+        confirm "Do you agree with Let's Encrypt Terms of Service at https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf ?" ; then
             
         tls_key_file="letsencrypt"
         tls_cert_file="letsencrypt"
         tls_cabundle_file="letsencrypt"
     else
 
-        echo -e "You have opted out of automatic SSL setup. You need to have obtained SSL certificate files for '$inetaddr'
+        echomult "You have opted out of automatic SSL setup. You need to have obtained SSL certificate files for '$inetaddr'
             from a trusted authority. Please specify the certificate files you have obtained below.\n"
 
         resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
@@ -252,6 +250,10 @@ function set_inet_addr() {
     fi
 
     # Rest of this function flow will be used for debugging and internal testing puposes only.
+
+    tls_key_file="self"
+    tls_cert_file="self"
+    tls_cabundle_file="self"
 
     # Attempt auto-detection.
     if [ "$inetaddr" == "auto" ] || $interactive ; then
@@ -870,12 +872,7 @@ if [ "$mode" == "install" ]; then
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-            and register your system as an $evernode host.\n
-            \nThe setup will go through the following steps:\n
-            - Check your system compatibility for $evernode.\n
-            - Collect information about your system to be published to users.\n
-            - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
-            \nContinue?" && exit 1
+            and register your system as an $evernode host.\n\nContinue?" && exit 1
 
     check_sys_req
     check_prereq

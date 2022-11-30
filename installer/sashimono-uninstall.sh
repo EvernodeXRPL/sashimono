@@ -50,7 +50,7 @@ function remove_evernode_auto_updater() {
 
 function cleanup_certbot_ssl() {
     # revoke/delete certs if certbot is used.
-    if command -v certbot &>/dev/null; then
+    if command -v certbot &>/dev/null && [ -f $SASHIMONO_DATA/sa.cfg ] ; then
         local inet_addr=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)
         local deploy_hook_script="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
         if [ -f $deploy_hook_script ] ; then

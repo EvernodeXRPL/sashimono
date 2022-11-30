@@ -48,6 +48,19 @@ function remove_evernode_auto_updater() {
     systemctl daemon-reload
 }
 
+function cleanup_certbot_ssl() {
+    # revoke/delete certs if certbot is used.
+    if command -v certbot &>/dev/null; then
+        local inet_addr=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)
+        local deploy_hook_script="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
+        if [ -f $deploy_hook_script ] ; then
+            echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
+            rm $deploy_hook_script
+            certbot -n revoke --cert-name $inet_addr
+        fi
+    fi
+}
+
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
 
 # Message board---------------------
@@ -183,11 +196,14 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 fi
 
 # Delete all the data and bin directories.
-echo "Deleting message board binaries..."
+echo "Deleting binaries..."
 rm -r $SASHIMONO_BIN
 
 if [ "$UPGRADE" == "0" ]; then
-    echo "Deleting message board data directory..."
+    
+    cleanup_certbot_ssl
+    
+    echo "Deleting data directory..."
     rm -r $SASHIMONO_DATA
 fi
 

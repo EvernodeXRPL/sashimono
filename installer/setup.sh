@@ -191,15 +191,15 @@ function resolve_filepath() {
 }
 
 function set_domain_certs() {
-    if confirm "\nIt is recommended that you obtain an SSL certificate for '$inetaddr' from a trusted certificate authority.
-        If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
-        by some clients including web browsers.
-        \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
+    if confirm "\n$evernode can automatically setup SSL certificates and renewals for '$inetaddr' using letsencrypt.
+            \nDo you want this (recommended)?" ; then
+        tls_key_file="letsencrypt"
+        tls_cert_file="letsencrypt"
+        tls_cabundle_file="letsencrypt"
+    else
         resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
         resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
         resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"
-    else
-        echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi
     return 0
 }
@@ -234,18 +234,16 @@ function validate_ws_url() {
 
 function set_inet_addr() {
 
-    if $interactive ; then
+    if $interactive && [ "$NO_DOMAIN" == "" ] ; then
         echo ""
-        if confirm "For greater compatibility with a wide range of clients, it is recommended that you own a domain name
-            that others can use to reach your host over internet. If you don't, your host will not be accepted by some clients
-            including web browsers. \n\nDo you own a domain name for this host?" ; then
-            while [ -z "$inetaddr" ]; do
-                read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
-                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
-                echo "Invalid or unreachable domain name."
-            done
-        fi
+        while [ -z "$inetaddr" ]; do
+            read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+            echo "Invalid or unreachable domain name."
+        done
     fi
+
+    # Rest of this function flow will be used for debugging and internal testing puposes only.
 
     # Attempt auto-detection.
     if [ "$inetaddr" == "auto" ] || $interactive ; then
@@ -707,6 +705,7 @@ function apply_ssl() {
         ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
             echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
 
+    echo "Applying new SSL certificates for $evernode"
     cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
     cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
     # ca bundle is optional.

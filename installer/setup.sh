@@ -191,12 +191,20 @@ function resolve_filepath() {
 }
 
 function set_domain_certs() {
-    if confirm "\n$evernode can automatically setup SSL certificates and renewals for '$inetaddr' using letsencrypt.
-            \nDo you want this (recommended)?" ; then
+    if confirm "\n$evernode can automatically setup free SSL certificates and renewals for '$inetaddr'
+            using Let's Encrypt (https://letsencrypt.org/).
+            \nDo you want to setup Let's Encrypt automatic SSL (recommended)?" && \
+        confirm "\nDo you agree to have Let's Encrypt send SSL certificate notifications to your email '$email' (required)?" && \
+        confirm "\nDo you agree with Let's Encrypt Terms of Service at https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf ?" ; then
+            
         tls_key_file="letsencrypt"
         tls_cert_file="letsencrypt"
         tls_cabundle_file="letsencrypt"
     else
+
+        echo -e "You have opted out of automatic SSL setup. You need to have obtained SSL certificate files for '$inetaddr'
+            from a trusted authority. Please specify the certificate files you have obtained below.\n"
+
         resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
         resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
         resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"

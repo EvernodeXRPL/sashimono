@@ -36,8 +36,7 @@ async function main() {
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12]);
             }
             else if (process.argv.length >= 3 && process.argv[2] === 'transfer') {
-                const transfereeAddress = (process.argv[3]) ? process.argv[3] : null;
-                await new Setup().transfer(transfereeAddress);
+                (process.argv[3]) ? await new Setup().transfer(process.argv[3]) : await new Setup().transfer();
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();

@@ -446,6 +446,20 @@ function set_lease_amount() {
     fi
 }
 
+function set_email_address() {
+    if $interactive; then
+        local emailAddress=""
+        while true ; do
+            read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
+            email_address_length=${#emailAddress}
+            ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address in invalid.." ) ) || break
+        done
+
+        email_address=$emailAddress
+    fi
+}
+
 function set_rippled_server() {
     [ -z $rippled_server ] && rippled_server=$default_rippled_server
 
@@ -550,7 +564,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -857,9 +871,10 @@ if [ "$mode" == "install" ]; then
         lease_amount=${12}        # Contract instance lease amount in EVRs.
         rippled_server=${13}      # Ripple URL
         xrpl_account_secret=${14} # XRPL account secret.
-        tls_key_file=${15}        # File path to the tls private key.
-        tls_cert_file=${16}       # File path to the tls certificate.
-        tls_cabundle_file=${17}   # File path to the tls ca bundle.
+        email_address=${15}       # User email address
+        tls_key_file=${16}        # File path to the tls private key.
+        tls_cert_file=${17}       # File path to the tls certificate.
+        tls_cabundle_file=${18}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -892,6 +907,9 @@ if [ "$mode" == "install" ]; then
 
     set_host_xrpl_secret
     echo -e "Using entered value as the XRPL account serect for the configuration.\n"
+
+    set_email_address
+    echo -e "Using the email address '$email_address'.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"

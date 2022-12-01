@@ -716,10 +716,10 @@ function apply_ssl() {
             echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
 
     echo "Applying new SSL certificates for $evernode"
-    cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
-    cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
+    echo "Key: $tls_key_file" && cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
+    echo "Cert: $tls_cert_file" && cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
     # ca bundle is optional.
-    [ "$tls_cabundle_file" != "" ] && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
+    [ "$tls_cabundle_file" != "" ] && echo "CA bundle: $tls_cabundle_file" && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
 
     sashi list | jq -rc '.[]' | while read -r inst; do \
         local instuser=$(echo $inst | jq -r '.user'); \
@@ -731,6 +731,8 @@ function apply_ssl() {
             chown -R $instuser:$instuser /home/$instuser/$instname/cfg/*.pem && \
             echo -e "Starting contract instance $instname" && sashi start -n $instname; \
     done
+
+    echo "Done."
 }
 
 function reconfig() {

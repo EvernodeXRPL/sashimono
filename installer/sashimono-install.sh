@@ -108,14 +108,14 @@ function setup_certbot() {
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
     ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
-
+    
     # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
     local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
     echo "Setting up certbot deploy hook $deploy_hook"
     echo "#!/bin/sh
 # This script is placed by Sashimono for automatic updataing of contract SSL certs.
 # Domain name: $inetaddr
-certname=$(basename \$RENEWED_LINEAGE)
+certname=\$(basename \$RENEWED_LINEAGE)
 [ \"\$certname\" = \"$inetaddr\" ] && evernode applyssl \$RENEWED_LINEAGE/privkey.pem \$RENEWED_LINEAGE/fullchain.pem" >$deploy_hook
     chmod +x $deploy_hook
 }

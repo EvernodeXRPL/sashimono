@@ -325,6 +325,7 @@ class Setup {
         await hostClient.connect();
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedNfts(hostClient.xrplAcc);
+        await hostClient.disconnect();
     }
 
     // Change the message board configurations.

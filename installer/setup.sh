@@ -453,7 +453,7 @@ function set_email_address() {
             read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
             email_address_length=${#emailAddress}
             ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address in invalid.." ) ) || break
+            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || break
         done
 
         email_address=$emailAddress

@@ -252,7 +252,7 @@ function set_inet_addr() {
         inetaddr=$(hostname -I | awk '{print $1}')
         validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
                                 internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
-        inetaddr=""
+        $interactive && inetaddr=""
     fi
 
     if $interactive ; then
@@ -444,10 +444,12 @@ function set_lease_amount() {
 
         lease_amount=$amount
     fi
+
+    ! validate_positive_decimal $lease_amount && echo "Lease amount should be a positive numerical value greater than zero." && exit 1
 }
 
 function set_rippled_server() {
-    [ -z $rippled_server ] && rippled_server=$default_rippled_server
+    ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
         confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
@@ -462,6 +464,7 @@ function set_rippled_server() {
         rippled_server=$newURL
     fi
 
+    ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
 }
 
 
@@ -481,6 +484,8 @@ function set_transferee_address() {
 
         transferee_address=$address
     fi
+
+    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
 }
 
 
@@ -497,6 +502,8 @@ function set_host_xrpl_secret() {
 
         xrpl_account_secret=$secret
     fi
+
+    ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
 }
 
 function install_failure() {

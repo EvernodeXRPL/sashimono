@@ -263,7 +263,7 @@ function set_inet_addr() {
         done
     fi
 
-   ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
+    ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
 }
 
 function check_port_validity() {
@@ -458,6 +458,10 @@ function set_email_address() {
 
         email_address=$emailAddress
     fi
+
+    non_interactive_email_address_length=${#email_address}
+    ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || exit 1
 }
 
 function set_rippled_server() {

@@ -175,9 +175,8 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description) {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description, emailAddress) {
         console.log("Registering host...");
-
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const acc = this.#getConfig().xrpl;
         setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
@@ -211,7 +210,7 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '));
+                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");

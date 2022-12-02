@@ -231,7 +231,7 @@ class MessageBoard {
             const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
             // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
             if (!nft)
-                console.log(`Cannot find a NFT for ${lease.containerName}`);
+                console.log(`Cannot find an NFT for ${lease.containerName}`);
             else {
                 const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                 await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);

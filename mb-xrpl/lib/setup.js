@@ -516,7 +516,7 @@ class Setup {
             const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
 
             if (!nft)
-                throw `Cannot find a NFT for ${lease.container_name}`;
+                throw `Cannot find an NFT for ${lease.container_name}`;
             else {
                 // Delete instance from sashiDB and burn the token
                 await sashiCli.destroyInstance(containerName);

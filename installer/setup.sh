@@ -492,7 +492,7 @@ function set_host_xrpl_secret() {
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty
-            ! [[ $secret =~ ^s[a-zA-Z0-9]{25,}$ ]] && echo "Invalid XRPL account secret." || break
+            ! [[ $secret =~ ^s[rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
 
         done
 
@@ -842,7 +842,7 @@ function reconfig() {
 function delete_instance()
 {
     instance_name=$1
-    echo "Deleting $instance_name"
+    echo "Deleting instance $instance_name"
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
         echo "There was an error in deleting the instance." && exit 1
 

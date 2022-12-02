@@ -54,6 +54,9 @@ async function main() {
             else if ((process.argv.length === 5 || process.argv.length === 6) && process.argv[2] === 'reconfig') {
                 await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4]);
             }
+            else if (process.argv.length === 4 && process.argv[2] === 'delete') {
+                await new Setup().deleteInstance(process.argv[3]);
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
@@ -66,6 +69,7 @@ async function main() {
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.
         node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
+        node index.js delete [containerName] - Delete an instance and recreate the lease offer
         node index.js help - Print help.`);
             }
             else {

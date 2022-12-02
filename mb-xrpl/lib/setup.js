@@ -534,7 +534,7 @@ class Setup {
                 await db.deleteValues(leaseTable, { tx_hash: lease.tx_hash });
             }
 
-            console.log(`Destroyed ${lease.container_name}`);
+            console.log(`Destroyed instance ${lease.container_name}`);
 
         } catch (error) {
             console.log(error);

@@ -852,7 +852,7 @@ function delete_instance()
 
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
 
-    echo "Instance Deletion Completed."
+    echo "Instance deletion completed."
 }
 
 # Begin setup execution flow --------------------

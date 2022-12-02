@@ -543,8 +543,6 @@ class Setup {
             await hostClient.disconnect();
             await xrplApi.disconnect();
         }
-
-
     }
 }
 

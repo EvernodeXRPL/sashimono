@@ -185,8 +185,25 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
-        if (hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
+        let isAReReg = false;
+
+        try {
+            // Check the availability of an initiated transfer
+            const stateTransfereeAddrKey = evernode.StateHelpers.generateTransfereeAddrStateKey(acc.address);
+            const stateTransfereeAddrIndex = evernode.StateHelpers.getHookStateIndex(acc.registryAddress, stateTransfereeAddrKey);
+            const res = await hostClient.xrplApi.getLedgerEntry(stateTransfereeAddrIndex);
+
+            if (res && res?.HookStateData)
+                isAReReg = true;
+        }
+        catch (e) {
+            console.log('Error occurred in getting the ledger entires');
+        }
+
+        if (!isAReReg && hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
             throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+        else if (isAReReg && ((await hostClient.getEVRBalance()) < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS)))
+            throw `EVR balance in the account is less than 1 Now for the re-registration.`;
 
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -325,6 +342,7 @@ class Setup {
         await hostClient.connect();
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedNfts(hostClient.xrplAcc);
+        await hostClient.disconnect();
     }
 
     // Change the message board configurations.

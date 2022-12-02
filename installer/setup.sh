@@ -3,7 +3,7 @@
 # This script is also used as the 'evernode' cli alias after the installation.
 # usage: ./setup.sh install
 
-evernode="Evernode beta"
+evernode="Evernode"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
@@ -914,7 +914,7 @@ if [ "$mode" == "install" ]; then
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
-            \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
+            \n\nContinue?" && exit 1
 
     set_host_xrpl_secret
     echo -e "Using entered value as the XRPL account serect for the configuration.\n"

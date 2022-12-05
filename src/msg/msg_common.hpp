@@ -238,8 +238,11 @@ namespace msg
     constexpr const char *MSGTYPE_CREATE_ERROR = "create_error";
     constexpr const char *MSGTYPE_INITIATE_RES = "initiate_res";
     constexpr const char *MSGTYPE_DESTROY_RES = "destroy_res";
+    constexpr const char *MSGTYPE_DESTROY_ERROR = "destroy_error";
     constexpr const char *MSGTYPE_START_RES = "start_res";
+    constexpr const char *MSGTYPE_START_ERROR = "start_error";
     constexpr const char *MSGTYPE_STOP_RES = "stop_res";
+    constexpr const char *MSGTYPE_STOP_ERROR = "stop_error";
     constexpr const char *MSGTYPE_LIST_RES = "list_res";
     constexpr const char *MSGTYPE_INSPECT_RES = "inspect_res";
     constexpr const char *MSGTYPE_INSPECT_ERROR = "inspect_error";

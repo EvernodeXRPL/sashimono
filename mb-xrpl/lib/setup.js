@@ -503,63 +503,80 @@ class Setup {
 
     async deleteInstance(containerName) {
         const sashiCliPath = appenv.SASHI_CLI_PATH;
-
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
-        const sashiCli = new SashiCLI(sashiCliPath);
-        const db = new SqliteDatabase(appenv.DB_PATH);
-        const leaseTable = appenv.DB_TABLE_NAME;
-        
-        const acc = this.#getConfig().xrpl;
-        const xrplApi = new evernode.XrplApi(acc.rippledServer);
-        let hostClient = null;
-
+        let db;
+        let xrplApi;
+        let hostClient;
         try {
-            setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
-            await xrplApi.connect();
-            hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
-            await hostClient.connect();
+            console.log(`Destroying the instance...`);
+
+            // Destroy the instance.
+            const sashiCli = new SashiCLI(sashiCliPath);
+            await sashiCli.destroyInstance(containerName);
+
+            db = new SqliteDatabase(appenv.DB_PATH);
             db.open();
+            const leaseTable = appenv.DB_TABLE_NAME;
 
             let lease = await db.getValues(leaseTable, { container_name: containerName });
 
-            if (lease.length > 0)
+            if (lease.length > 0) {
                 lease = lease[0];
-            else
-                throw "Lease records not found.";
 
-            // Get the existing nft of the lease.
-            const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
+                const acc = this.#getConfig().xrpl;
+                setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
 
-            if (!nft)
-                throw `Cannot find an NFT for ${lease.container_name}`;
-            else {
-                // Delete instance from sashiDB and burn the token
-                await sashiCli.destroyInstance(containerName);
-                const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                xrplApi = new evernode.XrplApi(acc.rippledServer);
+                await xrplApi.connect();
 
-                // Burn the NFTs and recreate the offer.
-                await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
+                // Get the existing nft of the lease.
+                const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
 
-                // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-                await hostClient.refreshConfig();
-                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice);
-                await hostClient.offerLease(uriInfo.leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+                if (nft) {
+                    hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
+                    await hostClient.connect();
+
+                    // Delete instance from sashiDB and burn the token
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+
+                    console.log(`Expiring the lease...`);
+
+                    // Burn the NFTs and recreate the offer.
+                    await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
+
+                    // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
+                    await hostClient.refreshConfig();
+                    const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice);
+                    await hostClient.offerLease(uriInfo.leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+
+                    // Refund EVRs to the tenant.
+                    const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+                    const spentMoments = Math.ceil((currentTime - lease.timestamp) / hostClient.config.momentSize);
+                    const remainingMoments = lease.life_moments - spentMoments;
+                    if (remainingMoments > 0) {
+                        console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
+                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, (uriInfo.leaseAmount * remainingMoments).toString());
+                    }
+                }
 
                 // Delete the lease record related to this instance (Permanent Delete).
                 await db.deleteValues(leaseTable, { tx_hash: lease.tx_hash });
             }
 
             console.log(`Destroyed instance ${lease.container_name}`);
-
-        } catch (error) {
-            throw error;
-        } finally {
-            db.close();
-            await hostClient.disconnect();
-            await xrplApi.disconnect();
         }
+        catch (e) { throw e }
+        finally {
+            if (db)
+                db.close();
+            if (hostClient)
+                await hostClient.disconnect();
+            if (xrplApi)
+                await xrplApi.disconnect();
+        }
+
     }
 }
 

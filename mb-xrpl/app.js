@@ -58,6 +58,7 @@ async function main() {
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
+        node index.js betagen [registryAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.

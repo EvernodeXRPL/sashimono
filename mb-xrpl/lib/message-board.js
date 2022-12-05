@@ -23,7 +23,7 @@ class MessageBoard {
     #graceTimeoutRef = null;
     #lastHaltedTime = null;
 
-    constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath) {
+    constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
         this.secretConfigPath = secretConfigPath;
         this.leaseTable = appenv.DB_TABLE_NAME;
@@ -37,7 +37,8 @@ class MessageBoard {
         this.sashiCli = new SashiCLI(sashiCliPath);
         this.db = new SqliteDatabase(dbPath);
         this.sashiDb = new SqliteDatabase(sashiDbPath);
-        this.sashiTable = appenv.SASHI_TABLE_NAME
+        this.sashiTable = appenv.SASHI_TABLE_NAME;
+        this.sashiConfigPath = sashiConfigPath;
     }
 
     async init() {
@@ -59,9 +60,13 @@ class MessageBoard {
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.#connectHost();
         // Get last heartbeat moment from the host info.
-        const hostInfo = await this.hostClient.getRegistration();
+        let hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
             throw "Host is not registered.";
+
+        this.regClient = new evernode.RegistryClient();
+        await this.#connectRegistry();
+        await this.regClient.subscribe();
 
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatIndex ? await this.hostClient.getMoment(hostInfo.lastHeartbeatIndex) : 0;
@@ -80,10 +85,14 @@ class MessageBoard {
         // Catch up missed transactions based on the previously updated "last_watched_ledger" record (checkpoint).
         await this.#catchupMissedLeases().catch(console.error);
 
+        // Load the sashimono config.
+        const sashiConfig = ConfigHelper.readSashiConfig(this.sashiConfigPath);
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
         // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version);
+        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
+            sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
+            Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
         this.db.close();
 
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
@@ -94,6 +103,26 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+        const checkAndRequestRebate = async () => {
+            // Send rebate request at startup if there's any pending rebates.
+            if (hostInfo?.registrationFee > hostRegFee) {
+                console.log(`Requesting rebate...`);
+                await this.hostClient.requestRebate();
+            }
+        }
+
+        let hostRegFee = this.hostClient.config.hostRegFee;
+        await checkAndRequestRebate();
+
+        // Listen to the host registrations and send rebate requests if registration fee updated.
+        this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
+            await this.hostClient.refreshConfig();
+            if (hostRegFee != this.hostClient.config.hostRegFee) {
+                hostRegFee = this.hostClient.config.hostRegFee;
+                hostInfo = await this.hostClient.getRegistration();
+                await checkAndRequestRebate();
+            }
+        });
 
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
@@ -202,7 +231,7 @@ class MessageBoard {
             const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
             // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
             if (!nft)
-                console.log(`Cannot find a NFT for ${lease.containerName}`);
+                console.log(`Cannot find an NFT for ${lease.containerName}`);
             else {
                 const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                 await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
@@ -231,13 +260,13 @@ class MessageBoard {
 
     // Connect the host and trying to reconnect in the event of account not found error.
     // Account not found error can be because of a network reset. (Dev and test nets)
-    async #connectHost() {
+    async #connect(client) {
         let attempts = 0;
         // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
                 attempts++;
-                const ret = await this.hostClient.connect();
+                const ret = await client.connect();
                 if (ret)
                     break;
             } catch (error) {
@@ -255,6 +284,14 @@ class MessageBoard {
                     throw error;
             }
         }
+    }
+
+    async #connectHost() {
+        await this.#connect(this.hostClient);
+    }
+
+    async #connectRegistry() {
+        await this.#connect(this.regClient);
     }
 
     #startPruneScheduler() {
@@ -566,10 +603,10 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
-        // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+        // Burn the NFTs and recreate the offer.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-        this.hostClient.refreshConfig();
+        await this.hostClient.refreshConfig();
         const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
         await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
     }

@@ -12,8 +12,15 @@ async function main() {
 
     try {
         if (process.argv.length >= 3) {
-            if (process.argv.length >= 3 && process.argv[2] === 'new') {
-                new Setup().newConfig(process.argv[3], process.argv[4], process.argv[5], process.argv[6]);
+            if (process.argv.length == 8 && process.argv[2] === 'new') {
+                const accountSecret = process.argv[3];
+                const registryAddress = process.argv[4];
+                const domain = process.argv[5];
+                const leaseAmount = process.argv[6];
+                const rippledServer = process.argv[7];
+                const setup = new Setup();
+                const acc = await setup.setupHostAccount(accountSecret, rippledServer, registryAddress, domain);
+                setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const registryAddress = process.argv[3];
@@ -24,9 +31,12 @@ async function main() {
                 const acc = await setup.generateBetaHostAccount(rippledServer, registryAddress, domain);
                 setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledServer);
             }
-            else if (process.argv.length === 13 && process.argv[2] === 'register') {
+            else if (process.argv.length === 14 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
-                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]),  parseInt(process.argv[11]),  process.argv[12]);
+                    parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12], process.argv[13]);
+            }
+            else if (process.argv.length >= 3 && process.argv[2] === 'transfer') {
+                (process.argv[3]) ? await new Setup().transfer(process.argv[3]) : await new Setup().transfer();
             }
             else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
                 await new Setup().deregister();
@@ -40,6 +50,12 @@ async function main() {
             else if (process.argv.length === 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
+            else if ((process.argv.length === 5 || process.argv.length === 6) && process.argv[2] === 'reconfig') {
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4]);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'delete') {
+                await new Setup().deleteInstance(process.argv[3]);
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
@@ -47,9 +63,12 @@ async function main() {
         node index.js new [address] [secret] [registryAddress] [leaseAmount] - Create new config files.
         node index.js betagen [registryAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
+        node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade - Upgrade message board data.
+        node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
+        node index.js delete [containerName] - Delete an instance and recreate the lease offer
         node index.js help - Print help.`);
             }
             else {
@@ -64,7 +83,7 @@ async function main() {
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
-            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH);
+            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH);
             await mb.init();
         }
 

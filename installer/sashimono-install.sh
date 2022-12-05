@@ -16,8 +16,14 @@ diskKB=${9}
 description=${10}
 lease_amount=${11}
 rippled_server=${12}
+xrpl_account_secret=${13}
+email_address=${14}
+tls_key_file=${15}
+tls_cert_file=${16}
+tls_cabundle_file=${17}
 
 script_dir=$(dirname "$(realpath "$0")")
+
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -88,6 +94,28 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
 }
 
+function setup_tls_certs() {
+    mkdir -p $SASHIMONO_DATA/tls
+
+    if [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
+
+        stage "Transfering certificate files"
+
+        cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
+        cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        # ca bundle is optional.
+        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] && \
+            cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+
+    else
+        # If user has not provided certs we generate self-signed ones.
+        stage "Generating self-signed certificates"
+        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
+            echo "Error when generating self-signed certificate." && rollback
+    fi
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -105,57 +133,12 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 ! set_cpu_info && echo "Fetching CPU info failed" && rollback
 
-# Register host only if NO_MB environment is not set.
-if [ "$NO_MB" == "" ]; then
-    # Configure message board users and register host.
-    echo "Configuaring host registration on Evernode..."
-
-    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
-
-    # Creating message board user (if not exists).
-    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-        usermod --lock $MB_XRPL_USER
-        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
-        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
-    fi
-
-    # First create the folder from root and then transfer ownership to the user
-    # since the folder is created in /etc/sashimono directory.
-    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
-    # Change ownership to message board user.
-    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
-
-    # Betage and register if not upgrade mode.
-    if [ "$UPGRADE" == "0" ]; then
-        # Generate beta host account (if not already setup).
-        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
-            stage "Configuring host xrpl account"
-            echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
-            doreg=1
-        fi
-
-        # Register the host on Evernode.
-        if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-            set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
-            # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
-            # Add -p to the progress logs so they would be printed overwriting the same line.
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $description |
-                stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
-                echo "REG_FAILURE" && rollback
-            set +o pipefail
-        fi
-
-        echo "Registered host on Evernode."
-    fi
-fi
-
 # Copy contract template and licence file (delete existing)
 rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
 cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
+
+# Setup tls certs used for contract instance websockets.
+setup_tls_certs
 
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
@@ -188,6 +171,59 @@ fi
 
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
+
+# Register host only if NO_MB environment is not set.
+if [ "$NO_MB" == "" ]; then
+    # Configure message board users and register host.
+    echo "Configuaring host registration on Evernode..."
+
+    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+
+    # Creating message board user (if not exists).
+    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        usermod --lock $MB_XRPL_USER
+        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    fi
+
+    # First create the folder from root and then transfer ownership to the user
+    # since the folder is created in /etc/sashimono directory.
+    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
+    # Change ownership to message board user.
+    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+
+    # Betage and register if not upgrade mode.
+    if [ "$UPGRADE" == "0" ]; then
+        # Setup and register the account.
+        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
+            stage "Configuring host xrpl account"
+            echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
+
+            # Commented for now, because 'betagen' will no longer be used.
+            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
+            # doreg=1
+
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+            doreg=1
+        fi
+
+        # Register the host on Evernode.
+        if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
+            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+            set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
+            # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
+            # Add -p to the progress logs so they would be printed overwriting the same line.
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $description $email_address |
+                stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
+                echo "REG_FAILURE" && rollback
+            set +o pipefail
+        fi
+
+        echo "Registered host on Evernode."
+    fi
+fi
 
 stage "Configuring Sashimono services"
 
@@ -313,7 +349,7 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     fi
 fi
 
-stage "Configuring auto updater service."
+stage "Configuring auto updater service"
 
 # Enable the Evernode Auto Updater Service.
 enable_evernode_auto_updater

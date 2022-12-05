@@ -75,14 +75,18 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "reconfig" ] &&  [ "$1" != "delete" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
                 \nstatus - View $evernode registration info
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
+                \napplyssl - Apply new SSL certificates for contracts.
+                \nreconfig - Change the host configuration.
                 \nupdate - Check and install $evernode software updates
+                \ntransfer - Initiate an $evernode transfer for your machine
+                \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
@@ -112,9 +116,10 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] ; then
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] ; then
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
+    [ "$mode" == "transfer" ] && transfer=true || transfer=false
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
@@ -168,51 +173,98 @@ function check_sys_req() {
     echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
-function resolve_ip_addr() {
-    # Attempt to resolve ip (in case inetaddr is a DNS address)
-    # This will resolve correctly if inetaddr is a valid ip or dns address.
-    local ipaddr=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+function resolve_filepath() {
+    # name reference the variable name provided as first argument.
+    local -n filepath=$1
+    local option=$2
+    local prompt="${*:3} "
 
-    # If invalid, reset inetaddr and return with non-zero code.
-    if [ -z "$ipaddr" ] ; then
-        inetaddr=""
-        return 1
-    fi
+    while [ -z "$filepath" ]; do
+        read -p "$prompt" filepath </dev/tty
+
+        # if optional accept empty path as "-"
+        [ "$option" == "o" ] && [ -z "$filepath" ] && filepath="-"
+        
+        # Check for valid path.
+        ([ "$option" == "r" ] || ([ "$option" == "o" ] && [ "$filepath" != "-" ])) \
+            && [ ! -f "$filepath" ] && echo "Invalid file path" && filepath=""
+    done
 }
 
-function check_inet_addr_validity() {
-    # inert address cannot be empty and cannot contain spaces.
-    if [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] ; then
-        inetaddr=""
-        return 1
+function set_domain_certs() {
+    if confirm "\nIt is recommended that you obtain an SSL certificate for '$inetaddr' from a trusted certificate authority.
+        If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
+        by some clients including web browsers.
+        \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
+        resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
+        resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
+        resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"
     else
-        return 0
+        echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi
+    return 0
+}
+
+function validate_inet_addr_domain() {
+    host $inetaddr 2>&1 > /dev/null && return 0
+    inetaddr="" && return 1
+}
+
+function validate_inet_addr() {
+    # inert address cannot be empty and cannot contain spaces.
+    [ -z "$inetaddr" ] || [[ $inetaddr = *" "* ]] && inetaddr="" && return 1
+
+    # Attempt to resolve ip (in case inetaddr is a DNS address)
+    # This will resolve correctly if inetaddr is a valid ip or dns address.
+    local resolved=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+    # If invalid, reset inetaddr and return with non-zero code.
+    [ -z "$resolved" ] && inetaddr="" && return 1
+
+    return 0
+}
+
+function validate_positive_decimal() {
+    ! [[ $1 =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && return 1
+    return 0
+}
+
+function validate_ws_url() {
+    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && return 1
+    return 0
 }
 
 function set_inet_addr() {
 
-    # Attempt to auto-detect in interactive mode or if 'auto' is specified.
-    ([ "$inetaddr" == "auto" ] || $interactive) && inetaddr=$(hostname -I | awk '{print $1}')
-    resolve_ip_addr
+    if $interactive ; then
+        echo ""
+        if confirm "For greater compatibility with a wide range of clients, it is recommended that you own a domain name
+            that others can use to reach your host over internet. If you don't, your host will not be accepted by some clients
+            including web browsers. \n\nDo you own a domain name for this host?" ; then
+            while [ -z "$inetaddr" ]; do
+                read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+                echo "Invalid or unreachable domain name."
+            done
+        fi
+    fi
+
+    # Attempt auto-detection.
+    if [ "$inetaddr" == "auto" ] || $interactive ; then
+        inetaddr=$(hostname -I | awk '{print $1}')
+        validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
+        $interactive && inetaddr=""
+    fi
 
     if $interactive ; then
-
-        if [ -n "$inetaddr" ] && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
-                                            internet. \n\nIs this the IP/DNS address you want to use?" ; then
-            return 0
-        fi
-
-        inetaddr=""
         while [ -z "$inetaddr" ]; do
-            # This will be asked if auto-detection fails or if user wants to specify manually.
-            read -p "Please specify the public IP/DNS address your server is reachable at: " inetaddr </dev/tty
-            check_inet_addr_validity || echo "Invalid IP/DNS address."
+            read -p "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && return 0
+            echo "Invalid ip/domain address."
         done
-
-    else
-        [ -z "$inetaddr" ] && echo "Invalid IP/DNS address '$inetaddr'" && exit 1
     fi
+
+    ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
 }
 
 function check_port_validity() {
@@ -350,17 +402,17 @@ function set_instance_alloc() {
 
         while true ; do
             read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid RAM size." || break
         done
 
         while true ; do
             read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-            ! [[ $swapMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
         done
 
         while true ; do
             read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-            ! [[ $diskMB -gt 0 ]] && echo "Invalid amount." || break
+            ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
         done
 
         alloc_ramKB=$(( ramMB * 1000 ))
@@ -388,15 +440,35 @@ function set_lease_amount() {
         local amount=0
         while true ; do
             read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
-            ! [[ $amount =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && echo "Lease amount should be a positive numerical value greater than zero." || break
+            ! validate_positive_decimal $amount && echo "Lease amount should be a positive numerical value greater than zero." || break
         done
 
         lease_amount=$amount
     fi
+
+    ! validate_positive_decimal $lease_amount && echo "Lease amount should be a positive numerical value greater than zero." && exit 1
+}
+
+function set_email_address() {
+    if $interactive; then
+        local emailAddress=""
+        while true ; do
+            read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
+            email_address_length=${#emailAddress}
+            ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || break
+        done
+
+        email_address=$emailAddress
+    fi
+
+    non_interactive_email_address_length=${#email_address}
+    ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || exit 1
 }
 
 function set_rippled_server() {
-    [ -z $rippled_server ] && rippled_server=$default_rippled_server
+    ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
         confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
@@ -405,12 +477,52 @@ function set_rippled_server() {
 
         while true ; do
             read -p "Specify the rippled URL: " newURL </dev/tty
-            ! [[ $newURL =~ ^(wss:\/\/.*)$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+            ! validate_ws_url $newURL && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
         done
 
         rippled_server=$newURL
     fi
 
+    ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+}
+
+
+function set_transferee_address() {
+    # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
+    [ -z $transferee_address ] && transferee_address=''
+
+    if $interactive; then
+        confirm "\nDo you want to set the current host account as the transferee's account?" && return 0
+
+        local address=''
+        while true ; do
+            read -p "Specify the XRPL account address of the transferee: " address </dev/tty
+            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
+
+        done
+
+        transferee_address=$address
+    fi
+
+    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
+}
+
+
+function set_host_xrpl_secret() {
+
+    if $interactive; then
+        echomult "In order to register in Evernode you need to have an XRPL account with EVRs.\n"
+        local secret=''
+        while true ; do
+            read -p "Specify the XRPL account secret: " secret </dev/tty
+            ! [[ $secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
+
+        done
+
+        xrpl_account_secret=$secret
+    fi
+
+    ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
 }
 
 function install_failure() {
@@ -464,7 +576,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -492,13 +604,18 @@ function uninstall_evernode() {
     local ucount=${#sashiusers[@]}
 
     if [ "$upgrade" == "0" ] ; then
-        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to uninstall?" && exit 1
+        $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to continue?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
 
-    [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
-    ! UPGRADE=$upgrade $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-
+    if ! $transfer ; then
+        [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
+        ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    else
+        echo "Intiating Transfer..."
+        echo "Uninstalling for transfer..."
+        ! UPGRADE=$upgrade TRANSFER=1 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+    fi
     # Remove the evernode alias at the end.
     # So, if the uninstallation failed user can try uninstall again with evernode commands.
     remove_evernode_alias
@@ -532,6 +649,15 @@ function update_evernode() {
     fi
 
     echo "Upgrade complete."
+}
+
+function init_evernode_transfer() {
+
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
+        [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
+            echo "Evernode transfer initiation was failed. Try again later." && exit 1
+    fi
+
 }
 
 function create_log() {
@@ -596,6 +722,165 @@ function reg_info() {
     fi
 }
 
+function apply_ssl() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    
+    local tls_key_file=$1
+    local tls_cert_file=$2
+    local tls_cabundle_file=$3
+
+    ([ ! -f "$tls_key_file" ] || [ ! -f "$tls_cert_file" ] || \
+        ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
+            echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
+
+    cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
+    cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
+    # ca bundle is optional.
+    [ "$tls_cabundle_file" != "" ] && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
+
+    sashi list | jq -rc '.[]' | while read -r inst; do \
+        local instuser=$(echo $inst | jq -r '.user'); \
+        local instname=$(echo $inst | jq -r '.name'); \
+        echo -e "\nStopping contract instance $instname" && sashi stop -n $instname && \
+            echo "Updating SSL certificates" && \
+            cp $SASHIMONO_DATA/contract_template/cfg/tlskey.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem /home/$instuser/$instname/cfg/ && \
+            chmod 644 /home/$instuser/$instname/cfg/tlscert.pem && chmod 600 /home/$instuser/$instname/cfg/tlskey.pem && \
+            chown -R $instuser:$instuser /home/$instuser/$instname/cfg/*.pem && \
+            echo -e "Starting contract instance $instname" && sashi start -n $instname; \
+    done
+}
+
+function reconfig() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+    echomult "\nStaring reconfiguration...\n"
+
+    local saconfig="$SASHIMONO_DATA/sa.cfg"
+    local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+    local max_cpu_us=$(jq '.system.max_cpu_us' $saconfig)
+    local max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)
+    local max_swap_kbytes=$(jq '.system.max_swap_kbytes' $saconfig)
+    local max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+
+    local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
+    local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
+    local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
+                
+    local update_sashi=0
+    ( ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ||
+        ( [[ $alloc_cpu -gt 0 ]] && [[ $max_cpu_us != $alloc_cpu ]] ) ||
+        ( [[ $alloc_ramKB -gt 0 ]] && [[ $max_mem_kbytes != $alloc_ramKB ]] ) ||
+        ( [[ $alloc_swapKB -gt 0 ]] && [[ $max_swap_kbytes != $alloc_swapKB ]] ) ||
+        ( [[ $alloc_diskKB -gt 0 ]] && [[ $max_storage_kbytes != $alloc_diskKB ]] ) ) &&
+        update_sashi=1
+    local update_mb=0
+    ( ( [ ! -z "$rippled_server" ] && [[ $cfg_rippled_server != $rippled_server ]] ) ||
+        ( [[ $lease_amount -gt 0 ]] && [[ $cfg_lease_amount != $lease_amount ]] ) ||
+        ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ) &&
+        update_mb=1
+
+    # Update only if changed
+    [ $update_sashi == 0 ] && [ $update_mb == 0 ] && echomult "Given values are already configured!\n" && exit 0
+
+    # Stop the services to stop any activities.
+    # Stop the sashimono service.
+    if [ $update_sashi == 1 ] ; then
+        echomult "Stopping the sashimono...\n"
+        systemctl stop $SASHIMONO_SERVICE
+    fi
+
+    # Stop the message board service.
+    if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
+        echomult "Stopping the message board...\n"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+    fi
+
+    if [ $update_sashi == 1 ] ; then
+        echomult "Using allocation"
+        [[ $alloc_cpu -gt 0 ]] && echomult "$alloc_cpu Micro Sec CPU" || alloc_cpu=0
+        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
+        [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
+        [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
+        [[ $alloc_instcount -gt 0 ]] && echomult "Distributed among $alloc_instcount contract instances" || alloc_instcount=0
+        
+        echomult "\nConfiguaring sashimono...\n"
+
+        ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+            echomult "\nThere was an error in updating sashimono configuration.\n" && exit 1
+
+        # Update cgroup allocations.
+        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) &&
+            echomult "Updating the cgroup configuration...\n" &&
+            ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echomult "\nError occured while upgrading cgroup allocations\n" && exit 1
+
+        # Update disk quotas.
+        if ( [ $alloc_diskKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) ; then
+            echomult "Updating the disk quotas...\n"
+
+            users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
+            readarray -t userarr <<<"$users"
+            sashiusers=()
+            for user in "${userarr[@]}"; do
+                [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$SASHIUSER_PREFIX[0-9]+$ ]] && continue
+                sashiusers+=("$user")
+            done
+
+            max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
+            max_instance_count=$(jq '.system.max_instance_count' $saconfig)
+            disk=$(expr $max_storage_kbytes / $max_instance_count)
+            ucount=${#sashiusers[@]}
+            if [ $ucount -gt 0 ]; then
+                for user in "${sashiusers[@]}"; do
+                    setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+                done
+            fi
+        fi
+    fi
+
+    if [ $update_mb == 1 ] ; then
+        [ ! -z "$rippled_server" ] && echomult "Using the rippled address '$rippled_server'."
+        [[ $lease_amount -gt 0 ]] && echomult "Using lease amount $lease_amount EVRs." || lease_amount=0
+        [[ $alloc_instcount -gt 0 ]] || alloc_instcount=0
+        
+        echomult "\nConfiguaring message board...\n"
+
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
+            echo "There was an error in updating message board configuration." && exit 1
+    fi
+
+    # Start the sashimono service.
+    if [ $update_sashi == 1 ] ; then
+        echomult "Starting the sashimono...\n"
+        systemctl start $SASHIMONO_SERVICE
+    fi
+
+    # Start the message board service.
+    if [ $update_sashi == 1 ] || [ $update_mb == 1 ] ; then
+        echomult "Starting the message board...\n"
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+    fi
+}
+
+function delete_instance()
+{
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+    instance_name=$1
+    echo "Deleting instance $instance_name"
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
+        echo "There was an error in deleting the instance." && exit 1
+
+    # Restart the message board to update the instance count
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
+
+    echo "Instance deletion completed."
+}
 
 # Begin setup execution flow --------------------
 
@@ -604,17 +889,22 @@ echo "Thank you for trying out $evernode!"
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}           # IP or DNS address.
-        init_peer_port=${4}     # Starting peer port for instances.
-        init_user_port=${5}     # Starting user port for instances.
-        countrycode=${6}        # 2-letter country code.
-        alloc_cpu=${7}          # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}        # RAM to allocate for contract instances.
-        alloc_swapKB=${9}       # Swap to allocate for contract instances.
-        alloc_diskKB=${10}      # Disk space to allocate for contract instances.
-        alloc_instcount=${11}   # Total contract instance count.
-        lease_amount=${12}      # Contract instance lease amount in EVRs.
-        rippled_server=${13}    # Ripple URL
+        inetaddr=${3}             # IP or DNS address.
+        init_peer_port=${4}       # Starting peer port for instances.
+        init_user_port=${5}       # Starting user port for instances.
+        countrycode=${6}          # 2-letter country code.
+        alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}          # RAM to allocate for contract instances.
+        alloc_swapKB=${9}         # Swap to allocate for contract instances.
+        alloc_diskKB=${10}        # Disk space to allocate for contract instances.
+        alloc_instcount=${11}     # Total contract instance count.
+        lease_amount=${12}        # Contract instance lease amount in EVRs.
+        rippled_server=${13}      # Ripple URL
+        xrpl_account_secret=${14} # XRPL account secret.
+        email_address=${15}       # User email address
+        tls_key_file=${16}        # File path to the tls private key.
+        tls_cert_file=${17}       # File path to the tls certificate.
+        tls_cabundle_file=${18}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -644,6 +934,12 @@ if [ "$mode" == "install" ]; then
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
             \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
+
+    set_host_xrpl_secret
+    echo -e "Using entered value as the XRPL account serect for the configuration.\n"
+
+    set_email_address
+    echo -e "Using the email address '$email_address'.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -687,6 +983,22 @@ elif [ "$mode" == "uninstall" ]; then
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
 
+elif [ "$mode" == "transfer" ]; then
+    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
+            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+
+    if ! $interactive ; then
+        transferee_address=${3}           # Address of the transferee.
+    fi
+
+    set_transferee_address
+
+    init_evernode_transfer
+
+    uninstall_evernode 0
+
+    echo "Transfer process was sucessfully initiated."
+
 elif [ "$mode" == "status" ]; then
     reg_info
 
@@ -698,6 +1010,39 @@ elif [ "$mode" == "update" ]; then
 
 elif [ "$mode" == "log" ]; then
     create_log
+
+elif [ "$mode" == "applyssl" ]; then
+    apply_ssl $2 $3 $4
+
+elif [ "$mode" == "reconfig" ]; then
+    alloc_cpu=${2}          # CPU microsec to allocate for contract instances (max 1000000).
+    alloc_ramKB=${3}        # RAM to allocate for contract instances.
+    alloc_swapKB=${4}       # Swap to allocate for contract instances.
+    alloc_diskKB=${5}      # Disk space to allocate for contract instances.
+    alloc_instcount=${6}   # Total contract instance count.
+    lease_amount=${7}      # Contract instance lease amount in EVRs.
+    rippled_server=${8}    # Ripple URL
+
+    ( [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ] || [ -z $lease_amount ] ) &&
+        echomult "Invalid arguments.\n  Usage: evernode reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
+
+    [ ! -z $alloc_cpu ] && [ $alloc_cpu != 0 ] && ( ! ( validate_positive_decimal $alloc_cpu && [[ $alloc_cpu -le 1000000 ]] ) ) && echo "Invalid cpu allocation." && exit 1
+    [ ! -z $alloc_ramKB ] && [ $alloc_ramKB != 0 ] && ! validate_positive_decimal $alloc_ramKB && echo "Invalid ram size." && exit 1
+    [ ! -z $alloc_swapKB ] && [ $alloc_swapKB != 0 ] && ! validate_positive_decimal $alloc_swapKB && echo "Invalid swap size." && exit 1
+    [ ! -z $alloc_diskKB ] && [ $alloc_diskKB != 0 ] && ! validate_positive_decimal $alloc_diskKB && echo "Invalid disk size." && exit 1
+    [ ! -z $alloc_instcount ] && [ $alloc_instcount != 0 ] && ! validate_positive_decimal $alloc_instcount && echo "Invalid instance count." && exit 1
+    [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
+    [ ! -z $rippled_server ] && ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+
+    reconfig
+
+    echo "Successfully changed the configuration!"
+
+elif [ "$mode" == "delete" ]; then
+    [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1
+
+    delete_instance "$2"
+
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

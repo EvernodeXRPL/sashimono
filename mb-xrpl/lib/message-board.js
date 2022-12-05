@@ -231,7 +231,7 @@ class MessageBoard {
             const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
             // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
             if (!nft)
-                console.log(`Cannot find a NFT for ${lease.containerName}`);
+                console.log(`Cannot find an NFT for ${lease.containerName}`);
             else {
                 const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                 await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
@@ -603,7 +603,7 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
-        // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+        // Burn the NFTs and recreate the offer.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
         await this.hostClient.refreshConfig();

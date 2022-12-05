@@ -75,7 +75,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "reconfig" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "reconfig" ] &&  [ "$1" != "delete" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -83,9 +83,10 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nlist - View contract instances running on this system
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
-                \reconfig - Change the host configuration.
+                \nreconfig - Change the host configuration.
                 \nupdate - Check and install $evernode software updates
                 \ntransfer - Initiate an $evernode transfer for your machine
+                \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
@@ -514,7 +515,7 @@ function set_host_xrpl_secret() {
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty
-            ! [[ $secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." || break
+            ! [[ $secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
 
         done
 
@@ -863,6 +864,24 @@ function reconfig() {
     fi
 }
 
+function delete_instance()
+{
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+    instance_name=$1
+    echo "Deleting instance $instance_name"
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
+        echo "There was an error in deleting the instance." && exit 1
+
+    # Restart the message board to update the instance count
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
+
+    echo "Instance deletion completed."
+}
+
 # Begin setup execution flow --------------------
 
 echo "Thank you for trying out $evernode!"
@@ -1018,6 +1037,12 @@ elif [ "$mode" == "reconfig" ]; then
     reconfig
 
     echo "Successfully changed the configuration!"
+
+elif [ "$mode" == "delete" ]; then
+    [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1
+
+    delete_instance "$2"
+
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

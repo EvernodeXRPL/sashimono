@@ -25,7 +25,6 @@ namespace comm
     constexpr const char *INIT_ERROR = "init_error";
     constexpr const char *START_ERROR = "start_error";
     constexpr const char *STOP_ERROR = "stop_error";
-    constexpr const char *DESTROY_ERROR = "destroy_error";
 
     struct Callback
     {
@@ -237,10 +236,11 @@ namespace comm
         {
             msg::destroy_msg msg;
             if (msg_parser.extract_destroy_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, FORMAT_ERROR, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_ERROR, FORMAT_ERROR, -1);
 
-            if (hp::destroy_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, DESTROY_ERROR, -1);
+            std::string error_msg;
+            if (hp::destroy_container(error_msg, msg.container_name) == -1)
+                __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_ERROR, error_msg, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_DESTROY_RES, "destroyed", 0);
         }
@@ -248,10 +248,10 @@ namespace comm
         {
             msg::start_msg msg;
             if (msg_parser.extract_start_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, FORMAT_ERROR, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_ERROR, FORMAT_ERROR, -1);
 
             if (hp::start_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, START_ERROR, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_START_ERROR, START_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_START_RES, "started", 0);
         }
@@ -259,10 +259,10 @@ namespace comm
         {
             msg::stop_msg msg;
             if (msg_parser.extract_stop_message(msg))
-                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, FORMAT_ERROR, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_ERROR, FORMAT_ERROR, -1);
 
             if (hp::stop_container(msg.container_name) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, STOP_ERROR, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_STOP_ERROR, STOP_ERROR, -1);
 
             __HANDLE_RESPONSE(msg::MSGTYPE_STOP_RES, "stopped", 0);
         }

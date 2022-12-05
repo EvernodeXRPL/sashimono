@@ -5,6 +5,7 @@ const evernode = require('evernode-js-client');
 const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
+const { SashiCLI } = require('./sashi-cli');
 
 function setEvernodeDefaults(registryAddress, rippledServer) {
     evernode.Defaults.set({
@@ -175,9 +176,8 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description) {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description, emailAddress) {
         console.log("Registering host...");
-
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const acc = this.#getConfig().xrpl;
         setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
@@ -185,8 +185,25 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
-        if (hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
+        let isAReReg = false;
+
+        try {
+            // Check the availability of an initiated transfer
+            const stateTransfereeAddrKey = evernode.StateHelpers.generateTransfereeAddrStateKey(acc.address);
+            const stateTransfereeAddrIndex = evernode.StateHelpers.getHookStateIndex(acc.registryAddress, stateTransfereeAddrKey);
+            const res = await hostClient.xrplApi.getLedgerEntry(stateTransfereeAddrIndex);
+
+            if (res && res?.HookStateData)
+                isAReReg = true;
+        }
+        catch (e) {
+            console.log('Error occurred in getting the ledger entires');
+        }
+
+        if (!isAReReg && hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
             throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+        else if (isAReReg && ((await hostClient.getEVRBalance()) < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS)))
+            throw `EVR balance in the account is less than 1 Now for the re-registration.`;
 
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -194,7 +211,7 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '));
+                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
@@ -325,6 +342,7 @@ class Setup {
         await hostClient.connect();
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedNfts(hostClient.xrplAcc);
+        await hostClient.disconnect();
     }
 
     // Change the message board configurations.
@@ -481,6 +499,84 @@ class Setup {
         }
 
         await deinitClients();
+    }
+
+    async deleteInstance(containerName) {
+        const sashiCliPath = appenv.SASHI_CLI_PATH;
+        if (!fs.existsSync(sashiCliPath))
+            throw `Sashi CLI does not exist in ${sashiCliPath}.`;
+
+        let db;
+        let xrplApi;
+        let hostClient;
+        try {
+            console.log(`Destroying the instance...`);
+
+            // Destroy the instance.
+            const sashiCli = new SashiCLI(sashiCliPath);
+            await sashiCli.destroyInstance(containerName);
+
+            db = new SqliteDatabase(appenv.DB_PATH);
+            db.open();
+            const leaseTable = appenv.DB_TABLE_NAME;
+
+            let lease = await db.getValues(leaseTable, { container_name: containerName });
+
+            if (lease.length > 0) {
+                lease = lease[0];
+
+                const acc = this.#getConfig().xrpl;
+                setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+
+                xrplApi = new evernode.XrplApi(acc.rippledServer);
+                await xrplApi.connect();
+
+                // Get the existing nft of the lease.
+                const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
+
+                if (nft) {
+                    hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
+                    await hostClient.connect();
+
+                    // Delete instance from sashiDB and burn the token
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+
+                    console.log(`Expiring the lease...`);
+
+                    // Burn the NFTs and recreate the offer.
+                    await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
+
+                    // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
+                    await hostClient.refreshConfig();
+                    const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice);
+                    await hostClient.offerLease(uriInfo.leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+
+                    // Refund EVRs to the tenant.
+                    const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+                    const spentMoments = Math.ceil((currentTime - lease.timestamp) / hostClient.config.momentSize);
+                    const remainingMoments = lease.life_moments - spentMoments;
+                    if (remainingMoments > 0) {
+                        console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
+                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, (uriInfo.leaseAmount * remainingMoments).toString());
+                    }
+                }
+
+                // Delete the lease record related to this instance (Permanent Delete).
+                await db.deleteValues(leaseTable, { tx_hash: lease.tx_hash });
+            }
+
+            console.log(`Destroyed instance ${lease.container_name}`);
+        }
+        catch (e) { throw e }
+        finally {
+            if (db)
+                db.close();
+            if (hostClient)
+                await hostClient.disconnect();
+            if (xrplApi)
+                await xrplApi.disconnect();
+        }
+
     }
 }
 

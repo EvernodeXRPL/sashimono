@@ -45,11 +45,13 @@ namespace hp
     constexpr const char *DB_READ_ERROR = "db_read_error";
     constexpr const char *DB_WRITE_ERROR = "db_write_error";
     constexpr const char *USER_INSTALL_ERROR = "user_install_error";
+    constexpr const char *USER_UNINSTALL_ERROR = "user_uninstall_error";
     constexpr const char *INSTANCE_ERROR = "instance_error";
     constexpr const char *CONF_READ_ERROR = "conf_read_error";
     constexpr const char *CONTAINER_CONF_ERROR = "container_conf_error";
     constexpr const char *CONTAINER_START_ERROR = "container_start_error";
     constexpr const char *CONTAINER_UPDATE_ERROR = "container_update_error";
+    constexpr const char *CONTAINER_DESTROY_ERROR = "container_destroy_error";
     constexpr const char *NO_CONTAINER = "no_container";
     constexpr const char *DUP_CONTAINER = "dup_container";
     constexpr const char *MAX_ALLOCATION_REACHED = "max_alloc_reached";
@@ -457,15 +459,17 @@ namespace hp
 
     /**
      * Destroy the container with given name if exists.
+     * @param error_msg Error message if any.
      * @param container_name Name of the container.
      * @return 0 on success execution or relavent error code on error.
      */
-    int destroy_container(std::string_view container_name)
+    int destroy_container(std::string &error_msg, std::string_view container_name)
     {
         instance_info info;
         const int res = sqlite::is_container_exists(db, container_name, info);
         if (res == 0)
         {
+            error_msg = NO_CONTAINER;
             LOG_ERROR << "Given container not found. name: " << container_name;
             return -1;
         }
@@ -475,6 +479,7 @@ namespace hp
             // sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1) // Soft Deletion.
             sqlite::delete_hp_instance(db, container_name) == -1) // Permanent Deletion.
         {
+            error_msg = CONTAINER_DESTROY_ERROR;
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
         }
@@ -483,8 +488,10 @@ namespace hp
             vacant_ports.push_back(info.assigned_ports);
 
         // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
+        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1) {
+            error_msg = USER_UNINSTALL_ERROR;
             return -1;
+        }
 
         return 0;
     }

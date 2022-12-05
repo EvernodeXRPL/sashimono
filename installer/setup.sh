@@ -193,7 +193,7 @@ function set_domain_certs() {
     if confirm "\n$evernode can automatically setup free SSL certificates and renewals for '$inetaddr'
             using Let's Encrypt (https://letsencrypt.org/).
             \nDo you want to setup Let's Encrypt automatic SSL (recommended)?" && \
-        confirm "Do you agree to have Let's Encrypt send SSL certificate notifications to your email 'sashimono@evernode.org' (required)?" && \
+        confirm "Do you agree to have Let's Encrypt send SSL certificate notifications to your email '$email_address' (required)?" && \
         confirm "Do you agree with Let's Encrypt Terms of Service at https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf ?" ; then
             
         tls_key_file="letsencrypt"

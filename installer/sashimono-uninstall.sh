@@ -59,6 +59,7 @@ function cleanup_certbot_ssl() {
             certbot -n revoke --cert-name $inet_addr
 
             # cleaning up firewall rule for domain validation
+            echo "Cleaning up firewall rule for SSL validation"
             ufw delete allow 80/tcp
         fi
     fi

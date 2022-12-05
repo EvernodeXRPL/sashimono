@@ -107,7 +107,7 @@ function setup_certbot() {
 
     # Setup the certificates
     echo "Running certbot certonly"
-    certbot certonly -n -d $inetaddr --agree-tos --email sashimono@evernode.org --standalone || return 1
+    certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
 
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"

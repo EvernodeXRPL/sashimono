@@ -492,7 +492,7 @@ function set_transferee_address() {
     [ -z $transferee_address ] && transferee_address=''
 
     if $interactive; then
-        confirm "\nDo you want to set the current host account as the transferee's account also?" && return 0
+        confirm "\nDo you want to set the current host account as the transferee's account?" && return 0
 
         local address=''
         while true ; do

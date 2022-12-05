@@ -253,7 +253,7 @@ function set_inet_addr() {
         inetaddr=$(hostname -I | awk '{print $1}')
         validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
                                 internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
-        inetaddr=""
+        $interactive && inetaddr=""
     fi
 
     if $interactive ; then
@@ -264,7 +264,7 @@ function set_inet_addr() {
         done
     fi
 
-   ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
+    ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
 }
 
 function check_port_validity() {
@@ -445,10 +445,30 @@ function set_lease_amount() {
 
         lease_amount=$amount
     fi
+
+    ! validate_positive_decimal $lease_amount && echo "Lease amount should be a positive numerical value greater than zero." && exit 1
+}
+
+function set_email_address() {
+    if $interactive; then
+        local emailAddress=""
+        while true ; do
+            read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
+            email_address_length=${#emailAddress}
+            ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || break
+        done
+
+        email_address=$emailAddress
+    fi
+
+    non_interactive_email_address_length=${#email_address}
+    ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
+    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || exit 1
 }
 
 function set_rippled_server() {
-    [ -z $rippled_server ] && rippled_server=$default_rippled_server
+    ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
         confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
@@ -463,6 +483,7 @@ function set_rippled_server() {
         rippled_server=$newURL
     fi
 
+    ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
 }
 
 
@@ -482,6 +503,8 @@ function set_transferee_address() {
 
         transferee_address=$address
     fi
+
+    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
 }
 
 
@@ -498,6 +521,8 @@ function set_host_xrpl_secret() {
 
         xrpl_account_secret=$secret
     fi
+
+    ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
 }
 
 function install_failure() {
@@ -551,7 +576,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -874,9 +899,10 @@ if [ "$mode" == "install" ]; then
         lease_amount=${12}        # Contract instance lease amount in EVRs.
         rippled_server=${13}      # Ripple URL
         xrpl_account_secret=${14} # XRPL account secret.
-        tls_key_file=${15}        # File path to the tls private key.
-        tls_cert_file=${16}       # File path to the tls certificate.
-        tls_cabundle_file=${17}   # File path to the tls ca bundle.
+        email_address=${15}       # User email address
+        tls_key_file=${16}        # File path to the tls private key.
+        tls_cert_file=${17}       # File path to the tls certificate.
+        tls_cabundle_file=${18}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -909,6 +935,9 @@ if [ "$mode" == "install" ]; then
 
     set_host_xrpl_secret
     echo -e "Using entered value as the XRPL account serect for the configuration.\n"
+
+    set_email_address
+    echo -e "Using the email address '$email_address'.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -993,7 +1022,7 @@ elif [ "$mode" == "reconfig" ]; then
     rippled_server=${8}    # Ripple URL
 
     ( [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ] || [ -z $lease_amount ] ) &&
-        echomult "Invalid arguments.\n  Usage: sagent reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
+        echomult "Invalid arguments.\n  Usage: evernode reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
 
     [ ! -z $alloc_cpu ] && [ $alloc_cpu != 0 ] && ( ! ( validate_positive_decimal $alloc_cpu && [[ $alloc_cpu -le 1000000 ]] ) ) && echo "Invalid cpu allocation." && exit 1
     [ ! -z $alloc_ramKB ] && [ $alloc_ramKB != 0 ] && ! validate_positive_decimal $alloc_ramKB && echo "Invalid ram size." && exit 1

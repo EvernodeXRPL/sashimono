@@ -539,7 +539,7 @@ class Setup {
                 await sashiCli.destroyInstance(containerName);
                 const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
 
-                // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+                // Burn the NFTs and recreate the offer.
                 await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
                 // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
@@ -554,7 +554,7 @@ class Setup {
             console.log(`Destroyed instance ${lease.container_name}`);
 
         } catch (error) {
-            console.log(error);
+            throw error;
         } finally {
             db.close();
             await hostClient.disconnect();

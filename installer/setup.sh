@@ -116,8 +116,8 @@ else
 fi
 mode=$1
 
-if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] || [ "$mode" == "delete" ] ; then
-    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && [ "$2" != "-n" ] && echo "Second arg must be -q (Quiet) or -i (Interactive) or -n (Name)" && exit 1
+if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] ; then
+    [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$mode" == "transfer" ] && transfer=true || transfer=false
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
@@ -515,7 +515,7 @@ function set_host_xrpl_secret() {
         local secret=''
         while true ; do
             read -p "Specify the XRPL account secret: " secret </dev/tty
-            ! [[ $secret =~ ^s[rpshnaf39wBUDNEGHJKLM4PQRST7VWXYZ2bcdeCg65jkm8oFqi1tuvAxyz]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
+            ! [[ $secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
 
         done
 
@@ -866,6 +866,8 @@ function reconfig() {
 
 function delete_instance()
 {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
     instance_name=$1
     echo "Deleting instance $instance_name"
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
@@ -1037,10 +1039,9 @@ elif [ "$mode" == "reconfig" ]; then
     echo "Successfully changed the configuration!"
 
 elif [ "$mode" == "delete" ]; then
-    ([ -n "$2" ] && [ "$2" != "-n" ]) && echo "Argument must be -n ." && exit 1
-    [ -n "$3" ] || echo "An instance name must be specified." && exit 1
+    [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1
 
-    delete_instance "$3"
+    delete_instance "$2"
 
 fi
 

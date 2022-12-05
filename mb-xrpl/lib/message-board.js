@@ -603,7 +603,7 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
-        // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+        // Burn the NFTs and recreate the offer.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
         await this.hostClient.refreshConfig();

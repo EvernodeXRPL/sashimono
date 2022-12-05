@@ -101,6 +101,9 @@ function setup_certbot() {
     ! [ -f /snap/bin/certbot ] && echo "certbot not found" && return 1
     [ -f /usr/bin/certbot ] || ln -s /snap/bin/certbot /usr/bin/certbot || return 1
 
+    # allow http (port 80) in firewall for certbot domain validation
+    ufw allow http comment sashimono-certbot
+
     # Setup the certificates
     echo "Running certbot certonly"
     certbot certonly -n -d $inetaddr --agree-tos --email sashimono@evernode.org --standalone || return 1

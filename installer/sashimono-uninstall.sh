@@ -57,6 +57,9 @@ function cleanup_certbot_ssl() {
             echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
             rm $deploy_hook_script
             certbot -n revoke --cert-name $inet_addr
+
+            # cleaning up firewall rule for domain validation
+            ufw delete allow 80/tcp
         fi
     fi
 }

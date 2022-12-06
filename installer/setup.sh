@@ -751,8 +751,6 @@ function apply_ssl() {
 }
 
 function reconfig() {
-    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-
     local mb_user_id=$(id -u "$MB_XRPL_USER")
     local mb_user_runtime_dir="/run/user/$mb_user_id"
 
@@ -760,7 +758,6 @@ function reconfig() {
 
     local saconfig="$SASHIMONO_DATA/sa.cfg"
     local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
-    local max_cpu_us=$(jq '.system.max_cpu_us' $saconfig)
     local max_mem_kbytes=$(jq '.system.max_mem_kbytes' $saconfig)
     local max_swap_kbytes=$(jq '.system.max_swap_kbytes' $saconfig)
     local max_storage_kbytes=$(jq '.system.max_storage_kbytes' $saconfig)
@@ -771,7 +768,6 @@ function reconfig() {
                 
     local update_sashi=0
     ( ( [[ $alloc_instcount -gt 0 ]] && [[ $max_instance_count != $alloc_instcount ]] ) ||
-        ( [[ $alloc_cpu -gt 0 ]] && [[ $max_cpu_us != $alloc_cpu ]] ) ||
         ( [[ $alloc_ramKB -gt 0 ]] && [[ $max_mem_kbytes != $alloc_ramKB ]] ) ||
         ( [[ $alloc_swapKB -gt 0 ]] && [[ $max_swap_kbytes != $alloc_swapKB ]] ) ||
         ( [[ $alloc_diskKB -gt 0 ]] && [[ $max_storage_kbytes != $alloc_diskKB ]] ) ) &&
@@ -800,7 +796,6 @@ function reconfig() {
 
     if [ $update_sashi == 1 ] ; then
         echomult "Using allocation"
-        [[ $alloc_cpu -gt 0 ]] && echomult "$alloc_cpu Micro Sec CPU" || alloc_cpu=0
         [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM" || alloc_ramKB=0
         [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap" || alloc_swapKB=0
         [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space" || alloc_diskKB=0
@@ -808,11 +803,11 @@ function reconfig() {
         
         echomult "\nConfiguaring sashimono...\n"
 
-        ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
+        ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount 0 $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
             echomult "\nThere was an error in updating sashimono configuration.\n" && exit 1
 
         # Update cgroup allocations.
-        ( [ $alloc_cpu -gt 0 ] || [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) &&
+        ( [ $alloc_ramKB -gt 0 ] || [ $alloc_swapKB -gt 0 ] || [ $alloc_instcount -gt 0 ] ) &&
             echomult "Updating the cgroup configuration...\n" &&
             ! $SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA && echomult "\nError occured while upgrading cgroup allocations\n" && exit 1
 
@@ -1015,24 +1010,49 @@ elif [ "$mode" == "applyssl" ]; then
     apply_ssl $2 $3 $4
 
 elif [ "$mode" == "reconfig" ]; then
-    alloc_cpu=${2}          # CPU microsec to allocate for contract instances (max 1000000).
-    alloc_ramKB=${3}        # RAM to allocate for contract instances.
-    alloc_swapKB=${4}       # Swap to allocate for contract instances.
-    alloc_diskKB=${5}      # Disk space to allocate for contract instances.
-    alloc_instcount=${6}   # Total contract instance count.
-    lease_amount=${7}      # Contract instance lease amount in EVRs.
-    rippled_server=${8}    # Ripple URL
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    ( [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ] || [ -z $lease_amount ] ) &&
-        echomult "Invalid arguments.\n  Usage: evernode reconfig <cpu microsec> <ram kbytes> <swap kbytes> <disk kbytes> <max instance count> <lease amount> <rippled server>" && exit 1
+    local submod=${2}
+    if [ "$submod" == "resources" ] ; then
 
-    [ ! -z $alloc_cpu ] && [ $alloc_cpu != 0 ] && ( ! ( validate_positive_decimal $alloc_cpu && [[ $alloc_cpu -le 1000000 ]] ) ) && echo "Invalid cpu allocation." && exit 1
-    [ ! -z $alloc_ramKB ] && [ $alloc_ramKB != 0 ] && ! validate_positive_decimal $alloc_ramKB && echo "Invalid ram size." && exit 1
-    [ ! -z $alloc_swapKB ] && [ $alloc_swapKB != 0 ] && ! validate_positive_decimal $alloc_swapKB && echo "Invalid swap size." && exit 1
-    [ ! -z $alloc_diskKB ] && [ $alloc_diskKB != 0 ] && ! validate_positive_decimal $alloc_diskKB && echo "Invalid disk size." && exit 1
-    [ ! -z $alloc_instcount ] && [ $alloc_instcount != 0 ] && ! validate_positive_decimal $alloc_instcount && echo "Invalid instance count." && exit 1
-    [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
-    [ ! -z $rippled_server ] && ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+        local ramMB=${3}       # RAM to allocate for contract instances.
+        local swapMB=${4}      # Swap to allocate for contract instances.
+        local diskMB=${5}      # Disk space to allocate for contract instances.
+        alloc_instcount=${6}   # Total contract instance count.
+
+        ( [ -z $ramMB ] || [ -z $swapMB ] || [ -z $diskMB ] || [ -z $alloc_instcount ] ) &&
+            echomult "Invalid arguments.\n  Usage: evernode reconfig resources <ram MB> <swap MB> <disk MB> <max instance count>" && exit 1
+
+        [ ! -z $ramMB ] && [ $ramMB != 0 ] && ! validate_positive_decimal $ramMB && echo "Invalid ram size." && exit 1
+        [ ! -z $swapMB ] && [ $swapMB != 0 ] && ! validate_positive_decimal $swapMB && echo "Invalid swap size." && exit 1
+        [ ! -z $diskMB ] && [ $diskMB != 0 ] && ! validate_positive_decimal $diskMB && echo "Invalid disk size." && exit 1
+        [ ! -z $alloc_instcount ] && [ $alloc_instcount != 0 ] && ! validate_positive_decimal $alloc_instcount && echo "Invalid instance count." && exit 1
+
+        alloc_ramKB=$(( ramMB * 1000 ))
+        alloc_swapKB=$(( swapMB * 1000 ))
+        alloc_diskKB=$(( diskMB * 1000 ))
+
+    elif [ "$mode" == "leaseamt" ] ; then
+
+        lease_amount=${3}      # Contract instance lease amount in EVRs.
+
+        [ -z $lease_amount ] &&
+            echomult "Invalid arguments.\n  Usage: evernode reconfig leaseamt <lease amount>" && exit 1
+        
+        [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
+
+    elif [ "$mode" == "rippled" ] ; then
+    
+        rippled_server=${7}    # Ripple URL
+
+        [ -z $rippled_server ] &&
+            echomult "Invalid arguments.\n  Usage: evernode reconfig rippled <rippled server>" && exit 1
+
+        [ ! -z $rippled_server ] && ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+
+    else
+        echomult "Invalid arguments.\n  Usage: evernode reconfig [resources|leaseamt|rippled] [arguments]" && exit 1
+    fi
 
     reconfig
 

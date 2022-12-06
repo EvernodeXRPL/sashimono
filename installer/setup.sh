@@ -1045,7 +1045,7 @@ elif [ "$mode" == "reconfig" ]; then
 
     elif [ "$submod" == "rippled" ] ; then
     
-        rippled_server=${7}    # Ripple URL
+        rippled_server=${3}    # Ripple URL
 
         [ -z $rippled_server ] &&
             echomult "Invalid arguments.\n  Usage: evernode reconfig rippled <rippled server>" && exit 1

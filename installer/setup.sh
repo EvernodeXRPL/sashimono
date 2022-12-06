@@ -19,8 +19,6 @@ installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
 
-
-
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
@@ -192,15 +190,23 @@ function resolve_filepath() {
 }
 
 function set_domain_certs() {
-    if confirm "\nIt is recommended that you obtain an SSL certificate for '$inetaddr' from a trusted certificate authority.
-        If you don't provide a certificate, $evernode will generate a self-signed certificate which would not be accepted
-        by some clients including web browsers.
-        \n\nHave you obtained an SSL certificate for '$inetaddr' from a trusted authority?" ; then
+    if confirm "\n$evernode can automatically setup free SSL certificates and renewals for '$inetaddr'
+            using Let's Encrypt (https://letsencrypt.org/).
+            \nDo you want to setup Let's Encrypt automatic SSL (recommended)?" && \
+        confirm "Do you agree to have Let's Encrypt send SSL certificate notifications to your email '$email_address' (required)?" && \
+        confirm "Do you agree with Let's Encrypt Terms of Service at https://letsencrypt.org/documents/LE-SA-v1.3-September-21-2022.pdf ?" ; then
+            
+        tls_key_file="letsencrypt"
+        tls_cert_file="letsencrypt"
+        tls_cabundle_file="letsencrypt"
+    else
+
+        echomult "You have opted out of automatic SSL setup. You need to have obtained SSL certificate files for '$inetaddr'
+            from a trusted authority. Please specify the certificate files you have obtained below.\n"
+
         resolve_filepath tls_key_file r "Please specify location of the private key (usually ends with .key):"
         resolve_filepath tls_cert_file r "Please specify location of the certificate (usually ends with .crt):"
         resolve_filepath tls_cabundle_file o "Please specify location of ca bundle (usually ends with .ca-bundle [Optional]):"
-    else
-        echo "SSL certificate not provided. $evernode will generate self-signed certificate.\n"
     fi
     return 0
 }
@@ -235,18 +241,20 @@ function validate_ws_url() {
 
 function set_inet_addr() {
 
-    if $interactive ; then
+    if $interactive && [ "$NO_DOMAIN" == "" ] ; then
         echo ""
-        if confirm "For greater compatibility with a wide range of clients, it is recommended that you own a domain name
-            that others can use to reach your host over internet. If you don't, your host will not be accepted by some clients
-            including web browsers. \n\nDo you own a domain name for this host?" ; then
-            while [ -z "$inetaddr" ]; do
-                read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
-                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
-                echo "Invalid or unreachable domain name."
-            done
-        fi
+        while [ -z "$inetaddr" ]; do
+            read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+            echo "Invalid or unreachable domain name."
+        done
     fi
+
+    # Rest of this function flow will be used for debugging and internal testing puposes only.
+
+    tls_key_file="self"
+    tls_cert_file="self"
+    tls_cabundle_file="self"
 
     # Attempt auto-detection.
     if [ "$inetaddr" == "auto" ] || $interactive ; then
@@ -733,10 +741,11 @@ function apply_ssl() {
         ([ "$tls_cabundle_file" != "" ] && [ ! -f "$tls_cabundle_file" ])) &&
             echo -e "One or more invalid files provided.\nusage: applyssl <private key file> <cert file> <ca bundle file (optional)>" && exit 1
 
-    cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
-    cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
+    echo "Applying new SSL certificates for $evernode"
+    echo "Key: $tls_key_file" && cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem || exit 1
+    echo "Cert: $tls_cert_file" && cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1
     # ca bundle is optional.
-    [ "$tls_cabundle_file" != "" ] && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
+    [ "$tls_cabundle_file" != "" ] && echo "CA bundle: $tls_cabundle_file" && (cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem || exit 1)
 
     sashi list | jq -rc '.[]' | while read -r inst; do \
         local instuser=$(echo $inst | jq -r '.user'); \
@@ -748,6 +757,8 @@ function apply_ssl() {
             chown -R $instuser:$instuser /home/$instuser/$instname/cfg/*.pem && \
             echo -e "Starting contract instance $instname" && sashi start -n $instname; \
     done
+
+    echo "Done."
 }
 
 function reconfig() {
@@ -908,12 +919,7 @@ if [ "$mode" == "install" ]; then
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-            and register your system as an $evernode host.\n
-            \nThe setup will go through the following steps:\n
-            - Check your system compatibility for $evernode.\n
-            - Collect information about your system to be published to users.\n
-            - Generate a testnet XRPL account to receive $evernode hosting rewards.\n
-            \nContinue?" && exit 1
+            and register your system as an $evernode host.\n\nContinue?" && exit 1
 
     check_sys_req
     check_prereq

@@ -94,10 +94,51 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
 }
 
+function setup_certbot() {
+    stage "Setting up letsencrypt certbot"
+
+    # We assume snap is already installed (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
+    snap install core && snap refresh core && snap install --classic certbot
+    ! [ -f /snap/bin/certbot ] && echo "certbot not found" && return 1
+    [ -f /usr/bin/certbot ] || ln -s /snap/bin/certbot /usr/bin/certbot || return 1
+
+    # allow http (port 80) in firewall for certbot domain validation
+    ufw allow http comment sashimono-certbot
+
+    # Setup the certificates
+    echo "Running certbot certonly"
+    certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+
+    # We need to place our script in certbook deploy hooks dir.
+    local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
+    
+    # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
+    local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
+    echo "Setting up certbot deploy hook $deploy_hook"
+    echo "#!/bin/sh
+# This script is placed by Sashimono for automatic updataing of contract SSL certs.
+# Domain name: $inetaddr
+certname=\$(basename \$RENEWED_LINEAGE)
+[ \"\$certname\" = \"$inetaddr\" ] && evernode applyssl \$RENEWED_LINEAGE/privkey.pem \$RENEWED_LINEAGE/fullchain.pem" >$deploy_hook
+    chmod +x $deploy_hook
+}
+
 function setup_tls_certs() {
     mkdir -p $SASHIMONO_DATA/tls
 
-    if [ -f "$tls_cert_file" ] && [ -f "$tls_key_file" ] ; then
+    if [ "$tls_key_file" == "letsencrypt" ] ; then
+
+        ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && rollback
+
+    elif [ "$tls_key_file" == "self" ] ; then
+        # If user has not provided certs we generate self-signed ones.
+        stage "Generating self-signed certificates"
+        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
+            echo "Error when generating self-signed certificate." && rollback
+
+    elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ] ; then
 
         stage "Transfering certificate files"
 
@@ -108,11 +149,7 @@ function setup_tls_certs() {
             cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     else
-        # If user has not provided certs we generate self-signed ones.
-        stage "Generating self-signed certificates"
-        ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
-            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
-            echo "Error when generating self-signed certificate." && rollback
+        echo "Error when setting up SSL certificate." && rollback
     fi
 }
 

@@ -1014,8 +1014,8 @@ elif [ "$mode" == "applyssl" ]; then
 elif [ "$mode" == "reconfig" ]; then
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    submod=${2}
-    if [ "$submod" == "resources" ] ; then
+    sub_mode=${2}
+    if [ "$sub_mode" == "resources" ] ; then
 
         ramMB=${3}       # RAM to allocate for contract instances.
         swapMB=${4}      # Swap to allocate for contract instances.
@@ -1034,7 +1034,7 @@ elif [ "$mode" == "reconfig" ]; then
         alloc_swapKB=$(( swapMB * 1000 ))
         alloc_diskKB=$(( diskMB * 1000 ))
 
-    elif [ "$submod" == "leaseamt" ] ; then
+    elif [ "$sub_mode" == "leaseamt" ] ; then
 
         lease_amount=${3}      # Contract instance lease amount in EVRs.
 
@@ -1043,7 +1043,7 @@ elif [ "$mode" == "reconfig" ]; then
         
         [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
 
-    elif [ "$submod" == "rippled" ] ; then
+    elif [ "$sub_mode" == "rippled" ] ; then
     
         rippled_server=${3}    # Ripple URL
 

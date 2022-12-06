@@ -857,6 +857,8 @@ function reconfig() {
         echomult "Starting the message board...\n"
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
     fi
+
+    echo "Successfully changed the configuration!"
 }
 
 function delete_instance()
@@ -1012,12 +1014,12 @@ elif [ "$mode" == "applyssl" ]; then
 elif [ "$mode" == "reconfig" ]; then
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    local submod=${2}
+    submod=${2}
     if [ "$submod" == "resources" ] ; then
 
-        local ramMB=${3}       # RAM to allocate for contract instances.
-        local swapMB=${4}      # Swap to allocate for contract instances.
-        local diskMB=${5}      # Disk space to allocate for contract instances.
+        ramMB=${3}       # RAM to allocate for contract instances.
+        swapMB=${4}      # Swap to allocate for contract instances.
+        diskMB=${5}      # Disk space to allocate for contract instances.
         alloc_instcount=${6}   # Total contract instance count.
 
         ( [ -z $ramMB ] || [ -z $swapMB ] || [ -z $diskMB ] || [ -z $alloc_instcount ] ) &&
@@ -1032,7 +1034,7 @@ elif [ "$mode" == "reconfig" ]; then
         alloc_swapKB=$(( swapMB * 1000 ))
         alloc_diskKB=$(( diskMB * 1000 ))
 
-    elif [ "$mode" == "leaseamt" ] ; then
+    elif [ "$submod" == "leaseamt" ] ; then
 
         lease_amount=${3}      # Contract instance lease amount in EVRs.
 
@@ -1041,7 +1043,7 @@ elif [ "$mode" == "reconfig" ]; then
         
         [ ! -z $lease_amount ] && [ $lease_amount != 0 ] && ! validate_positive_decimal $lease_amount && echo "Invalid lease amount." && exit 1
 
-    elif [ "$mode" == "rippled" ] ; then
+    elif [ "$submod" == "rippled" ] ; then
     
         rippled_server=${7}    # Ripple URL
 
@@ -1055,8 +1057,6 @@ elif [ "$mode" == "reconfig" ]; then
     fi
 
     reconfig
-
-    echo "Successfully changed the configuration!"
 
 elif [ "$mode" == "delete" ]; then
     [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1

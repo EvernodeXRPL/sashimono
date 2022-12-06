@@ -460,6 +460,9 @@ class Setup {
                     nftIndexesToCreate = await getVacantLeaseIndexes();
                 }
             }
+            else {
+                nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex);
+            }
         }
         // If only instance count is changed decide whether we need to add or burn comparing the current count and updated count.
         else if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {

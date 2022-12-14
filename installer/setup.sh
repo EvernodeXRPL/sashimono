@@ -854,7 +854,7 @@ function config() {
             ( [[ $alloc_ramKB -eq 0 ]] || [[ $max_mem_kbytes == $alloc_ramKB ]] ) &&
             ( [[ $alloc_swapKB -eq 0 ]] || [[ $max_swap_kbytes == $alloc_swapKB ]] ) &&
             ( [[ $alloc_diskKB -eq 0 ]] || [[ $max_storage_kbytes == $alloc_diskKB ]] ) ) &&
-            echomult "Resource configurations values are already configured!\n" && exit 0
+            echomult "Resource configuration values are already configured!\n" && exit 0
 
         echomult "Using allocation"
         [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM"

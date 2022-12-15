@@ -197,13 +197,13 @@ class Setup {
                 isAReReg = true;
         }
         catch (e) {
-            console.log('Error occurred in getting the ledger entires');
+            // Checking ledger entries whether there is a transaction before. if not, comes here. 
         }
 
         if (!isAReReg && hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
-            throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+            throw `STAGE: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
         else if (isAReReg && ((await hostClient.getEVRBalance()) < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS)))
-            throw `EVR balance in the account is less than 1 Now for the re-registration.`;
+            throw `STAGE: EVR balance in the account is less than 1 Now for the re-registration.`;
 
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -230,7 +230,7 @@ class Setup {
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
-                throw err;
+                throw 'STAGE: '+err;
             }
         }
 

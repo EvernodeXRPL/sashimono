@@ -201,9 +201,9 @@ class Setup {
         }
 
         if (!isAReReg && hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
-            throw `STAGE: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+            throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
         else if (isAReReg && ((await hostClient.getEVRBalance()) < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS)))
-            throw `STAGE: EVR balance in the account is less than 1 Now for the re-registration.`;
+            throw `ERROR: EVR balance in the account is less than 1 Now for the re-registration.`;
 
         // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.

@@ -230,7 +230,7 @@ class Setup {
                     await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
                 }
-                throw 'STAGE: '+err;
+                throw err;
             }
         }
 

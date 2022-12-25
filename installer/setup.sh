@@ -39,7 +39,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
-export EVR_ISSUER_ADDRESS="rfxLPXCcSmwR99dV97yFozBzrzpvCa2VCf"
+export EVR_ISSUER_ADDRESS="rEm71QHHXJzGULG4mkR3yhLz6EZYgvuwwP"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
@@ -162,18 +162,21 @@ function check_sys_req() {
     local os=$(grep -ioP '^ID=\K.+' /etc/os-release)
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
-    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $swapKB -lt 2000000 ] || [ $diskKB -lt 4000000 ]; then
-        echomult "Your system specs are:
-            \n OS: $os $osversion
-            \n RAM: $(GB $ramKB)
-            \n Swap: $(GB $swapKB)
-            \n Disk space (/home): $(GB $diskKB)
-            \n$evernode host registration requires Ubuntu 20.04 with 2 GB RAM, 2 GB Swap and 4 GB free disk space for /home.
-            \nYour system does not meet some of the requirements. Aborting."
+    local errors=""
+    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errors=" OS: $os $osversion (required: Ubuntu 20.04)"
+    [ $ramKB -lt 2000000 ] && errors="$errors\n RAM: $(GB $ramKB) (required: 2 GB RAM)"
+    [ $swapKB -lt 2000000 ] && errors="$errors\n Swap: $(GB $swapKB) (required: 2 GB Swap)"
+    [ $diskKB -lt 4000000 ] && errors="$errors\n Disk space (/home): $(GB $diskKB) (required: 4 GB)"
+
+    if [ -z $errors ]; then
+        echo "System check complete. Your system is capable of becoming an $evernode host."
+    else
+        echomult "Your system does not meet following $evernode system requirements:\n"
+        echomult $errors
+        echomult "\n\n$evernode host registration requires Ubuntu 20.04 with 2 GB RAM,
+            2 GB Swap and 4 GB free disk space for /home. Aborting setup."
         exit 1
     fi
-
-    echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
 function get_xrpl_response() {
@@ -423,7 +426,7 @@ function set_instance_alloc() {
 
     if $interactive; then
         echomult "Based on your system resources, we have chosen the following allocation:\n
-                $(GB $alloc_ramKB) RAM\n
+                $(GB $alloc_ramKB) memory\n
                 $(GB $alloc_swapKB) Swap\n
                 $(GB $alloc_diskKB) disk space\n
                 Distributed among $alloc_instcount contract instances"
@@ -437,8 +440,8 @@ function set_instance_alloc() {
         done
 
         while true ; do
-            read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid RAM size." || break
+            read -p "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
         done
 
         while true ; do
@@ -503,7 +506,7 @@ function set_rippled_server() {
         local new_url=""
 
         while true ; do
-            read -p "Specify the rippled URL: " new_url </dev/tty
+            read -p "Specify the Rippled server URL: " new_url </dev/tty
             ! validate_rippled_url $new_url || break
         done
 
@@ -538,7 +541,7 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have an XRPL account with a minimum EVR balance of $MIN_EVR_BALANCE.\n"
+        echomult "In order to register in Evernode you need to have an XRPL account.\n"
         local xrpl_address=""
         local xrpl_secret=""
         while true ; do
@@ -546,10 +549,15 @@ function set_host_xrpl_secret() {
             # We don't really need the account address. We simply use it to check sufficient EVR balance.
             read -p "Specify the XRPL account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
-            # Check account balance
-            local evr_balance=$(get_xrpl_response "{\"command\": \"account_info\",\"account\": \"$xrpl_address\"}" | jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
+
+            # Check whether there's a pending transfer to this account.
+            # TODO
+
+            # If no transfer pending, check account balance
+            echo "Checking EVR balance in $xrpl_address"
+            local evr_balance=$(get_xrpl_response "{\"command\": \"account_info\",\"account\": \"$xrpl_address\"}" | $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
             [ -z $evr_balance ] && echo "Failed to get EVR balance of $xrpl_address. Check whether account address is correct and try again." && continue
-            [ $evr_balance \< $MIN_EVR_BALANCE ] && echo "Insufficient EVR balance in $xrpl_address" && continue
+            [ $evr_balance \< $MIN_EVR_BALANCE ] && echo "Insufficient EVR balance in $xrpl_address. You need at least $MIN_EVR_BALANCE Evers to fund the registration." && continue
 
             read -p "Specify the XRPL account secret (this is stored on your disk): " xrpl_secret </dev/tty
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
@@ -861,21 +869,21 @@ function config() {
     local sub_mode=${1}
     if [ "$sub_mode" == "resources" ] ; then
 
-        local ramMB=${2}       # RAM to allocate for contract instances.
+        local ramMB=${2}       # memory to allocate for contract instances.
         local swapMB=${3}      # Swap to allocate for contract instances.
         local diskMB=${4}      # Disk space to allocate for contract instances.
         local instcount=${5}   # Total contract instance count.
 
         [ -z $ramMB ] && [ -z $swapMB ] && [ -z $diskMB ] && [ -z $instcount ] &&
             echomult "Your current resource allocation is:
-            \n RAM: $(GB $max_mem_kbytes)
+            \n Memory: $(GB $max_mem_kbytes)
             \n Swap: $(GB $max_swap_kbytes)
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
 
-        local help_text="Usage: evernode config resources | evernode config resources <ram MB> <swap MB> <disk MB> <max instance count>\n"
+        local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
-            echomult "Invalid ram size.\n   $help_text" && exit 1
+            echomult "Invalid memory size.\n   $help_text" && exit 1
         [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && ! validate_positive_decimal $swapMB &&
             echomult "Invalid swap size.\n   $help_text" && exit 1
         [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && ! validate_positive_decimal $diskMB &&
@@ -896,7 +904,7 @@ function config() {
             echomult "Resource configuration values are already configured!\n" && exit 0
 
         echomult "Using allocation"
-        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM"
+        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) memory"
         [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap"
         [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space"
         [[ $alloc_instcount -gt 0 ]] && echomult "Distributed among $alloc_instcount contract instances"
@@ -1001,7 +1009,7 @@ if [ "$mode" == "install" ]; then
         init_user_port=${5}       # Starting user port for instances.
         countrycode=${6}          # 2-letter country code.
         alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}          # RAM to allocate for contract instances.
+        alloc_ramKB=${8}          # Memory to allocate for contract instances.
         alloc_swapKB=${9}         # Swap to allocate for contract instances.
         alloc_diskKB=${10}        # Disk space to allocate for contract instances.
         alloc_instcount=${11}     # Total contract instance count.
@@ -1015,16 +1023,13 @@ if [ "$mode" == "install" ]; then
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-            and register your system as an $evernode host.\n\nContinue?" && exit 1
+            and register your system as an $evernode host.
+            \nMake sure your system does not currently contain any other workloads important
+            to you since we will be making modifications to your system configuration.
+            \n\nContinue?" && exit 1
 
     check_sys_req
     check_prereq
-
-    # Check bc command is installed.
-    if ! command -v bc &>/dev/null; then
-        echo "bc command not found. Installing.."
-        apt-get -y install bc >/dev/null
-    fi
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
@@ -1032,16 +1037,10 @@ if [ "$mode" == "install" ]; then
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-
-    $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
-            to you since we will be making modifications to your system configuration.
-            \n\nContinue?" && exit 1
-
     if [ "$NO_MB" == "" ]; then
         set_rippled_server
-        echo -e "Using the Rippled server '$rippled_server'.\n"
+        echo -e "Using Rippled server '$rippled_server'.\n"
         set_host_xrpl_secret
-        set_lease_amount
     fi
 
     set_email_address
@@ -1057,11 +1056,15 @@ if [ "$mode" == "install" ]; then
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
 
     set_instance_alloc
-    echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
+    echo -e "Using allocation $(GB $alloc_ramKB) memory, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, distributed among $alloc_instcount contract instances.\n"
 
     set_init_ports
-    echo -e "Using port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).\n"
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+    echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
+
+    set_lease_amount
+    echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+
+    $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
     echo "Starting installation..."
     install_evernode 0
@@ -1083,8 +1086,9 @@ elif [ "$mode" == "uninstall" ]; then
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
-    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
-            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+    $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
+        while allowing you to transfer the registration to a preferred transferee.
+        \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
     if ! $interactive ; then
         transferee_address=${3}           # Address of the transferee.
@@ -1096,7 +1100,8 @@ elif [ "$mode" == "transfer" ]; then
 
     uninstall_evernode 0
 
-    echo "Transfer process was sucessfully initiated."
+    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using
+        the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
     reg_info
@@ -1117,7 +1122,7 @@ elif [ "$mode" == "config" ]; then
     config $2 $3 $4 $5 $6
 
 elif [ "$mode" == "delete" ]; then
-    [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1
+    [ -z "$2" ] && echomult "A contract instance name must be specified (see 'evernode list').\n  Usage: evernode delete <instance name>" && exit 1
 
     delete_instance "$2"
 

@@ -1042,6 +1042,12 @@ if [ "$mode" == "install" ]; then
     check_sys_req
     check_prereq
 
+    # Check bc command is installed.
+    if ! command -v bc &>/dev/null; then
+        echo "bc command not found. Installing.."
+        apt-get -y install bc >/dev/null
+    fi
+
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
     curl --silent $licence_url | cat

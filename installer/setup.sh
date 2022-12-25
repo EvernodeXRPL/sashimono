@@ -495,7 +495,7 @@ function set_email_address() {
             read -p "Specify the contact email address (this will be published on the ledger): " emailAddress </dev/tty
             email_address_length=${#emailAddress}
             ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid." ) ) || break
+            ( ! [[ $emailAddress =~ .+@.+ ]] && echo "Email address is invalid." ) ) || break
         done
 
         email_address=$emailAddress
@@ -503,7 +503,7 @@ function set_email_address() {
 
     non_interactive_email_address_length=${#email_address}
     ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid." ) ) || exit 1
+    ( ! [[ $email_address =~ .+@.+ ]] && echo "Email address is invalid." ) ) || exit 1
 }
 
 function set_rippled_server() {

@@ -3,6 +3,9 @@
 # This script is also used as the 'evernode' cli alias after the installation.
 # usage: ./setup.sh install
 
+# surrounding braces  are needed make the whole script to be buffered on client before execution.
+{
+
 evernode="Evernode beta"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
@@ -163,17 +166,16 @@ function check_sys_req() {
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
     local errors=""
-    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errors=" OS: $os $osversion (required: Ubuntu 20.04)"
-    [ $ramKB -lt 2000000 ] && errors="$errors\n RAM: $(GB $ramKB) (required: 2 GB RAM)"
-    [ $swapKB -lt 2000000 ] && errors="$errors\n Swap: $(GB $swapKB) (required: 2 GB Swap)"
-    [ $diskKB -lt 4000000 ] && errors="$errors\n Disk space (/home): $(GB $diskKB) (required: 4 GB)"
+    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errs=" OS: $os $osversion (required: Ubuntu 20.04)\n"
+    [ $ramKB -lt 2000000 ] && errors="$errors RAM: $(GB $ramKB) (required: 2 GB RAM)\n"
+    [ $swapKB -lt 2000000 ] && errors="$errors Swap: $(GB $swapKB) (required: 2 GB Swap)\n"
+    [ $diskKB -lt 4000000 ] && errors="$errors Disk space (/home): $(GB $diskKB) (required: 4 GB)\n"
 
-    if [ -z $errors ]; then
+    if [ -z "$errors" ]; then
         echo "System check complete. Your system is capable of becoming an $evernode host."
     else
-        echomult "Your system does not meet following $evernode system requirements:\n"
-        echomult $errors
-        echomult "\n\n$evernode host registration requires Ubuntu 20.04 with 2 GB RAM,
+        echomult "Your system does not meet following $evernode system requirements:\n $errors"
+        echomult "$evernode host registration requires Ubuntu 20.04 with minimum 2 GB RAM,
             2 GB Swap and 4 GB free disk space for /home. Aborting setup."
         exit 1
     fi
@@ -182,9 +184,11 @@ function check_sys_req() {
 function get_xrpl_response() {
     local msg=$1
     local url=$2
-    [ -z $url ] && url=default_rippled_server
+    [ -z "$url" ] && url=$rippled_server
 
-    # if our websocat binary doesn't exist in temp location, download it.
+    mkdir -p $tools_temp_dir
+
+    # If our websocat binary doesn't exist in temp location, download it.
     local websocat_temp_bin="$tools_temp_dir/websocat"
     [ ! -f "$websocat_temp_bin" ] && curl --silent $websocat_url --output $websocat_temp_bin
     [ ! -f "$websocat_temp_bin" ] && echo "Could not download websocat for xrpl validation." && exit 1
@@ -196,9 +200,11 @@ function get_xrpl_response() {
 
     local resp=$($websocat_temp_bin $url <<< $msg)
 
-    # check success response
-    [ $resp == *'"status":"success"'* ] && echo resp && return 0
-    return 1
+    # Check success response.
+    local resp_status=$(echo "$resp" | $jq_temp_bin -r ".status" 2>/dev/null)
+    [ "$resp_status" == "success" ] && echo "$resp"
+
+    # If we will not output anything.
 }
 
 function resolve_filepath() {
@@ -266,7 +272,10 @@ function validate_positive_decimal() {
 
 function validate_rippled_url() {
     ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
-    ! get_xrpl_response '{"command": "server_info"}' $1 && echo "Could not communicate with the rippled server." && return 1
+
+    echo "Checking server $1..."
+    local resp=$(get_xrpl_response '{"command": "server_info"}' $1)
+    [ -z "$resp" ] && echo "Could not communicate with the rippled server." && return 1
     return 0
 }
 
@@ -501,19 +510,17 @@ function set_rippled_server() {
     ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
-        confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
-
-        local new_url=""
-
-        while true ; do
-            read -p "Specify the Rippled server URL: " new_url </dev/tty
-            ! validate_rippled_url $new_url || break
-        done
-
-        rippled_server=$new_url
+        if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?" ; then
+            ! validate_rippled_url $rippled_server && exit 1
+        else
+            local new_url=""
+            while true ; do
+                read -p "Specify the Rippled server URL: " new_url </dev/tty
+                ! validate_rippled_url $new_url || break
+            done
+            rippled_server=$new_url
+        fi
     fi
-
-    ! validate_rippled_url $rippled_server && exit 1
 }
 
 
@@ -541,7 +548,7 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have an XRPL account.\n"
+        echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
         local xrpl_address=""
         local xrpl_secret=""
         while true ; do
@@ -554,10 +561,14 @@ function set_host_xrpl_secret() {
             # TODO
 
             # If no transfer pending, check account balance
-            echo "Checking EVR balance in $xrpl_address"
-            local evr_balance=$(get_xrpl_response "{\"command\": \"account_info\",\"account\": \"$xrpl_address\"}" | $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
-            [ -z $evr_balance ] && echo "Failed to get EVR balance of $xrpl_address. Check whether account address is correct and try again." && continue
-            [ $evr_balance \< $MIN_EVR_BALANCE ] && echo "Insufficient EVR balance in $xrpl_address. You need at least $MIN_EVR_BALANCE Evers to fund the registration." && continue
+            echo "Checking EVR balance in $xrpl_address..."
+            
+            local xrpl_resp=$(get_xrpl_response "{\"command\":\"account_lines\",\"account\":\"$xrpl_address\"}")
+            [ -z "$xrpl_resp" ] && echomult "Failed to get EVR balance of $xrpl_address. Check whether the account address is correct and try again.\n" && continue
+
+            local evr_balance=$(echo $xrpl_resp | $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
+            [ -z "$evr_balance" ] && echomult "Account $xrpl_address does not have an EVR balance.\n" && continue
+            [ $evr_balance \< $MIN_EVR_BALANCE ] && echomult "Insufficient EVR balance in $xrpl_address. You need at least $MIN_EVR_BALANCE Evers to fund the registration.\n" && continue
 
             read -p "Specify the XRPL account secret (this is stored on your disk): " xrpl_secret </dev/tty
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
@@ -1061,8 +1072,10 @@ if [ "$mode" == "install" ]; then
     set_init_ports
     echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
 
-    set_lease_amount
-    echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+    if [ "$NO_MB" == "" ]; then
+        set_lease_amount
+        echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+    fi
 
     $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
@@ -1131,3 +1144,6 @@ fi
 [ "$mode" != "uninstall" ] && check_installer_pending_finish
 
 exit 0
+
+# surrounding braces  are needed make the whole script to be buffered on client before execution.
+}

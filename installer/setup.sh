@@ -15,9 +15,12 @@ cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f7
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
+websocat_url="$cloud_storage/websocat"
+jq_url="$cloud_storage/jq"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
+tools_temp_dir="/tmp/evernode-setup-tools"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -34,8 +37,10 @@ export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
-export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
+export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
+export EVR_ISSUER_ADDRESS="rfxLPXCcSmwR99dV97yFozBzrzpvCa2VCf"
+export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -171,6 +176,28 @@ function check_sys_req() {
     echo "System check complete. Your system is capable of becoming an $evernode host."
 }
 
+function get_xrpl_response() {
+    local msg=$1
+    local url=$2
+    [ -z $url ] && url=default_rippled_server
+
+    # if our websocat binary doesn't exist in temp location, download it.
+    local websocat_temp_bin="$tools_temp_dir/websocat"
+    [ ! -f "$websocat_temp_bin" ] && curl --silent $websocat_url --output $websocat_temp_bin
+    [ ! -f "$websocat_temp_bin" ] && echo "Could not download websocat for xrpl validation." && exit 1
+    local jq_temp_bin="$tools_temp_dir/jq"
+    [ ! -f "$jq_temp_bin" ] && curl --silent $jq_url --output $jq_temp_bin
+    [ ! -f "$jq_temp_bin" ] && echo "Could not download jq for xrpl validation." && exit 1
+    chmod +x $websocat_temp_bin
+    chmod +x $jq_temp_bin
+
+    local resp=$($websocat_temp_bin $url <<< $msg)
+
+    # check success response
+    [ $resp == *'"status":"success"'* ] && echo resp && return 0
+    return 1
+}
+
 function resolve_filepath() {
     # name reference the variable name provided as first argument.
     local -n filepath=$1
@@ -234,8 +261,9 @@ function validate_positive_decimal() {
     return 0
 }
 
-function validate_ws_url() {
-    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && return 1
+function validate_rippled_url() {
+    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
+    ! get_xrpl_response '{"command": "server_info"}' $1 && echo "Could not communicate with the rippled server." && return 1
     return 0
 }
 
@@ -435,36 +463,27 @@ function set_instance_alloc() {
 }
 
 function set_lease_amount() {
-    # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    # [ -z $lease_amount ] && lease_amount=0
 
     # Lease amount is mandatory field set by the user
     if $interactive; then
-        # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
-        # echo "Default contract instance lease amount is taken from purchaser service target price."
-
-        # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
-
         local amount=0
         while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
-            ! validate_positive_decimal $amount && echo "Lease amount should be a positive numerical value greater than zero." || break
+            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
+            ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
         done
 
         lease_amount=$amount
     fi
-
-    ! validate_positive_decimal $lease_amount && echo "Lease amount should be a positive numerical value greater than zero." && exit 1
 }
 
 function set_email_address() {
     if $interactive; then
         local emailAddress=""
         while true ; do
-            read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
+            read -p "Specify the contact email address (this will be published on the ledger): " emailAddress </dev/tty
             email_address_length=${#emailAddress}
             ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || break
+            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid." ) ) || break
         done
 
         email_address=$emailAddress
@@ -472,7 +491,7 @@ function set_email_address() {
 
     non_interactive_email_address_length=${#email_address}
     ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || exit 1
+    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid." ) ) || exit 1
 }
 
 function set_rippled_server() {
@@ -481,17 +500,17 @@ function set_rippled_server() {
     if $interactive; then
         confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
 
-        local newURL=""
+        local new_url=""
 
         while true ; do
-            read -p "Specify the rippled URL: " newURL </dev/tty
-            ! validate_ws_url $newURL && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
+            read -p "Specify the rippled URL: " new_url </dev/tty
+            ! validate_rippled_url $new_url || break
         done
 
-        rippled_server=$newURL
+        rippled_server=$new_url
     fi
 
-    ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
+    ! validate_rippled_url $rippled_server && exit 1
 }
 
 
@@ -519,15 +538,24 @@ function set_transferee_address() {
 function set_host_xrpl_secret() {
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have an XRPL account with EVRs.\n"
-        local secret=''
+        echomult "In order to register in Evernode you need to have an XRPL account with a minimum EVR balance of $MIN_EVR_BALANCE.\n"
+        local xrpl_address=""
+        local xrpl_secret=""
         while true ; do
-            read -p "Specify the XRPL account secret: " secret </dev/tty
-            ! [[ $secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
 
+            # We don't really need the account address. We simply use it to check sufficient EVR balance.
+            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+            # Check account balance
+            local evr_balance=$(get_xrpl_response "{\"command\": \"account_info\",\"account\": \"$xrpl_address\"}" | jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
+            [ -z $evr_balance ] && echo "Failed to get EVR balance of $xrpl_address. Check whether account address is correct and try again." && continue
+            [ $evr_balance \< $MIN_EVR_BALANCE ] && echo "Insufficient EVR balance in $xrpl_address" && continue
+
+            read -p "Specify the XRPL account secret (this is stored on your disk): " xrpl_secret </dev/tty
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
         done
 
-        xrpl_account_secret=$secret
+        xrpl_account_secret=$xrpl_secret
     fi
 
     ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
@@ -893,11 +921,11 @@ function config() {
 
     elif [ "$sub_mode" == "rippled" ] ; then
     
-        local server=${2}    # Ripple URL
+        local server=${2}    # Rippled server URL
         [ -z $server ] && echomult "Your current rippled server is: $cfg_rippled_server\n" && exit 0
 
-        ! validate_ws_url $server &&
-            echomult "Rippled URL must be a valid URL that starts with 'wss://' .\n   Usage: evernode config rippled | evernode config rippled <rippled server>\n" &&
+        ! validate_rippled_url $server &&
+            echomult "\nUsage: evernode config rippled | evernode config rippled <rippled server>\n" &&
             exit 1
         rippled_server=$server
         [[ $cfg_rippled_server == $rippled_server ]] && echomult "Rippled server is already configured!\n" && exit 0
@@ -978,7 +1006,7 @@ if [ "$mode" == "install" ]; then
         alloc_diskKB=${10}        # Disk space to allocate for contract instances.
         alloc_instcount=${11}     # Total contract instance count.
         lease_amount=${12}        # Contract instance lease amount in EVRs.
-        rippled_server=${13}      # Ripple URL
+        rippled_server=${13}      # Rippled server URL
         xrpl_account_secret=${14} # XRPL account secret.
         email_address=${15}       # User email address
         tls_key_file=${16}        # File path to the tls private key.
@@ -1007,13 +1035,17 @@ if [ "$mode" == "install" ]; then
 
     $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
-            \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
+            \n\nContinue?" && exit 1
 
-    set_host_xrpl_secret
-    echo -e "Using entered value as the XRPL account serect for the configuration.\n"
+    if [ "$NO_MB" == "" ]; then
+        set_rippled_server
+        echo -e "Using the Rippled server '$rippled_server'.\n"
+        set_host_xrpl_secret
+        set_lease_amount
+    fi
 
     set_email_address
-    echo -e "Using the email address '$email_address'.\n"
+    echo -e "Using the contact email address '$email_address'.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -1029,14 +1061,7 @@ if [ "$mode" == "install" ]; then
 
     set_init_ports
     echo -e "Using port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).\n"
-
-    set_lease_amount
-    # Commented for future consideration.
-    # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
     (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
-
-    set_rippled_server
-    echo -e "Using the rippled address '$rippled_server'.\n"
 
     echo "Starting installation..."
     install_evernode 0

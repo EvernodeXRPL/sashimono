@@ -578,7 +578,8 @@ function install_evernode() {
     ! create_evernode_alias && install_failure
 
     # Adding ip address as the host description.
-    description=$inetaddr
+    # Currently the domain address saved only in account_info and an empty hyphen in Hook states )
+    description="-"
 
     echo "Installing Sashimono..."
     # Filter logs with STAGE prefix and ommit the prefix when echoing.

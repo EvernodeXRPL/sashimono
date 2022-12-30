@@ -578,14 +578,14 @@ function install_evernode() {
     ! create_evernode_alias && install_failure
 
     # Adding ip address as the host description.
-    # Currently the domain address saved only in account_info and an empty hyphen in Hook states )
-    description="-"
+    # Currently the domain address saved only in account_info and an empty value in Hook states )
+    description=""
 
     echo "Installing Sashimono..."
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $description $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure

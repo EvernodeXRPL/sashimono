@@ -176,7 +176,7 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, description, emailAddress) {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description = "") {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const acc = this.#getConfig().xrpl;

@@ -49,6 +49,10 @@ export MIN_EVR_BALANCE=5120
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
 
+# We record the user who called this setup script as sudo because we need to execute some programs
+# we download manually in a secure manner.
+noroot_user=${SUDO_USER:-$(whoami)}
+
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
@@ -198,13 +202,14 @@ function get_xrpl_response() {
     chmod +x $websocat_temp_bin
     chmod +x $jq_temp_bin
 
-    local resp=$($websocat_temp_bin $url <<< $msg)
+    # execute as websocat unprivileged user.
+    local resp=$(sudo -u $noroot_user $websocat_temp_bin $url <<< $msg)
 
     # Check success response.
     local resp_status=$(echo "$resp" | $jq_temp_bin -r ".status" 2>/dev/null)
     [ "$resp_status" == "success" ] && echo "$resp"
 
-    # If we will not output anything.
+    # If error we will not output anything.
 }
 
 function resolve_filepath() {
@@ -566,7 +571,8 @@ function set_host_xrpl_secret() {
             local xrpl_resp=$(get_xrpl_response "{\"command\":\"account_lines\",\"account\":\"$xrpl_address\"}")
             [ -z "$xrpl_resp" ] && echomult "Failed to get EVR balance of $xrpl_address. Check whether the account address is correct and try again.\n" && continue
 
-            local evr_balance=$(echo $xrpl_resp | $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
+            # execute jq as unprivileged user.
+            local evr_balance=$(echo $xrpl_resp | sudo -u $noroot_user $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
             [ -z "$evr_balance" ] && echomult "Account $xrpl_address does not have an EVR balance.\n" && continue
             [ $evr_balance \< $MIN_EVR_BALANCE ] && echomult "Insufficient EVR balance in $xrpl_address. You need at least $MIN_EVR_BALANCE Evers to fund the registration.\n" && continue
 

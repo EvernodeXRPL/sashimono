@@ -18,12 +18,14 @@ cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f7
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
-websocat_url="$cloud_storage/websocat"
-jq_url="$cloud_storage/jq"
+nodejs_url="$cloud_storage/node"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
-tools_temp_dir="/tmp/evernode-setup-tools"
+setup_helper_dir="/tmp/evernode-setup-helpers"
+nodejs_temp_bin="$setup_helper_dir/node"
+jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -48,10 +50,6 @@ export MIN_EVR_BALANCE=5120
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
-
-# We record the user who called this setup script as sudo because we need to execute some programs
-# we download manually in a secure manner.
-noroot_user=${SUDO_USER:-$(whoami)}
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -185,31 +183,42 @@ function check_sys_req() {
     fi
 }
 
-function get_xrpl_response() {
-    local msg=$1
-    local url=$2
-    [ -z "$url" ] && url=$rippled_server
+function init_setup_helpers() {
 
-    mkdir -p $tools_temp_dir
+    local jshelper_dir=$(dirname $jshelper_temp_bin)
+    mkdir -p $jshelper_dir
 
-    # If our websocat binary doesn't exist in temp location, download it.
-    local websocat_temp_bin="$tools_temp_dir/websocat"
-    [ ! -f "$websocat_temp_bin" ] && curl --silent $websocat_url --output $websocat_temp_bin
-    [ ! -f "$websocat_temp_bin" ] && echo "Could not download websocat for xrpl validation." && exit 1
-    local jq_temp_bin="$tools_temp_dir/jq"
-    [ ! -f "$jq_temp_bin" ] && curl --silent $jq_url --output $jq_temp_bin
-    [ ! -f "$jq_temp_bin" ] && echo "Could not download jq for xrpl validation." && exit 1
-    chmod +x $websocat_temp_bin
-    chmod +x $jq_temp_bin
+    [ ! -f "$nodejs_temp_bin" ] && curl --silent $nodejs_url --output $nodejs_temp_bin
+    [ ! -f "$nodejs_temp_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
+    chmod +x $nodejs_temp_bin
 
-    # execute as websocat unprivileged user.
-    local resp=$(sudo -u $noroot_user $websocat_temp_bin $url <<< $msg)
+    if [ ! -f "$jshelper_temp_bin" ]; then
+        pushd $jshelper_dir
+        curl --silent $jshelper_url --output jshelper.tar.gz
+        tar zxf jshelper.tar.gz --strip-components=1
+        rm jshelper.tar.gz
+        popd
+    fi
+    [ ! -f "$jshelper_temp_bin" ] && echo "Could not download helper tool for setup checks." && exit 1
+}
 
-    # Check success response.
-    local resp_status=$(echo "$resp" | $jq_temp_bin -r ".status" 2>/dev/null)
-    [ "$resp_status" == "success" ] && echo "$resp"
+function exec_jshelper() {
 
-    # If error we will not output anything.
+    # Create fifo file to read response data from the helper script.
+    local resp_file=$setup_helper_dir/helper_fifo
+    mkfifo $resp_file
+
+    # Execute as unprivileged user for better security. (we execute as the user who launched this script as sudo)
+    local noroot_user=${SUDO_USER:-$(whoami)}
+
+    # Execute js helper asynchronously while collecting response to fifo file.
+    RESPFILE=$resp_file sudo -u $noroot_user $nodejs_temp_bin $jshelper_temp_bin "$@" &
+    local pid=$!
+
+    # Wait for js helper to exit while printing any output collected in the fifo file.
+    # Reflect the succesful exit code of js helper in this function return as well.
+    cat $resp_file && wait $pid && [ $? -eq 0 ] && return 0
+    return 1
 }
 
 function resolve_filepath() {
@@ -279,8 +288,7 @@ function validate_rippled_url() {
     ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
 
     echo "Checking server $1..."
-    local resp=$(get_xrpl_response '{"command": "server_info"}' $1)
-    [ -z "$resp" ] && echo "Could not communicate with the rippled server." && return 1
+    ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1
     return 0
 }
 
@@ -528,7 +536,6 @@ function set_rippled_server() {
     fi
 }
 
-
 function set_transferee_address() {
     # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
     [ -z $transferee_address ] && transferee_address=''
@@ -550,7 +557,7 @@ function set_transferee_address() {
 }
 
 
-function set_host_xrpl_secret() {
+function set_host_xrpl_account() {
 
     if $interactive; then
         echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
@@ -558,32 +565,24 @@ function set_host_xrpl_secret() {
         local xrpl_secret=""
         while true ; do
 
-            # We don't really need the account address. We simply use it to check sufficient EVR balance.
             read -p "Specify the XRPL account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
-
-            # Check whether there's a pending transfer to this account.
-            # TODO
-
-            # If no transfer pending, check account balance
-            echo "Checking EVR balance in $xrpl_address..."
             
-            local xrpl_resp=$(get_xrpl_response "{\"command\":\"account_lines\",\"account\":\"$xrpl_address\"}")
-            [ -z "$xrpl_resp" ] && echomult "Failed to get EVR balance of $xrpl_address. Check whether the account address is correct and try again.\n" && continue
+            echo "Checking account $xrpl_address..."
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_REGISTRY_ADDRESS $xrpl_address && xrpl_address="" && continue
 
-            # execute jq as unprivileged user.
-            local evr_balance=$(echo $xrpl_resp | sudo -u $noroot_user $tools_temp_dir/jq -r ".result.lines[] | select((.account==\"$EVR_ISSUER_ADDRESS\") and .currency==\"EVR\") | .balance" 2>/dev/null)
-            [ -z "$evr_balance" ] && echomult "Account $xrpl_address does not have an EVR balance.\n" && continue
-            [ $evr_balance \< $MIN_EVR_BALANCE ] && echomult "Insufficient EVR balance in $xrpl_address. You need at least $MIN_EVR_BALANCE Evers to fund the registration.\n" && continue
-
-            read -p "Specify the XRPL account secret (this is stored on your disk): " xrpl_secret </dev/tty
+            # Take hidden input and print empty echo (new line) at the end.
+            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
+
+            echo "Checking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
         done
 
+        xrpl_account_address=$xrpl_address
         xrpl_account_secret=$xrpl_secret
     fi
-
-    ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
 }
 
 function install_failure() {
@@ -1032,11 +1031,12 @@ if [ "$mode" == "install" ]; then
         alloc_instcount=${11}     # Total contract instance count.
         lease_amount=${12}        # Contract instance lease amount in EVRs.
         rippled_server=${13}      # Rippled server URL
-        xrpl_account_secret=${14} # XRPL account secret.
-        email_address=${15}       # User email address
-        tls_key_file=${16}        # File path to the tls private key.
-        tls_cert_file=${17}       # File path to the tls certificate.
-        tls_cabundle_file=${18}   # File path to the tls ca bundle.
+        xrpl_account_address=${14} # XRPL account secret.
+        xrpl_account_secret=${15} # XRPL account secret.
+        email_address=${16}       # User email address
+        tls_key_file=${17}        # File path to the tls private key.
+        tls_cert_file=${18}       # File path to the tls certificate.
+        tls_cabundle_file=${19}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1061,9 +1061,11 @@ if [ "$mode" == "install" ]; then
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
     if [ "$NO_MB" == "" ]; then
+        init_setup_helpers
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
-        set_host_xrpl_secret
+        set_host_xrpl_account
+        echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
     fi
 
     set_email_address
@@ -1093,6 +1095,8 @@ if [ "$mode" == "install" ]; then
 
     echo "Starting installation..."
     install_evernode 0
+
+    rm -r $setup_helper_dir &>/dev/null
 
     echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."

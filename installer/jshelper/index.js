@@ -61,13 +61,14 @@ const funcs = {
     }
 }
 
-function handleResponse(msg) {
+function handleResponse(resp) {
+
+    if (!resp.result) resp.result = "-";
+
     // If RESPFILE env is specified, we write the result to that file insead of stdout.
     // This allows the setup script to read the command result directly from the RESPFILE.
-    if (resp.result) {
-        if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, msg);
-        else console.log(msg);
-    }
+    if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, resp.result);
+    else console.log(resp.result);
 
     // Setup script uses the exit code of this script to evaluate the result.
     process.exit(resp.success === true ? 0 : 1);
@@ -75,14 +76,23 @@ function handleResponse(msg) {
 
 async function app() {
 
-    const command = process.argv[2];
-    if (!command)
-        throw "Command not specified.";
+    try {
+        const command = process.argv[2];
+        if (!command)
+            throw "Command not specified.";
 
-    const resp = await funcs[command](process.argv.splice(3));
-    if (!resp)
-        throw "No response.";
+        const resp = await funcs[command](process.argv.splice(3));
+        if (!resp)
+            throw "No response.";
 
-    handleResponse(resp);
+        handleResponse(resp);
+    }
+    catch (e) {
+        // Write the placeholder char to response file if specified.
+        // Otherwise the reader process (setup script) will get stuck.
+        if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
+        console.log(e);
+        process.exit(1);
+    }
 }
 app();

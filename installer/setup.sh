@@ -51,6 +51,10 @@ export MIN_EVR_BALANCE=5120
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
 
+# We execute some commands as unprivileged user for better security.
+# (we execute as the user who launched this script as sudo)
+noroot_user=${SUDO_USER:-$(whoami)}
+
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
@@ -185,40 +189,40 @@ function check_sys_req() {
 
 function init_setup_helpers() {
 
-    local jshelper_dir=$(dirname $jshelper_temp_bin)
-    mkdir -p $jshelper_dir
+    echo "Downloading setup support files..."
 
-    [ ! -f "$nodejs_temp_bin" ] && curl --silent $nodejs_url --output $nodejs_temp_bin
+    local jshelper_dir=$(dirname $jshelper_temp_bin)
+    sudo -u $noroot_user mkdir -p $jshelper_dir
+
+    [ ! -f "$nodejs_temp_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_temp_bin
     [ ! -f "$nodejs_temp_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
     chmod +x $nodejs_temp_bin
 
     if [ ! -f "$jshelper_temp_bin" ]; then
-        pushd $jshelper_dir
-        curl --silent $jshelper_url --output jshelper.tar.gz
-        tar zxf jshelper.tar.gz --strip-components=1
+        pushd $jshelper_dir >/dev/null 2>&1
+        sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
+        sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
         rm jshelper.tar.gz
-        popd
+        popd >/dev/null 2>&1
     fi
     [ ! -f "$jshelper_temp_bin" ] && echo "Could not download helper tool for setup checks." && exit 1
+    echo -e "Done.\n"
 }
 
 function exec_jshelper() {
 
     # Create fifo file to read response data from the helper script.
     local resp_file=$setup_helper_dir/helper_fifo
-    mkfifo $resp_file
-
-    # Execute as unprivileged user for better security. (we execute as the user who launched this script as sudo)
-    local noroot_user=${SUDO_USER:-$(whoami)}
+    [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    RESPFILE=$resp_file sudo -u $noroot_user $nodejs_temp_bin $jshelper_temp_bin "$@" &
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" >/dev/null 2>&1 &
     local pid=$!
-
-    # Wait for js helper to exit while printing any output collected in the fifo file.
-    # Reflect the succesful exit code of js helper in this function return as well.
-    cat $resp_file && wait $pid && [ $? -eq 0 ] && return 0
-    return 1
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+    
+    # Wait for js helper to exit and reflect the error exit code in this function return.
+    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+    rm $resp_file && return 1
 }
 
 function resolve_filepath() {
@@ -262,7 +266,7 @@ function set_domain_certs() {
 }
 
 function validate_inet_addr_domain() {
-    host $inetaddr 2>&1 > /dev/null && return 0
+    host $inetaddr >/dev/null 2>&1 && return 0
     inetaddr="" && return 1
 }
 
@@ -1096,7 +1100,7 @@ if [ "$mode" == "install" ]; then
     echo "Starting installation..."
     install_evernode 0
 
-    rm -r $setup_helper_dir &>/dev/null
+    rm -r $setup_helper_dir >/dev/null 2>&1
 
     echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."

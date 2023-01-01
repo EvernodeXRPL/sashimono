@@ -192,6 +192,7 @@ function init_setup_helpers() {
     echo "Downloading setup support files..."
 
     local jshelper_dir=$(dirname $jshelper_temp_bin)
+    rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
     [ ! -f "$nodejs_temp_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_temp_bin

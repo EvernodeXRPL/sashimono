@@ -40,10 +40,8 @@ const funcs = {
         if (await hostClient.isRegistered())
             return { success: false, result: "Host already registered." };
 
-        // TODO: Check whether pending transfer exists.
-        // We need helper method for this in HostClient.
-        const isTransferPending = false;
-
+        // Check whether pending transfer exists.
+        const isTransferPending = await hostClient.hasPendingTransfer();
         const minEverBalance = isTransferPending ? 1 : hostClient.config.hostRegFee;
         const currentBalance = await hostClient.getEVRBalance();
         if (currentBalance < minEverBalance)

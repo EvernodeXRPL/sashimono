@@ -28,9 +28,13 @@ const funcs = {
         const registryAddress = args[1];
         const accountAddress = args[2];
 
+        const xrplApi = new evernode.XrplApi(rippledUrl);
+        await xrplApi.connect();
+
         const hostClient = new evernode.HostClient(accountAddress, null, {
             rippledServer: rippledUrl,
             registryAddress: registryAddress,
+            xrplApi: xrplApi
         });
 
         if (!await hostClient.xrplAcc.exists())
@@ -48,14 +52,26 @@ const funcs = {
             return { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
 
         await hostClient.disconnect();
+        await xrplApi.disconnect();
         return { success: true };
     },
     'validate-keys': async (args) => {
-        checkParams(args, 2);
-        const accountAddress = args[0];
-        const accountSecret = args[1];
-        const xrplAcc = new evernode.XrplAccount(accountAddress, accountSecret);
-        return { success: await xrplAcc.isValidSecret() };
+        checkParams(args, 3);
+        const rippledUrl = args[0];
+        const accountAddress = args[1];
+        const accountSecret = args[2];
+
+        const xrplApi = new evernode.XrplApi(rippledUrl);
+        await xrplApi.connect();
+
+        const xrplAcc = new evernode.XrplAccount(accountAddress, accountSecret, {
+            xrplApi: xrplApi
+        });
+
+        const validKeys = await xrplAcc.hasValidKeyPair()
+        await xrplApi.disconnect();
+
+        return validKeys ? { success: true } : { success: false, result: "Given account address and secret do not match." };
     }
 }
 

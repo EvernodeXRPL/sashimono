@@ -68,12 +68,12 @@ class Setup {
         });
     }
 
-    async setupHostAccount(secret, rippledServer, registryAddress, domain) {
+    async setupHostAccount(address, secret, rippledServer, registryAddress, domain) {
 
         setEvernodeDefaults(registryAddress, rippledServer);
 
         const xrplApi = new evernode.XrplApi(rippledServer);
-        const acc = new evernode.XrplAccount(null, secret, { xrplApi: xrplApi });
+        const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
 
         // Prepare host account.
         {

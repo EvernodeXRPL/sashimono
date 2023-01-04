@@ -822,7 +822,7 @@ function apply_ssl() {
 }
 
 function reconfig_sashi() {
-    echomult "Configuaring sashimono..."
+    echomult "Configuaring sashimono...\n"
 
     ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
         echomult "There was an error in updating sashimono configuration." && return 1
@@ -859,7 +859,7 @@ function reconfig_sashi() {
 }
 
 function reconfig_mb() {
-    echomult "Configuaring message board..."
+    echomult "Configuaring message board...\n"
 
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
         echo "There was an error in updating message board configuration." && return 1
@@ -991,7 +991,7 @@ function config() {
         systemctl start $SASHIMONO_SERVICE
     fi
 
-    if [ $update_mb == 1 ] ; then
+    if [ $has_error == 0 ] && [ $update_mb == 1 ] ; then
         ! reconfig_mb && has_error=1
     fi
 

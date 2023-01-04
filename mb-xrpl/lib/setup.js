@@ -179,7 +179,7 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
-        const isAReReg = await hostClient.hasPendingTransfer();
+        const isAReReg = await hostClient.isTransferee();
         const evrBalance = await hostClient.getEVRBalance();
         if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
             throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;

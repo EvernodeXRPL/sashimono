@@ -15,12 +15,13 @@ swapKB=${8}
 diskKB=${9}
 lease_amount=${10}
 rippled_server=${11}
-xrpl_account_secret=${12}
-email_address=${13}
-tls_key_file=${14}
-tls_cert_file=${15}
-tls_cabundle_file=${16}
-description=${17}
+xrpl_account_address=${12}
+xrpl_account_secret=${13}
+email_address=${14}
+tls_key_file=${15}
+tls_cert_file=${16}
+tls_cabundle_file=${17}
+description=${18}
 
 script_dir=$(dirname "$(realpath "$0")")
 
@@ -241,7 +242,7 @@ if [ "$NO_MB" == "" ]; then
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

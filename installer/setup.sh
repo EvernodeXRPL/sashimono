@@ -3,6 +3,9 @@
 # This script is also used as the 'evernode' cli alias after the installation.
 # usage: ./setup.sh install
 
+# surrounding braces  are needed make the whole script to be buffered on client before execution.
+{
+
 evernode="Evernode beta"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
@@ -15,9 +18,14 @@ cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f7
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
+nodejs_url="$cloud_storage/node"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
+setup_helper_dir="/tmp/evernode-setup-helpers"
+nodejs_temp_bin="$setup_helper_dir/node"
+jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -34,12 +42,18 @@ export SASHIUSER_GROUP="sashiuser"
 export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
-export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
+export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
+export EVR_ISSUER_ADDRESS="rEm71QHHXJzGULG4mkR3yhLz6EZYgvuwwP"
+export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
 export DOCKER_REGISTRY_PORT=0
+
+# We execute some commands as unprivileged user for better security.
+# (we execute as the user who launched this script as sudo)
+noroot_user=${SUDO_USER:-$(whoami)}
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -157,18 +171,59 @@ function check_sys_req() {
     local os=$(grep -ioP '^ID=\K.+' /etc/os-release)
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
-    if [ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ] || [ $ramKB -lt 2000000 ] || [ $swapKB -lt 2000000 ] || [ $diskKB -lt 4000000 ]; then
-        echomult "Your system specs are:
-            \n OS: $os $osversion
-            \n RAM: $(GB $ramKB)
-            \n Swap: $(GB $swapKB)
-            \n Disk space (/home): $(GB $diskKB)
-            \n$evernode host registration requires Ubuntu 20.04 with 2 GB RAM, 2 GB Swap and 4 GB free disk space for /home.
-            \nYour system does not meet some of the requirements. Aborting."
+    local errors=""
+    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errs=" OS: $os $osversion (required: Ubuntu 20.04)\n"
+    [ $ramKB -lt 2000000 ] && errors="$errors RAM: $(GB $ramKB) (required: 2 GB RAM)\n"
+    [ $swapKB -lt 2000000 ] && errors="$errors Swap: $(GB $swapKB) (required: 2 GB Swap)\n"
+    [ $diskKB -lt 4000000 ] && errors="$errors Disk space (/home): $(GB $diskKB) (required: 4 GB)\n"
+
+    if [ -z "$errors" ]; then
+        echo "System check complete. Your system is capable of becoming an $evernode host."
+    else
+        echomult "Your system does not meet following $evernode system requirements:\n $errors"
+        echomult "$evernode host registration requires Ubuntu 20.04 with minimum 2 GB RAM,
+            2 GB Swap and 4 GB free disk space for /home. Aborting setup."
         exit 1
     fi
+}
 
-    echo "System check complete. Your system is capable of becoming an $evernode host."
+function init_setup_helpers() {
+
+    echo "Downloading setup support files..."
+
+    local jshelper_dir=$(dirname $jshelper_temp_bin)
+    rm -r $jshelper_dir >/dev/null 2>&1
+    sudo -u $noroot_user mkdir -p $jshelper_dir
+
+    [ ! -f "$nodejs_temp_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_temp_bin
+    [ ! -f "$nodejs_temp_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
+    chmod +x $nodejs_temp_bin
+
+    if [ ! -f "$jshelper_temp_bin" ]; then
+        pushd $jshelper_dir >/dev/null 2>&1
+        sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
+        sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
+        rm jshelper.tar.gz
+        popd >/dev/null 2>&1
+    fi
+    [ ! -f "$jshelper_temp_bin" ] && echo "Could not download helper tool for setup checks." && exit 1
+    echo -e "Done.\n"
+}
+
+function exec_jshelper() {
+
+    # Create fifo file to read response data from the helper script.
+    local resp_file=$setup_helper_dir/helper_fifo
+    [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
+
+    # Execute js helper asynchronously while collecting response to fifo file.
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" >/dev/null 2>&1 &
+    local pid=$!
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+    
+    # Wait for js helper to exit and reflect the error exit code in this function return.
+    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+    rm $resp_file && return 1
 }
 
 function resolve_filepath() {
@@ -212,7 +267,7 @@ function set_domain_certs() {
 }
 
 function validate_inet_addr_domain() {
-    host $inetaddr 2>&1 > /dev/null && return 0
+    host $inetaddr >/dev/null 2>&1 && return 0
     inetaddr="" && return 1
 }
 
@@ -234,8 +289,11 @@ function validate_positive_decimal() {
     return 0
 }
 
-function validate_ws_url() {
-    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && return 1
+function validate_rippled_url() {
+    ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
+
+    echo "Checking server $1..."
+    ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1
     return 0
 }
 
@@ -395,7 +453,7 @@ function set_instance_alloc() {
 
     if $interactive; then
         echomult "Based on your system resources, we have chosen the following allocation:\n
-                $(GB $alloc_ramKB) RAM\n
+                $(GB $alloc_ramKB) memory\n
                 $(GB $alloc_swapKB) Swap\n
                 $(GB $alloc_diskKB) disk space\n
                 Distributed among $alloc_instcount contract instances"
@@ -409,8 +467,8 @@ function set_instance_alloc() {
         done
 
         while true ; do
-            read -p "Specify the total RAM in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid RAM size." || break
+            read -p "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
         done
 
         while true ; do
@@ -435,36 +493,27 @@ function set_instance_alloc() {
 }
 
 function set_lease_amount() {
-    # We take the default lease amount as 0, So it is taken from the purchaser target price.
-    # [ -z $lease_amount ] && lease_amount=0
 
     # Lease amount is mandatory field set by the user
     if $interactive; then
-        # If user hasn't specified, the default lease amount is taken from the target price set by the purchaser service.
-        # echo "Default contract instance lease amount is taken from purchaser service target price."
-
-        # ! confirm "Do you want to specify a contract instance lease amount?" && return 0
-
         local amount=0
         while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge): " amount </dev/tty
-            ! validate_positive_decimal $amount && echo "Lease amount should be a positive numerical value greater than zero." || break
+            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
+            ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
         done
 
         lease_amount=$amount
     fi
-
-    ! validate_positive_decimal $lease_amount && echo "Lease amount should be a positive numerical value greater than zero." && exit 1
 }
 
 function set_email_address() {
     if $interactive; then
         local emailAddress=""
         while true ; do
-            read -p "Specify the email address for reporting purpose: " emailAddress </dev/tty
+            read -p "Specify the contact email address (this will be published on the ledger): " emailAddress </dev/tty
             email_address_length=${#emailAddress}
             ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-            ( ! [[ $emailAddress =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || break
+            ( ! [[ $emailAddress =~ .+@.+ ]] && echo "Email address is invalid." ) ) || break
         done
 
         email_address=$emailAddress
@@ -472,28 +521,25 @@ function set_email_address() {
 
     non_interactive_email_address_length=${#email_address}
     ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-    ( ! [[ $email_address =~ [a-z0-9]+@[a-z]+\.[a-z]{2,3} ]] && echo "Email address is invalid.." ) ) || exit 1
+    ( ! [[ $email_address =~ .+@.+ ]] && echo "Email address is invalid." ) ) || exit 1
 }
 
 function set_rippled_server() {
     ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
-        confirm "Do you want to connect to the default rippled server ('$default_rippled_server')?" && return 0
-
-        local newURL=""
-
-        while true ; do
-            read -p "Specify the rippled URL: " newURL </dev/tty
-            ! validate_ws_url $newURL && echo "Rippled URL must be a valid URL that starts with 'wss://' ." || break
-        done
-
-        rippled_server=$newURL
+        if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?" ; then
+            ! validate_rippled_url $rippled_server && exit 1
+        else
+            local new_url=""
+            while true ; do
+                read -p "Specify the Rippled server URL: " new_url </dev/tty
+                ! validate_rippled_url $new_url || break
+            done
+            rippled_server=$new_url
+        fi
     fi
-
-    ! validate_ws_url $rippled_server && echo "Rippled URL must be a valid URL that starts with 'wss://' ." && exit 1
 }
-
 
 function set_transferee_address() {
     # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
@@ -516,21 +562,34 @@ function set_transferee_address() {
 }
 
 
-function set_host_xrpl_secret() {
+function set_host_xrpl_account() {
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have an XRPL account with EVRs.\n"
-        local secret=''
+        echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
+        local xrpl_address=""
+        local xrpl_secret=""
         while true ; do
-            read -p "Specify the XRPL account secret: " secret </dev/tty
-            ! [[ $secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." || break
+
+            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+            
+            echo "Checking account $xrpl_address..."
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_REGISTRY_ADDRESS $xrpl_address && xrpl_address="" && continue
+
+            # Take hidden input and print empty echo (new line) at the end.
+            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
+
+            echo "Checking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+            break
 
         done
 
-        xrpl_account_secret=$secret
+        xrpl_account_address=$xrpl_address
+        xrpl_account_secret=$xrpl_secret
     fi
-
-    ! [[ $xrpl_account_secret =~ ^[a-zA-Z0-9]+$ ]] && echo "Invalid XRPL account secret." && exit 1
 }
 
 function install_failure() {
@@ -585,7 +644,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -763,7 +822,7 @@ function apply_ssl() {
 }
 
 function reconfig_sashi() {
-    echomult "Configuaring sashimono..."
+    echomult "Configuaring sashimono...\n"
 
     ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
         echomult "There was an error in updating sashimono configuration." && return 1
@@ -800,7 +859,7 @@ function reconfig_sashi() {
 }
 
 function reconfig_mb() {
-    echomult "Configuaring message board..."
+    echomult "Configuaring message board...\n"
 
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
         echo "There was an error in updating message board configuration." && return 1
@@ -834,21 +893,21 @@ function config() {
     local sub_mode=${1}
     if [ "$sub_mode" == "resources" ] ; then
 
-        local ramMB=${2}       # RAM to allocate for contract instances.
+        local ramMB=${2}       # memory to allocate for contract instances.
         local swapMB=${3}      # Swap to allocate for contract instances.
         local diskMB=${4}      # Disk space to allocate for contract instances.
         local instcount=${5}   # Total contract instance count.
 
         [ -z $ramMB ] && [ -z $swapMB ] && [ -z $diskMB ] && [ -z $instcount ] &&
             echomult "Your current resource allocation is:
-            \n RAM: $(GB $max_mem_kbytes)
+            \n Memory: $(GB $max_mem_kbytes)
             \n Swap: $(GB $max_swap_kbytes)
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
 
-        local help_text="Usage: evernode config resources | evernode config resources <ram MB> <swap MB> <disk MB> <max instance count>\n"
+        local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
-            echomult "Invalid ram size.\n   $help_text" && exit 1
+            echomult "Invalid memory size.\n   $help_text" && exit 1
         [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && ! validate_positive_decimal $swapMB &&
             echomult "Invalid swap size.\n   $help_text" && exit 1
         [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && ! validate_positive_decimal $diskMB &&
@@ -869,7 +928,7 @@ function config() {
             echomult "Resource configuration values are already configured!\n" && exit 0
 
         echomult "Using allocation"
-        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) RAM"
+        [[ $alloc_ramKB -gt 0 ]] && echomult "$(GB $alloc_ramKB) memory"
         [[ $alloc_swapKB -gt 0 ]] && echomult "$(GB $alloc_swapKB) Swap"
         [[ $alloc_diskKB -gt 0 ]] && echomult "$(GB $alloc_diskKB) disk space"
         [[ $alloc_instcount -gt 0 ]] && echomult "Distributed among $alloc_instcount contract instances"
@@ -894,11 +953,11 @@ function config() {
 
     elif [ "$sub_mode" == "rippled" ] ; then
     
-        local server=${2}    # Ripple URL
+        local server=${2}    # Rippled server URL
         [ -z $server ] && echomult "Your current rippled server is: $cfg_rippled_server\n" && exit 0
 
-        ! validate_ws_url $server &&
-            echomult "Rippled URL must be a valid URL that starts with 'wss://' .\n   Usage: evernode config rippled | evernode config rippled <rippled server>\n" &&
+        ! validate_rippled_url $server &&
+            echomult "\nUsage: evernode config rippled | evernode config rippled <rippled server>\n" &&
             exit 1
         rippled_server=$server
         [[ $cfg_rippled_server == $rippled_server ]] && echomult "Rippled server is already configured!\n" && exit 0
@@ -932,7 +991,7 @@ function config() {
         systemctl start $SASHIMONO_SERVICE
     fi
 
-    if [ $update_mb == 1 ] ; then
+    if [ $has_error == 0 ] && [ $update_mb == 1 ] ; then
         ! reconfig_mb && has_error=1
     fi
 
@@ -974,21 +1033,25 @@ if [ "$mode" == "install" ]; then
         init_user_port=${5}       # Starting user port for instances.
         countrycode=${6}          # 2-letter country code.
         alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}          # RAM to allocate for contract instances.
+        alloc_ramKB=${8}          # Memory to allocate for contract instances.
         alloc_swapKB=${9}         # Swap to allocate for contract instances.
         alloc_diskKB=${10}        # Disk space to allocate for contract instances.
         alloc_instcount=${11}     # Total contract instance count.
         lease_amount=${12}        # Contract instance lease amount in EVRs.
-        rippled_server=${13}      # Ripple URL
-        xrpl_account_secret=${14} # XRPL account secret.
-        email_address=${15}       # User email address
-        tls_key_file=${16}        # File path to the tls private key.
-        tls_cert_file=${17}       # File path to the tls certificate.
-        tls_cabundle_file=${18}   # File path to the tls ca bundle.
+        rippled_server=${13}      # Rippled server URL
+        xrpl_account_address=${14} # XRPL account secret.
+        xrpl_account_secret=${15} # XRPL account secret.
+        email_address=${16}       # User email address
+        tls_key_file=${17}        # File path to the tls private key.
+        tls_cert_file=${18}       # File path to the tls certificate.
+        tls_cabundle_file=${19}   # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
-            and register your system as an $evernode host.\n\nContinue?" && exit 1
+            and register your system as an $evernode host.
+            \nMake sure your system does not currently contain any other workloads important
+            to you since we will be making modifications to your system configuration.
+            \n\nContinue?" && exit 1
 
     check_sys_req
     check_prereq
@@ -1005,16 +1068,16 @@ if [ "$mode" == "install" ]; then
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-
-    $interactive && ! confirm "Make sure your system does not currently contain any other workloads important
-            to you since we will be making modifications to your system configuration.
-            \nThis is beta software, so there's a chance things can go wrong. \n\nContinue?" && exit 1
-
-    set_host_xrpl_secret
-    echo -e "Using entered value as the XRPL account serect for the configuration.\n"
+    if [ "$NO_MB" == "" ]; then
+        init_setup_helpers
+        set_rippled_server
+        echo -e "Using Rippled server '$rippled_server'.\n"
+        set_host_xrpl_account
+        echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
+    fi
 
     set_email_address
-    echo -e "Using the email address '$email_address'.\n"
+    echo -e "Using the contact email address '$email_address'.\n"
 
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
@@ -1026,21 +1089,22 @@ if [ "$mode" == "install" ]; then
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
 
     set_instance_alloc
-    echo -e "Using allocation $(GB $alloc_ramKB) RAM, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, $alloc_instcount contract instances.\n"
+    echo -e "Using allocation $(GB $alloc_ramKB) memory, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, distributed among $alloc_instcount contract instances.\n"
 
     set_init_ports
-    echo -e "Using port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).\n"
+    echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
 
-    set_lease_amount
-    # Commented for future consideration.
-    # (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n" || echo -e "Using anchor tenant target price as lease amount.\n"
-    (( $(echo "$lease_amount > 0" |bc -l) )) && echo -e "Using lease amount $lease_amount EVRs.\n"
+    if [ "$NO_MB" == "" ]; then
+        set_lease_amount
+        echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+    fi
 
-    set_rippled_server
-    echo -e "Using the rippled address '$rippled_server'.\n"
+    $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
     echo "Starting installation..."
     install_evernode 0
+
+    rm -r $setup_helper_dir >/dev/null 2>&1
 
     echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
@@ -1059,8 +1123,9 @@ elif [ "$mode" == "uninstall" ]; then
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
-    $interactive && ! confirm "\nThis will uninstall Sashimono, Evernode's contract instance management software and
-            transfer the registration to a preferred transferee.\n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+    $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
+        while allowing you to transfer the registration to a preferred transferee.
+        \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
     if ! $interactive ; then
         transferee_address=${3}           # Address of the transferee.
@@ -1072,7 +1137,8 @@ elif [ "$mode" == "transfer" ]; then
 
     uninstall_evernode 0
 
-    echo "Transfer process was sucessfully initiated."
+    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using
+        the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
     reg_info
@@ -1093,7 +1159,7 @@ elif [ "$mode" == "config" ]; then
     config $2 $3 $4 $5 $6
 
 elif [ "$mode" == "delete" ]; then
-    [ -z "$2" ] && echomult "An instance name must be specified.\n  Usage: evernode delete <instance name>" && exit 1
+    [ -z "$2" ] && echomult "A contract instance name must be specified (see 'evernode list').\n  Usage: evernode delete <instance name>" && exit 1
 
     delete_instance "$2"
 
@@ -1102,3 +1168,6 @@ fi
 [ "$mode" != "uninstall" ] && check_installer_pending_finish
 
 exit 0
+
+# surrounding braces  are needed make the whole script to be buffered on client before execution.
+}

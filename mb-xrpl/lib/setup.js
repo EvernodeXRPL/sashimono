@@ -45,12 +45,6 @@ class Setup {
             address: json.address,
             secret: json.secret
         };
-
-        // If NFT DEV NET is used.
-        // return {
-        //     address: json.account.address,
-        //     secret: json.account.secret
-        // };
     }
 
     #getConfig(readSecret = true) {
@@ -74,12 +68,12 @@ class Setup {
         });
     }
 
-    async setupHostAccount(secret, rippledServer, registryAddress, domain) {
+    async setupHostAccount(address, secret, rippledServer, registryAddress, domain) {
 
         setEvernodeDefaults(registryAddress, rippledServer);
 
         const xrplApi = new evernode.XrplApi(rippledServer);
-        const acc = new evernode.XrplAccount(null, secret, { xrplApi: xrplApi });
+        const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
 
         // Prepare host account.
         {
@@ -87,7 +81,7 @@ class Setup {
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
 
-            // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
+            // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
             // haven't still updated the ledger. In such cases, we retry several times before giving up.
             {
                 let attempts = 0;
@@ -185,27 +179,14 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
-        let isAReReg = false;
-
-        try {
-            // Check the availability of an initiated transfer
-            const stateTransfereeAddrKey = evernode.StateHelpers.generateTransfereeAddrStateKey(acc.address);
-            const stateTransfereeAddrIndex = evernode.StateHelpers.getHookStateIndex(acc.registryAddress, stateTransfereeAddrKey);
-            const res = await hostClient.xrplApi.getLedgerEntry(stateTransfereeAddrIndex);
-
-            if (res && res?.HookStateData)
-                isAReReg = true;
-        }
-        catch (e) {
-            // Checking ledger entries whether there is a transaction before. if not, comes here. 
-        }
-
-        if (!isAReReg && hostClient.config.hostRegFee > (await hostClient.getEVRBalance()))
+        const isAReReg = await hostClient.isTransferee();
+        const evrBalance = await hostClient.getEVRBalance();
+        if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
             throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
-        else if (isAReReg && ((await hostClient.getEVRBalance()) < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS)))
-            throw `ERROR: EVR balance in the account is less than 1 Now for the re-registration.`;
+        else if (isAReReg && evrBalance < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS))
+            throw `ERROR: EVR balance in the account is insufficient for re-registration.`;
 
-        // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the testnet cluster
+        // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the server cluster
         // haven't still updated the ledger. In such cases, we retry several times before giving up.
         let attempts = 0;
         while (attempts >= 0) {

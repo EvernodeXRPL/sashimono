@@ -48,6 +48,23 @@ function remove_evernode_auto_updater() {
     systemctl daemon-reload
 }
 
+function cleanup_certbot_ssl() {
+    # revoke/delete certs if certbot is used.
+    if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ] ; then
+        local inet_addr=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)
+        local deploy_hook_script="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inet_addr.sh"
+        if [ -f $deploy_hook_script ] ; then
+            echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
+            rm $deploy_hook_script
+            certbot -n revoke --cert-name $inet_addr
+
+            # cleaning up firewall rule for domain validation
+            echo "Cleaning up firewall rule for SSL validation"
+            ufw delete allow 80/tcp
+        fi
+    fi
+}
+
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
 
 # Message board---------------------
@@ -137,10 +154,6 @@ echo "Deleting Sashimono CLI..."
 rm $USER_BIN/sashi
 
 if [ "$UPGRADE" == "0" ]; then
-    # Delete data except message board. Need this for deregistration.
-    echo "Deleting data directory..."
-    find $SASHIMONO_DATA -mindepth 1 ! -regex "^$MB_XRPL_DATA\(/.*\)?" -delete
-
     # When removing the cgrules service, we first edit the config and restart the service to apply the config.
     # Then we remove the attached group.
     echo "Deleting cgroup rules..."
@@ -183,11 +196,14 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 fi
 
 # Delete all the data and bin directories.
-echo "Deleting message board binaries..."
+echo "Deleting binaries..."
 rm -r $SASHIMONO_BIN
 
 if [ "$UPGRADE" == "0" ]; then
-    echo "Deleting message board data directory..."
+    
+    cleanup_certbot_ssl
+    
+    echo "Deleting data directory..."
     rm -r $SASHIMONO_DATA
 fi
 

@@ -44,7 +44,6 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
-export EVR_ISSUER_ADDRESS="rEm71QHHXJzGULG4mkR3yhLz6EZYgvuwwP"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
@@ -217,7 +216,7 @@ function exec_jshelper() {
     [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" >/dev/null 2>&1 &
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     

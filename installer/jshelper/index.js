@@ -71,7 +71,7 @@ const funcs = {
         const validKeys = await xrplAcc.hasValidKeyPair()
         await xrplApi.disconnect();
 
-        return validKeys ? { success: true } : { success: false, result: "Given account address and secret does not match." };
+        return validKeys ? { success: true } : { success: false, result: "Given account address and secret do not match." };
     }
 }
 

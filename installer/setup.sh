@@ -216,7 +216,7 @@ function exec_jshelper() {
     [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" &
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" >/dev/null 2>&1 &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     

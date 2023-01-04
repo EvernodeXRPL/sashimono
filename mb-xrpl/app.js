@@ -12,14 +12,15 @@ async function main() {
 
     try {
         if (process.argv.length >= 3) {
-            if (process.argv.length == 8 && process.argv[2] === 'new') {
-                const accountSecret = process.argv[3];
-                const registryAddress = process.argv[4];
-                const domain = process.argv[5];
-                const leaseAmount = process.argv[6];
-                const rippledServer = process.argv[7];
+            if (process.argv.length == 9 && process.argv[2] === 'new') {
+                const accountAddress = process.argv[3];
+                const accountSecret = process.argv[4];
+                const registryAddress = process.argv[5];
+                const domain = process.argv[6];
+                const leaseAmount = process.argv[7];
+                const rippledServer = process.argv[8];
                 const setup = new Setup();
-                const acc = await setup.setupHostAccount(accountSecret, rippledServer, registryAddress, domain);
+                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, registryAddress, domain);
                 setup.newConfig(acc.address, acc.secret, registryAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {

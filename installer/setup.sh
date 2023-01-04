@@ -44,7 +44,6 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_REGISTRY_ADDRESS="r3cNR2bdao1NyvQ5ZuQvCUgqkoWGmgF34E"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
-export EVR_ISSUER_ADDRESS="rEm71QHHXJzGULG4mkR3yhLz6EZYgvuwwP"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)

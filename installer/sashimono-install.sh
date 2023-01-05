@@ -25,7 +25,6 @@ description=${18}
 
 script_dir=$(dirname "$(realpath "$0")")
 
-
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
 }
@@ -113,7 +112,7 @@ function setup_certbot() {
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
     ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
-    
+
     # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
     local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
     echo "Setting up certbot deploy hook $deploy_hook"
@@ -128,26 +127,26 @@ certname=\$(basename \$RENEWED_LINEAGE)
 function setup_tls_certs() {
     mkdir -p $SASHIMONO_DATA/tls
 
-    if [ "$tls_key_file" == "letsencrypt" ] ; then
+    if [ "$tls_key_file" == "letsencrypt" ]; then
 
         ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && rollback
 
-    elif [ "$tls_key_file" == "self" ] ; then
+    elif [ "$tls_key_file" == "self" ]; then
         # If user has not provided certs we generate self-signed ones.
         stage "Generating self-signed certificates"
         ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
-            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" && \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" &&
             echo "Error when generating self-signed certificate." && rollback
 
-    elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ] ; then
+    elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ]; then
 
         stage "Transfering certificate files"
 
         cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
         cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
         # ca bundle is optional.
-        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] && \
-            cat $tls_cabundle_file >> $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] &&
+            cat $tls_cabundle_file >>$SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     else
         echo "Error when setting up SSL certificate." && rollback
@@ -172,11 +171,22 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 ! set_cpu_info && echo "Fetching CPU info failed" && rollback
 
 # Copy contract template and licence file (delete existing)
+# Backup the ssl cert files if exists
+tmp=$(mktemp -d)
+cp $SASHIMONO_DATA/contract_template/cfg/{tlskey.pem,tlscert.pem} "$tmp"/
 rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
 cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
+cp "$tmp"/{tlskey.pem,tlscert.pem} $SASHIMONO_DATA/contract_template/cfg/
+rm -r "$tmp"
+
+# Create self signed tls certs on update if not exists
+# This is added to auto fix the hosts which got their ssl certificates removed in v0.5.20
+[ "$UPGRADE" != "0" ] && ( [ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlskey.pem" ] || [ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlscert.pem" ] ) &&
+    openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
 # Setup tls certs used for contract instance websockets.
-setup_tls_certs
+[ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN

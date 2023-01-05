@@ -130,6 +130,8 @@ function setup_tls_certs() {
     if [ "$tls_key_file" == "letsencrypt" ]; then
 
         ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && rollback
+        cp /etc/letsencrypt/live/$inetaddr/privkey.pem $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
+        cp /etc/letsencrypt/live/$inetaddr/fullchain.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     elif [ "$tls_key_file" == "self" ]; then
         # If user has not provided certs we generate self-signed ones.
@@ -173,17 +175,17 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 # Copy contract template and licence file (delete existing)
 # Backup the ssl cert files if exists
 tmp=$(mktemp -d)
-cp $SASHIMONO_DATA/contract_template/cfg/{tlskey.pem,tlscert.pem} "$tmp"/
+[ "$UPGRADE" != "0" ] && cp $SASHIMONO_DATA/contract_template/cfg/{tlskey.pem,tlscert.pem} "$tmp"/
 rm -r "$SASHIMONO_DATA"/{contract_template,licence.txt} >/dev/null 2>&1
 cp -r "$script_dir"/{contract_template,licence.txt} $SASHIMONO_DATA
-cp "$tmp"/{tlskey.pem,tlscert.pem} $SASHIMONO_DATA/contract_template/cfg/
+[ "$UPGRADE" != "0" ] && cp "$tmp"/{tlskey.pem,tlscert.pem} $SASHIMONO_DATA/contract_template/cfg/
 rm -r "$tmp"
 
 # Create self signed tls certs on update if not exists
 # This is added to auto fix the hosts which got their ssl certificates removed in v0.5.20
-[ "$UPGRADE" != "0" ] && ( [ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlskey.pem" ] || [ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlscert.pem" ] ) &&
+[ "$UPGRADE" != "0" ] && ([ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlskey.pem" ] || [ ! -f "$SASHIMONO_DATA/contract_template/cfg/tlscert.pem" ]) &&
     openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
-            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
+        -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
 # Setup tls certs used for contract instance websockets.
 [ "$UPGRADE" == "0" ] && setup_tls_certs

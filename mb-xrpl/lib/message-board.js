@@ -334,7 +334,9 @@ class MessageBoard {
         // Sending a heartbeat at startup
         await this.#sendHeartbeat();
 
-        const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
+        const momentSize = this.hostClient.config.momentSize;
+        const halfMomentSize = momentSize/2; // Getting half of moment size
+        const timeout = momentSize * 1000; // Converting seconds to milliseconds.
 
         const scheduler = async () => {
             setTimeout(async () => {
@@ -343,11 +345,19 @@ class MessageBoard {
             await this.#sendHeartbeat();
         };
 
-        const nextMomentStartIdx = await this.hostClient.getMomentStartIndex() + this.hostClient.config.momentSize;
-        setTimeout(async () => {
-            await scheduler();
-        }, (nextMomentStartIdx - evernode.UtilHelpers.getCurrentUnixTime() + 60) * 1000);
-        // Delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        const nextMomentStartIdx = await this.hostClient.getMomentStartIndex();
+                
+        if(((evernode.UtilHelpers.getCurrentUnixTime()+60)-nextMomentStartIdx) < halfMomentSize){
+            setTimeout(async () => {
+                await scheduler();
+            }, ((momentSize + 60)*1000));
+            // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        }
+        else{
+            setTimeout(async () => {
+                await scheduler();
+            }, ((momentSize)*1000));
+        }
     }
 
     // Try to acquire the lease update lock.

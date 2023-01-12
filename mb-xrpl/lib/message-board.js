@@ -345,19 +345,14 @@ class MessageBoard {
             await this.#sendHeartbeat();
         };
 
-        const nextMomentStartIdx = await this.hostClient.getMomentStartIndex();
-                
-        if(((evernode.UtilHelpers.getCurrentUnixTime()+60)-nextMomentStartIdx) < halfMomentSize){
-            setTimeout(async () => {
-                await scheduler();
-            }, ((momentSize + 60)*1000));
-            // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        }
-        else{
-            setTimeout(async () => {
-                await scheduler();
-            }, ((momentSize)*1000));
-        }
+        const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
+        
+        // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime()-currentMomentStartIdx) < halfMomentSize ?((momentSize + 60)*1000) : ((momentSize)*1000);
+        
+        setTimeout(async () => {
+            await scheduler();
+        }, startTimeout);
     }
 
     // Try to acquire the lease update lock.

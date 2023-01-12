@@ -333,23 +333,23 @@ class MessageBoard {
     async #startHeartBeatScheduler() {
         // Sending a heartbeat at startup
         await this.#sendHeartbeat();
-
+    
         const momentSize = this.hostClient.config.momentSize;
-        const halfMomentSize = momentSize/2; // Getting half of moment size
+        const halfMomentSize = momentSize / 2; // Getting half of moment size
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
-
+    
         const scheduler = async () => {
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
             await this.#sendHeartbeat();
         };
-
+    
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
-        
+    
         // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime()-currentMomentStartIdx) < halfMomentSize ?((momentSize + 60)*1000) : ((momentSize)*1000);
-        
+        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
+    
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

@@ -43,8 +43,10 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
-# TODO Need to modify the relevant Governor address in DEV ENV
-export EVERNODE_GOVERNOR_ADDRESS="rfahCFFLKHuNkeE9iRvn1tjmdH2FYyL8QS"
+
+# TODO: Need to modify the relevant Governor address for DEV ENV
+# TODO: Configure the same figure in sashimono-install.sh as well.
+export EVERNODE_GOVERNOR_ADDRESS="rNPPwSnXDkcGDUaY5gKJzt33bkVRMVVLKX"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)

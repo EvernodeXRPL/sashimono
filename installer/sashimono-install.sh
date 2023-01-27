@@ -248,19 +248,19 @@ if [ "$NO_MB" == "" ]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
-            echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
+            echo "Using registry: $REGISTRY"
 
             # Commented for now, because 'betagen' will no longer be used.
-            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
+            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 
         # Register the host on Evernode.
         if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+            stage "Registering host on Evernode registry $REGISTRY"
             set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
@@ -315,7 +315,7 @@ else
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
-    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
+    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade $EVERNODE_GOVERNOR_ADDRESS && rollback
 fi
 
 # Install Sashimono Agent systemd service.

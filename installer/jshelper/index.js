@@ -25,7 +25,7 @@ const funcs = {
     'validate-account': async (args) => {
         checkParams(args, 3);
         const rippledUrl = args[0];
-        const registryAddress = args[1];
+        const governorAddress = args[1];
         const accountAddress = args[2];
 
         const xrplApi = new evernode.XrplApi(rippledUrl);
@@ -33,7 +33,7 @@ const funcs = {
 
         const hostClient = new evernode.HostClient(accountAddress, null, {
             rippledServer: rippledUrl,
-            registryAddress: registryAddress,
+            governorAddress: governorAddress,
             xrplApi: xrplApi
         });
 
@@ -72,6 +72,34 @@ const funcs = {
         await xrplApi.disconnect();
 
         return validKeys ? { success: true } : { success: false, result: "Given account address and secret do not match." };
+    },
+
+    'access-evernode-cfg': async (args) => {
+        checkParams(args, 4);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const configName = args[3];
+
+        const xrplApi = new evernode.XrplApi(rippledUrl);
+        await xrplApi.connect();
+
+        const hostClient = new evernode.HostClient(accountAddress, null, {
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress,
+            xrplApi: xrplApi
+        });
+
+        if (!await hostClient.xrplAcc.exists())
+            return { success: false, result: "Account not found." };
+
+        await hostClient.connect();
+        const config = hostClient.config;
+
+        await hostClient.disconnect();
+        await xrplApi.disconnect();
+
+        return { success: true, result: config[configName] };
     }
 }
 

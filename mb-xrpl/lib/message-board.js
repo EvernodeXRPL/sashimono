@@ -65,7 +65,8 @@ class MessageBoard {
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.regClient = new evernode.RegistryClient({ registryAddress: this.hostClient.config.registryAddress });
+        this.regClient = await evernode.HookClientFactory.create(evernode.HookAccountTypes.registryHook);
+
         await this.#connectRegistry();
         await this.regClient.subscribe();
 

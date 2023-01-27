@@ -14,7 +14,7 @@ ramKB_per_instance=524288
 instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-transfer-29fb5038-a605-47e8-87f7-ce96da6575a9"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f72e-430e-b297-9210468a4cbb"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -43,6 +43,7 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
+# TODO Need to modify the relevant Governor address in DEV ENV
 export EVERNODE_GOVERNOR_ADDRESS="rfahCFFLKHuNkeE9iRvn1tjmdH2FYyL8QS"
 export MIN_EVR_BALANCE=5120
 

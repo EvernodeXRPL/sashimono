@@ -43,16 +43,18 @@ class MessageBoard {
 
     async init() {
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress ||
-            !this.cfg.xrpl.registryAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress || !this.cfg.xrpl.registryAddress ||
+            !this.cfg.xrpl.heartbeatAddress)
             throw "Required cfg fields cannot be empty.";
 
-        console.log("Using registry " + this.cfg.xrpl.registryAddress);
+        console.log("Using,\n\tGovernor account " + this.cfg.xrpl.governorAddress);
+        console.log("\tRegistry account " + this.cfg.xrpl.registryAddress);
+        console.log("\tHeartbeat account " + this.cfg.xrpl.heartbeatAddress);
         console.log("Using rippled " + this.cfg.xrpl.rippledServer);
 
         this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
         evernode.Defaults.set({
-            registryAddress: this.cfg.xrpl.registryAddress,
+            governorAddress: this.cfg.xrpl.governorAddress,
             xrplApi: this.xrplApi
         })
         await this.xrplApi.connect();
@@ -64,7 +66,8 @@ class MessageBoard {
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.regClient = new evernode.RegistryClient();
+        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+
         await this.#connectRegistry();
         await this.regClient.subscribe();
 
@@ -333,23 +336,23 @@ class MessageBoard {
     async #startHeartBeatScheduler() {
         // Sending a heartbeat at startup
         await this.#sendHeartbeat();
-    
+
         const momentSize = this.hostClient.config.momentSize;
         const halfMomentSize = momentSize / 2; // Getting half of moment size
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
-    
+
         const scheduler = async () => {
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
             await this.#sendHeartbeat();
         };
-    
+
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
-    
+
         // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
-    
+
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

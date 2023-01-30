@@ -4,6 +4,9 @@
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
+# TODO : Remove this line once the previous evernode alias (/usr/bin/evernode) is updated in all hosts.
+[[ -z "${EVERNODE_GOVERNOR_ADDRESS}" ]] && export EVERNODE_GOVERNOR_ADDRESS="rNPPwSnXDkcGDUaY5gKJzt33bkVRMVVLKX"
+
 inetaddr=${1}
 init_peer_port=${2}
 init_user_port=${3}
@@ -251,10 +254,10 @@ if [ "$NO_MB" == "" ]; then
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
             # Commented for now, because 'betagen' will no longer be used.
-            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
+            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_REGISTRY_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 
@@ -315,7 +318,7 @@ else
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
-    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
+    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade $EVERNODE_GOVERNOR_ADDRESS && rollback
 fi
 
 # Install Sashimono Agent systemd service.

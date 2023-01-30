@@ -43,7 +43,10 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
-export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
+
+# TODO: Need to modify the relevant Governor address for DEV ENV
+# TODO: Configure the same figure in sashimono-install.sh as well.
+export EVERNODE_GOVERNOR_ADDRESS="rNPPwSnXDkcGDUaY5gKJzt33bkVRMVVLKX"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
@@ -571,9 +574,9 @@ function set_host_xrpl_account() {
 
             read -p "Specify the XRPL account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
-            
+
             echo "Checking account $xrpl_address..."
-            ! exec_jshelper validate-account $rippled_server $EVERNODE_REGISTRY_ADDRESS $xrpl_address && xrpl_address="" && continue
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address && xrpl_address="" && continue
 
             # Take hidden input and print empty echo (new line) at the end.
             read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
@@ -640,9 +643,12 @@ function install_evernode() {
     description=""
 
     echo "Installing Sashimono..."
+
+    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
+
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-    ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \

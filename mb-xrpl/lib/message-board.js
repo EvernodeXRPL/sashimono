@@ -47,9 +47,9 @@ class MessageBoard {
             !this.cfg.xrpl.heartbeatAddress)
             throw "Required cfg fields cannot be empty.";
 
-        console.log("Using governor " + this.cfg.xrpl.governorAddress);
-        console.log("Using registry " + this.cfg.xrpl.registryAddress);
-        console.log("Using heartbeat auditor " + this.cfg.xrpl.heartbeatAddress);
+        console.log("Using governor account " + this.cfg.xrpl.governorAddress);
+        console.log("Using registry account " + this.cfg.xrpl.registryAddress);
+        console.log("Using heartbeat account " + this.cfg.xrpl.heartbeatAddress);
         console.log("Using rippled " + this.cfg.xrpl.rippledServer);
 
         this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);

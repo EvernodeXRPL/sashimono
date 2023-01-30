@@ -47,6 +47,7 @@ class MessageBoard {
             !this.cfg.xrpl.heartbeatAddress)
             throw "Required cfg fields cannot be empty.";
 
+        console.log("Using governor " + this.cfg.xrpl.governorAddress);
         console.log("Using registry " + this.cfg.xrpl.registryAddress);
         console.log("Using heartbeat auditor " + this.cfg.xrpl.heartbeatAddress);
         console.log("Using rippled " + this.cfg.xrpl.rippledServer);
@@ -65,7 +66,7 @@ class MessageBoard {
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.regClient = await evernode.HookClientFactory.create(evernode.HookAccountTypes.registryHook);
+        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
 
         await this.#connectRegistry();
         await this.regClient.subscribe();

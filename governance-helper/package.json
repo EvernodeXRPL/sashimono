@@ -1,5 +1,5 @@
 {
-    "name": "evernode-setup-helper",
+    "name": "governance-helper",
     "scripts": {
         "build": "ncc build index.js --minify -o dist"
     },

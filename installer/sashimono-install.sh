@@ -230,7 +230,7 @@ if [ "$NO_MB" == "" ]; then
     # Configure message board users and register host.
     echo "Configuaring host registration on Evernode..."
 
-    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+    cp -r "$script_dir"/{mb-xrpl,governance-helper} $SASHIMONO_BIN
 
     # Creating message board user (if not exists).
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

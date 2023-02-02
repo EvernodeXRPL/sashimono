@@ -69,8 +69,8 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./evernode-bootstrap-contract/src/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
-    COMMAND npm  --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
-    COMMAND npm  --prefix ./governance-helper install && npm run --prefix ./governance-helper build
+    COMMAND npm --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
+    COMMAND npm --prefix ./governance-helper install && npm run --prefix ./governance-helper build
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)

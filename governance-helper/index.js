@@ -47,7 +47,7 @@ const propose = async (hashFilePath, shortName) => {
 
     try {
         await hostClient.connect();
-        await hostClient.proposeHookCandidate(hashes, shortName);
+        await hostClient.propose(hashes, shortName);
     } finally {
         await hostClient.disconnect();
         await xrplApi.disconnect();

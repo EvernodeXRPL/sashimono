@@ -93,7 +93,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
     if ([ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] &&
         [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ]); then
 
-        output=$(sudo -u $noroot_user DATA_DIR=$MB_XRPL_DATA /usr/bin/node $GOVERNANCE_HELPER_BIN "$@" 2>&1)
+        output=$(DATA_DIR=$MB_XRPL_DATA /usr/bin/node $GOVERNANCE_HELPER_BIN "$@" 2>&1)
         exit_code=$?
         [ $exit_code -eq 2 ] && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
@@ -651,6 +651,7 @@ function install_evernode() {
 
     echo "Installing Sashimono..."
 
+    init_setup_helpers
     registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
 
     # Filter logs with STAGE prefix and ommit the prefix when echoing.

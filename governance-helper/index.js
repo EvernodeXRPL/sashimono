@@ -6,17 +6,23 @@ const DATA_DIR = process.env.DATA_DIR || __dirname;
 const CONFIG_PATH = DATA_DIR + '/mb-xrpl.cfg';
 const SECRET_CONFIG_PATH = DATA_DIR + '/secret.cfg';
 
-const getConfig = () => {
+const getConfig = (skipSecret = false) => {
+    // Only root user can access the secret config.
+    if (!skipSecret) {
+        if (process.getuid() != 0)
+            throw `Please run with root privileges (sudo).`;
+    }
+
     if (!fs.existsSync(CONFIG_PATH))
         throw `Config file does not exist at ${CONFIG_PATH}`;
     else if (!fs.existsSync(SECRET_CONFIG_PATH))
         throw `Config file does not exist at ${SECRET_CONFIG_PATH}`;
 
-        let config = JSON.parse(fs.readFileSync(CONFIG_PATH).toString());
-        const secretCfg = JSON.parse(fs.readFileSync(SECRET_CONFIG_PATH).toString());
-        config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
+    let config = JSON.parse(fs.readFileSync(CONFIG_PATH).toString());
+    const secretCfg = JSON.parse(fs.readFileSync(SECRET_CONFIG_PATH).toString());
+    config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
 
-        return config;
+    return config;
 }
 
 const propose = async (hashFilePath, shortName) => {

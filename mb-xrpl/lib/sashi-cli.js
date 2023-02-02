@@ -27,7 +27,8 @@ class SashiCLI {
             container_name: containerName
         };
         const res = await this.execSashiCli(msg);
-        if (res.content && typeof res.content == 'string' && res.content.endsWith("error"))
+        if ((res.content && typeof res.content == 'string' && res.content.endsWith("error")) ||
+            res.type && typeof res.type == 'string' && res.type.endsWith("error"))
             throw res;
 
         return res;

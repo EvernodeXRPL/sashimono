@@ -81,8 +81,12 @@ add_custom_target(installer
   COMMAND bash -c "cp -r ./installer/{docker-install.sh,docker-registry-install.sh,docker-registry-uninstall.sh,prereq.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/installer/"
   COMMAND bash -c "cp -r ./dependencies/{user-cgcreate.sh,libblake3.so,licence.txt} ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
-  COMMAND tar cfz  ./build/installer.tar.gz --directory=./build/ installer
+  COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
+
+  # js helper for installer setup.
+  COMMAND npm  --prefix ./installer/jshelper install && npm run --prefix ./installer/jshelper build
+  COMMAND tar cfz ./build/setup-jshelper.tar.gz --directory=./installer/jshelper/ dist
 )
 set_target_properties(installer PROPERTIES EXCLUDE_FROM_ALL TRUE)
 add_dependencies(installer sagent)

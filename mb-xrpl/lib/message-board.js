@@ -231,7 +231,7 @@ class MessageBoard {
             const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
             // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
             if (!nft)
-                console.log(`Cannot find a NFT for ${lease.containerName}`);
+                console.log(`Cannot find an NFT for ${lease.containerName}`);
             else {
                 const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
                 await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
@@ -333,21 +333,26 @@ class MessageBoard {
     async #startHeartBeatScheduler() {
         // Sending a heartbeat at startup
         await this.#sendHeartbeat();
-
-        const timeout = this.hostClient.config.momentSize * 1000; // Seconds to millisecs.
-
+    
+        const momentSize = this.hostClient.config.momentSize;
+        const halfMomentSize = momentSize / 2; // Getting half of moment size
+        const timeout = momentSize * 1000; // Converting seconds to milliseconds.
+    
         const scheduler = async () => {
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
             await this.#sendHeartbeat();
         };
-
-        const nextMomentStartIdx = await this.hostClient.getMomentStartIndex() + this.hostClient.config.momentSize;
+    
+        const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
+    
+        // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
+    
         setTimeout(async () => {
             await scheduler();
-        }, (nextMomentStartIdx - evernode.UtilHelpers.getCurrentUnixTime() + 60) * 1000);
-        // Delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        }, startTimeout);
     }
 
     // Try to acquire the lease update lock.
@@ -603,7 +608,7 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
-        // Burn the NFTs and recreate the offer and send back the lease amount back to the tenant.
+        // Burn the NFTs and recreate the offer.
         await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
         await this.hostClient.refreshConfig();

@@ -84,7 +84,7 @@ namespace hp
 
     int stop_container(std::string_view container_name);
 
-    int destroy_container(std::string_view container_name);
+    int destroy_container(std::string &error_msg, std::string_view container_name);
 
     int create_contract(std::string_view username, std::string_view owner_pubkey, std::string_view contract_id,
                         std::string_view contract_dir, const ports &assigned_ports, instance_info &info);

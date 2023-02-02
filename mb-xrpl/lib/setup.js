@@ -188,6 +188,8 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
+        console.log(`Using registry ${hostClient.config.registryAddress}`);
+
         const isAReReg = await hostClient.isTransferee();
         const evrBalance = await hostClient.getEVRBalance();
         if (!isAReReg && hostClient.config.hostRegFee > evrBalance)

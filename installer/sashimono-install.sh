@@ -251,7 +251,6 @@ if [ "$NO_MB" == "" ]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
-            echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
             # Commented for now, because 'betagen' will no longer be used.
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
@@ -263,7 +262,7 @@ if [ "$NO_MB" == "" ]; then
 
         # Register the host on Evernode.
         if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+            stage "Registering host on Evernode"
             set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.

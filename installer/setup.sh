@@ -32,6 +32,7 @@ export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
 export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
 export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
+export GOVERNANCE_HELPER_BIN=$SASHIMONO_BIN/governance-helper
 export SASHIMONO_DATA=/etc/sashimono
 export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
 export SASHIMONO_SERVICE="sashimono-agent"
@@ -89,20 +90,26 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] \
-        && echomult "$evernode host management tool
+    if ([ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] &&
+        [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ]); then
+
+        output=$(DATA_DIR=$MB_XRPL_DATA /usr/bin/node $GOVERNANCE_HELPER_BIN "$@" 2>&1)
+        exit_code=$?
+        [ $exit_code -eq 2 ] && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
-                \nstatus - View $evernode registration info
-                \nlist - View contract instances running on this system
-                \nlog - Generate evernode log file.
-                \napplyssl - Apply new SSL certificates for contracts.
-                \nconfig - View and update host configuration.
-                \nupdate - Check and install $evernode software updates
-                \ntransfer - Initiate an $evernode transfer for your machine
-                \ndelete - Remove an instance from the system and recreate the lease
-                \nuninstall - Uninstall and deregister from $evernode" \
-        && exit 1
+                \n  status - View $evernode registration info
+                \n  list - View contract instances running on this system
+                \n  log - Generate evernode log file.
+                \n  applyssl - Apply new SSL certificates for contracts.
+                \n  config - View and update host configuration.
+                \n  update - Check and install $evernode software updates
+                \n  transfer - Initiate an $evernode transfer for your machine
+                \n  delete - Remove an instance from the system and recreate the lease
+                \n  uninstall - Uninstall and deregister from $evernode"
+        echo "$output"
+        [ ! $exit_code -eq 0 ] && exit 1
+    fi
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
         && echomult "$evernode host management tool
@@ -644,6 +651,7 @@ function install_evernode() {
 
     echo "Installing Sashimono..."
 
+    init_setup_helpers
     registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
 
     # Filter logs with STAGE prefix and ommit the prefix when echoing.

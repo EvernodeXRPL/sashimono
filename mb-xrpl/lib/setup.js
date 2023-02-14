@@ -205,9 +205,8 @@ class Setup {
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
-                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice); // in EVRs.
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -498,7 +497,7 @@ class Setup {
         for (const idx of nftIndexesToCreate) {
             try {
                 await hostClient.offerLease(idx,
-                    leaseAmount ? leaseAmount : (acc.leaseAmount ? acc.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice)),
+                    leaseAmount ? leaseAmount : acc.leaseAmount,
                     appenv.TOS_HASH);
             }
             catch (e) {
@@ -554,10 +553,7 @@ class Setup {
                     // Burn the NFTs and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-                    await hostClient.refreshConfig();
-                    const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice);
-                    await hostClient.offerLease(uriInfo.leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

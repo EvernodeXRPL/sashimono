@@ -4,9 +4,6 @@
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono installer---" || echo "---Sashimono installer (upgrade)---"
 
-# TODO : Remove this line once the previous evernode alias (/usr/bin/evernode) is updated in all hosts.
-[[ -z "${EVERNODE_GOVERNOR_ADDRESS}" ]] && export EVERNODE_GOVERNOR_ADDRESS="rNPPwSnXDkcGDUaY5gKJzt33bkVRMVVLKX"
-
 inetaddr=${1}
 init_peer_port=${2}
 init_user_port=${3}

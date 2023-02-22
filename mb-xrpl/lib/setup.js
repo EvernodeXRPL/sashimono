@@ -7,10 +7,11 @@ const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 
-function setEvernodeDefaults(governorAddress, rippledServer) {
+function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
         governorAddress: governorAddress,
-        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER
+        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
+        xrplApi: xrplApi
     });
 }
 
@@ -188,6 +189,9 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
         const isAReReg = await hostClient.isTransferee();
         const evrBalance = await hostClient.getEVRBalance();
         if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
@@ -234,6 +238,10 @@ class Setup {
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
         await this.burnMintedNfts(hostClient.xrplAcc);
         await hostClient.deregister();
         await hostClient.disconnect();

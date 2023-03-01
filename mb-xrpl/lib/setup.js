@@ -242,7 +242,7 @@ class Setup {
         // Update the Defaults with "xrplApi" of the client.
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
-        await this.burnMintedNfts(hostClient.xrplAcc);
+        await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.deregister();
         await hostClient.disconnect();
     }
@@ -263,7 +263,7 @@ class Setup {
 
                 const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
-                    console.log(`Registration NFT: ${hostInfo.nfTokenId}`);
+                    console.log(`Registration URIToken: ${hostInfo.uriTokenId}`);
                 }
                 else {
                     await hostClient.disconnect();
@@ -308,13 +308,13 @@ class Setup {
         await Promise.resolve(); // async placeholder.
     }
 
-    // Burn the host minted NFTs at the de-registration.
-    async burnMintedNfts(xrplAcc) {
-        // Get unsold NFTs.
-        const nfts = (await xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
-            .map(o => { return { nfTokenId: o.NFTokenID, ownerAddress: xrplAcc.address }; });
+    // Burn the host minted URITokens at the de-registration.
+    async burnMintedURITokens(xrplAcc) {
+        // Get unsold URITokens.
+        const uriTokens = (await xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+            .map(o => { return { uriTokenId: o.index, ownerAddress: xrplAcc.address }; });
 
-        // Get sold NFTs.
+        // Get sold URITokens.
         // We check for db existance since db is created by message board (not setup).
         const dbPath = appenv.DB_PATH;
         if (fs.existsSync(dbPath)) {
@@ -327,8 +327,8 @@ class Setup {
             try {
                 // We check for table existance since table is created by message board (not setup).
                 if (db.isTableExists(leaseTable)) {
-                    nfts.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
-                        .map(o => { return { nfTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))
+                    uriTokens.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
+                        .map(o => { return { uriTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))
                 }
             }
             finally {
@@ -337,10 +337,11 @@ class Setup {
         }
 
 
-        for (const nft of nfts) {
-            const sold = nft.ownerAddress !== xrplAcc.address;
-            await xrplAcc.burnNft(nft.nfTokenId, sold ? nft.ownerAddress : null);
-            console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting NFT (${nft.nfTokenId}) of ${nft.ownerAddress + (sold ? ' tenant' : '')} account`);
+        for (const uriToken of uriTokens) {
+            console.log(uriToken);
+            const sold = uriToken.ownerAddress !== xrplAcc.address;
+            await xrplAcc.burnURIToken(uriToken.uriTokenId);
+            console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting URIToken (${uriToken.uriTokenId}) of ${uriToken.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
     }
 
@@ -354,7 +355,7 @@ class Setup {
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
         await hostClient.transfer(transfereeAddress);
-        await this.burnMintedNfts(hostClient.xrplAcc);
+        await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.disconnect();
     }
 
@@ -389,9 +390,9 @@ class Setup {
         this.#saveConfig(cfg);
     }
 
-    // Recreate unsold NFTs
+    // Recreate unsold URITokens
     async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, existingCfg) {
-        // Get sold NFTs.
+        // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
 
@@ -421,10 +422,10 @@ class Setup {
 
         await initClients(acc.rippledServer);
 
-        // Get unsold NFTs.
-        const unsoldNfts = (await hostClient.xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
-            .map(n => { return { nfTokenId: n.NFTokenID, leaseIndex: evernode.UtilHelpers.decodeLeaseNftUri(n.URI).leaseIndex }; });
-        const unsoldCount = unsoldNfts.length;
+        // Get unsold URI Tokens.
+        const unsoldUriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+            .map(n => { return { uriTokenId: n.index, leaseIndex: evernode.UtilHelpers.decodeLeaseTokenUri(n.URI).leaseIndex }; });
+        const unsoldCount = unsoldUriTokens.length;
 
         // Return if not changed.
         if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount)) {
@@ -433,15 +434,15 @@ class Setup {
         }
 
         async function getVacantLeaseIndexes(includeUnsold = true) {
-            let acquired = includeUnsold ? [] : unsoldNfts.map(n => n.leaseIndex);
+            let acquired = includeUnsold ? [] : unsoldUriTokens.map(n => n.leaseIndex);
             let vacant = [];
             for (const l of leaseRecords) {
                 try {
                     const tenantAddress = l.tenant_xrp_address;
-                    const nfTokenId = l.container_name;
-                    const nft = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getNfts())?.find(n => n.NFTokenID == nfTokenId);
-                    if (nft) {
-                        const index = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI).leaseIndex;
+                    const uriTokenId = l.container_name;
+                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
+                    if (uriToken) {
+                        const index = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).leaseIndex;
                         acquired.push(index);
                     }
                 } catch {
@@ -456,54 +457,54 @@ class Setup {
             return vacant;
         }
 
-        let nftsToBurn = [];
-        let nftIndexesToCreate = [];
-        // If lease amount is changed we need to burn all the unsold nfts
+        let uriTokensToBurn = [];
+        let uriTokenIndexesToCreate = [];
+        // If lease amount is changed we need to burn all the unsold uriTokens
         if ((leaseAmount && acc.leaseAmount !== leaseAmount) || (rippledServer && acc.rippledServer !== rippledServer)) {
-            nftsToBurn = unsoldNfts;
+            uriTokensToBurn = unsoldUriTokens;
 
-            // If total instance count also changed decide the nfts that we need to create.
+            // If total instance count also changed decide the uriTokens that we need to create.
             if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
-                // If less than current count, Create only first chuck of the burned nfts.
-                // If greater than current count, create burned nfts plus extra nfts that are needed.
+                // If less than current count, Create only first chuck of the burned uriTokens.
+                // If greater than current count, create burned uriTokens plus extra uriTokens that are needed.
                 if (totalInstanceCount < soldCount + unsoldCount) {
-                    nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex).sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
+                    uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex).sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
                 }
                 else {
-                    nftIndexesToCreate = await getVacantLeaseIndexes();
+                    uriTokenIndexesToCreate = await getVacantLeaseIndexes();
                 }
             }
             else {
-                nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex);
+                uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex);
             }
         }
         // If only instance count is changed decide whether we need to add or burn comparing the current count and updated count.
         else if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
             if (totalInstanceCount < soldCount + unsoldCount) {
-                nftsToBurn = unsoldNfts.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
-                nftIndexesToCreate = [];
+                uriTokensToBurn = unsoldUriTokens.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
+                uriTokenIndexesToCreate = [];
             }
             else {
-                nftsToBurn = [];
-                nftIndexesToCreate = await getVacantLeaseIndexes(false);
+                uriTokensToBurn = [];
+                uriTokenIndexesToCreate = await getVacantLeaseIndexes(false);
             }
         }
 
-        for (const nft of nftsToBurn) {
+        for (const uriToken of uriTokensToBurn) {
             try {
-                await hostClient.expireLease(nft.nfTokenId);
+                await hostClient.expireLease(uriToken.nfTokenId);
             }
             catch (e) {
                 console.error(e);
             }
         }
 
-        // If rippled server is changed, create new nfts from new server.
+        // If rippled server is changed, create new uriTokens from new server.
         if (rippledServer && rippledServer !== acc.rippledServer) {
             await initClients(rippledServer);
         }
 
-        for (const idx of nftIndexesToCreate) {
+        for (const idx of uriTokenIndexesToCreate) {
             try {
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : (acc.leaseAmount ? acc.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice)),
@@ -547,19 +548,19 @@ class Setup {
                 xrplApi = new evernode.XrplApi(acc.rippledServer);
                 await xrplApi.connect();
 
-                // Get the existing nft of the lease.
-                const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
+                // Get the existing uriToken of the lease.
+                const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);
 
-                if (nft) {
+                if (uriToken) {
                     hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
                     await hostClient.connect();
 
                     // Delete instance from sashiDB and burn the token
-                    const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
 
                     console.log(`Expiring the lease...`);
 
-                    // Burn the NFTs and recreate the offer.
+                    // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
                     // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.

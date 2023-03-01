@@ -483,7 +483,6 @@ class MessageBoard {
         }
     }
 
-    // TODO : Need to find a way to get the NFTSell Offers.
     async #catchupMissedLeases() {
         const fullHistoryXrplApi = new evernode.XrplApi(appenv.DEFAULT_FULL_HISTORY_NODE);
         await fullHistoryXrplApi.connect();
@@ -536,10 +535,10 @@ class MessageBoard {
                             // Handle Acquires.
                             if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
 
-                                // Find and bind the NFTSellOffer (If the trx. is  an ACQUIRE, there should be an NFTSellOffer)
-                                const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
-                                if (trx.NFTokenSellOffer)
-                                    trx.NFTokenSellOffer = offer;
+                                // Find and bind the bought lease offer (If the trx. is  an ACQUIRE, it should be an URITokenBuy trx)
+                                const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID);
+                                if (trx.URITokenSellOffer)
+                                    trx.URITokenSellOffer = offer;
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
@@ -647,7 +646,7 @@ class MessageBoard {
             // Since acquire is accepted for leaseAmount
             const moments = 1;
 
-            // Use URITokenId as the instance name.
+            // Use URITokenID as the instance name.
             const containerName = uriTokenId;
             console.log(`Received acquire lease from ${tenantAddress}`);
             requestValidated = true;

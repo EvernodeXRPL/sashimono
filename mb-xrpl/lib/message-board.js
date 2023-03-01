@@ -537,7 +537,7 @@ class MessageBoard {
 
                                 // Find and bind the bought lease offer (If the trx. is  an ACQUIRE, it should be an URITokenBuy trx)
                                 const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID);
-                                if (trx.URITokenSellOffer)
+                                if (!trx.URITokenSellOffer)
                                     trx.URITokenSellOffer = offer;
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);

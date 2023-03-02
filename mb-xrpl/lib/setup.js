@@ -261,6 +261,8 @@ class Setup {
                 const hostClient = new evernode.HostClient(acc.address);
                 await hostClient.connect();
 
+                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
                 const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
                     console.log(`Registration URIToken: ${hostInfo.uriTokenId}`);
@@ -295,6 +297,8 @@ class Setup {
 
             const hostClient = new evernode.HostClient(cfg.xrpl.address, cfg.xrpl.secret);
             await hostClient.connect();
+
+            setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer, hostClient.xrplApi);
 
             cfg.xrpl.governorAddress = governorAddress;
             cfg.xrpl.registryAddress = hostClient.config.registryAddress;
@@ -338,7 +342,6 @@ class Setup {
 
 
         for (const uriToken of uriTokens) {
-            console.log(uriToken);
             const sold = uriToken.ownerAddress !== xrplAcc.address;
             await xrplAcc.burnURIToken(uriToken.uriTokenId);
             console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting URIToken (${uriToken.uriTokenId}) of ${uriToken.ownerAddress + (sold ? ' tenant' : '')} account`);
@@ -354,6 +357,9 @@ class Setup {
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
+
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.disconnect();
@@ -413,6 +419,8 @@ class Setup {
             hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
             await xrplApi.connect();
             await hostClient.connect();
+            setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
+
         }
 
         async function deinitClients() {
@@ -547,6 +555,8 @@ class Setup {
 
                 xrplApi = new evernode.XrplApi(acc.rippledServer);
                 await xrplApi.connect();
+
+                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
 
                 // Get the existing uriToken of the lease.
                 const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);

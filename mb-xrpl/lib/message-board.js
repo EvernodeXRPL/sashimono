@@ -536,7 +536,7 @@ class MessageBoard {
                             if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
 
                                 // Find and bind the bought lease offer (If the trx. is  an ACQUIRE, it should be an URITokenBuy trx)
-                                const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID);
+                                const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID && o.Amount);
                                 if (!trx.URITokenSellOffer)
                                     trx.URITokenSellOffer = offer;
 

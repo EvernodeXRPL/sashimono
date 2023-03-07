@@ -5,9 +5,9 @@ let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",
     FILE_LOG_ENABLED: process.env.MB_FILE_LOG === "1",
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
-    FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet-v2.xrpl-labs.com/newcreds",
-    DEFAULT_RIPPLED_SERVER: 'wss://hooks-testnet-v2.xrpl-labs.com',
-    DEFAULT_FULL_HISTORY_NODE: 'wss://hooks-testnet-v2.xrpl-labs.com' // If we migrate to Main NET, this should be configured with the relevant full history Node WebSocket.
+    FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet-v3.xrpl-labs.com/newcreds",
+    DEFAULT_RIPPLED_SERVER: 'wss://hooks-testnet-v3.xrpl-labs.com',
+    DEFAULT_FULL_HISTORY_NODE: 'wss://hooks-testnet-v3.xrpl-labs.com' // If we migrate to Main NET, this should be configured with the relevant full history Node WebSocket.
 }
 
 appenv = {

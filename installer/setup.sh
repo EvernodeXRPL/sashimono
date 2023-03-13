@@ -670,11 +670,11 @@ function install_evernode() {
     echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
-function uninstall_evernode() {
+function check_exisiting_contracts() {
 
     local upgrade=$1
 
-    # Check for existing contract instances.
+    # Check the condition of existing contract instances.
     local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
     readarray -t userarr <<<"$users"
     local sashiusers=()
@@ -688,6 +688,11 @@ function uninstall_evernode() {
         $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to continue?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
+}
+
+function uninstall_evernode() {
+
+    local upgrade=$1
 
     if ! $transfer ; then
         [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
@@ -736,7 +741,8 @@ function init_evernode_transfer() {
 
     if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
         [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
-            echo "Evernode transfer initiation was failed. Try again later." && exit 1
+        ! confirm "Evernode transfer initiation was failed. Still do you want to continue the unistallation?" && echo "Aborting unistallation. Try again later." && exit 1
+        echo "Continuing uninstallation..."
     fi
 
 }
@@ -1131,6 +1137,9 @@ elif [ "$mode" == "uninstall" ]; then
     # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
+    # check contract condtion.
+    check_exisiting_contracts 0
+
     # Force uninstall on quiet mode.
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
@@ -1146,12 +1155,13 @@ elif [ "$mode" == "transfer" ]; then
 
     set_transferee_address
 
+    check_exisiting_contracts 0
+
     init_evernode_transfer
 
-    uninstall_evernode 0
+    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
 
-    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using
-        the account $transferee_address."
+    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
     reg_info

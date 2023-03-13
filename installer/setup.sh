@@ -1137,7 +1137,7 @@ elif [ "$mode" == "uninstall" ]; then
     # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
-    # check contract condtion.
+    # Check contract condtion.
     check_exisiting_contracts 0
 
     # Force uninstall on quiet mode.
@@ -1153,12 +1153,16 @@ elif [ "$mode" == "transfer" ]; then
         transferee_address=${3}           # Address of the transferee.
     fi
 
+    # Set transferee based on the user input.
     set_transferee_address
 
+    # Check contract condtion.
     check_exisiting_contracts 0
 
+    # Initiate transferring.
     init_evernode_transfer
 
+    # Execute oftware uninstallation (Force uninstall on quiet mode).
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
 
     echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."

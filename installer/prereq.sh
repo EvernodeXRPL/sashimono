@@ -70,6 +70,12 @@ if ! command -v ufw &>/dev/null; then
     apt-get install -y ufw
 fi
 
+# Install snap (required for letsencrypt certbot install)
+if ! command -v snap &>/dev/null; then
+    stage "Installing snapd"
+    apt-get install -y snapd
+fi
+
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.

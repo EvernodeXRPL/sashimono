@@ -97,7 +97,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 function setup_certbot() {
     stage "Setting up letsencrypt certbot"
 
-    # We assume snap is already installed (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
+    # Install certbot via snap (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
     snap install core && snap refresh core && snap install --classic certbot
     ! [ -f /snap/bin/certbot ] && echo "certbot not found" && return 1
     [ -f /usr/bin/certbot ] || ln -s /snap/bin/certbot /usr/bin/certbot || return 1

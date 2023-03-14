@@ -191,7 +191,7 @@ rm -r "$tmp"
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh,governance.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Copy Blake3 and update linker library cache.
@@ -227,7 +227,7 @@ if [ "$NO_MB" == "" ]; then
     # Configure message board users and register host.
     echo "Configuaring host registration on Evernode..."
 
-    cp -r "$script_dir"/{mb-xrpl,governance-helper} $SASHIMONO_BIN
+    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
     # Creating message board user (if not exists).
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

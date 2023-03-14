@@ -4,6 +4,7 @@ const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
 const { appenv } = require('./appenv');
 const { SashiCLI } = require('./sashi-cli');
 const { ConfigHelper } = require('./config-helper');
+const { GovernanceManager } = require('./governance-manager');
 
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
@@ -210,6 +211,43 @@ class MessageBoard {
             (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
             ongoingHeartbeat = true;
             console.log(`Reporting heartbeat at Moment ${currentMoment}...`);
+
+            // Send heartbeat with votes, if there are votes in the config.
+            let heartbeatSent = false;
+            const govMgr = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);
+            const votes = govMgr.getVotes();
+            if (votes) {
+                const voteArr = Object.entries(votes).map(async ([key, value]) => {
+                    const candidate = await this.hostClient.getCandidateById(key);
+                    return candidate ? {
+                        candidate: candidate.uniqueId,
+                        vote: value === evernode.EvernodeConstants.CandidateVote.Support ?
+                            evernode.EvernodeConstants.CandidateVote.Support :
+                            evernode.EvernodeConstants.CandidateVote.Reject,
+                        idx: candidate.index
+                    } : null;
+                }).filter(v => v).sort((a, b) => a.idx - b.idx);
+                if (voteArr && voteArr.length) {
+                    for (const vote in voteArr) {
+                        try {
+                            await this.hostClient.heartbeat(vote);
+                            heartbeatSent = true;
+                        }
+                        catch (e) {
+                            // Remove candidate from config.
+                            if (e.code === 'VOTE_VALIDATION_ERR') {
+                                console.error(e.error);
+                                govMgr.clearCandidate(key);
+                            }
+                            throw e;
+                        }
+                    }
+                }
+            }
+
+            // Return if at-least one heartbeat has been sent. Otherwise send heartbeat without votes.
+            if (heartbeatSent)
+                return;
 
             try {
                 await this.hostClient.heartbeat();

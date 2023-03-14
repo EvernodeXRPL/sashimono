@@ -32,7 +32,7 @@ export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
 export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
 export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
-export GOVERNANCE_HELPER_BIN=$SASHIMONO_BIN/governance-helper
+export GOVERNANCE_SH=$SASHIMONO_BIN/governance.sh
 export SASHIMONO_DATA=/etc/sashimono
 export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
 export SASHIMONO_SERVICE="sashimono-agent"
@@ -90,26 +90,21 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    if ([ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] &&
-        [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ]); then
-
-        output=$(DATA_DIR=$MB_XRPL_DATA /usr/bin/node $GOVERNANCE_HELPER_BIN "$@" 2>&1)
-        exit_code=$?
-        [ $exit_code -eq 2 ] && echomult "$evernode host management tool
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] \
+        && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
-                \n  status - View $evernode registration info
-                \n  list - View contract instances running on this system
-                \n  log - Generate evernode log file.
-                \n  applyssl - Apply new SSL certificates for contracts.
-                \n  config - View and update host configuration.
-                \n  update - Check and install $evernode software updates
-                \n  transfer - Initiate an $evernode transfer for your machine
-                \n  delete - Remove an instance from the system and recreate the lease
-                \n  uninstall - Uninstall and deregister from $evernode"
-        echo "$output"
-        [ ! $exit_code -eq 0 ] && exit 1
-    fi
+                \nstatus - View $evernode registration info
+                \nlist - View contract instances running on this system
+                \nlog - Generate evernode log file.
+                \napplyssl - Apply new SSL certificates for contracts.
+                \nconfig - View and update host configuration.
+                \nupdate - Check and install $evernode software updates
+                \ntransfer - Initiate an $evernode transfer for your machine
+                \ndelete - Remove an instance from the system and recreate the lease
+                \nuninstall - Uninstall and deregister from $evernode
+                \ngovernance - Governance candidate manangment" \
+        && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
         && echomult "$evernode host management tool
@@ -1175,6 +1170,9 @@ elif [ "$mode" == "delete" ]; then
     [ -z "$2" ] && echomult "A contract instance name must be specified (see 'evernode list').\n  Usage: evernode delete <instance name>" && exit 1
 
     delete_instance "$2"
+
+elif [ "$mode" == "governance" ]; then
+    $GOVERNANCE_SH ${*:2}
 
 fi
 

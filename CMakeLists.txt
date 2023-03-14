@@ -63,14 +63,13 @@ add_dependencies(sagent
 )
 
 add_custom_command(TARGET sagent POST_BUILD
-    COMMAND bash -c "cp -r ./dependencies/{hpfs,user-install.sh,user-uninstall.sh} ./build/"
+    COMMAND bash -c "cp -r ./dependencies/{hpfs,user-install.sh,user-uninstall.sh,governance.sh} ./build/"
     COMMAND tar xf ./dependencies/contract_template.tar -C ./build/ --no-same-owner
     COMMAND cp ./dependencies/hp.cfg ./build/contract_template/cfg/
     COMMAND cp ./evernode-bootstrap-contract/src/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
     COMMAND npm --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
-    COMMAND npm --prefix ./governance-helper install && npm run --prefix ./governance-helper build
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
@@ -78,11 +77,10 @@ target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
 # Add target to generate the installer setup.
 add_custom_target(installer
   COMMAND mkdir -p ./build/installer
-  COMMAND bash -c "cp -r ./build/{sagent,sashi,hpfs,user-install.sh,user-uninstall.sh,contract_template} ./build/installer/"
+  COMMAND bash -c "cp -r ./build/{sagent,sashi,hpfs,user-install.sh,user-uninstall.sh,governance.sh,contract_template} ./build/installer/"
   COMMAND bash -c "cp -r ./installer/{docker-install.sh,docker-registry-install.sh,docker-registry-uninstall.sh,prereq.sh,sashimono-install.sh,sashimono-uninstall.sh} ./build/installer/"
   COMMAND bash -c "cp -r ./dependencies/{user-cgcreate.sh,libblake3.so,licence.txt} ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
-  COMMAND bash -c "cp -r ./governance-helper/dist ./build/installer/governance-helper"
   COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
 

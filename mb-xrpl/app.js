@@ -3,6 +3,7 @@ const logger = require('./lib/logger');
 const { appenv } = require('./lib/appenv');
 const { Setup } = require('./lib/setup');
 const { MessageBoard } = require('./lib/message-board');
+const { GovernanceManager } = require('./lib/governance-manager');
 
 async function main() {
 
@@ -59,6 +60,18 @@ async function main() {
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);
             }
+            else if (process.argv.length === 5 && process.argv[2] === 'governance-propose') {
+                await new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH).proposeCandidate(process.argv[3], process.argv[4]);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'governance-withdraw') {
+                await new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH).withdrawCandidate(process.argv[3]);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'governance-vote') {
+                new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH).voteCandidate(process.argv[3]);
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'governance-unvote') {
+                new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH).clearCandidate(process.argv[3]);
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
@@ -72,6 +85,10 @@ async function main() {
         node index.js upgrade [governorAddress] - Upgrade message board data.
         node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
         node index.js delete [containerName] - Delete an instance and recreate the lease offer
+        node index.js candidate-propose [hashFile] [shortName] - Propose new governance candidate.
+        node index.js candidate-withdraw [candidateId] - Withdraw proposed governance candidate.
+        node index.js candidate-vote [candidateId] - Vote for a governance candidate.
+        node index.js candidate-unvote [candidateId] - Remove vote from voted governance candidate.
         node index.js help - Print help.`);
             }
             else {

@@ -3,4 +3,5 @@ dist
 log
 mb-xrpl.cfg
 secret.cfg
+governance.cfg
 mb-xrpl.sqlite

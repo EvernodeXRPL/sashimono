@@ -220,13 +220,18 @@ class MessageBoard {
             if (votes) {
                 const voteArr = (await Promise.all(Object.entries(votes).map(async ([key, value]) => {
                     const candidate = await this.hostClient.getCandidateById(key);
-                    return candidate ? {
+                    // Delete candidate vote if there's no such candidate.
+                    if (!candidate) {
+                        this.governanceManager.clearCandidate(key);
+                        return null;
+                    }
+                    return {
                         candidate: candidate.uniqueId,
                         vote: value === evernode.EvernodeConstants.CandidateVote.Support ?
                             evernode.EvernodeConstants.CandidateVote.Support :
                             evernode.EvernodeConstants.CandidateVote.Reject,
                         idx: candidate.index
-                    } : null;
+                    };
                 }))).filter(v => v).sort((a, b) => a.idx - b.idx);
                 if (voteArr && voteArr.length) {
                     for (const vote of voteArr) {
@@ -235,10 +240,10 @@ class MessageBoard {
                             heartbeatSent = true;
                         }
                         catch (e) {
-                            // Remove candidate from config.
+                            // Remove candidate from config in vote validation from the hook failed.
                             if (e.code === 'VOTE_VALIDATION_ERR') {
                                 console.error(e.error);
-                                this.governanceManager.clearCandidate(key);
+                                this.governanceManager.clearCandidate(vote.candidate);
                             }
                             throw e;
                         }

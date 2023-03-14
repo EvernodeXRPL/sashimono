@@ -179,7 +179,7 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         # Exit the uninstallation, So user can try uninstall again with deregistration.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
             [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
-            ! confirm "Evernode host deregistration failed. Still do you want to continue uninstall?" && echo "Aborting uninstall. Try again later." && exit 1
+            ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
             echo "Continuing uninstallation..."
         fi
     fi

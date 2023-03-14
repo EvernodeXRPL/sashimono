@@ -40,6 +40,7 @@ class MessageBoard {
         this.sashiDb = new SqliteDatabase(sashiDbPath);
         this.sashiTable = appenv.SASHI_TABLE_NAME;
         this.sashiConfigPath = sashiConfigPath;
+        this.governanceManager = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);
     }
 
     async init() {
@@ -214,8 +215,7 @@ class MessageBoard {
 
             // Send heartbeat with votes, if there are votes in the config.
             let heartbeatSent = false;
-            const govMgr = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);
-            const votes = govMgr.getVotes();
+            const votes = this.governanceManager.getVotes();
             if (votes) {
                 const voteArr = Object.entries(votes).map(async ([key, value]) => {
                     const candidate = await this.hostClient.getCandidateById(key);
@@ -237,7 +237,7 @@ class MessageBoard {
                             // Remove candidate from config.
                             if (e.code === 'VOTE_VALIDATION_ERR') {
                                 console.error(e.error);
-                                govMgr.clearCandidate(key);
+                                this.governanceManager.clearCandidate(key);
                             }
                             throw e;
                         }

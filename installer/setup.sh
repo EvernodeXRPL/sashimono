@@ -32,7 +32,6 @@ export USER_BIN=/usr/bin
 export SASHIMONO_BIN=/usr/bin/sashimono
 export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
 export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
-export GOVERNANCE_SH=$SASHIMONO_BIN/governance.sh
 export SASHIMONO_DATA=/etc/sashimono
 export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
 export SASHIMONO_SERVICE="sashimono-agent"
@@ -1172,7 +1171,15 @@ elif [ "$mode" == "delete" ]; then
     delete_instance "$2"
 
 elif [ "$mode" == "governance" ]; then
-    $GOVERNANCE_SH ${*:2}
+    [ $2 == "help" ] && echomult "Governance management tool
+            \nSupported commands:
+            \npropose [hashFile] [shortName] - Propose new governance candidate.
+            \nwithdraw [candidateId] - Withdraw proposed governance candidate.
+            \nvote [candidateId] - Vote for a governance candidate.
+            \nunvote [candidateId] - Remove vote from voted governance candidate.
+            \nstatus - Get governance info of this host.
+            \nhelp - Print help." && exit 0
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
 fi
 

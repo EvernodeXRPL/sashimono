@@ -56,21 +56,20 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, secondaryAddrsCfg = { registryAddress: "", heartbeatAddress: "" }, rippledServer = null) {
+    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null) {
         this.#saveConfig({
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
                 secret: secret,
                 governorAddress: governorAddress,
-                ...secondaryAddrsCfg,
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
             }
         });
     }
 
-    async setupHostAccount(address, secret, rippledServer, governorAddress, domain, secondaryAddrsCfg) {
+    async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
 
         setEvernodeDefaults(governorAddress, rippledServer);
 
@@ -83,9 +82,6 @@ class Setup {
             await hostClient.connect();
 
             console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
-
-            secondaryAddrsCfg.registryAddress = hostClient.config.registryAddress;
-            secondaryAddrsCfg.heartbeatAddress = hostClient.config.heartbeatAddress;
 
             // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
             // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -114,7 +110,7 @@ class Setup {
         return acc;
     }
 
-    async generateBetaHostAccount(rippledServer, governorAddress, domain, secondaryAddrsCfg) {
+    async generateBetaHostAccount(rippledServer, governorAddress, domain) {
 
         setEvernodeDefaults(governorAddress, rippledServer);
 
@@ -124,9 +120,6 @@ class Setup {
         {
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
-
-            secondaryAddrsCfg.registryAddress = hostClient.config.registryAddress;
-            secondaryAddrsCfg.heartbeatAddress = hostClient.config.heartbeatAddress;
 
             console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
 
@@ -250,8 +243,6 @@ class Setup {
         const acc = this.#getConfig(false).xrpl;
         console.log(`Host account address: ${acc.address}`);
         console.log(`Governor address: ${acc?.governorAddress}`);
-        console.log(`Registry address: ${acc?.registryAddress}`);
-        console.log(`Heartbeat address: ${acc?.heartbeatAddress}`);
 
         if (!isBasic) {
             setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
@@ -259,6 +250,8 @@ class Setup {
             try {
                 const hostClient = new evernode.HostClient(acc.address);
                 await hostClient.connect();
+                console.log(`Registry address: ${hostClient.config.registryAddress}`);
+                console.log(`Heartbeat address: ${hostClient.config.heartbeatAddress}`);
 
                 setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
@@ -300,8 +293,6 @@ class Setup {
             setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer, hostClient.xrplApi);
 
             cfg.xrpl.governorAddress = governorAddress;
-            cfg.xrpl.registryAddress = hostClient.config.registryAddress;
-            cfg.xrpl.heartbeatAddress = hostClient.config.heartbeatAddress;
 
             await hostClient.disconnect();
         }

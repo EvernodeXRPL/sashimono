@@ -45,14 +45,8 @@ class MessageBoard {
 
     async init() {
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress || !this.cfg.xrpl.registryAddress ||
-            !this.cfg.xrpl.heartbeatAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress)
             throw "Required cfg fields cannot be empty.";
-
-        console.log("Using,\n\tGovernor account " + this.cfg.xrpl.governorAddress);
-        console.log("\tRegistry account " + this.cfg.xrpl.registryAddress);
-        console.log("\tHeartbeat account " + this.cfg.xrpl.heartbeatAddress);
-        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
 
         this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
         evernode.Defaults.set({
@@ -63,6 +57,13 @@ class MessageBoard {
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.#connectHost();
+
+        console.log("Using,");
+        console.log("\tGovernor account " + this.cfg.xrpl.governorAddress);
+        console.log("\tRegistry account " + this.hostClient.config.registryAddress);
+        console.log("\tHeartbeat account " + this.hostClient.config.heartbeatAddress);
+        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
+
         // Get last heartbeat moment from the host info.
         let hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
@@ -217,7 +218,7 @@ class MessageBoard {
             let heartbeatSent = false;
             const votes = this.governanceManager.getVotes();
             if (votes) {
-                const voteArr = Object.entries(votes).map(async ([key, value]) => {
+                const voteArr = (await Promise.all(Object.entries(votes).map(async ([key, value]) => {
                     const candidate = await this.hostClient.getCandidateById(key);
                     return candidate ? {
                         candidate: candidate.uniqueId,
@@ -226,9 +227,9 @@ class MessageBoard {
                             evernode.EvernodeConstants.CandidateVote.Reject,
                         idx: candidate.index
                     } : null;
-                }).filter(v => v).sort((a, b) => a.idx - b.idx);
+                }))).filter(v => v).sort((a, b) => a.idx - b.idx);
                 if (voteArr && voteArr.length) {
-                    for (const vote in voteArr) {
+                    for (const vote of voteArr) {
                         try {
                             await this.hostClient.heartbeat(vote);
                             heartbeatSent = true;

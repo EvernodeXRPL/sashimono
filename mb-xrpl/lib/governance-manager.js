@@ -14,23 +14,18 @@ function setEvernodeDefaults(governorAddress, rippledServer, xrplApi) {
 
 class GovernanceManager {
     #cfgPath;
-    #cfg;
 
     constructor(cfgPath) {
         this.#cfgPath = cfgPath;
         if (!fs.existsSync(cfgPath)) {
-            this.#cfg = {
+            this.#writeConfig({
                 votes: {}
-            };
-            this.#persistGovernanceConfig();
-        }
-        else {
-            this.#cfg = JSON.parse(fs.readFileSync(this.#cfgPath).toString());
+            });
         }
     }
 
-    #persistGovernanceConfig() {
-        fs.writeFileSync(this.#cfgPath, JSON.stringify(this.#cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+    #writeConfig(cfg) {
+        fs.writeFileSync(this.#cfgPath, JSON.stringify(cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
     }
 
     async proposeCandidate(hashFilePath, shortName, hostClient) {
@@ -90,21 +85,24 @@ class GovernanceManager {
             if (!candidate)
                 throw `There's no governance candidate for the given candidate id.`;
 
-            this.#cfg.votes[candidateId] = evernode.EvernodeConstants.CandidateVote.Support;
-            this.#persistGovernanceConfig();
+            let cfg = this.getConfig();
+            cfg.votes[candidateId] = evernode.EvernodeConstants.CandidateVote.Support;
+            this.#writeConfig(cfg);
         } finally {
             await hostClient.disconnect();
         }
     }
 
     clearCandidate(candidateId) {
-        delete this.#cfg[candidateId];
-        this.#persistGovernanceConfig();
+        let cfg = this.getConfig();
+        delete cfg[candidateId];
+        this.#writeConfig(cfg);
     }
 
     unvoteCandidate(candidateId) {
-        this.#cfg.votes[candidateId] = evernode.EvernodeConstants.CandidateVote.Reject;
-        this.#persistGovernanceConfig();
+        let cfg = this.getConfig();
+        cfg.votes[candidateId] = evernode.EvernodeConstants.CandidateVote.Reject;
+        this.#writeConfig(cfg);
     }
 
     getVotes() {

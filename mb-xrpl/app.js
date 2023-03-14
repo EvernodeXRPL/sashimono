@@ -21,9 +21,8 @@ async function main() {
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const setup = new Setup();
-                const secondaryAddrsCfg = {};
-                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain, secondaryAddrsCfg);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), secondaryAddrsCfg, rippledServer);
+                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain);
+                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const governorAddress = process.argv[3];
@@ -31,9 +30,8 @@ async function main() {
                 const leaseAmount = process.argv[5];
                 const rippledServer = process.argv[6];
                 const setup = new Setup();
-                const secondaryAddrsCfg = {};
-                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain, secondaryAddrsCfg);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), secondaryAddrsCfg, rippledServer);
+                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain);
+                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),

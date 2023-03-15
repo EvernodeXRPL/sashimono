@@ -102,7 +102,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
-                \ngovernance - Governance candidate manangment" \
+                \ngovernance - Governance candidate management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \

@@ -1193,7 +1193,7 @@ elif [ "$mode" == "governance" ]; then
             \nunvote [candidateId] - Remove vote from voted governance candidate.
             \nstatus - Get governance info of this host.
             \nhelp - Print help." && exit 0
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
+    ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
 fi
 

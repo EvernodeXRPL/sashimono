@@ -25,7 +25,7 @@ class GovernanceManager {
     }
 
     #writeConfig(cfg) {
-        fs.writeFileSync(this.#cfgPath, JSON.stringify(cfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+        fs.writeFileSync(this.#cfgPath, JSON.stringify(cfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
 
     async proposeCandidate(hashFilePath, shortName, hostClient) {
@@ -38,9 +38,10 @@ class GovernanceManager {
 
         const hashes = fs.readFileSync(hashFilePath).toString();
 
+        let candidateId = null;
         try {
             await hostClient.connect();
-            await hostClient.propose(hashes, shortName).catch(e => {
+            candidateId = await hostClient.propose(hashes, shortName).catch(e => {
                 let err;
                 if (e.code === "tecHOOK_REJECTED" && e.hookExecutionResult) {
                     err = e.hookExecutionResult.map(o => o.message).join(', ');
@@ -50,6 +51,7 @@ class GovernanceManager {
         } finally {
             await hostClient.disconnect();
         }
+        return candidateId;
     }
 
     async withdrawCandidate(candidateId, hostClient) {
@@ -95,7 +97,7 @@ class GovernanceManager {
 
     clearCandidate(candidateId) {
         let cfg = this.getConfig();
-        delete cfg[candidateId];
+        delete cfg.votes[candidateId];
         this.#writeConfig(cfg);
     }
 
@@ -110,7 +112,7 @@ class GovernanceManager {
         return cfg?.votes;
     }
 
-    async printStatus(hostClient) {
+    async getStatus(hostClient) {
         let status = this.getConfig();
         try {
             await hostClient.connect();
@@ -122,7 +124,7 @@ class GovernanceManager {
             await hostClient.disconnect();
         }
 
-        console.log(JSON.stringify(status, null, 2));
+        return status;
     }
 
     getConfig() {
@@ -130,33 +132,47 @@ class GovernanceManager {
     }
 
     static async handleCommand(command, ...args) {
-        let hostClient;
+        let hostClient = null;
+
+        // Secret is needed for propose and withdraw in order to send the transaction.
+        // Root access is needed in order to access the secret config.
+        // Vote and unvote need write access for the governance config.
+        if ((command == 'propose' || command === 'withdraw' || command === 'vote' || command === 'unvote') && process.getuid() !== 0)
+            throw "Please run with root privileges (sudo).";
+
+        // Host client is only needed for some commands.
         if (command == 'propose' || command === 'withdraw' || command === 'vote' || command === 'status') {
-            const sashiMBConfig = ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
+            // Secret is needed for propose and withdraw in order to send the transaction
+            const sashiMBConfig = ConfigHelper.readConfig(appenv.CONFIG_PATH,
+                (command == 'propose' || command === 'withdraw') ? appenv.SECRET_CONFIG_PATH : null);
             setEvernodeDefaults(sashiMBConfig.xrpl.governorAddress, sashiMBConfig.xrpl.rippledServer);
             hostClient = new evernode.HostClient(sashiMBConfig.xrpl.address, sashiMBConfig.xrpl.secret);
         }
         const mgr = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);
 
         if (args.length === 2 && command === 'propose') {
-            await mgr.proposeCandidate(args[0], args[1], hostClient);
+            const id = await mgr.proposeCandidate(args[0], args[1], hostClient);
+            console.log(`Successfully proposed the candidate ${id}.`);
         }
         else if (args.length === 1 && command === 'withdraw') {
             await mgr.withdrawCandidate(args[0], hostClient);
+            console.log(`Successfully withdrawn the candidate ${args[0]}.`);
         }
         else if (args.length === 1 && command === 'vote') {
             await mgr.voteCandidate(args[0], hostClient);
+            console.log(`Voted for candidate ${args[0]}.`);
         }
         else if (args.length === 1 && command === 'unvote') {
             mgr.clearCandidate(args[0]);
+            console.log(`Rejected vote for candidate ${args[0]}.`);
         }
         else if (args.length === 0 && command === 'status') {
-            await mgr.printStatus(hostClient);
+            const status = await mgr.getStatus(hostClient);
+            console.log(JSON.stringify(status, null, 2));
         }
         else {
             throw "Invalid args.";
         }
-        return true;
     }
 }
 

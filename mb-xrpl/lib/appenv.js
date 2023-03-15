@@ -14,6 +14,7 @@ appenv = {
     ...appenv,
     CONFIG_PATH: appenv.DATA_DIR + '/mb-xrpl.cfg',
     SECRET_CONFIG_PATH: appenv.DATA_DIR + '/secret.cfg',
+    GOVERNANCE_CONFIG_PATH: appenv.DATA_DIR + '/governance.cfg',
     LOG_PATH: appenv.DATA_DIR + '/log/mb-xrpl.log',
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',
     DB_TABLE_NAME: 'leases',

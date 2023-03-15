@@ -3,6 +3,7 @@ const logger = require('./lib/logger');
 const { appenv } = require('./lib/appenv');
 const { Setup } = require('./lib/setup');
 const { MessageBoard } = require('./lib/message-board');
+const { GovernanceManager } = require('./lib/governance-manager');
 
 async function main() {
 
@@ -20,9 +21,8 @@ async function main() {
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const setup = new Setup();
-                const secondaryAddrsCfg = {};
-                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain, secondaryAddrsCfg);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), secondaryAddrsCfg, rippledServer);
+                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain);
+                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const governorAddress = process.argv[3];
@@ -30,9 +30,8 @@ async function main() {
                 const leaseAmount = process.argv[5];
                 const rippledServer = process.argv[6];
                 const setup = new Setup();
-                const secondaryAddrsCfg = {};
-                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain, secondaryAddrsCfg);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), secondaryAddrsCfg, rippledServer);
+                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain);
+                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer);
             }
             else if (process.argv.length === 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
@@ -59,6 +58,9 @@ async function main() {
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);
             }
+            else if (process.argv.length >= 4 && process.argv[2] === 'governance') {
+                await GovernanceManager.handleCommand(process.argv[3], ...process.argv.slice(4));
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
@@ -72,6 +74,7 @@ async function main() {
         node index.js upgrade [governorAddress] - Upgrade message board data.
         node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
         node index.js delete [containerName] - Delete an instance and recreate the lease offer
+        node index.js governance [command] [args] - Governance handling.
         node index.js help - Print help.`);
             }
             else {

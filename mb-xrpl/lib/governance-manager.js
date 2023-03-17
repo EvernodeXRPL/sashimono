@@ -92,7 +92,7 @@ class GovernanceManager {
         // Only one support vote is allowed.
         const votes = this.getVotes();
         if (votes && Object.values(votes).includes(evernode.EvernodeConstants.CandidateVote.Support))
-            throw `There's already a support vote for a candidate. Unvote it and try again!.`;
+            throw `There's already a support vote for a candidate. Unvote it and try again!`;
 
         try {
             await hostClient.connect();

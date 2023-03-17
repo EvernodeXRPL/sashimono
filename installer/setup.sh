@@ -1036,8 +1036,6 @@ function delete_instance()
 
 # Begin setup execution flow --------------------
 
-echo "Thank you for trying out $evernode!"
-
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then

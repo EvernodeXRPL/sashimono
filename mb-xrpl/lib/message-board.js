@@ -245,7 +245,9 @@ class MessageBoard {
                                 console.error(e.error);
                                 this.governanceManager.clearCandidate(vote.candidate);
                             }
-                            throw e;
+                            else {
+                                console.error("Heartbeat tx with vote error", e);
+                            }
                         }
                     }
                 }

@@ -28,6 +28,14 @@ class GovernanceManager {
         fs.writeFileSync(this.#cfgPath, JSON.stringify(cfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
 
+    #validateCandidateId(candidateId) {
+        if (!candidateId)
+            throw `Candidate id cannot be empty.`;
+        else if (candidateId.length !== 64)
+            throw `Invalid candidate id.`;
+        return true;
+    }
+
     async proposeCandidate(hashFilePath, shortName, hostClient) {
         if (!hashFilePath)
             throw `Hash file param cannot be empty.`;
@@ -55,8 +63,7 @@ class GovernanceManager {
     }
 
     async withdrawCandidate(candidateId, hostClient) {
-        if (!candidateId)
-            throw `Candidate id cannot be empty.`;
+        this.#validateCandidateId(candidateId);
 
         try {
             await hostClient.connect();
@@ -80,6 +87,13 @@ class GovernanceManager {
     }
 
     async voteCandidate(candidateId, hostClient) {
+        this.#validateCandidateId(candidateId);
+
+        // Only one support vote is allowed.
+        const votes = this.getVotes();
+        if (votes && Object.values(votes).includes(evernode.EvernodeConstants.CandidateVote.Support))
+            throw `There's already a support vote for a candidate. Unvote it and try again!`;
+
         try {
             await hostClient.connect();
 
@@ -96,12 +110,16 @@ class GovernanceManager {
     }
 
     clearCandidate(candidateId) {
+        this.#validateCandidateId(candidateId);
+
         let cfg = this.getConfig();
         delete cfg.votes[candidateId];
         this.#writeConfig(cfg);
     }
 
     unvoteCandidate(candidateId) {
+        this.#validateCandidateId(candidateId);
+
         let cfg = this.getConfig();
         cfg.votes[candidateId] = evernode.EvernodeConstants.CandidateVote.Reject;
         this.#writeConfig(cfg);

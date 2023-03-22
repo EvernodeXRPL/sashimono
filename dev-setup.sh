@@ -77,7 +77,8 @@ sudo apt-get install -y \
     sqlite3 libsqlite3-dev \
     libboost-stacktrace-dev \
     fuse3 \
-    jq
+    jq \
+    bind9-host
 
 sudo cp $scriptdir/dependencies/libblake3.so /usr/local/lib/
 

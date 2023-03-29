@@ -51,7 +51,8 @@ class MessageBoard {
         this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
         evernode.Defaults.set({
             governorAddress: this.cfg.xrpl.governorAddress,
-            xrplApi: this.xrplApi
+            xrplApi: this.xrplApi,
+            stateIndexId: 'evernodev3devindex'
         })
         await this.xrplApi.connect();
 

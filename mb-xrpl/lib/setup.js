@@ -7,10 +7,11 @@ const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 
-function setEvernodeDefaults(registryAddress, rippledServer) {
+function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
-        registryAddress: registryAddress,
-        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER
+        governorAddress: governorAddress,
+        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
+        xrplApi: xrplApi
     });
 }
 
@@ -55,31 +56,32 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", registryAddress = "", leaseAmount = 0, rippledServer = null) {
+    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null) {
         this.#saveConfig({
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
                 secret: secret,
-                registryAddress: registryAddress,
+                governorAddress: governorAddress,
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
             }
         });
     }
 
-    async setupHostAccount(address, secret, rippledServer, registryAddress, domain) {
+    async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
 
-        setEvernodeDefaults(registryAddress, rippledServer);
+        setEvernodeDefaults(governorAddress, rippledServer);
 
         const xrplApi = new evernode.XrplApi(rippledServer);
         const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
 
         // Prepare host account.
         {
-            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${registryAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
+
+            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
 
             // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
             // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -108,17 +110,18 @@ class Setup {
         return acc;
     }
 
-    async generateBetaHostAccount(rippledServer, registryAddress, domain) {
+    async generateBetaHostAccount(rippledServer, governorAddress, domain) {
 
-        setEvernodeDefaults(registryAddress, rippledServer);
+        setEvernodeDefaults(governorAddress, rippledServer);
 
         const acc = await this.#generateFaucetAccount();
 
         // Prepare host account.
         {
-            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${registryAddress})`);
             const hostClient = new evernode.HostClient(acc.address, acc.secret);
             await hostClient.connect();
+
+            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
 
             // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
             // haven't still updated the ledger. In such cases, we retry several times before giving up.
@@ -174,10 +177,13 @@ class Setup {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
         const isAReReg = await hostClient.isTransferee();
         const evrBalance = await hostClient.getEVRBalance();
@@ -196,9 +202,8 @@ class Setup {
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
-                const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice); // in EVRs.
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -221,30 +226,38 @@ class Setup {
     async deregister() {
         console.log("Deregistering host...");
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
-        await this.burnMintedNfts(hostClient.xrplAcc);
+
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
+        await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.deregister();
         await hostClient.disconnect();
     }
 
     async regInfo(isBasic) {
         const acc = this.#getConfig(false).xrpl;
-        console.log(`Registry address: ${acc.registryAddress}`);
         console.log(`Host account address: ${acc.address}`);
+        console.log(`Governor address: ${acc?.governorAddress}`);
 
         if (!isBasic) {
-            setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+            setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
             try {
                 const hostClient = new evernode.HostClient(acc.address);
                 await hostClient.connect();
+                console.log(`Registry address: ${hostClient.config.registryAddress}`);
+                console.log(`Heartbeat address: ${hostClient.config.heartbeatAddress}`);
+
+                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
                 const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
-                    console.log(`Registration NFT: ${hostInfo.nfTokenId}`);
+                    console.log(`Registration URIToken: ${hostInfo.uriTokenId}`);
                 }
                 else {
                     await hostClient.disconnect();
@@ -261,7 +274,7 @@ class Setup {
     }
 
     // Upgrades existing message board data to the new version.
-    async upgrade() {
+    async upgrade(governorAddress) {
 
         // Do a simple version change in the config.
         const cfg = this.#getConfig();
@@ -271,18 +284,31 @@ class Setup {
         if (!cfg.xrpl.rippledServer)
             cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
 
+        if (!cfg.xrpl.governorAddress) {
+            setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer);
+
+            const hostClient = new evernode.HostClient(cfg.xrpl.address, cfg.xrpl.secret);
+            await hostClient.connect();
+
+            setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer, hostClient.xrplApi);
+
+            cfg.xrpl.governorAddress = governorAddress;
+
+            await hostClient.disconnect();
+        }
+
         this.#saveConfig(cfg);
 
         await Promise.resolve(); // async placeholder.
     }
 
-    // Burn the host minted NFTs at the de-registration.
-    async burnMintedNfts(xrplAcc) {
-        // Get unsold NFTs.
-        const nfts = (await xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
-            .map(o => { return { nfTokenId: o.NFTokenID, ownerAddress: xrplAcc.address }; });
+    // Burn the host minted URITokens at the de-registration.
+    async burnMintedURITokens(xrplAcc) {
+        // Get unsold URITokens.
+        const uriTokens = (await xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+            .map(o => { return { uriTokenId: o.index, ownerAddress: xrplAcc.address }; });
 
-        // Get sold NFTs.
+        // Get sold URITokens.
         // We check for db existance since db is created by message board (not setup).
         const dbPath = appenv.DB_PATH;
         if (fs.existsSync(dbPath)) {
@@ -295,8 +321,8 @@ class Setup {
             try {
                 // We check for table existance since table is created by message board (not setup).
                 if (db.isTableExists(leaseTable)) {
-                    nfts.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
-                        .map(o => { return { nfTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))
+                    uriTokens.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
+                        .map(o => { return { uriTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))
                 }
             }
             finally {
@@ -305,10 +331,10 @@ class Setup {
         }
 
 
-        for (const nft of nfts) {
-            const sold = nft.ownerAddress !== xrplAcc.address;
-            await xrplAcc.burnNft(nft.nfTokenId, sold ? nft.ownerAddress : null);
-            console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting NFT (${nft.nfTokenId}) of ${nft.ownerAddress + (sold ? ' tenant' : '')} account`);
+        for (const uriToken of uriTokens) {
+            const sold = uriToken.ownerAddress !== xrplAcc.address;
+            await xrplAcc.burnURIToken(uriToken.uriTokenId);
+            console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting URIToken (${uriToken.uriTokenId}) of ${uriToken.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
     }
 
@@ -317,12 +343,15 @@ class Setup {
     async transfer(transfereeAddress) {
         console.log("Transferring host...");
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
+
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
         await hostClient.transfer(transfereeAddress);
-        await this.burnMintedNfts(hostClient.xrplAcc);
+        await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.disconnect();
     }
 
@@ -357,9 +386,9 @@ class Setup {
         this.#saveConfig(cfg);
     }
 
-    // Recreate unsold NFTs
+    // Recreate unsold URITokens
     async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, existingCfg) {
-        // Get sold NFTs.
+        // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
 
@@ -375,11 +404,13 @@ class Setup {
         let hostClient;
 
         async function initClients(rippledServer) {
-            setEvernodeDefaults(acc.registryAddress, rippledServer);
+            setEvernodeDefaults(acc.governorAddress, rippledServer);
             xrplApi = new evernode.XrplApi();
             hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
             await xrplApi.connect();
             await hostClient.connect();
+            setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
+
         }
 
         async function deinitClients() {
@@ -389,10 +420,10 @@ class Setup {
 
         await initClients(acc.rippledServer);
 
-        // Get unsold NFTs.
-        const unsoldNfts = (await hostClient.xrplAcc.getNfts()).filter(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX))
-            .map(n => { return { nfTokenId: n.NFTokenID, leaseIndex: evernode.UtilHelpers.decodeLeaseNftUri(n.URI).leaseIndex }; });
-        const unsoldCount = unsoldNfts.length;
+        // Get unsold URI Tokens.
+        const unsoldUriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+            .map(n => { return { uriTokenId: n.index, leaseIndex: evernode.UtilHelpers.decodeLeaseTokenUri(n.URI).leaseIndex }; });
+        const unsoldCount = unsoldUriTokens.length;
 
         // Return if not changed.
         if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount)) {
@@ -401,15 +432,15 @@ class Setup {
         }
 
         async function getVacantLeaseIndexes(includeUnsold = true) {
-            let acquired = includeUnsold ? [] : unsoldNfts.map(n => n.leaseIndex);
+            let acquired = includeUnsold ? [] : unsoldUriTokens.map(n => n.leaseIndex);
             let vacant = [];
             for (const l of leaseRecords) {
                 try {
                     const tenantAddress = l.tenant_xrp_address;
-                    const nfTokenId = l.container_name;
-                    const nft = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getNfts())?.find(n => n.NFTokenID == nfTokenId);
-                    if (nft) {
-                        const index = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI).leaseIndex;
+                    const uriTokenId = l.container_name;
+                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
+                    if (uriToken) {
+                        const index = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).leaseIndex;
                         acquired.push(index);
                     }
                 } catch {
@@ -424,57 +455,57 @@ class Setup {
             return vacant;
         }
 
-        let nftsToBurn = [];
-        let nftIndexesToCreate = [];
-        // If lease amount is changed we need to burn all the unsold nfts
+        let uriTokensToBurn = [];
+        let uriTokenIndexesToCreate = [];
+        // If lease amount is changed we need to burn all the unsold uriTokens
         if ((leaseAmount && acc.leaseAmount !== leaseAmount) || (rippledServer && acc.rippledServer !== rippledServer)) {
-            nftsToBurn = unsoldNfts;
+            uriTokensToBurn = unsoldUriTokens;
 
-            // If total instance count also changed decide the nfts that we need to create.
+            // If total instance count also changed decide the uriTokens that we need to create.
             if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
-                // If less than current count, Create only first chuck of the burned nfts.
-                // If greater than current count, create burned nfts plus extra nfts that are needed.
+                // If less than current count, Create only first chuck of the burned uriTokens.
+                // If greater than current count, create burned uriTokens plus extra uriTokens that are needed.
                 if (totalInstanceCount < soldCount + unsoldCount) {
-                    nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex).sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
+                    uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex).sort((a, b) => a - b).slice(0, totalInstanceCount - soldCount);
                 }
                 else {
-                    nftIndexesToCreate = await getVacantLeaseIndexes();
+                    uriTokenIndexesToCreate = await getVacantLeaseIndexes();
                 }
             }
             else {
-                nftIndexesToCreate = nftsToBurn.map(n => n.leaseIndex);
+                uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex);
             }
         }
         // If only instance count is changed decide whether we need to add or burn comparing the current count and updated count.
         else if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
             if (totalInstanceCount < soldCount + unsoldCount) {
-                nftsToBurn = unsoldNfts.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
-                nftIndexesToCreate = [];
+                uriTokensToBurn = unsoldUriTokens.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
+                uriTokenIndexesToCreate = [];
             }
             else {
-                nftsToBurn = [];
-                nftIndexesToCreate = await getVacantLeaseIndexes(false);
+                uriTokensToBurn = [];
+                uriTokenIndexesToCreate = await getVacantLeaseIndexes(false);
             }
         }
 
-        for (const nft of nftsToBurn) {
+        for (const uriToken of uriTokensToBurn) {
             try {
-                await hostClient.expireLease(nft.nfTokenId);
+                await hostClient.expireLease(uriToken.nfTokenId);
             }
             catch (e) {
                 console.error(e);
             }
         }
 
-        // If rippled server is changed, create new nfts from new server.
+        // If rippled server is changed, create new uriTokens from new server.
         if (rippledServer && rippledServer !== acc.rippledServer) {
             await initClients(rippledServer);
         }
 
-        for (const idx of nftIndexesToCreate) {
+        for (const idx of uriTokenIndexesToCreate) {
             try {
                 await hostClient.offerLease(idx,
-                    leaseAmount ? leaseAmount : (acc.leaseAmount ? acc.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice)),
+                    leaseAmount ? leaseAmount : acc.leaseAmount,
                     appenv.TOS_HASH);
             }
             catch (e) {
@@ -510,30 +541,29 @@ class Setup {
                 lease = lease[0];
 
                 const acc = this.#getConfig().xrpl;
-                setEvernodeDefaults(acc.registryAddress, acc.rippledServer);
+                setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
                 xrplApi = new evernode.XrplApi(acc.rippledServer);
                 await xrplApi.connect();
 
-                // Get the existing nft of the lease.
-                const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getNfts()))?.find(n => n.NFTokenID == lease.container_name);
+                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
 
-                if (nft) {
+                // Get the existing uriToken of the lease.
+                const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);
+
+                if (uriToken) {
                     hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
                     await hostClient.connect();
 
                     // Delete instance from sashiDB and burn the token
-                    const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
 
                     console.log(`Expiring the lease...`);
 
-                    // Burn the NFTs and recreate the offer.
+                    // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-                    await hostClient.refreshConfig();
-                    const leaseAmount = acc.leaseAmount ? acc.leaseAmount : parseFloat(hostClient.config.purchaserTargetPrice);
-                    await hostClient.offerLease(uriInfo.leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

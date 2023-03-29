@@ -6,7 +6,7 @@
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
 
-evernode="Evernode beta"
+evernode="Evernode"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
@@ -14,7 +14,7 @@ ramKB_per_instance=524288
 instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-bb7ec110-f72e-430e-b297-9210468a4cbb"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-v3-dev-77ad5333-8e43-4f9d-b3dc-177ce1b61a2d"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -22,7 +22,7 @@ nodejs_url="$cloud_storage/node"
 jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
-default_rippled_server="wss://hooks-testnet-v2.xrpl-labs.com"
+default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_temp_bin="$setup_helper_dir/node"
 jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
@@ -43,7 +43,10 @@ export SASHIUSER_PREFIX="sashi"
 export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
-export EVERNODE_REGISTRY_ADDRESS="raaFre81618XegCrzTzVotAmarBcqNSAvK"
+
+# TODO: Need to modify the relevant Governor address for DEV ENV
+# TODO: Configure the same figure in sashimono-install.sh as well.
+export EVERNODE_GOVERNOR_ADDRESS="rao1FoQ9SPhjyxVayMVNeyh9wsWZ6jF3L"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
@@ -86,7 +89,7 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -98,7 +101,8 @@ if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN 
                 \nupdate - Check and install $evernode software updates
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \ndelete - Remove an instance from the system and recreate the lease
-                \nuninstall - Uninstall and deregister from $evernode" \
+                \nuninstall - Uninstall and deregister from $evernode
+                \ngovernance - Governance candidate management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -571,9 +575,9 @@ function set_host_xrpl_account() {
 
             read -p "Specify the XRPL account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
-            
+
             echo "Checking account $xrpl_address..."
-            ! exec_jshelper validate-account $rippled_server $EVERNODE_REGISTRY_ADDRESS $xrpl_address && xrpl_address="" && continue
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address && xrpl_address="" && continue
 
             # Take hidden input and print empty echo (new line) at the end.
             read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
@@ -640,9 +644,13 @@ function install_evernode() {
     description=""
 
     echo "Installing Sashimono..."
+
+    init_setup_helpers
+    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
+
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-    ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
@@ -656,11 +664,11 @@ function install_evernode() {
     echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
-function uninstall_evernode() {
+function check_exisiting_contracts() {
 
     local upgrade=$1
 
-    # Check for existing contract instances.
+    # Check the condition of existing contract instances.
     local users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)
     readarray -t userarr <<<"$users"
     local sashiusers=()
@@ -674,6 +682,11 @@ function uninstall_evernode() {
         $interactive && [ $ucount -gt 0 ] && ! confirm "This will delete $ucount contract instances. \n\nDo you still want to continue?" && exit 1
         ! $interactive && echo "$ucount contract instances will be deleted."
     fi
+}
+
+function uninstall_evernode() {
+
+    local upgrade=$1
 
     if ! $transfer ; then
         [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
@@ -722,7 +735,8 @@ function init_evernode_transfer() {
 
     if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN transfer $transferee_address &&
         [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
-            echo "Evernode transfer initiation was failed. Try again later." && exit 1
+        ! confirm "Evernode transfer initiation was failed. Still do you want to continue the unistallation?" && echo "Aborting unistallation. Try again later." && exit 1
+        echo "Continuing uninstallation..."
     fi
 
 }
@@ -1022,8 +1036,6 @@ function delete_instance()
 
 # Begin setup execution flow --------------------
 
-echo "Thank you for trying out $evernode!"
-
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
@@ -1117,6 +1129,9 @@ elif [ "$mode" == "uninstall" ]; then
     # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
+    # Check contract condtion.
+    check_exisiting_contracts 0
+
     # Force uninstall on quiet mode.
     $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
@@ -1130,14 +1145,19 @@ elif [ "$mode" == "transfer" ]; then
         transferee_address=${3}           # Address of the transferee.
     fi
 
+    # Set transferee based on the user input.
     set_transferee_address
 
+    # Check contract condtion.
+    check_exisiting_contracts 0
+
+    # Initiate transferring.
     init_evernode_transfer
 
-    uninstall_evernode 0
+    # Execute oftware uninstallation (Force uninstall on quiet mode).
+    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
 
-    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using
-        the account $transferee_address."
+    echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
     reg_info
@@ -1161,6 +1181,17 @@ elif [ "$mode" == "delete" ]; then
     [ -z "$2" ] && echomult "A contract instance name must be specified (see 'evernode list').\n  Usage: evernode delete <instance name>" && exit 1
 
     delete_instance "$2"
+
+elif [ "$mode" == "governance" ]; then
+    [[ "$2" == "" || "$2" == "help" ]] && echomult "Governance management tool
+            \nSupported commands:
+            \npropose [hashFile] [shortName] - Propose new governance candidate.
+            \nwithdraw [candidateId] - Withdraw proposed governance candidate.
+            \nvote [candidateId] - Vote for a governance candidate.
+            \nunvote [candidateId] - Remove vote from voted governance candidate.
+            \nstatus - Get governance info of this host.
+            \nhelp - Print help." && exit 0
+    ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
 fi
 

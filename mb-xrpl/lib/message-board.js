@@ -4,6 +4,7 @@ const { SqliteDatabase, DataTypes } = require('./sqlite-handler');
 const { appenv } = require('./appenv');
 const { SashiCLI } = require('./sashi-cli');
 const { ConfigHelper } = require('./config-helper');
+const { GovernanceManager } = require('./governance-manager');
 
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
@@ -39,32 +40,37 @@ class MessageBoard {
         this.sashiDb = new SqliteDatabase(sashiDbPath);
         this.sashiTable = appenv.SASHI_TABLE_NAME;
         this.sashiConfigPath = sashiConfigPath;
+        this.governanceManager = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);
     }
 
     async init() {
         this.readConfig();
-        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.registryAddress ||
-            !this.cfg.xrpl.registryAddress)
+        if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress)
             throw "Required cfg fields cannot be empty.";
-
-        console.log("Using registry " + this.cfg.xrpl.registryAddress);
-        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
 
         this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
         evernode.Defaults.set({
-            registryAddress: this.cfg.xrpl.registryAddress,
+            governorAddress: this.cfg.xrpl.governorAddress,
             xrplApi: this.xrplApi
         })
         await this.xrplApi.connect();
 
         this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
         await this.#connectHost();
+
+        console.log("Using,");
+        console.log("\tGovernor account " + this.cfg.xrpl.governorAddress);
+        console.log("\tRegistry account " + this.hostClient.config.registryAddress);
+        console.log("\tHeartbeat account " + this.hostClient.config.heartbeatAddress);
+        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
+
         // Get last heartbeat moment from the host info.
         let hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.regClient = new evernode.RegistryClient();
+        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+
         await this.#connectRegistry();
         await this.regClient.subscribe();
 
@@ -208,6 +214,49 @@ class MessageBoard {
             ongoingHeartbeat = true;
             console.log(`Reporting heartbeat at Moment ${currentMoment}...`);
 
+            // Send heartbeat with votes, if there are votes in the config.
+            let heartbeatSent = false;
+            const votes = this.governanceManager.getVotes();
+            if (votes) {
+                const voteArr = (await Promise.all(Object.entries(votes).map(async ([key, value]) => {
+                    const candidate = await this.hostClient.getCandidateById(key);
+                    // Delete candidate vote if there's no such candidate.
+                    if (!candidate) {
+                        this.governanceManager.clearCandidate(key);
+                        return null;
+                    }
+                    return {
+                        candidate: candidate.uniqueId,
+                        vote: value === evernode.EvernodeConstants.CandidateVote.Support ?
+                            evernode.EvernodeConstants.CandidateVote.Support :
+                            evernode.EvernodeConstants.CandidateVote.Reject,
+                        idx: candidate.index
+                    };
+                }))).filter(v => v).sort((a, b) => a.idx - b.idx);
+                if (voteArr && voteArr.length) {
+                    for (const vote of voteArr) {
+                        try {
+                            await this.hostClient.heartbeat(vote);
+                            heartbeatSent = true;
+                        }
+                        catch (e) {
+                            // Remove candidate from config in vote validation from the hook failed.
+                            if (e.code === 'VOTE_VALIDATION_ERR') {
+                                console.error(e.error);
+                                this.governanceManager.clearCandidate(vote.candidate);
+                            }
+                            else {
+                                console.error("Heartbeat tx with vote error", e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Return if at-least one heartbeat has been sent. Otherwise send heartbeat without votes.
+            if (heartbeatSent)
+                return;
+
             try {
                 await this.hostClient.heartbeat();
                 this.lastHeartbeatMoment = currentMoment;
@@ -227,13 +276,13 @@ class MessageBoard {
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
         try {
             console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
-            // Expire the current lease agreement (Burn the instance NFT) and re-minting and creating sell offer for the same lease index.
-            const nft = (await (new evernode.XrplAccount(lease.tenant)).getNfts())?.find(n => n.NFTokenID == lease.containerName);
-            // If there's no nft for this record it should be already burned and instance is destroyed, So we only delete the record.
-            if (!nft)
-                console.log(`Cannot find an NFT for ${lease.containerName}`);
+            // Expire the current lease agreement (Burn the instance URIToken) and re-minting and creating sell offer for the same lease index.
+            const uriToken = (await (new evernode.XrplAccount(lease.tenant)).getURITokens())?.find(n => n.index == lease.containerName);
+            // If there's no uriToken for this record it should be already burned and instance is destroyed, So we only delete the record.
+            if (!uriToken)
+                console.log(`Cannot find an URIToken for ${lease.containerName}`);
             else {
-                const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                 await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex);
             }
 
@@ -333,23 +382,23 @@ class MessageBoard {
     async #startHeartBeatScheduler() {
         // Sending a heartbeat at startup
         await this.#sendHeartbeat();
-    
+
         const momentSize = this.hostClient.config.momentSize;
         const halfMomentSize = momentSize / 2; // Getting half of moment size
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
-    
+
         const scheduler = async () => {
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
             await this.#sendHeartbeat();
         };
-    
+
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
-    
+
         // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
-    
+
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);
@@ -401,18 +450,18 @@ class MessageBoard {
                 // If there's a lease record this is created from message board.
                 if (lease) {
                     leases.splice(leaseIndex, 1);
-                    const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getNfts())?.find(n => n.NFTokenID == instance.name);
+                    const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getURITokens())?.find(n => n.index == instance.name);
 
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
-                    // If the NFT is not owned by the tenant we destroy the instance since this is not a valid lease.
+                    // If the URIToken is not owned by the tenant we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
-                    if (lease.status === LeaseStatus.ACQUIRING || !nft) {
+                    if (lease.status === LeaseStatus.ACQUIRING || !uriToken) {
                         console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
 
-                        // After destroying, If the NFT is owned by the tenant, burn the NFT and recreate and refund the tenant.
-                        if (nft) {
-                            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                        // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
+                        if (uriToken) {
+                            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex);
 
                             console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
@@ -428,15 +477,6 @@ class MessageBoard {
                             if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
                                 activeInstanceCount--;
                         }
-                    }
-                }
-                else {
-                    // If there's no lease but the name matches with NFT pattern,
-                    // This is created from the message board but lease record is missing.
-                    const namePrefix = this.hostClient.getLeaseNFTokenIdPrefix();
-                    if (instance.name.startsWith(namePrefix)) {
-                        console.log(`Pruning orphan instance ${instance.name}...`);
-                        await this.sashiCli.destroyInstance(instance.name);
                     }
                 }
             }
@@ -464,9 +504,9 @@ class MessageBoard {
                     if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
                         activeInstanceCount--;
 
-                    const nft = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getNfts())?.find(n => n.NFTokenID == lease.container_name);
-                    if (nft) {
-                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+                    const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getURITokens())?.find(n => n.index == lease.container_name);
+                    if (uriToken) {
+                        const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex);
 
                         // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
@@ -513,7 +553,7 @@ class MessageBoard {
                 for (const trx of transactions) {
                     try {
                         const memoTypes = trx.Memos.map(m => m.type);
-                        if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE) || memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) {
+                        if (memoTypes.includes(evernode.EventTypes.ACQUIRE_LEASE) || memoTypes.includes(evernode.EventTypes.EXTEND_LEASE)) {
                             // Update last watched ledger sequence number.
                             await this.updateLastIndexRecord(trx.ledger_index);
 
@@ -522,15 +562,15 @@ class MessageBoard {
 
                                 for (const tx of transactions) {
                                     // Skip, if this transaction was previously considered.
-                                    const acquireRef = this.#getTrxMemoData(tx, evernode.MemoTypes.ACQUIRE_REF);
+                                    const acquireRef = this.#getTrxMemoData(tx, evernode.EventTypes.ACQUIRE_REF);
                                     if (acquireRef === trx.hash)
                                         continue loop1;
 
-                                    const extendRef = this.#getTrxMemoData(tx, evernode.MemoTypes.EXTEND_REF);
+                                    const extendRef = this.#getTrxMemoData(tx, evernode.EventTypes.EXTEND_REF);
                                     if (extendRef === trx.hash)
                                         continue loop1;
 
-                                    const refundRef = this.#getTrxMemoData(tx, evernode.MemoTypes.REFUND_REF);
+                                    const refundRef = this.#getTrxMemoData(tx, evernode.EventTypes.REFUND_REF);
                                     if (refundRef === trx.hash)
                                         continue loop1;
                                 }
@@ -539,49 +579,49 @@ class MessageBoard {
                             trx.Destination = this.cfg.xrpl.address;
 
                             // Handle Acquires.
-                            if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
+                            if (memoTypes.includes(evernode.EventTypes.ACQUIRE_LEASE)) {
 
-                                // Find and bind the NFTSellOffer (If the trx. is  an ACQUIRE, there should be an NFTSellOffer)
-                                const offer = (await fullHistoryXrplApi.getNftOffers(this.cfg.xrpl.address, { ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.NFTokenSellOffer);
-                                if (trx.NFTokenSellOffer)
-                                    trx.NFTokenSellOffer = offer;
+                                // Find and bind the bought lease offer (If the trx. is  an ACQUIRE, it should be an URITokenBuy trx)
+                                const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID && o.Amount);
+                                if (!trx.URITokenSellOffer)
+                                    trx.URITokenSellOffer = offer;
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
-                                const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
                                 if (!lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === eventInfo.data.nfTokenId);
-                                    if (nft) {
-                                        const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
-                                        // Have to recreate the NFT Offer for the lease as previous one was not utilized.
-                                        await this.recreateLeaseOffer(eventInfo.data.nfTokenId, eventInfo.data.tenant, uriInfo.leaseIndex);
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    if (uriToken) {
+                                        const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+                                        // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
+                                        await this.recreateLeaseOffer(eventInfo.data.uriTokenId, eventInfo.data.tenant, uriInfo.leaseIndex);
 
                                         console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
                                         await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString());
                                     }
                                 }
 
-                            } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) { // Handle Extensions.
+                            } else if (memoTypes.includes(evernode.EventTypes.EXTEND_LEASE)) { // Handle Extensions.
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
-                                const lease = leases.find(l => l.container_name === eventInfo.data.nfTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
                                 if (lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const nft = (await tenantXrplAcc.getNfts()).find(n => n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX) && n.NFTokenID === eventInfo.data.nfTokenId);
-                                    if (nft) {
-                                        // The refund for the extension, if tenant still own the NFT.
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    if (uriToken) {
+                                        // The refund for the extension, if tenant still own the URIToken.
                                         console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
                                         await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString());
 
                                     } else {
-                                        console.log(`No such NFT (${eventInfo.data.nfTokenId}) was found.`);
+                                        console.log(`No such URIToken (${eventInfo.data.uriTokenId}) was found.`);
                                     }
                                 } else {
-                                    console.log(`No lease was found: (NFT : ${eventInfo.data.nfTokenId}).`);
+                                    console.log(`No lease was found: (URIToken : ${eventInfo.data.uriTokenId}).`);
                                 }
                             }
                         }
@@ -607,9 +647,9 @@ class MessageBoard {
         return null;
     }
 
-    async recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex) {
-        // Burn the NFTs and recreate the offer.
-        await this.hostClient.expireLease(nfTokenId, tenantAddress).catch(console.error);
+    async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex) {
+        // Burn the URIToken and recreate the offer.
+        await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
         // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
         await this.hostClient.refreshConfig();
         const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
@@ -619,7 +659,7 @@ class MessageBoard {
     async handleAcquireLease(r) {
 
         const acquireRefId = r.acquireRefId; // Acquire tx hash.
-        const nfTokenId = r.nfTokenId;
+        const uriTokenId = r.uriTokenId;
         const leaseAmount = parseFloat(r.leaseAmount);
         const tenantAddress = r.tenant;
         let requestValidated = false;
@@ -637,22 +677,23 @@ class MessageBoard {
             // Update last watched ledger sequence number.
             await this.updateLastIndexRecord(r.transaction.LedgerIndex);
 
-            // Get the existing nft of the lease.
-            const nft = (await (new evernode.XrplAccount(tenantAddress)).getNfts())?.find(n => n.NFTokenID == nfTokenId);
-            if (!nft)
-                throw 'Could not find the nft for lease acquire request.';
+            // Get the existing uriToken of the lease.
 
-            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(nft.URI);
+            const uriToken = (await (new evernode.XrplAccount(tenantAddress)).getURITokens())?.find(n => n.index == uriTokenId);
+            if (!uriToken)
+                throw 'Could not find the uriToken for lease acquire request.';
+
+            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
 
             if (leaseAmount != uriInfo.leaseAmount)
-                throw 'NFT embedded lease amount and acquire lease amount does not match.';
+                throw 'URIToken embedded lease amount and acquire lease amount does not match.';
             leaseIndex = uriInfo.leaseIndex;
 
             // Since acquire is accepted for leaseAmount
             const moments = 1;
 
-            // Use NFTokenId as the instance name.
-            const containerName = nfTokenId;
+            // Use URITokenID as the instance name.
+            const containerName = uriTokenId;
             console.log(`Received acquire lease from ${tenantAddress}`);
             requestValidated = true;
             await this.createLeaseRecord(acquireRefId, tenantAddress, containerName, moments);
@@ -671,7 +712,7 @@ class MessageBoard {
                 console.error(`Sashimono busy timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                 // Update the lease status of the request to 'SashiTimeout'.
                 await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex);
+                await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex);
             }
             else {
                 const instanceRequirements = r.payload;
@@ -721,9 +762,9 @@ class MessageBoard {
             if (createRes)
                 await this.sashiCli.destroyInstance(createRes.content.name).catch(console.error);
 
-            // Re-create the lease offer (Only if the nft belongs to this request has a lease index).
+            // Re-create the lease offer (Only if the uriToken belongs to this request has a lease index).
             if (leaseIndex >= 0)
-                await this.recreateLeaseOffer(nfTokenId, tenantAddress, leaseIndex).catch(console.error);
+                await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex).catch(console.error);
 
             // Send error transaction with received leaseAmount.
             await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
@@ -745,7 +786,7 @@ class MessageBoard {
         this.db.open();
 
         const extendRefId = r.extendRefId;
-        const nfTokenId = r.nfTokenId;
+        const uriTokenId = r.uriTokenId;
         const tenantAddress = r.tenant;
         const amount = r.payment;
 
@@ -755,15 +796,15 @@ class MessageBoard {
                 throw "Invalid destination";
 
             const tenantAcc = new evernode.XrplAccount(tenantAddress);
-            const hostingNft = (await tenantAcc.getNfts()).find(n => n.NFTokenID === nfTokenId && n.URI.startsWith(evernode.EvernodeConstants.LEASE_NFT_PREFIX_HEX));
+            const hostingNft = (await tenantAcc.getURITokens()).find(n => n.index === uriTokenId && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX));
 
             // Update last watched ledger sequence number.
             await this.updateLastIndexRecord(r.transaction.LedgerIndex);
 
             if (!hostingNft)
-                throw "The NFT ownership verification was failed in the lease extension process";
+                throw "The URIToken ownership verification was failed in the lease extension process";
 
-            const uriInfo = evernode.UtilHelpers.decodeLeaseNftUri(hostingNft.URI);
+            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(hostingNft.URI);
             const leaseAmount = uriInfo.leaseAmount;
             if (leaseAmount <= 0)
                 throw "Invalid per moment lease amount";
@@ -773,7 +814,7 @@ class MessageBoard {
             if (extendingMoments < 1)
                 throw "The transaction does not satisfy the minimum extendable moments";
 
-            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.NFTokenID };
+            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.index };
 
             const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
 

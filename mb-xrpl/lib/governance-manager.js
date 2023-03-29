@@ -89,10 +89,17 @@ class GovernanceManager {
     async voteCandidate(candidateId, hostClient) {
         this.#validateCandidateId(candidateId);
 
-        // Only one support vote is allowed.
+        // Assure only one support vote for New Hook candidate type.
         const votes = this.getVotes();
-        if (votes && Object.values(votes).includes(evernode.EvernodeConstants.CandidateVote.Support))
-            throw `There's already a support vote for a candidate. Unvote it and try again!`;
+        const candidateType = evernode.StateHelpers.getCandidateType(candidateId);
+
+        for (let key in votes) {
+            if (key === candidateId)
+                throw `There's already a support vote for this candidate.`;
+
+            if (candidateType === evernode.StateHelpers.getCandidateType(key) && candidateType === evernode.EvernodeConstants.CandidateTypes.NewHook)
+                throw `There's already a support vote for this candidate type. Unvote it and try again!`;
+        }
 
         try {
             await hostClient.connect();

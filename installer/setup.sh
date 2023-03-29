@@ -1183,7 +1183,7 @@ elif [ "$mode" == "delete" ]; then
     delete_instance "$2"
 
 elif [ "$mode" == "governance" ]; then
-    [ $2 == "help" ] && echomult "Governance management tool
+    [[ "$2" == "" || "$2" == "help" ]] && echomult "Governance management tool
             \nSupported commands:
             \npropose [hashFile] [shortName] - Propose new governance candidate.
             \nwithdraw [candidateId] - Withdraw proposed governance candidate.

@@ -553,7 +553,7 @@ class MessageBoard {
                 for (const trx of transactions) {
                     try {
                         const memoTypes = trx.Memos.map(m => m.type);
-                        if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE) || memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) {
+                        if (memoTypes.includes(evernode.EventTypes.ACQUIRE_LEASE) || memoTypes.includes(evernode.EventTypes.EXTEND_LEASE)) {
                             // Update last watched ledger sequence number.
                             await this.updateLastIndexRecord(trx.ledger_index);
 
@@ -562,15 +562,15 @@ class MessageBoard {
 
                                 for (const tx of transactions) {
                                     // Skip, if this transaction was previously considered.
-                                    const acquireRef = this.#getTrxMemoData(tx, evernode.MemoTypes.ACQUIRE_REF);
+                                    const acquireRef = this.#getTrxMemoData(tx, evernode.EventTypes.ACQUIRE_REF);
                                     if (acquireRef === trx.hash)
                                         continue loop1;
 
-                                    const extendRef = this.#getTrxMemoData(tx, evernode.MemoTypes.EXTEND_REF);
+                                    const extendRef = this.#getTrxMemoData(tx, evernode.EventTypes.EXTEND_REF);
                                     if (extendRef === trx.hash)
                                         continue loop1;
 
-                                    const refundRef = this.#getTrxMemoData(tx, evernode.MemoTypes.REFUND_REF);
+                                    const refundRef = this.#getTrxMemoData(tx, evernode.EventTypes.REFUND_REF);
                                     if (refundRef === trx.hash)
                                         continue loop1;
                                 }
@@ -579,7 +579,7 @@ class MessageBoard {
                             trx.Destination = this.cfg.xrpl.address;
 
                             // Handle Acquires.
-                            if (memoTypes.includes(evernode.MemoTypes.ACQUIRE_LEASE)) {
+                            if (memoTypes.includes(evernode.EventTypes.ACQUIRE_LEASE)) {
 
                                 // Find and bind the bought lease offer (If the trx. is  an ACQUIRE, it should be an URITokenBuy trx)
                                 const offer = (await hostAccount.getURITokens({ ledger_index: trx.ledger_index - 1 }))?.find(o => o.index === trx?.URITokenID && o.Amount);
@@ -603,7 +603,7 @@ class MessageBoard {
                                     }
                                 }
 
-                            } else if (memoTypes.includes(evernode.MemoTypes.EXTEND_LEASE)) { // Handle Extensions.
+                            } else if (memoTypes.includes(evernode.EventTypes.EXTEND_LEASE)) { // Handle Extensions.
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 

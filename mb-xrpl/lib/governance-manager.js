@@ -51,11 +51,7 @@ class GovernanceManager {
         try {
             await hostClient.connect();
             candidateId = await hostClient.propose(hashes, shortName).catch(e => {
-                let err;
-                if (e.code === "tecHOOK_REJECTED" && e.hookExecutionResult) {
-                    err = e.hookExecutionResult.map(o => o.message).join(', ');
-                }
-                throw err || e.code || 'PROPOSE_TX_ERR';
+                throw (typeof e == 'object' ? (e.code || 'PROPOSE_TX_ERR') : e);
             });
         } finally {
             await hostClient.disconnect();
@@ -76,11 +72,7 @@ class GovernanceManager {
                 throw `Trying to remove governance candidate which is not owned by host.`;
 
             await hostClient.withdraw(candidateId).catch(e => {
-                let err;
-                if (e.code === "tecHOOK_REJECTED" && e.hookExecutionResult) {
-                    err = e.hookExecutionResult.map(o => o.message).join(', ');
-                }
-                throw err || e.code || 'WITHDRAW_TX_ERR';
+                throw (typeof e == 'object' ? (e.code || 'WITHDRAW_TX_ERR') : e);
             });
         } finally {
             await hostClient.disconnect();

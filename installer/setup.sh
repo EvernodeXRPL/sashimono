@@ -6,7 +6,7 @@
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
 
-evernode="Evernode"
+evernode="Evernode Beta v3"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80

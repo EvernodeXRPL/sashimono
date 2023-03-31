@@ -6,7 +6,7 @@
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
 
-evernode="Evernode"
+evernode="Evernode Beta v3"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
@@ -14,7 +14,7 @@ ramKB_per_instance=524288
 instances_per_core=3
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-v3-dev-77ad5333-8e43-4f9d-b3dc-177ce1b61a2d"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -46,7 +46,7 @@ export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
 # TODO: Need to modify the relevant Governor address for DEV ENV
 # TODO: Configure the same figure in sashimono-install.sh as well.
-export EVERNODE_GOVERNOR_ADDRESS="rao1FoQ9SPhjyxVayMVNeyh9wsWZ6jF3L"
+export EVERNODE_GOVERNOR_ADDRESS="rGVHr1PrfL93UAjyw3DWZoi9adz2sLp2yL"
 export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)

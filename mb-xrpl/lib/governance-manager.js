@@ -135,13 +135,21 @@ class GovernanceManager {
         try {
             await hostClient.connect();
             const candidate = await hostClient.getCandidateByOwner();
-
+            const dudHostCandidates = await hostClient.getDudHostCandidatesByOwner();
+            
             if (candidate)
-                status = { ...status, candidate: candidate.uniqueId };
-        } finally {
+                status = { ...status, candidates: { hook: candidate.uniqueId } };
+            if (dudHostCandidates && dudHostCandidates.length > 0)
+                if (status.candidates)
+                    status.candidates.dudHosts = dudHostCandidates.map(dh => dh.uniqueId);
+                else
+                    status = { ...status, candidates: { dudHosts: dudHostCandidates.map(dh => dh.uniqueId) } }
+        } catch(e) {
+            throw (typeof e == 'object' ? (e.code || 'ERROR_IN_COLLECTING_CANDIDATES') : e);
+        }
+        finally {
             await hostClient.disconnect();
         }
-
         return status;
     }
 

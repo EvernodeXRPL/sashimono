@@ -251,12 +251,11 @@ class Setup {
                 const hostClient = new evernode.HostClient(acc.address);
                 await hostClient.connect();
                 console.log(`Registry address: ${hostClient.config.registryAddress}`);
-                console.log(`Heartbeat address: ${hostClient.config.heartbeatAddress}`);                
+                console.log(`Heartbeat address: ${hostClient.config.heartbeatAddress}`);
 
                 setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
-                const [evrBalance, hostInfo,hosts] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration(),hostClient.getHosts({ address: acc.address })]);
-                const hostDetails = (hosts && hosts.length) ? hosts[0] : null;
+                const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
                     console.log(`Registration URIToken: ${hostInfo.uriTokenId}`);
                 }
@@ -265,8 +264,8 @@ class Setup {
                     throw 'Host is not registered';
                 }
                 console.log(`EVR balance: ${evrBalance}`);
-                console.log(`Host status: ${hostDetails.active? 'Active':'Inactive'}`);
-                
+                console.log(`Host status: ${hostInfo.active ? 'Active' : 'Inactive'}`);
+
                 await hostClient.disconnect();
             }
             catch {

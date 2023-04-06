@@ -11,8 +11,7 @@ function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
         governorAddress: governorAddress,
         rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
-        xrplApi: xrplApi,
-        stateIndexId: 'evernodev3devindex'
+        xrplApi: xrplApi
     });
 }
 

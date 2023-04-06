@@ -140,10 +140,7 @@ class GovernanceManager {
             if (candidate)
                 status = { ...status, candidates: { hook: candidate.uniqueId } };
             if (dudHostCandidates && dudHostCandidates.length > 0)
-                if (status.candidates)
-                    status.candidates.dudHosts = dudHostCandidates.map(dh => dh.uniqueId);
-                else
-                    status = { ...status, candidates: { dudHosts: dudHostCandidates.map(dh => dh.uniqueId) } }
+                status.candidates = { ...(status.candidates ?? {}), dudHosts: dudHostCandidates.map(dh => dh.uniqueId)}
         } catch(e) {
             throw (typeof e == 'object' ? (e.code || 'ERROR_IN_COLLECTING_CANDIDATES') : e);
         }

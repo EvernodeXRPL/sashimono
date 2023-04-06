@@ -6,7 +6,7 @@
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
 
-evernode="Evernode beta"
+evernode="Evernode Beta v2"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
@@ -639,7 +639,7 @@ function install_evernode() {
     # Currently the domain address saved only in account_info and an empty value in Hook states )
     description=""
 
-    echo "Installing Sashimono..."
+    echo "Installing Sashimono on Evernode Beta V2 (Disabled Network)..."
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \

@@ -491,7 +491,7 @@ class Setup {
 
         for (const uriToken of uriTokensToBurn) {
             try {
-                await hostClient.expireLease(uriToken.nfTokenId);
+                await hostClient.expireLease(uriToken.uriTokenId);
             }
             catch (e) {
                 console.error(e);

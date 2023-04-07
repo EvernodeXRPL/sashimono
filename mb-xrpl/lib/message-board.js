@@ -796,15 +796,15 @@ class MessageBoard {
                 throw "Invalid destination";
 
             const tenantAcc = new evernode.XrplAccount(tenantAddress);
-            const hostingNft = (await tenantAcc.getURITokens()).find(n => n.index === uriTokenId && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX));
+            const hostingToken = (await tenantAcc.getURITokens()).find(n => n.index === uriTokenId && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX));
 
             // Update last watched ledger sequence number.
             await this.updateLastIndexRecord(r.transaction.LedgerIndex);
 
-            if (!hostingNft)
+            if (!hostingToken)
                 throw "The URIToken ownership verification was failed in the lease extension process";
 
-            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(hostingNft.URI);
+            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(hostingToken.URI);
             const leaseAmount = uriInfo.leaseAmount;
             if (leaseAmount <= 0)
                 throw "Invalid per moment lease amount";
@@ -814,7 +814,7 @@ class MessageBoard {
             if (extendingMoments < 1)
                 throw "The transaction does not satisfy the minimum extendable moments";
 
-            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingNft.index };
+            const instanceSearchCriteria = { tenant_xrp_address: tenantAddress, container_name: hostingToken.index };
 
             const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
 

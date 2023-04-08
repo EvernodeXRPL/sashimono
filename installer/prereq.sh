@@ -27,7 +27,7 @@ stage "Installing dependencies"
 # Added --allow-releaseinfo-change
 # To fix - Repository 'https://apprepo.vultr.com/ubuntu universal InRelease' changed its 'Codename' value from 'buster' to 'universal'
 apt-get update --allow-releaseinfo-change
-apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq bind9-host
+apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 # uidmap        # Required for rootless docker.
 # slirp4netns   # Required for high performance rootless networking.
 # fuse3         # Required for hpfs.
@@ -36,7 +36,6 @@ apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq b
 # curl          # Required to download installation artifacts.
 # openssl       # Required by Sashimono agent to create contract tls certs.
 # jq            # Used for json config file manipulation.
-# bind9-host    # Used for access DNS lookup utility.
 
 # Install nodejs if not exists.
 if ! command -v node &>/dev/null; then

@@ -153,6 +153,18 @@ function check_prereq() {
             exit 1
         fi
     fi
+
+    # Check bc command is installed.
+    if ! command -v bc &>/dev/null; then
+        echo "bc command not found. Installing.."
+        apt-get -y install bc >/dev/null
+    fi
+
+    # Check host command is installed.
+    if ! command -v host &> /dev/null; then
+        echo "host command not found. Installing.."
+        apt-get -y install bind9-host >/dev/null
+    fi
 }
 
 function check_sys_req() {
@@ -1067,11 +1079,6 @@ if [ "$mode" == "install" ]; then
     check_sys_req
     check_prereq
 
-    # Check bc command is installed.
-    if ! command -v bc &>/dev/null; then
-        echo "bc command not found. Installing.."
-        apt-get -y install bc >/dev/null
-    fi
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"

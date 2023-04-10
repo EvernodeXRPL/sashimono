@@ -159,7 +159,7 @@ function check_sys_req() {
 
     # Assign sys resource info to global vars since these will also be used for instance allocation later.
     ramKB=$(free | grep Mem | awk '{print $2}')
-    swapKB=$(free | grep Swap | awk '{print $2}')
+    swapKB=$(free | grep -i Swap | awk '{print $2}')
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 

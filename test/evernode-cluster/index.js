@@ -251,11 +251,11 @@ class ClusterManager {
 
         if (contract.target_moments_count > 1 && contract.cluster.findIndex(c => !c.extended) >= 0) {
             console.log('Extending the cluster...');
-            
+
             // Funding before extending
             const extendingCost = await this.#getExtendingFundAmount();
             await this.#evernodeService.fundTenant(extendingCost);
-            
+
             const promises = contract.cluster.map(async (c, i) => {
                 if (!contract.cluster[i].extended) {
                     try {
@@ -268,7 +268,6 @@ class ClusterManager {
                     }
                     catch (e) {
                         console.error({ message: `Error while extending the node ${i + 1} in ${c.host}.`, innerException: e });
-
                     }
                 }
             })

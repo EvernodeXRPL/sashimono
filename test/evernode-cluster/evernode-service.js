@@ -3,7 +3,7 @@ const evernode = require("evernode-js-client");
 class EvernodeService {
     #xrplApi;
 
-    #registryAddress;
+    #governorAddress;
     #foundationAddress;
     #foundationSecret;
 
@@ -11,10 +11,11 @@ class EvernodeService {
     #tenantSecret;
 
     #registryClient;
+    #governorClient;
     #tenantClient;
 
     constructor(accounts) {
-        this.#registryAddress = accounts.registry_address;
+        this.#governorAddress = accounts.governor_address;
         this.#foundationAddress = accounts.foundation_address;
         this.#foundationSecret = accounts.foundation_secret;
         this.#tenantAddress = accounts.tenant_address;
@@ -33,23 +34,28 @@ class EvernodeService {
     }
 
     async init() {
-        this.#xrplApi = new evernode.XrplApi('wss://hooks-testnet-v2.xrpl-labs.com');
+        this.#xrplApi = new evernode.XrplApi('wss://hooks-testnet-v3.xrpl-labs.com');
         evernode.Defaults.set({
-            registryAddress: this.#registryAddress,
-            xrplApi: this.#xrplApi
+            governorAddress: this.#governorAddress,
+            xrplApi: this.#xrplApi,
+            networkID: 21338
         })
         await this.#xrplApi.connect();
 
         this.#tenantClient = new evernode.TenantClient(this.#tenantAddress, this.#tenantSecret);
         await this.#tenantClient.connect();
 
-        this.#registryClient = new evernode.RegistryClient();
+        this.#governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
+        await this.#governorClient.connect();
+
+        this.#registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
         await this.#registryClient.connect();
     }
 
     async terminate() {
         await this.#tenantClient.disconnect();
         await this.#registryClient.disconnect();
+        await this.#governorClient.disconnect();
         await this.#xrplApi.disconnect();
     }
 
@@ -60,7 +66,7 @@ class EvernodeService {
 
     async getHosts() {
         const allHosts = await this.#registryClient.getActiveHosts();
-        return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version !== "0.5.2");
+        return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version >= "0.6.0");
     }
 
     async acquireLease(host, contractId, image, ownerPubKey, config, timeout = 60000) {

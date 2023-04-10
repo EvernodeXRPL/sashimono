@@ -53,7 +53,7 @@ class ClusterManager {
                     }
                 ],
                 "accounts": {
-                    "registry_address": "",
+                    "governor_address": "",
                     "foundation_address": "",
                     "foundation_secret": "",
                     "tenant_address": "",

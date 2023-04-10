@@ -95,6 +95,16 @@ class EvernodeService {
         console.log(`Instance ${instanceName} expiry set to ${result.expiryMoment}`);
         return result;
     }
+
+    async getLeaseAmountbyTokenId(uriTokenId) {
+        const uriToken = (await (new evernode.XrplAccount(this.#tenantAddress)).getURITokens())?.find(n => n.index == uriTokenId);
+        if (!uriToken) {
+            console.log(`Could not find the uriToken for the index ${uriTokenId}.`);
+            return 0;
+        }
+        const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+        return uriInfo.leaseAmount;
+    }
 }
 
 module.exports = {

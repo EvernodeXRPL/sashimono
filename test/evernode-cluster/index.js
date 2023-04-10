@@ -91,6 +91,20 @@ class ClusterManager {
             .sort(() => Math.random() - 0.5);
     }
 
+    async #getExtendingFundAmount() {
+        const contract = this.#config.contracts[this.#contractIdx];
+        let totalAmount = 0;
+        if (contract.target_moments_count > 0 && contract.cluster.length > 0) {
+            for (const c of contract.cluster) {
+                const leaseAmount = await this.#evernodeService.getLeaseAmountbyTokenId(c.name);
+                totalAmount += leaseAmount;
+            }
+            totalAmount *= contract.target_moments_count;
+        }
+
+        return totalAmount;
+    }
+
     async terminate() {
         await this.#evernodeService.terminate();
         await this.#writeConfig();
@@ -237,27 +251,30 @@ class ClusterManager {
 
         if (contract.target_moments_count > 1 && contract.cluster.findIndex(c => !c.extended) >= 0) {
             console.log('Extending the cluster...');
-
-            let i = 0;
-            while (i < contract.cluster.length) {
-                const c = contract.cluster[i];
-                try {
-                    await sleep(2000 * i);
-                    const result = await this.#evernodeService.extendLease(c.host, c.name, contract.target_moments_count - 1);
-                    if (!result)
-                        throw 'INST_EXTEND_ERR';
-                    this.#config.contracts[this.#contractIdx].cluster[i].extended = true;
-                    i++;
-                } catch (e) {
-                    // If the reason is lack of EVRs, fund again and try
-                    if (e.content?.code == 'tecINSUFFICIENT_FUNDS' || e.content?.code == "tecPATH_PARTIAL") {
-                        await this.#evernodeService.fundTenant(FUNDING_EVR_PER_ROUND);
-                    } else {
-                        i++;
+            
+            // Funding before extending
+            const extendingCost = await this.#getExtendingFundAmount();
+            await this.#evernodeService.fundTenant(extendingCost);
+            
+            const promises = contract.cluster.map(async (c, i) => {
+                if (!contract.cluster[i].extended) {
+                    try {
+                        await sleep(2000 * i);
+                        const result = await this.#evernodeService.extendLease(c.host, c.name, contract.target_moments_count - 1);
+                        if (!result)
+                            throw 'INST_EXTEND_ERR';
+                        this.#config.contracts[this.#contractIdx].cluster[i].extended = true;
+                        return result;
                     }
-                    console.error({ message: `Error while extending the node ${i + 1} in ${c.host}.`, innerException: e });
+                    catch (e) {
+                        console.error({ message: `Error while extending the node ${i + 1} in ${c.host}.`, innerException: e });
+
+                    }
                 }
-            }
+            })
+
+            await Promise.all(promises);
+
         }
     }
 
@@ -278,6 +295,7 @@ class ClusterManager {
         }
 
         try {
+
             await this.#extendCluster();
         }
         catch (e) {

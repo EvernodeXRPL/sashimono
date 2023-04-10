@@ -280,11 +280,19 @@ function validate_inet_addr() {
 
     # Attempt to resolve ip (in case inetaddr is a DNS address)
     # This will resolve correctly if inetaddr is a valid ip or dns address.
-    local resolved=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
-    # If invalid, reset inetaddr and return with non-zero code.
-    [ -z "$resolved" ] && inetaddr="" && return 1
 
-    return 0
+    local resolved_ips=$(getent hosts $inetaddr | wc -l)
+
+    # Check if there is more than one IP address
+    if [ $resolved_ips -eq 1 ]; then
+        return 0
+    elif [ $resolved_ips -gt 1 ]; then
+        echo "Your domain ($inetaddr) must point to a single IP address."
+    fi
+
+    # If invalid, reset inetaddr and return with non-zero code.
+    inetaddr="" && return 1
+
 }
 
 function validate_positive_decimal() {

@@ -22,14 +22,18 @@ class EvernodeService {
         this.#tenantSecret = accounts.tenant_secret;
     }
 
-    async #fundTenant(tenant, fundAmount) {
+    async fundTenant(fundAmount = 6000) {
         // Send evers to tenant if needed.
-        const lines = await tenant.xrplAcc.getTrustLines('EVR', tenant.config.evrIssuerAddress);
-        if (lines.length === 0 || parseInt(lines[0].balance) < fundAmount) {
-            await tenant.xrplAcc.setTrustLine('EVR', tenant.config.evrIssuerAddress, "99999999");
+        let lines = await this.#tenantClient.xrplAcc.getTrustLines('EVR', this.#tenantClient.config.evrIssuerAddress);
+        if (lines.length === 0) {
+            await this.#tenantClient.xrplAcc.setTrustLine('EVR', this.#tenantClient.config.evrIssuerAddress, "99999999");
+            lines = await this.#tenantClient.xrplAcc.getTrustLines('EVR', this.#tenantClient.config.evrIssuerAddress);
+        }
+
+        if (parseInt(lines[0].balance) < fundAmount) {
             const amount = (fundAmount - lines[0].balance).toString();
             console.log(`Funding ${amount} EVRs to ${this.#tenantAddress}`)
-            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, amount, 'EVR', tenant.config.evrIssuerAddress);
+            await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, amount, 'EVR', this.#tenantClient.config.evrIssuerAddress);
         }
     }
 
@@ -61,7 +65,7 @@ class EvernodeService {
 
     async prepareAccounts(fundAmount) {
         await this.#tenantClient.prepareAccount();
-        await this.#fundTenant(this.#tenantClient, fundAmount);
+        await this.fundTenant(fundAmount);
     }
 
     async getHosts() {

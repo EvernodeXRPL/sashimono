@@ -5,7 +5,7 @@ const { ContractInstanceManager } = require('./contract-instance-manager');
 const HotPocket = require('hotpocket-js-client');
 
 const CONFIG_FILE = "config.json";
-const EVR_PER_MOMENT = 2;
+const FUNDING_EVR_PER_ROUND = 6000;
 const MAX_MEMO_PEER_LIMIT = 10;
 const FAIL_THRESHOLD = 1;
 const DEF_TIMEOUT = 60000;
@@ -78,21 +78,11 @@ class ClusterManager {
         await fs.writeFile(CONFIG_FILE, JSON.stringify(this.#config, null, 2)).catch(console.error);
     }
 
-    #getFundAmount() {
-        const contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
-        const contract = this.#config.contracts[contractIdx];
-        const totalEvers = ((contract.target_nodes_count - contract.cluster.length) * EVR_PER_MOMENT) +
-            ((contract.target_nodes_count - contract.cluster.filter(c => c.extended).length) * (contract.target_moments_count - 1) * EVR_PER_MOMENT);
-
-        return totalEvers + Math.ceil(totalEvers * 25 / 100);
-    }
-
     async init() {
         await this.#readConfig();
         this.#evernodeService = new EvernodeService(this.#config.accounts);
-        const fundAmount = this.#getFundAmount();
         await this.#evernodeService.init();
-        await this.#evernodeService.prepareAccounts(fundAmount);
+        await this.#evernodeService.prepareAccounts(FUNDING_EVR_PER_ROUND);
         this.#contractIdx = this.#config.contracts.findIndex(c => c.name === this.#config.selected);
         this.#instanceCount = this.#config.contracts[this.#contractIdx]?.cluster?.length || 0;
         this.#hosts = (await this.#evernodeService.getHosts()).filter(h =>
@@ -133,6 +123,11 @@ class ClusterManager {
         }
         catch (e) {
             this.#hosts[hostIndex].acquiring = false;
+
+            // If the reason is lack of EVRs, fund again
+            if (e.content?.code == 'tecINSUFFICIENT_FUNDS') {
+                await this.#evernodeService.fundTenant(FUNDING_EVR_PER_ROUND);
+            }
             throw { message: `Error while creating the node ${nodeNumber} in ${host.address}.`, innerException: e };
         }
     }
@@ -243,23 +238,26 @@ class ClusterManager {
         if (contract.target_moments_count > 1 && contract.cluster.findIndex(c => !c.extended) >= 0) {
             console.log('Extending the cluster...');
 
-            const promises = contract.cluster.map(async (c, i) => {
-                if (!contract.cluster[i].extended) {
-                    try {
-                        await sleep(2000 * i);
-                        const result = await this.#evernodeService.extendLease(c.host, c.name, contract.target_moments_count - 1);
-                        if (!result)
-                            throw 'INST_EXTEND_ERR';
-                        this.#config.contracts[this.#contractIdx].cluster[i].extended = true;
-                        return result;
+            let i = 0;
+            while (i < contract.cluster.length) {
+                const c = contract.cluster[i];
+                try {
+                    await sleep(2000 * i);
+                    const result = await this.#evernodeService.extendLease(c.host, c.name, contract.target_moments_count - 1);
+                    if (!result)
+                        throw 'INST_EXTEND_ERR';
+                    this.#config.contracts[this.#contractIdx].cluster[i].extended = true;
+                    i++;
+                } catch (e) {
+                    // If the reason is lack of EVRs, fund again and try
+                    if (e.content?.code == 'tecINSUFFICIENT_FUNDS' || e.content?.code == "tecPATH_PARTIAL") {
+                        await this.#evernodeService.fundTenant(FUNDING_EVR_PER_ROUND);
+                    } else {
+                        i++;
                     }
-                    catch (e) {
-                        console.error({ message: `Error while extending the node ${i + 1} in ${c.host}.`, innerException: e });
-                    }
+                    console.error({ message: `Error while extending the node ${i + 1} in ${c.host}.`, innerException: e });
                 }
-            })
-
-            await Promise.all(promises);
+            }
         }
     }
 

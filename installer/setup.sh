@@ -153,13 +153,25 @@ function check_prereq() {
             exit 1
         fi
     fi
+
+    # Check bc command is installed.
+    if ! command -v bc &>/dev/null; then
+        echo "bc command not found. Installing.."
+        apt-get -y install bc >/dev/null
+    fi
+
+    # Check host command is installed.
+    if ! command -v host &> /dev/null; then
+        echo "host command not found. Installing.."
+        apt-get -y install bind9-host >/dev/null
+    fi
 }
 
 function check_sys_req() {
 
     # Assign sys resource info to global vars since these will also be used for instance allocation later.
     ramKB=$(free | grep Mem | awk '{print $2}')
-    swapKB=$(free | grep Swap | awk '{print $2}')
+    swapKB=$(free | grep -i Swap | awk '{print $2}')
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 
@@ -280,11 +292,19 @@ function validate_inet_addr() {
 
     # Attempt to resolve ip (in case inetaddr is a DNS address)
     # This will resolve correctly if inetaddr is a valid ip or dns address.
-    local resolved=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
-    # If invalid, reset inetaddr and return with non-zero code.
-    [ -z "$resolved" ] && inetaddr="" && return 1
 
-    return 0
+    local resolved_ips=$(getent hosts $inetaddr | wc -l)
+
+    # Check if there is more than one IP address
+    if [ $resolved_ips -eq 1 ]; then
+        return 0
+    elif [ $resolved_ips -gt 1 ]; then
+        echo "Your domain ($inetaddr) must point to a single IP address."
+    fi
+
+    # If invalid, reset inetaddr and return with non-zero code.
+    inetaddr="" && return 1
+
 }
 
 function validate_positive_decimal() {
@@ -1067,11 +1087,6 @@ if [ "$mode" == "install" ]; then
     check_sys_req
     check_prereq
 
-    # Check bc command is installed.
-    if ! command -v bc &>/dev/null; then
-        echo "bc command not found. Installing.."
-        apt-get -y install bc >/dev/null
-    fi
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"

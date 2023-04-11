@@ -11,7 +11,6 @@ class EvernodeService {
     #tenantSecret;
 
     #registryClient;
-    #governorClient;
     #tenantClient;
 
     constructor(accounts) {
@@ -49,9 +48,6 @@ class EvernodeService {
         this.#tenantClient = new evernode.TenantClient(this.#tenantAddress, this.#tenantSecret);
         await this.#tenantClient.connect();
 
-        this.#governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
-        await this.#governorClient.connect();
-
         this.#registryClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
         await this.#registryClient.connect();
     }
@@ -59,7 +55,6 @@ class EvernodeService {
     async terminate() {
         await this.#tenantClient.disconnect();
         await this.#registryClient.disconnect();
-        await this.#governorClient.disconnect();
         await this.#xrplApi.disconnect();
     }
 

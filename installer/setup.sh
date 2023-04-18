@@ -6,6 +6,9 @@
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
 
+# set the LANG environment variable to a universal encoding
+export LANG=C.UTF-8
+
 evernode="Evernode"
 maxmind_creds="687058:FtcQjM0emHFMEfgI"
 cgrulesengd_default="cgrulesengd"
@@ -44,8 +47,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-# TODO: Need to modify the relevant Governor address for DEV ENV
-# TODO: Configure the same figure in sashimono-install.sh as well.
+# TODO: Verify if the correct Governor address is present in the DEV/BETA envs.
 export EVERNODE_GOVERNOR_ADDRESS="raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF"
 export MIN_EVR_BALANCE=5120
 

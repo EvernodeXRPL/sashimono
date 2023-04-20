@@ -821,6 +821,10 @@ function check_installer_pending_finish() {
 function reg_info() {
     echo ""
     if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
+        local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
+        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl is-active $MB_XRPL_SERVICE)
+        echo "Sashimono agent status: $sashimono_agent_status"
+        echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
@@ -1014,7 +1018,7 @@ function config() {
     # Stop the message board service.
     echomult "Stopping the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
-
+    
     # Stop the sashimono service.
     if [ $update_sashi == 1 ] ; then
         echomult "Stopping the sashimono..."
@@ -1177,7 +1181,7 @@ elif [ "$mode" == "transfer" ]; then
     echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
-    reg_info
+    reg_info    
 
 elif [ "$mode" == "list" ]; then
     sashi list

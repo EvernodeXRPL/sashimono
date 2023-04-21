@@ -1018,6 +1018,7 @@ function config() {
     # Stop the message board service.
     echomult "Stopping the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+    
     # Stop the sashimono service.
     if [ $update_sashi == 1 ] ; then
         echomult "Stopping the sashimono..."

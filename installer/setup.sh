@@ -1018,7 +1018,6 @@ function config() {
     # Stop the message board service.
     echomult "Stopping the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
-    
     # Stop the sashimono service.
     if [ $update_sashi == 1 ] ; then
         echomult "Stopping the sashimono..."
@@ -1181,7 +1180,7 @@ elif [ "$mode" == "transfer" ]; then
     echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
 
 elif [ "$mode" == "status" ]; then
-    reg_info    
+    reg_info
 
 elif [ "$mode" == "list" ]; then
     sashi list

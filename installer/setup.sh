@@ -1014,6 +1014,7 @@ function config() {
     local has_error=0
 
     echomult "\nStaring the reconfiguration...\n"
+
     # Stop the message board service.
     echomult "Stopping the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE

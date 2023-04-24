@@ -23,6 +23,10 @@ class MessageBoard {
     #instanceExpirationQueue = [];
     #graceTimeoutRef = null;
     #lastHaltedTime = null;
+    #concurrencyQueue = {
+        processing: false,
+        queue: []
+    };
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
@@ -91,15 +95,19 @@ class MessageBoard {
         // Catch up missed transactions based on the previously updated "last_watched_ledger" record (checkpoint).
         await this.#catchupMissedLeases().catch(console.error);
 
+        this.db.close();
+
         // Load the sashimono config.
         const sashiConfig = ConfigHelper.readSashiConfig(this.sashiConfigPath);
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
-        // Update the registry with the active instance count.
-        await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
-            sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
-            Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
-        this.db.close();
+
+        this.#queueAction(async () => {
+            // Update the registry with the active instance count.
+            await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
+                sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
+                Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
+        });
 
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
@@ -139,6 +147,39 @@ class MessageBoard {
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
 
+    }
+
+    #queueAction(action) {
+        this.#concurrencyQueue.queue.push({
+            callback: action,
+            attempts: 0
+        });
+    }
+
+    async #processConcurrencyQueue() {
+        if (this.#concurrencyQueue.processing)
+            return;
+
+        this.#concurrencyQueue.processing = true;
+
+        let toKeep = [];
+        for (let action of this.#concurrencyQueue.queue) {
+            try {
+                await action.callback();
+            }
+            catch (e) {
+                if (action.attempts < 5) {
+                    action.attempts++;
+                    toKeep.push(action);
+                }
+                else {
+                    console.error(e);
+                }
+            }
+        }
+        this.#concurrencyQueue.queue = toKeep;
+
+        this.#concurrencyQueue.processing = false;
     }
 
     // Check for xrpl halts
@@ -298,7 +339,9 @@ class MessageBoard {
             // Remove from the queue
             this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
 
-            await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            this.#queueAction(async () => {
+                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            });
             console.log(`Destroyed ${lease.containerName}`);
 
         }
@@ -364,11 +407,12 @@ class MessageBoard {
     }
 
     #startSashimonoClockScheduler() {
-        const timeout = appenv.EXPIRE_INSTANCES_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+        const timeout = appenv.SASHIMONO_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
             this.#checkLedgersForHalt();
             await this.#expireInstances();
+            await this.#processConcurrencyQueue();
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -525,7 +569,9 @@ class MessageBoard {
         // If active instance count is updated, Send the update registration transaction.
         if (this.activeInstanceCount !== activeInstanceCount) {
             this.activeInstanceCount = activeInstanceCount;
-            await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            this.#queueAction(async () => {
+                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            });
         }
     }
 
@@ -648,12 +694,14 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex) {
-        // Burn the URIToken and recreate the offer.
-        await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
-        // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
-        await this.hostClient.refreshConfig();
-        const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-        await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+        this.#queueAction(async () => {
+            // Burn the URIToken and recreate the offer.
+            await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
+            // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
+            await this.hostClient.refreshConfig();
+            const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+            await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH).catch(console.error);
+        });
     }
 
     async handleAcquireLease(r) {
@@ -744,7 +792,9 @@ class MessageBoard {
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
-                    await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                    this.#queueAction(async () => {
+                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                    });
 
                     // Send the acquire response with created instance info.
                     await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);

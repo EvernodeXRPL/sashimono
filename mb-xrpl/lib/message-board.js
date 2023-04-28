@@ -800,7 +800,7 @@ class MessageBoard {
 
                 // Number of validated ledgers passed while the instance is created.
                 diff = evernode.UtilHelpers.getCurrentUnixTime() - startingValidatedTime;
-                // Give-up the acquiringing porocess if the instance creation itself takes more than 80% of allowed window(in seconds).
+                // Give-up the acquiring process if the instance creation itself takes more than 80% of allowed window(in seconds).
                 threshold = this.hostClient.config.leaseAcquireWindow * appenv.ACQUIRE_LEASE_TIMEOUT_THRESHOLD;
                 if (diff > threshold) {
                     console.error(`Instance creation timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
@@ -927,9 +927,10 @@ class MessageBoard {
             if (!expiryItemFound)
                 throw "No matching expiration record was found for the instance";
 
+            const expiryMoment = await this.hostClient.getMoment(expiryTimeStamp)
             await this.#queueAction(async () => {
                 // Send the extend success response
-                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryTimeStamp);
+                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
             });
 
         }

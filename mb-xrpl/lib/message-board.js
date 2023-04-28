@@ -102,7 +102,7 @@ class MessageBoard {
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
 
-        this.#queueAction(async () => {
+        await this.#queueAction(async () => {
             // Update the registry with the active instance count.
             await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
                 sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
@@ -118,7 +118,7 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
         const checkAndRequestRebate = async () => {
-            this.#queueAction(async () => {
+            await this.#queueAction(async () => {
                 // Send rebate request at startup if there's any pending rebates.
                 if (hostInfo?.registrationFee > hostRegFee) {
                     console.log(`Requesting rebate...`);
@@ -151,18 +151,37 @@ class MessageBoard {
 
     }
 
-    #queueAction(action) {
+    // Try to acquire the lease update lock.
+    async #acquireConcurrencyQueue() {
+        await new Promise(async resolve => {
+            while (this.#concurrencyQueue.processing) {
+                await new Promise(resolveSleep => {
+                    setTimeout(resolveSleep, 1000);
+                })
+            }
+            resolve();
+        });
+        this.#concurrencyQueue.processing = true;
+    }
+
+    // Release the lease update lock.
+    async #releaseConcurrencyQueue() {
+        this.#concurrencyQueue.processing = false;
+    }
+
+    async #queueAction(action) {
+        await this.#acquireConcurrencyQueue();
+
         this.#concurrencyQueue.queue.push({
             callback: action,
             attempts: 0
         });
+
+        await this.#releaseConcurrencyQueue();
     }
 
     async #processConcurrencyQueue() {
-        if (this.#concurrencyQueue.processing)
-            return;
-
-        this.#concurrencyQueue.processing = true;
+        await this.#acquireConcurrencyQueue();
 
         let toKeep = [];
         for (let action of this.#concurrencyQueue.queue) {
@@ -181,7 +200,7 @@ class MessageBoard {
         }
         this.#concurrencyQueue.queue = toKeep;
 
-        this.#concurrencyQueue.processing = false;
+        await this.#releaseConcurrencyQueue();
     }
 
     // Check for xrpl halts
@@ -279,7 +298,7 @@ class MessageBoard {
                 if (voteArr && voteArr.length) {
                     for (const vote of voteArr) {
                         try {
-                            this.#queueAction(async () => {
+                            await this.#queueAction(async () => {
                                 await this.hostClient.heartbeat(vote);
                                 this.lastHeartbeatMoment = await this.hostClient.getMoment();
                             });
@@ -304,7 +323,7 @@ class MessageBoard {
                 return;
 
             try {
-                this.#queueAction(async () => {
+                await this.#queueAction(async () => {
                     await this.hostClient.heartbeat();
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
                 });
@@ -346,7 +365,7 @@ class MessageBoard {
             // Remove from the queue
             this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
 
-            this.#queueAction(async () => {
+            await this.#queueAction(async () => {
                 await this.hostClient.updateRegInfo(this.activeInstanceCount);
             });
             console.log(`Destroyed ${lease.containerName}`);
@@ -460,9 +479,7 @@ class MessageBoard {
         await new Promise(async resolve => {
             while (this.#leaseUpdateLock) {
                 await new Promise(resolveSleep => {
-                    setTimeout(() => {
-                        resolveSleep();
-                    }, 1000);
+                    setTimeout(resolveSleep, 1000);
                 })
             }
             resolve();
@@ -515,7 +532,7 @@ class MessageBoard {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex);
 
-                            this.#queueAction(async () => {
+                            await this.#queueAction(async () => {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
                                 await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
                             });
@@ -562,7 +579,7 @@ class MessageBoard {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex);
 
-                        this.#queueAction(async () => {
+                        await this.#queueAction(async () => {
                             // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                             if (lease.status === LeaseStatus.ACQUIRING) {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
@@ -577,7 +594,7 @@ class MessageBoard {
             }
         }
 
-        this.#queueAction(async () => {
+        await this.#queueAction(async () => {
             // If active instance count is updated, Send the update registration transaction.
             if (this.activeInstanceCount !== activeInstanceCount) {
                 this.activeInstanceCount = activeInstanceCount;
@@ -656,7 +673,7 @@ class MessageBoard {
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
                                         await this.recreateLeaseOffer(eventInfo.data.uriTokenId, eventInfo.data.tenant, uriInfo.leaseIndex);
 
-                                        this.#queueAction(async () => {
+                                        await this.#queueAction(async () => {
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
                                             await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString());
                                         });
@@ -673,7 +690,7 @@ class MessageBoard {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
                                     const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
-                                        this.#queueAction(async () => {
+                                        await this.#queueAction(async () => {
                                             // The refund for the extension, if tenant still own the URIToken.
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
                                             await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString());
@@ -709,7 +726,7 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex) {
-        this.#queueAction(async () => {
+        await this.#queueAction(async () => {
             // Burn the URIToken and recreate the offer.
             await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
             // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
@@ -807,7 +824,7 @@ class MessageBoard {
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
-                    this.#queueAction(async () => {
+                    await this.#queueAction(async () => {
                         await this.hostClient.updateRegInfo(this.activeInstanceCount);
 
                         // Send the acquire response with created instance info.
@@ -831,7 +848,7 @@ class MessageBoard {
             if (leaseIndex >= 0)
                 await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex).catch(console.error);
 
-            this.#queueAction(async () => {
+            await this.#queueAction(async () => {
                 // Send error transaction with received leaseAmount.
                 await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
             });
@@ -910,7 +927,7 @@ class MessageBoard {
             if (!expiryItemFound)
                 throw "No matching expiration record was found for the instance";
 
-            this.#queueAction(async () => {
+            await this.#queueAction(async () => {
                 // Send the extend success response
                 await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryTimeStamp);
             });
@@ -918,7 +935,7 @@ class MessageBoard {
         }
         catch (e) {
             console.error(e);
-            this.#queueAction(async () => {
+            await this.#queueAction(async () => {
                 // Send the extend error response
                 await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount);
             });

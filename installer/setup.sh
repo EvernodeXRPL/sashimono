@@ -1074,23 +1074,23 @@ function delete_instance()
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}             # IP or DNS address.
-        init_peer_port=${4}       # Starting peer port for instances.
-        init_user_port=${5}       # Starting user port for instances.
-        countrycode=${6}          # 2-letter country code.
-        alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}          # Memory to allocate for contract instances.
-        alloc_swapKB=${9}         # Swap to allocate for contract instances.
-        alloc_diskKB=${10}        # Disk space to allocate for contract instances.
-        alloc_instcount=${11}     # Total contract instance count.
-        lease_amount=${12}        # Contract instance lease amount in EVRs.
-        rippled_server=${13}      # Rippled server URL
+        inetaddr=${3}              # IP or DNS address.
+        init_peer_port=${4}        # Starting peer port for instances.
+        init_user_port=${5}        # Starting user port for instances.
+        countrycode=${6}           # 2-letter country code.
+        alloc_cpu=${7}             # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}           # Memory to allocate for contract instances.
+        alloc_swapKB=${9}          # Swap to allocate for contract instances.
+        alloc_diskKB=${10}         # Disk space to allocate for contract instances.
+        alloc_instcount=${11}      # Total contract instance count.
+        lease_amount=${12}         # Contract instance lease amount in EVRs.
+        rippled_server=${13}       # Rippled server URL
         xrpl_account_address=${14} # XRPL account address.
-        xrpl_account_secret=${15} # XRPL account secret.
-        email_address=${16}       # User email address
-        tls_key_file=${17}        # File path to the tls private key.
-        tls_cert_file=${18}       # File path to the tls certificate.
-        tls_cabundle_file=${19}   # File path to the tls ca bundle.
+        xrpl_account_secret=${15}  # XRPL account secret.
+        email_address=${16}        # User email address
+        tls_key_file=${17}         # File path to the tls private key.
+        tls_cert_file=${18}        # File path to the tls certificate.
+        tls_cabundle_file=${19}    # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,

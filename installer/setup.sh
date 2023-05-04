@@ -829,7 +829,9 @@ function reg_info() {
     echo ""
     if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
         local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
-        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl is-active $MB_XRPL_SERVICE)
+        local mb_user_id=$(id -u "$MB_XRPL_USER")
+        local mb_user_runtime_dir="/run/user/$mb_user_id"
+        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
         echo "Sashimono agent status: $sashimono_agent_status"
         echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."

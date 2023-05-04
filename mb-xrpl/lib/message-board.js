@@ -828,7 +828,8 @@ class MessageBoard {
                         await this.hostClient.updateRegInfo(this.activeInstanceCount);
 
                         // Send the acquire response with created instance info.
-                        await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes);
+                        const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
+                        await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, options);
                     });
                 }
             }

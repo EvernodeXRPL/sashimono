@@ -1085,7 +1085,7 @@ if [ "$mode" == "install" ]; then
         alloc_instcount=${11}     # Total contract instance count.
         lease_amount=${12}        # Contract instance lease amount in EVRs.
         rippled_server=${13}      # Rippled server URL
-        xrpl_account_address=${14} # XRPL account secret.
+        xrpl_account_address=${14} # XRPL account address.
         xrpl_account_secret=${15} # XRPL account secret.
         email_address=${16}       # User email address
         tls_key_file=${17}        # File path to the tls private key.
@@ -1191,7 +1191,7 @@ elif [ "$mode" == "transfer" ]; then
 
     else
         if ! $interactive ; then
-            xrpl_account_address=${3} # XRPL account secret.
+            xrpl_account_address=${3} # XRPL account address.
             xrpl_account_secret=${4}  # XRPL account secret.
             transferee_address=${5}   # Address of the transferee.
             rippled_server=${6}       # Rippled server URL

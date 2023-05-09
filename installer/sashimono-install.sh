@@ -264,6 +264,7 @@ if [ "$NO_MB" == "" ]; then
             set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
+            echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
                 $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description |
                 stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&

@@ -267,77 +267,75 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
-        let ongoingHeartbeat = false;
-        const currentMoment = await this.hostClient.getMoment();
+        await this.#queueAction(async () => {
+            let ongoingHeartbeat = false;
+            const currentMoment = await this.hostClient.getMoment();
 
-        // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
-        if (!ongoingHeartbeat &&
-            (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
-            ongoingHeartbeat = true;
-            console.log(`Reporting heartbeat at Moment ${currentMoment}...`);
+            // Sending heartbeat every CONF_HOST_HEARTBEAT_FREQ moments.
+            if (!ongoingHeartbeat &&
+                (this.lastHeartbeatMoment === 0 || (currentMoment % this.hostClient.config.hostHeartbeatFreq === 0 && currentMoment !== this.lastHeartbeatMoment))) {
+                ongoingHeartbeat = true;
+                console.log(`Reporting heartbeat at Moment ${currentMoment}...`);
 
-            // Send heartbeat with votes, if there are votes in the config.
-            let heartbeatSent = false;
-            const votes = this.governanceManager.getVotes();
-            if (votes) {
-                const voteArr = (await Promise.all(Object.entries(votes).map(async ([key, value]) => {
-                    const candidate = await this.hostClient.getCandidateById(key);
-                    // Delete candidate vote if there's no such candidate.
-                    if (!candidate) {
-                        this.governanceManager.clearCandidate(key);
-                        return null;
-                    }
-                    return {
-                        candidate: candidate.uniqueId,
-                        vote: value === evernode.EvernodeConstants.CandidateVote.Support ?
-                            evernode.EvernodeConstants.CandidateVote.Support :
-                            evernode.EvernodeConstants.CandidateVote.Reject,
-                        idx: candidate.index
-                    };
-                }))).filter(v => v).sort((a, b) => a.idx - b.idx);
-                if (voteArr && voteArr.length) {
-                    for (const vote of voteArr) {
-                        try {
-                            await this.#queueAction(async () => {
+                // Send heartbeat with votes, if there are votes in the config.
+                let heartbeatSent = false;
+                const votes = this.governanceManager.getVotes();
+                if (votes) {
+                    const voteArr = (await Promise.all(Object.entries(votes).map(async ([key, value]) => {
+                        const candidate = await this.hostClient.getCandidateById(key);
+                        // Delete candidate vote if there's no such candidate.
+                        if (!candidate) {
+                            this.governanceManager.clearCandidate(key);
+                            return null;
+                        }
+                        return {
+                            candidate: candidate.uniqueId,
+                            vote: value === evernode.EvernodeConstants.CandidateVote.Support ?
+                                evernode.EvernodeConstants.CandidateVote.Support :
+                                evernode.EvernodeConstants.CandidateVote.Reject,
+                            idx: candidate.index
+                        };
+                    }))).filter(v => v).sort((a, b) => a.idx - b.idx);
+                    if (voteArr && voteArr.length) {
+                        for (const vote of voteArr) {
+                            try {
                                 await this.hostClient.heartbeat(vote);
                                 this.lastHeartbeatMoment = await this.hostClient.getMoment();
-                            });
-                            heartbeatSent = true;
-                        }
-                        catch (e) {
-                            // Remove candidate from config in vote validation from the hook failed.
-                            if (e.code === 'VOTE_VALIDATION_ERR') {
-                                console.error(e.error);
-                                this.governanceManager.clearCandidate(vote.candidate);
+                                heartbeatSent = true;
                             }
-                            else {
-                                console.error("Heartbeat tx with vote error", e);
+                            catch (e) {
+                                // Remove candidate from config in vote validation from the hook failed.
+                                if (e.code === 'VOTE_VALIDATION_ERR') {
+                                    console.error(e.error);
+                                    this.governanceManager.clearCandidate(vote.candidate);
+                                }
+                                else {
+                                    console.error("Heartbeat tx with vote error", e);
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            // Return if at-least one heartbeat has been sent. Otherwise send heartbeat without votes.
-            if (heartbeatSent)
-                return;
+                // Return if at-least one heartbeat has been sent. Otherwise send heartbeat without votes.
+                if (heartbeatSent)
+                    return;
 
-            try {
-                await this.#queueAction(async () => {
+                try {
                     await this.hostClient.heartbeat();
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
-                });
+                }
+                catch (err) {
+                    if (err.code === 'tecHOOK_REJECTED')
+                        console.log("Heartbeat rejected by the hook.");
+                    else
+                        console.log("Heartbeat tx error", err);
+                }
+                finally {
+                    ongoingHeartbeat = false;
+                }
             }
-            catch (err) {
-                if (err.code === 'tecHOOK_REJECTED')
-                    console.log("Heartbeat rejected by the hook.");
-                else
-                    console.log("Heartbeat tx error", err);
-            }
-            finally {
-                ongoingHeartbeat = false;
-            }
-        }
+        });
     }
 
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {

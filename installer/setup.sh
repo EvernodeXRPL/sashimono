@@ -86,7 +86,10 @@ function confirm() {
 # Creating bin dir is the first stage of installation.
 # Removing bin dir is the last stage of uninstalltion.
 # So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
-if [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] ; then
+installed=false
+[ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] && installed=true
+
+if $installed ; then
     [ "$1" == "install" ] \
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
@@ -124,11 +127,12 @@ elif [ -d $SASHIMONO_BIN ] ; then
                 \n\nDo you want to repair previous $evernode installation?" \
         && exit 1
 else
-    [ "$1" != "install" ] \
+    [ "$1" != "install" ] && [ "$1" != "transfer" ] \
         && echomult "$evernode host management tool
                 \nYour system is not registered on $evernode.
                 \nSupported commands:
-                \ninstall - Install Sashimono and register on $evernode"\
+                \ninstall - Install Sashimono and register on $evernode
+                \ntransfer - Initiate an $evernode transfer for your machine"\
         && exit 1
 fi
 mode=$1
@@ -137,7 +141,7 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$mode" == "transfer" ] && transfer=true || transfer=false
-    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    (! $transfer || $installed) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
 # Format the given KB number into GB units.
@@ -588,9 +592,12 @@ function set_transferee_address() {
 
 
 function set_host_xrpl_account() {
+    local account_validate_criteria="register"
+    [ ! -z $1 ] && account_validate_criteria=$1
 
     if $interactive; then
-        echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
+        [ "$account_validate_criteria" == "register" ] &&
+            echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
         local xrpl_address=""
         local xrpl_secret=""
         while true ; do
@@ -599,7 +606,7 @@ function set_host_xrpl_account() {
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
 
             echo "Checking account $xrpl_address..."
-            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address && xrpl_address="" && continue
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
 
             # Take hidden input and print empty echo (new line) at the end.
             read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
@@ -822,7 +829,9 @@ function reg_info() {
     echo ""
     if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
         local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
-        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl is-active $MB_XRPL_SERVICE)
+        local mb_user_id=$(id -u "$MB_XRPL_USER")
+        local mb_user_runtime_dir="/run/user/$mb_user_id"
+        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
         echo "Sashimono agent status: $sashimono_agent_status"
         echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
@@ -1065,23 +1074,23 @@ function delete_instance()
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}             # IP or DNS address.
-        init_peer_port=${4}       # Starting peer port for instances.
-        init_user_port=${5}       # Starting user port for instances.
-        countrycode=${6}          # 2-letter country code.
-        alloc_cpu=${7}            # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}          # Memory to allocate for contract instances.
-        alloc_swapKB=${9}         # Swap to allocate for contract instances.
-        alloc_diskKB=${10}        # Disk space to allocate for contract instances.
-        alloc_instcount=${11}     # Total contract instance count.
-        lease_amount=${12}        # Contract instance lease amount in EVRs.
-        rippled_server=${13}      # Rippled server URL
-        xrpl_account_address=${14} # XRPL account secret.
-        xrpl_account_secret=${15} # XRPL account secret.
-        email_address=${16}       # User email address
-        tls_key_file=${17}        # File path to the tls private key.
-        tls_cert_file=${18}       # File path to the tls certificate.
-        tls_cabundle_file=${19}   # File path to the tls ca bundle.
+        inetaddr=${3}              # IP or DNS address.
+        init_peer_port=${4}        # Starting peer port for instances.
+        init_user_port=${5}        # Starting user port for instances.
+        countrycode=${6}           # 2-letter country code.
+        alloc_cpu=${7}             # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}           # Memory to allocate for contract instances.
+        alloc_swapKB=${9}          # Swap to allocate for contract instances.
+        alloc_diskKB=${10}         # Disk space to allocate for contract instances.
+        alloc_instcount=${11}      # Total contract instance count.
+        lease_amount=${12}         # Contract instance lease amount in EVRs.
+        rippled_server=${13}       # Rippled server URL
+        xrpl_account_address=${14} # XRPL account address.
+        xrpl_account_secret=${15}  # XRPL account secret.
+        email_address=${16}        # User email address
+        tls_key_file=${17}         # File path to the tls private key.
+        tls_cert_file=${18}        # File path to the tls certificate.
+        tls_cabundle_file=${19}    # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1158,25 +1167,57 @@ elif [ "$mode" == "uninstall" ]; then
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
-    $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
-        while allowing you to transfer the registration to a preferred transferee.
-        \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+    # If evernode is not installed download setup helpers and call for transfer.
+    if $installed ; then
+        $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
+            while allowing you to transfer the registration to a preferred transferee.
+            \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
-    if ! $interactive ; then
-        transferee_address=${3}           # Address of the transferee.
+        if ! $interactive ; then
+            transferee_address=${3}           # Address of the transferee.
+        fi
+
+        # Set transferee based on the user input.
+        set_transferee_address
+
+        # Check contract condtion.
+        check_exisiting_contracts 0
+
+        # Initiate transferring.
+        init_evernode_transfer
+
+        # Execute oftware uninstallation (Force uninstall on quiet mode).
+        $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
+
+    else
+        if ! $interactive ; then
+            xrpl_account_address=${3} # XRPL account address.
+            xrpl_account_secret=${4}  # XRPL account secret.
+            transferee_address=${5}   # Address of the transferee.
+            rippled_server=${6}       # Rippled server URL
+        fi
+
+        init_setup_helpers
+
+        # Set rippled server based on the user input.
+        set_rippled_server
+        echo -e "Using Rippled server '$rippled_server'.\n"
+
+        # Set host account based on the user input.
+        set_host_xrpl_account "transfer"
+
+        # Set transferee based on the user input.
+        set_transferee_address
+
+        $interactive && ! confirm "\nThis will deregister $xrpl_account_address from $evernode
+            while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
+            \n\nAre you sure you want to transfer $evernode registration?" && exit 1
+
+        # Execute transfer from js helper.
+        exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address $xrpl_account_secret $transferee_address
+
+        rm -r $setup_helper_dir >/dev/null 2>&1
     fi
-
-    # Set transferee based on the user input.
-    set_transferee_address
-
-    # Check contract condtion.
-    check_exisiting_contracts 0
-
-    # Initiate transferring.
-    init_evernode_transfer
-
-    # Execute oftware uninstallation (Force uninstall on quiet mode).
-    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
 
     echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
 

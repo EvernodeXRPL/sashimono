@@ -715,11 +715,11 @@ class MessageBoard {
     }
 
     #getTrxHookParams(txn, paramName) {
-        for (const param of txn.HookParameters) {
-            if (paramName === param.name) {
-                return param.value;
-            }
-        }
+        const hookParams = txn.HookParameters;
+
+        if (hookParams.length > 1 && hookParams[0]?.value == paramName)
+            return hookParams[1]?.value
+
         return null;
     }
 

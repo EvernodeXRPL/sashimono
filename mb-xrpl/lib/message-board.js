@@ -635,15 +635,15 @@ class MessageBoard {
 
                                 for (const tx of transactions) {
                                     // Skip, if this transaction was previously considered.
-                                    const acquireRef = this.#getTrxMemoData(tx, evernode.EventTypes.ACQUIRE_REF);
+                                    const acquireRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_SUCCESS);
                                     if (acquireRef === trx.hash)
                                         continue loop1;
 
-                                    const extendRef = this.#getTrxMemoData(tx, evernode.EventTypes.EXTEND_REF);
+                                    const extendRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_SUCCESS);
                                     if (extendRef === trx.hash)
                                         continue loop1;
 
-                                    const refundRef = this.#getTrxMemoData(tx, evernode.EventTypes.REFUND_REF);
+                                    const refundRef = this.#getTrxHookParams(tx, evernode.EventTypes.REFUND);
                                     if (refundRef === trx.hash)
                                         continue loop1;
                                 }
@@ -714,10 +714,10 @@ class MessageBoard {
 
     }
 
-    #getTrxMemoData(txn, memoType) {
-        for (const memo of txn.Memos) {
-            if (memoType === memo.type) {
-                return memo.data;
+    #getTrxHookParams(txn, paramName) {
+        for (const param of txn.HookParameters) {
+            if (paramName === param.name) {
+                return param.value;
             }
         }
         return null;

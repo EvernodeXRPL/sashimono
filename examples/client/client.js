@@ -65,16 +65,16 @@ async function main() {
                     if (result.status == "ok")
                         console.log(`(ledger:${r.ledgerSeqNo})>> ${result.message}`);
                     else
-                        console.log(`(ledger:${r.ledgerSeqNo})>> Zip upload failed. reason: ${result.status}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> Zip upload failed. reason: ${result.message}`);
                 }
                 else if (result.type == "statusResult") {
                     if (result.status == "ok")
                         console.log(`(ledger:${r.ledgerSeqNo})>> ${result.message}`);
                     else
-                        console.log(`(ledger:${r.ledgerSeqNo})>> Status failed. reason: ${result.status}`);
+                        console.log(`(ledger:${r.ledgerSeqNo})>> Status failed. reason: ${result.message}`);
                 }
                 else {
-                    console.log("Unknown contract output.");
+                    console.log(`(ledger:${r.ledgerSeqNo})>> ${result.message}`);
                 }
             }
             catch (e)

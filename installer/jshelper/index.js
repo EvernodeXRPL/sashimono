@@ -27,6 +27,7 @@ const funcs = {
         const rippledUrl = args[0];
         const governorAddress = args[1];
         const accountAddress = args[2];
+        const validateFor = args[3] || "register";
 
         const xrplApi = new evernode.XrplApi(rippledUrl);
         await xrplApi.connect();
@@ -41,15 +42,29 @@ const funcs = {
             return { success: false, result: "Account not found." };
 
         await hostClient.connect();
-        if (await hostClient.isRegistered())
-            return { success: false, result: "Host already registered." };
+        const registered = await hostClient.isRegistered();
+        // For register validation the host should not be registered in evernode.
+        // For other validations host should be registered in evernode.
+        if (validateFor === "register") {
+            if (registered)
+                return { success: false, result: "Host is already registered." };
+        }
+        else if (!registered)
+            return { success: false, result: "Host is not registered." };
 
         // Check whether pending transfer exists.
         const isTransferPending = await hostClient.isTransferee();
-        const minEverBalance = isTransferPending ? 1 : hostClient.config.hostRegFee;
-        const currentBalance = await hostClient.getEVRBalance();
-        if (currentBalance < minEverBalance)
-            return { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
+
+        // For register validation check the available balance enough for transfer and non transfer registrations.
+        // For other validations there should not be a pending transfer for the host.
+        if (validateFor === "register") {
+            const minEverBalance = isTransferPending ? 1 : hostClient.config.hostRegFee;
+            const currentBalance = await hostClient.getEVRBalance();
+            if (currentBalance < minEverBalance)
+                return { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
+        }
+        else if (isTransferPending)
+            return { success: false, result: "There's a pending transfer for this host." };
 
         await hostClient.disconnect();
         await xrplApi.disconnect();
@@ -100,6 +115,36 @@ const funcs = {
         await xrplApi.disconnect();
 
         return { success: true, result: config[configName] };
+    },
+
+    'transfer': async (args) => {
+        checkParams(args, 4);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const accountSecret = args[3];
+        const transfereeAddress = args[4];
+
+        const xrplApi = new evernode.XrplApi(rippledUrl);
+        await xrplApi.connect();
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret, {
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress,
+            xrplApi: xrplApi
+        });
+
+        if (!await hostClient.xrplAcc.exists())
+            return { success: false, result: "Account not found." };
+
+        await hostClient.connect();
+
+        await hostClient.transfer(transfereeAddress || accountAddress);
+
+        await hostClient.disconnect();
+        await xrplApi.disconnect();
+
+        return { success: true };
     }
 }
 

@@ -326,6 +326,14 @@ function validate_rippled_url() {
     return 0
 }
 
+function validate_email_address() {
+    local emailAddress=$1
+    email_address_length=${#emailAddress}
+    ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." ) ||    
+        ( ! [[ $emailAddress =~ .+@.+ ]] && echo "Email address is invalid." ) ) || return 0
+    return 1
+}
+
 function set_inet_addr() {
 
     if $interactive && [ "$NO_DOMAIN" == "" ] ; then
@@ -540,17 +548,13 @@ function set_email_address() {
         local emailAddress=""
         while true ; do
             read -p "Specify the contact email address (this will be published on the ledger): " emailAddress </dev/tty
-            email_address_length=${#emailAddress}
-            ( ( ! [[ "$email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-            ( ! [[ $emailAddress =~ .+@.+ ]] && echo "Email address is invalid." ) ) || break
+            ! validate_email_address $emailAddress || break
         done
 
         email_address=$emailAddress
     fi
 
-    non_interactive_email_address_length=${#email_address}
-    ! ( ( ! [[ "$non_interactive_email_address_length" -le 40 ]] && echo "Email address length should not exceed 40 characters." )  ||    
-    ( ! [[ $email_address =~ .+@.+ ]] && echo "Email address is invalid." ) ) || exit 1
+    validate_email_address $email_address || exit 1
 }
 
 function set_rippled_server() {
@@ -1013,6 +1017,62 @@ function config() {
         echomult "Using the rippled address '$rippled_server'."
 
         update_mb=1
+
+    elif [ "$sub_mode" == "email" ] ; then
+    
+        local email_address=${2}    # Email address
+
+        local cfg_host_address=$(jq -r '.xrpl.address' $mbconfig)
+
+        local mbsecretconfig="$MB_XRPL_DATA/secret.cfg"
+        local cfg_host_secret=$(jq -r '.xrpl.secret' $mbsecretconfig)
+
+        [ ! -z $email_address ] && ! validate_email_address $email_address &&
+            echomult "\nUsage: evernode config email | evernode config email <email address>\n" &&
+            exit 1
+
+        # Get info of the host.
+        local host_info=$(sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN hostinfo) || exit 1
+        local cur_email_address=$(echo $host_info | jq -r '.email')
+            
+        [ -z $email_address ] && echomult "Your current email address is: $cur_email_address\n" && exit 0
+
+        [[ $cur_email_address == $email_address ]] && echomult "Email address is already configured!\n" && exit 0
+
+        echomult "Using the email address '$email_address'."
+
+        # Send update meassage to the registry.
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN update $email_address &&
+            echo "Could not update host info." && return 1
+
+        # If certbot installed, Sashimono might have been setup with letsencrypt certificates.
+        if command -v certbot &>/dev/null ; then
+            local inet_addr=$(jq -r '.hp.host_address' $saconfig)
+
+            local key_file="/etc/letsencrypt/live/$inetaddr/privkey.pem"
+            local cert_file="/etc/letsencrypt/live/$inetaddr/fullchain.pem"
+            local renewed_key_file="$RENEWED_LINEAGE/privkey.pem"
+            local sashimono_key_file="$SASHIMONO_DATA/contract_template/cfg/tlskey.pem"
+
+            # If sashimono containes the letsencrypt certificates, Update them with new email.
+            if ( [ -f $key_file ] && cmp -s $key_file $sashimono_key_file ) ||
+                ( [ -f $renewed_key_file ] && cmp -s $renewed_key_file $sashimono_key_file ) ; then
+                # Clean the certificates
+                echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
+                certbot -n revoke --cert-name $inet_addr
+
+                # Setup the certificates
+                echo "Running certbot certonly"
+                certbot certonly -n -d $inet_addr --agree-tos --email $email_address --standalone || return 1
+
+                # Update certificates in sashimono
+                apply_ssl "$key_file" "$cert_file"
+            fi
+        fi
+
+        # We do not need to restart services for email update.
+        echomult "\nSuccessfully changed the email address!\n" && exit 0
+
 
     else
         echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled] [arguments]\n" && exit 1

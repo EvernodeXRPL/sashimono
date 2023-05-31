@@ -58,6 +58,12 @@ async function main() {
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);
             }
+            else if (process.argv.length === 3 && process.argv[2] === 'hostinfo') {
+                await new Setup().hostInfo();
+            }
+            else if (process.argv.length === 4 && process.argv[2] === 'update') {
+                await new Setup().update(process.argv[3]);
+            }
             else if (process.argv.length >= 4 && process.argv[2] === 'governance') {
                 await GovernanceManager.handleCommand(process.argv[3], ...process.argv.slice(4));
             }

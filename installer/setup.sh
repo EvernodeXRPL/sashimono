@@ -547,7 +547,7 @@ function set_email_address() {
     if $interactive; then
         local emailAddress=""
         while true ; do
-            read -p "Specify the contact email address (this will be published on the ledger): " emailAddress </dev/tty
+            read -p "Specify the contact email address for your host (this will be published on the host registry and is publicly visible to anyone): " emailAddress </dev/tty
             ! validate_email_address $emailAddress || break
         done
 

@@ -1049,24 +1049,22 @@ function config() {
         if command -v certbot &>/dev/null ; then
             local inet_addr=$(jq -r '.hp.host_address' $saconfig)
 
-            local key_file="/etc/letsencrypt/live/$inetaddr/privkey.pem"
-            local cert_file="/etc/letsencrypt/live/$inetaddr/fullchain.pem"
+            local key_file="/etc/letsencrypt/live/$inet_addr/privkey.pem"
+            local cert_file="/etc/letsencrypt/live/$inet_addr/fullchain.pem"
             local renewed_key_file="$RENEWED_LINEAGE/privkey.pem"
             local sashimono_key_file="$SASHIMONO_DATA/contract_template/cfg/tlskey.pem"
 
             # If sashimono containes the letsencrypt certificates, Update them with new email.
-            if ( [ -f $key_file ] && cmp -s $key_file $sashimono_key_file ) ||
-                ( [ -f $renewed_key_file ] && cmp -s $renewed_key_file $sashimono_key_file ) ; then
-                # Clean the certificates
-                echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
-                certbot -n revoke --cert-name $inet_addr
+            if ( [ -f $key_file ] && cmp -s $key_file $sashimono_key_file ) || ( [ -f $renewed_key_file ] && cmp -s $renewed_key_file $sashimono_key_file ) ; then
 
-                # Setup the certificates
-                echo "Running certbot certonly"
-                certbot certonly -n -d $inet_addr --agree-tos --email $email_address --standalone || return 1
+                # Get the current letsencrypt certificate.
+                local lenc_acc_email=$(certbot show_account 2>/dev/null | grep "Email contact:" | cut -d ':' -f2 | sed 's/ *//g')
 
-                # Update certificates in sashimono
-                apply_ssl "$key_file" "$cert_file"
+                # Update account email only if previously configured email is same ad letsencrypt account email
+                # To ensure that current account is registered by sashimono
+                [[ $lenc_acc_email == $cur_email_address ]] && ! certbot -n update_account -m $email_address &&
+                   echo "Could not update the letsencrypt email." && return 1
+
             fi
         fi
 

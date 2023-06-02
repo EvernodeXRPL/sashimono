@@ -1073,7 +1073,7 @@ function config() {
 
 
     else
-        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled] [arguments]\n" && exit 1
+        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email] [arguments]\n" && exit 1
     fi
 
     local mb_user_id=$(id -u "$MB_XRPL_USER")

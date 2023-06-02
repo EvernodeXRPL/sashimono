@@ -1041,10 +1041,6 @@ function config() {
 
         echomult "Using the email address '$email_address'."
 
-        # Send update meassage to the registry.
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN update $email_address &&
-            echo "Could not update host info." && return 1
-
         # If certbot installed, Sashimono might have been setup with letsencrypt certificates.
         if command -v certbot &>/dev/null ; then
             local inet_addr=$(jq -r '.hp.host_address' $saconfig)
@@ -1067,6 +1063,10 @@ function config() {
 
             fi
         fi
+
+        # Send update meassage to the registry.
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN update $email_address &&
+            echo "Could not update host info." && return 1
 
         # We do not need to restart services for email update.
         echomult "\nSuccessfully changed the email address!\n" && exit 0

@@ -303,6 +303,43 @@ class Setup {
         await Promise.resolve(); // async placeholder.
     }
 
+    // Get host info.
+    async hostInfo() {
+
+        const acc = this.#getConfig(false).xrpl;
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
+        const hostInfo = await hostClient.getHostInfo();
+        
+        await hostClient.disconnect();
+
+        console.log(JSON.stringify(hostInfo, null, 2));
+    }
+
+    // Update host info.
+    async update(emailAddress) {
+
+        console.log("Updating host...");
+        const acc = this.#getConfig().xrpl;
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+
+        const hostInfo = await hostClient.getHostInfo();
+        await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress);
+        await hostClient.disconnect();
+    }
+
     // Burn the host minted URITokens at the de-registration.
     async burnMintedURITokens(xrplAcc) {
         // Get unsold URITokens.

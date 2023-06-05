@@ -97,8 +97,26 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 function setup_certbot() {
     stage "Setting up letsencrypt certbot"
 
-    # Install certbot via snap (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
-    snap install core && snap refresh core && snap install --classic certbot
+    # Check weather there's an existing certbot installation
+    if command -v certbot &>/dev/null; then
+        # Get the current registration email if there's any.
+        local lenc_acc_email=$(certbot show_account 2>/dev/null | grep "Email contact:" | cut -d ':' -f2 | sed 's/ *//g')
+
+        # If there's an existing registration with a different email and it has certificates, complain and return.
+        if [[ ! -z $lenc_acc_email ]] && [[ $lenc_acc_email != $email_address ]]; then
+            # If there are certificates complain and return. Otherwise update email.
+            local count=$(certbot certificates 2>/dev/null | grep -c "Certificate Name")
+            [ $count -gt 0 ] &&
+                echo "There's an existing letsencrypt registration with $lenc_acc_email, Please use the same email or update the letsencrypt email with certbot." &&
+                return 1
+
+            ! certbot -n update_account -m $email_address && ehco "Error when updating the existing letsencrypt account email." && return 1
+        fi
+    else
+        # Install certbot via snap (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
+        snap install core && snap refresh core && snap install --classic certbot
+    fi
+
     ! [ -f /snap/bin/certbot ] && echo "certbot not found" && return 1
     [ -f /usr/bin/certbot ] || ln -s /snap/bin/certbot /usr/bin/certbot || return 1
 

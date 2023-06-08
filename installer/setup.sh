@@ -1053,13 +1053,22 @@ function config() {
             # If sashimono containes the letsencrypt certificates, Update them with new email.
             if ( [ -f $key_file ] && cmp -s $key_file $sashimono_key_file ) || ( [ -f $renewed_key_file ] && cmp -s $renewed_key_file $sashimono_key_file ) ; then
 
-                # Get the current letsencrypt certificate.
+                # Get the current registration email if there's any.
                 local lenc_acc_email=$(certbot show_account 2>/dev/null | grep "Email contact:" | cut -d ':' -f2 | sed 's/ *//g')
 
-                # Update account email only if previously configured email is same ad letsencrypt account email
-                # To ensure that current account is registered by sashimono
-                [[ $lenc_acc_email == $cur_email_address ]] && ! certbot -n update_account -m $email_address &&
-                   echo "Could not update the letsencrypt email." && return 1
+                # If the emails are different, we need to update the letsencrypt email.
+                if [[ $lenc_acc_email != $email_address ]]; then
+                    # If there are other certificates from this letsencrypt account,
+                    # Complain that sashimono can't update the email since this account is used by other certificates.
+                    local count=$(certbot certificates 2>/dev/null | grep "Certificate Name" | grep -v -c "$inet_addr")
+                    [ $count -gt 0 ] &&
+                        echomult "Existing letsencrypt account with $lenc_acc_email has other certificates which are related to sashimono.\n
+                            So letsencrypt email cannot be changed, Please use the same email or update the letsencrypt email with certbot." &&
+                        return 1
+
+                    ! certbot -n update_account -m $email_address &&
+                        echo "Could not update the letsencrypt email." && return 1
+                fi
 
             fi
         fi

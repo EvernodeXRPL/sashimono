@@ -193,7 +193,7 @@ function check_sys_req() {
     local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
     local errors=""
-    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errs=" OS: $os $osversion (required: Ubuntu 20.04)\n"
+    ([ "$os" != "ubuntu" ] || [ "$osversion" != '"20.04"' ]) && errors=" OS: $os $osversion (required: Ubuntu 20.04)\n"
     [ $ramKB -lt 2000000 ] && errors="$errors RAM: $(GB $ramKB) (required: 2 GB RAM)\n"
     [ $swapKB -lt 2000000 ] && errors="$errors Swap: $(GB $swapKB) (required: 2 GB Swap)\n"
     [ $diskKB -lt 4000000 ] && errors="$errors Disk space (/home): $(GB $diskKB) (required: 4 GB)\n"

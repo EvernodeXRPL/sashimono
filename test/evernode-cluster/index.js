@@ -124,16 +124,16 @@ class ClusterManager {
 
         console.log(`Creating node ${nodeNumber} in ${host.address}`);
         try {
-            const instance = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubKeyHex, config)
-            if (!instance)
+            const result = await this.#evernodeService.acquireLease(host, contract.contract_id, contract.docker_image, ownerPubKeyHex, config)
+            if (!result.instance)
                 throw 'INST_CREATE_ERR'
             console.log(`Created node ${nodeNumber} in ${host.address}`);
             this.#instanceCount++;
-            this.#config.contracts[this.#contractIdx].cluster.push({ host: host.address, ...instance });
+            this.#config.contracts[this.#contractIdx].cluster.push({ host: host.address, acquire_ref_id: result.acquireRefId, ...result.instance });
             this.#hosts[hostIndex].activeInstances++;
             this.#hosts[hostIndex].acquiring = false;
 
-            return instance;
+            return result.instance;
         }
         catch (e) {
             this.#hosts[hostIndex].acquiring = false;
@@ -312,7 +312,7 @@ class ClusterManager {
         try {
             await instanceMgr.deployContract({
                 unl: contract.cluster.map(n => n.pubkey)
-            }, DEF_TIMEOUT);
+            }, contract.cluster, DEF_TIMEOUT);
         }
         catch (e) {
             throw { message: `Contract ${contract.name} deployment failed with.`, innerException: e };

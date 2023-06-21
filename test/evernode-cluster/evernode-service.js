@@ -30,7 +30,7 @@ class EvernodeService {
         }
 
         if (parseInt(lines[0].balance) < fundAmount) {
-            const amount = (fundAmount - lines[0].balance).toString();
+            const amount = Math.ceil(fundAmount - lines[0].balance).toString();
             console.log(`Funding ${amount} EVRs to ${this.#tenantAddress}`)
             await new evernode.XrplAccount(this.#foundationAddress, this.#foundationSecret).makePayment(this.#tenantAddress, amount, 'EVR', this.#tenantClient.config.evrIssuerAddress);
         }
@@ -80,7 +80,7 @@ class EvernodeService {
         console.log(`Acquiring lease in Host ${host.address} (currently ${host.activeInstances} instances)`);
         const result = await tenant.acquireLease(host.address, requirement, { timeout: timeout });
         console.log(`Tenant received instance '${result.instance.name}'`);
-        return result.instance;
+        return result;
     }
 
     async extendLease(hostAddress, instanceName, moments) {

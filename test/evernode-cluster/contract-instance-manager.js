@@ -27,12 +27,12 @@ class ContractInstanceManager {
         this.#contractBundle = contractBundle;
     }
 
-    async deployContract(config, uploadTimeout = null) {
+    async deployContract(config, cluster, uploadTimeout = null) {
         this.#tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), 'evncluster'));
 
         try {
             const hpc = await this.#getHotPocketConnection();
-            await this.#uploadBundle(hpc, this.#contractBundle, config, uploadTimeout);
+            await this.#uploadBundle(hpc, this.#contractBundle, config, cluster, uploadTimeout);
             await hpc.close();
         }
         catch (e) {
@@ -58,7 +58,7 @@ class ContractInstanceManager {
         return hpc;
     }
 
-    async #uploadBundle(hpc, bundleZipFile, config, uploadTimeout = null) {
+    async #uploadBundle(hpc, bundleZipFile, config, cluster, uploadTimeout = null) {
 
         return new Promise(async (resolve, reject) => {
 
@@ -124,6 +124,27 @@ class ContractInstanceManager {
                 let readConfig = JSON.parse(buf);
                 updateConfig(readConfig, config);
                 await fs.writeFile(configFile, JSON.stringify(readConfig, null, 2));
+
+                await fs.writeFile(`${bundleDir}/cluster.json`, JSON.stringify({
+                    pendingNodes: [],
+                    nodes: cluster.map(n => {
+                        return {
+                            refId: n.acquire_ref_id,
+                            contractId: n.acquire_ref_id,
+                            createdOnLcl: 0,
+                            host: n.host,
+                            ip: n.ip,
+                            name: n.name,
+                            peerPort: parseInt(n.peer_port),
+                            pubkey: n.pubkey,
+                            userPort: parseInt(n.user_port),
+                            isUnl: true,
+                            isQuorum: true,
+                            lifeMoments: 1,
+                            targetLifeMoments: 1
+                        }
+                    })
+                }, null, 2))
 
                 execSync(`cd ${bundleDir} && zip -r ${bundlePath} ./*`);
             }

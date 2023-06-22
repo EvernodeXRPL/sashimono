@@ -68,6 +68,10 @@ class EvernodeService {
         return allHosts.filter(h => (h.maxInstances - h.activeInstances) > 0 && h.version >= "0.6.0");
     }
 
+    async getMoment() {
+        return await this.#registryClient.getMoment();
+    }
+
     async acquireLease(host, contractId, image, ownerPubKey, config, timeout = 60000) {
         let requirement = {
             owner_pubkey: ownerPubKey,

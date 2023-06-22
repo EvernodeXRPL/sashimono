@@ -27,12 +27,12 @@ class ContractInstanceManager {
         this.#contractBundle = contractBundle;
     }
 
-    async deployContract(config, cluster, uploadTimeout = null) {
+    async deployContract(config, contract, uploadTimeout = null) {
         this.#tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), 'evncluster'));
 
         try {
             const hpc = await this.#getHotPocketConnection();
-            await this.#uploadBundle(hpc, this.#contractBundle, config, cluster, uploadTimeout);
+            await this.#uploadBundle(hpc, this.#contractBundle, config, contract, uploadTimeout);
             await hpc.close();
         }
         catch (e) {
@@ -58,7 +58,7 @@ class ContractInstanceManager {
         return hpc;
     }
 
-    async #uploadBundle(hpc, bundleZipFile, config, cluster, uploadTimeout = null) {
+    async #uploadBundle(hpc, bundleZipFile, config, contract, uploadTimeout = null) {
 
         return new Promise(async (resolve, reject) => {
 
@@ -127,7 +127,7 @@ class ContractInstanceManager {
 
                 await fs.writeFile(`${bundleDir}/cluster.json`, JSON.stringify({
                     pendingNodes: [],
-                    nodes: cluster.map(n => {
+                    nodes: contract.cluster.map(n => {
                         return {
                             refId: n.acquire_ref_id,
                             contractId: n.acquire_ref_id,
@@ -140,8 +140,9 @@ class ContractInstanceManager {
                             userPort: parseInt(n.user_port),
                             isUnl: true,
                             isQuorum: true,
-                            lifeMoments: 1,
-                            targetLifeMoments: 1
+                            lifeMoments: n.extended ? contract.target_moments_count : 1,
+                            targetLifeMoments: n.extended ? contract.target_moments_count : 1,
+                            createdMoment: n.created_moment
                         }
                     })
                 }, null, 2))

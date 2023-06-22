@@ -129,7 +129,12 @@ class ClusterManager {
                 throw 'INST_CREATE_ERR'
             console.log(`Created node ${nodeNumber} in ${host.address}`);
             this.#instanceCount++;
-            this.#config.contracts[this.#contractIdx].cluster.push({ host: host.address, acquire_ref_id: result.acquireRefId, ...result.instance });
+            this.#config.contracts[this.#contractIdx].cluster.push({
+                host: host.address,
+                acquire_ref_id: result.acquireRefId,
+                created_moment: await this.#evernodeService.getMoment(),
+                ...result.instance
+            });
             this.#hosts[hostIndex].activeInstances++;
             this.#hosts[hostIndex].acquiring = false;
 
@@ -312,7 +317,7 @@ class ClusterManager {
         try {
             await instanceMgr.deployContract({
                 unl: contract.cluster.map(n => n.pubkey)
-            }, contract.cluster, DEF_TIMEOUT);
+            }, contract, DEF_TIMEOUT);
         }
         catch (e) {
             throw { message: `Contract ${contract.name} deployment failed with.`, innerException: e };

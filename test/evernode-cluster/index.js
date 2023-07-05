@@ -6,9 +6,10 @@ const HotPocket = require('hotpocket-js-client');
 
 const CONFIG_FILE = "config.json";
 const FUNDING_EVR_PER_ROUND = 6000;
-const MAX_MEMO_PEER_LIMIT = 10;
+const HOST_LOG_FILE = "log.json";
+const MAX_MEMO_PEER_LIMIT = 8;
 const FAIL_THRESHOLD = 1;
-const DEF_TIMEOUT = 60000;
+const DEF_TIMEOUT = 300000;
 const CLUSTER_CHUNK_RATIO = 0.2;
 
 async function sleep(ms) {
@@ -21,6 +22,7 @@ async function sleep(ms) {
 
 class ClusterManager {
     #config = {};
+    #hostsLogs = {};
     #evernodeService = null;
     #contractIdx;
     #instanceCount;
@@ -78,6 +80,10 @@ class ClusterManager {
         await fs.writeFile(CONFIG_FILE, JSON.stringify(this.#config, null, 2)).catch(console.error);
     }
 
+    async #writeLogs() {
+        await fs.writeFile(HOST_LOG_FILE, JSON.stringify(this.#hostsLogs, null, 2)).catch(console.error);
+    }
+
     async init() {
         await this.#readConfig();
         this.#evernodeService = new EvernodeService(this.#config.accounts);
@@ -89,6 +95,12 @@ class ClusterManager {
             !this.#config.accounts.blacklist_hosts.includes(h.address) &&
             (!this.#config.accounts.preferred_hosts || !this.#config.accounts.preferred_hosts.length || this.#config.accounts.preferred_hosts.includes(h.address)))
             .sort(() => Math.random() - 0.5);
+        for (const host of this.#hosts) {
+            this.#hostsLogs[host.address] = {
+                count: 0,
+                errors: []
+            }
+        }
     }
 
     async #getExtendingFundAmount() {
@@ -136,17 +148,34 @@ class ClusterManager {
                 ...result.instance
             });
             this.#hosts[hostIndex].activeInstances++;
+            this.#hostsLogs[host.address].count++;
             this.#hosts[hostIndex].acquiring = false;
 
+            let attempt = 0;
+            while (true) {
+                attempt++;
+                try {
+                    await this.checkAliveness(result.instance);
+                    break;
+                }
+                catch (e) {
+                    if (attempt > 3)
+                        throw e;
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            await this.#writeLogs();
             return result.instance;
         }
         catch (e) {
             this.#hosts[hostIndex].acquiring = false;
-
+            this.#hostsLogs[host.address].errors.push(e.reason || e);
             // If the reason is lack of EVRs, fund again
             if (e.content?.code == 'tecINSUFFICIENT_FUNDS') {
                 await this.#evernodeService.fundTenant(FUNDING_EVR_PER_ROUND);
             }
+            await this.#writeLogs();
             throw { message: `Error while creating the node ${nodeNumber} in ${host.address}.`, innerException: e };
         }
     }
@@ -280,6 +309,13 @@ class ClusterManager {
             await Promise.all(promises);
 
         }
+    }
+
+    async checkAliveness(instance) {
+        let contract = this.#config.contracts[this.#contractIdx];
+        const ownerKeys = await HotPocket.generateKeys(contract.owner_privatekey);
+        const instanceMgr = new ContractInstanceManager(ownerKeys, instance.pubkey, instance.ip, instance.user_port, instance.contractId, contract.bundle_path);
+        await instanceMgr.checkAliveness();
     }
 
     async deploy() {

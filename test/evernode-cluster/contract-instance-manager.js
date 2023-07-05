@@ -43,6 +43,12 @@ class ContractInstanceManager {
         }
     }
 
+    async checkAliveness() {
+        const hpc = await this.#getHotPocketConnection();
+        hpc.clear(HotPocket.events.contractOutput);
+        await hpc.close();
+    }
+
     async #getHotPocketConnection() {
         const server = `wss://${this.#ip}:${this.#userPort}`
         const hpc = await HotPocket.createClient([server], this.#ownerKeys, {
@@ -129,20 +135,10 @@ class ContractInstanceManager {
                     pendingNodes: [],
                     nodes: contract.cluster.map(n => {
                         return {
-                            refId: n.acquire_ref_id,
-                            contractId: n.acquire_ref_id,
-                            createdOnLcl: 0,
-                            host: n.host,
-                            ip: n.ip,
-                            name: n.name,
-                            peerPort: parseInt(n.peer_port),
                             pubkey: n.pubkey,
-                            userPort: parseInt(n.user_port),
-                            isUnl: true,
-                            isQuorum: true,
-                            lifeMoments: n.extended ? contract.target_moments_count : 1,
-                            targetLifeMoments: n.extended ? contract.target_moments_count : 1,
-                            createdMoment: n.created_moment
+                            ip: n.ip,
+                            peerPort: parseInt(n.peer_port),
+                            userPort: parseInt(n.user_port)
                         }
                     })
                 }, null, 2))

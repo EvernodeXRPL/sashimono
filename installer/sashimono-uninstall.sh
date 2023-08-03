@@ -50,10 +50,10 @@ function remove_evernode_auto_updater() {
 
 function cleanup_certbot_ssl() {
     # revoke/delete certs if certbot is used.
-    if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ] ; then
+    if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ]; then
         local inet_addr=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)
         local deploy_hook_script="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inet_addr.sh"
-        if [ -f $deploy_hook_script ] ; then
+        if [ -f $deploy_hook_script ]; then
             echo "Cleaning up letsencrypt ssl certs for '$inet_addr'"
             rm $deploy_hook_script
             certbot -n revoke --cert-name $inet_addr
@@ -62,6 +62,10 @@ function cleanup_certbot_ssl() {
             echo "Cleaning up firewall rule for SSL validation"
             ufw delete allow 80/tcp
         fi
+
+        # If there are no certificates unregister.
+        local count=$(certbot certificates 2>/dev/null | grep -c "Certificate Name")
+        [ $count -eq 0 ] && certbot unregister -n
     fi
 }
 
@@ -200,9 +204,9 @@ echo "Deleting binaries..."
 rm -r $SASHIMONO_BIN
 
 if [ "$UPGRADE" == "0" ]; then
-    
+
     cleanup_certbot_ssl
-    
+
     echo "Deleting data directory..."
     rm -r $SASHIMONO_DATA
 fi

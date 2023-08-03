@@ -56,6 +56,7 @@ namespace msg
         std::optional<size_t> proc_cpu_seconds;
         std::optional<size_t> proc_mem_bytes;
         std::optional<size_t> proc_ofd_count;
+        std::optional<uint64_t> exec_timeout;
     };
 
     struct contract_config
@@ -190,6 +191,7 @@ namespace msg
     constexpr const char *FLD_PROC_CPU_SECS = "proc_cpu_seconds";
     constexpr const char *FLD_PROC_MEM_BYTES = "proc_mem_bytes";
     constexpr const char *FLD_PROC_OFD_COUNT = "proc_ofd_count";
+    constexpr const char *FLD_EXEC_TIMEOUT = "exec_timeout";
     constexpr const char *FLD_LOG = "log";
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";

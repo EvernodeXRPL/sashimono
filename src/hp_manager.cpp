@@ -488,7 +488,8 @@ namespace hp
             vacant_ports.push_back(info.assigned_ports);
 
         // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1) {
+        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
+        {
             error_msg = USER_UNINSTALL_ERROR;
             return -1;
         }
@@ -736,6 +737,9 @@ namespace hp
 
             if (config.contract.round_limits.proc_ofd_count.has_value())
                 d["contract"]["round_limits"]["proc_ofd_count"] = config.contract.round_limits.proc_ofd_count.value();
+
+            if (config.contract.round_limits.exec_timeout.has_value())
+                d["contract"]["round_limits"]["exec_timeout"] = config.contract.round_limits.exec_timeout.value();
 
             if (config.contract.log.max_mbytes_per_file.has_value())
                 d["contract"]["log"]["max_mbytes_per_file"] = config.contract.log.max_mbytes_per_file.value();

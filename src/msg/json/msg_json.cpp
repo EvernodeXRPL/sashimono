@@ -365,6 +365,9 @@ namespace msg::json
 
                 if (round_limits.contains(msg::FLD_PROC_OFD_COUNT))
                     msg.config.contract.round_limits.proc_ofd_count = round_limits[msg::FLD_PROC_OFD_COUNT].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_EXEC_TIMEOUT))
+                    msg.config.contract.round_limits.exec_timeout = round_limits[msg::FLD_EXEC_TIMEOUT].as<uint64_t>();
             }
 
             if (contract.contains(msg::FLD_LOG))

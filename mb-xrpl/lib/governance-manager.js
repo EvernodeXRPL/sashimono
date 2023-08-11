@@ -152,7 +152,7 @@ class GovernanceManager {
     async reportDudHost(dudHostAddress, hostClient) {
         try {
             await hostClient.connect();
-            await hostClient.reportDudHost(dudHostAddress)
+            await hostClient.reportDudHost(dudHostAddress);
         } catch (e) {
             throw (typeof e == 'object' ? (e.code || 'ERROR_IN_REPORTING_DUD_HOST') : e);
         }
@@ -168,7 +168,7 @@ class GovernanceManager {
     static async handleCommand(command, ...args) {
         let hostClient = null;
 
-        // Secret is needed for propose and withdraw in order to send the transaction.
+        // Secret is needed for propose, withdraw, and report in order to send the transaction.
         // Root access is needed in order to access the secret config.
         // Vote and unvote need write access for the governance config.
         if ((command == 'propose' || command === 'withdraw' || command === 'vote' || command === 'unvote' || command === 'report') && process.getuid() !== 0)
@@ -176,7 +176,7 @@ class GovernanceManager {
 
         // Host client is only needed for some commands.
         if (command == 'propose' || command === 'withdraw' || command === 'vote' || command === 'status' || command === 'report') {
-            // Secret is needed for propose and withdraw in order to send the transaction
+            // Secret is needed for propose, withdraw, and report in order to send the transaction
             const sashiMBConfig = ConfigHelper.readConfig(appenv.CONFIG_PATH,
                 (command == 'propose' || command === 'withdraw' || command === 'report') ? appenv.SECRET_CONFIG_PATH : null);
             setEvernodeDefaults(sashiMBConfig.xrpl.governorAddress, sashiMBConfig.xrpl.rippledServer);

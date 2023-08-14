@@ -1319,6 +1319,7 @@ elif [ "$mode" == "governance" ]; then
             \nvote [candidateId] - Vote for a governance candidate.
             \nunvote [candidateId] - Remove vote from voted governance candidate.
             \nstatus - Get governance info of this host.
+            \nreport [dudHostAddress] - Report a dud host.
             \nhelp - Print help." && exit 0
     ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 

@@ -153,6 +153,8 @@ class GovernanceManager {
         try {
             await hostClient.connect();
             await hostClient.reportDudHost(dudHostAddress);
+            const id = evernode.StateHelpers.getDudHostCandidateId(dudHostAddress);
+            return id;
         } catch (e) {
             throw (typeof e == 'object' ? (e.code || 'ERROR_IN_REPORTING_DUD_HOST') : e);
         }
@@ -205,8 +207,8 @@ class GovernanceManager {
             console.log(JSON.stringify(status, null, 2));
         }
         else if (args.length === 1 && command === 'report') {
-            await mgr.reportDudHost(args[0], hostClient);
-            console.log(`Successfully reported the dud host ${args[0]}.`);
+            const id = await mgr.reportDudHost(args[0], hostClient);
+            console.log(`Successfully proposed the dud host candidate ${id}.`);
         }
         else {
             throw "Invalid args.";

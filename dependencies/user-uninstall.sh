@@ -90,6 +90,14 @@ fi
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"
 
+ipv6file=/home/$user/.outbound_ipv6
+if [ -f $ipv6file ]; then
+    echo "Cleaning up ipv6 outbound address assignment..."
+    local ipv6addr=$(cat .ipv6file)
+    local netinterface=$(ip -6 -br addr | grep $ipv6addr | awk '{ print $1 }')
+    ip addr del $ipv6addr dev $netinterface
+fi
+
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"

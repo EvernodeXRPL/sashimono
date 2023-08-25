@@ -459,6 +459,41 @@ function set_country_code() {
     fi
 }
 
+function set_ipv6_subnet() {
+
+    if $interactive ; then
+
+        $ipv6_subnet="-"
+        $ipv6_net_interface="-"
+
+        echomult "If your host has IPv6 support, Evernode can assign individual outbound IPv6 addresses to each
+            contract instance. This will prevent your host's primary IP address from getting blocked by external
+            services in case many contracts on your host attempt to contact the same external service."
+
+        ! confirm "\nDoes your host have an IPv6 subnet assigned to it? (The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\")" && return 0
+    
+        while true; do
+            local subnet_input
+            read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
+            local validated_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
+            [ -z "$validated_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid CIDR subnet in the format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
+            local net_interfaces=$(ip -6 -br addr | grep $validated_subnet)
+            local interface_count=$(echo "$net_interfaces" | wc -l)
+
+            if [ -n "$net_interfaces" ]; then
+                echo "Could not find a network interface with the specified ipv6 subnet."
+            if [ "$interface_count" -eq 1 ]; then
+                echo "Found more than 1 network interface with the specified upv6 subnet."
+                echo $net_interfaces
+            else
+                ipv6_subnet=$validated_subnet
+                ipv6_net_interface=$(echo $net_interfaces | awk '{ print $1 }')
+            fi
+        done
+    fi
+
+}
+
 function set_cgrules_svc() {
     local filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
     if [ -n "$filepath" ] ; then
@@ -672,9 +707,9 @@ function install_evernode() {
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
     ! create_evernode_alias && install_failure
 
-    # Adding ip address as the host description.
-    # Currently the domain address saved only in account_info and an empty value in Hook states )
-    description=""
+    # Currently the domain address saved only in account_info and an empty value in Hook states.
+    # Set description to empty value ('_' will be treated as empty)
+    description="_"
 
     echo "Installing Sashimono..."
 
@@ -684,7 +719,8 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address \
+                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -1158,6 +1194,8 @@ if [ "$mode" == "install" ]; then
         tls_key_file=${17}         # File path to the tls private key.
         tls_cert_file=${18}        # File path to the tls certificate.
         tls_cabundle_file=${19}    # File path to the tls ca bundle.
+        ipv6_subnet=${20}          # ipv6 subnet to be used for ipv6 instance address assignment.
+        ipv6_net_interface=${21}   # ipv6 bound network interface to be used for outbound communication.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1192,6 +1230,9 @@ if [ "$mode" == "install" ]; then
 
     set_country_code
     echo -e "Using '$countrycode' as country code.\n"
+
+    set_ipv6_subnet
+    [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet ipv6 subnet on $ipv6_net_interface for contract instances.\n"
 
     set_cgrules_svc
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"

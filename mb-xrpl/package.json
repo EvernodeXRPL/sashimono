@@ -6,7 +6,8 @@
     },
     "dependencies": {
         "evernode-js-client": "0.6.13",
-        "sqlite3": "5.0.2"
+        "sqlite3": "5.0.2",
+        "ip6": "0.2.10"
     },
     "devDependencies": {
         "eslint": "8.3.0"

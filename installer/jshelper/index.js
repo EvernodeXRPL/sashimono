@@ -145,6 +145,31 @@ const funcs = {
         await xrplApi.disconnect();
 
         return { success: true };
+    },
+
+    'ip6-getsubnet': async (args) => {
+        checkParams(args, 1);
+
+        // Expecting an ipv6 subnet CIDR string as the argument.
+        const [ip, prefixLen] = args[0].split('/');
+
+        if (ip && prefixLen && !isNaN(prefixLen)) {
+            const { default: ip6 } = await import("ip6");
+
+            try {
+                const subnetAddr = ip6.divideSubnet(ip, prefixLen, prefixLen, 1)[0];
+                // Return the abbreviated subnet address as the output value.
+                if (subnetAddr) {
+                    return { success: true, result: ip6.abbreviate(subnetAddr) };
+                }
+            }
+            catch {
+                // Silent catch so that we don't log exceptions to console.
+                // This will be treated as ip validation failure.
+            }
+        }
+
+        return { success: false };
     }
 }
 

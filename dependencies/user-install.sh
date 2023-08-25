@@ -15,9 +15,11 @@ user_port=$9
 docker_image=${10}
 docker_registry=${11}
 outbound_ipv6=${12}
+outbound_net_interface=${13}
+
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
     [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] ||
-    [ -z "$docker_image" ] || [ -z "$docker_registry" ] || [ -z "$outbound_ipv6" ]; then
+    [ -z "$docker_image" ] || [ -z "$docker_registry" ] || [ -z "$outbound_ipv6" ] || [ -z "$outbound_net_interface" ]; then
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -32,6 +34,7 @@ script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 docker_service="docker.service"
 docker_pull_timeout_secs=120
+cleanup_script=$user_dir/uninstall_cleanup.sh
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -161,9 +164,14 @@ echo "[Service]
     Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$docker_service_override_conf
 
 # We need to enable ipv6 configurations if outbound ipv6 address is specified.
-if [ "$outbound_ipv6" != "-"]; then
-    # Pass the relevant ipv6 parameters to rootlesskit flags.rootlesskit will in turn pass these to slirp4nets.
-    echo "    Environment=\"DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=--ipv6 --outbound-addr6=$outbound_ipv6\"" >>$docker_service_override_conf
+if [ "$outbound_ipv6" != "-"] && [ "$outbound_net_interface" != "-"]; then
+    
+    # Pass the relevant ipv6 parameters to rootlesskit flags. rootlesskit will in turn pass these to slirp4nets.
+    # Also apply ipv6 route configuration patch in the dockerd process namespace (credits: https://github.com/containers/podman/issues/15850#issuecomment-1320028298)
+    echo "
+    Environment=\"DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=--ipv6 --outbound-addr6=$outbound_ipv6\"
+    ExecStartPost=/bin/bash -c 'nsenter -U --preserve-credentials -n -t $(pgrep -u $user dockerd) /bin/bash -c \"ip addr add fd00::100/64 dev tap0 && ip route add default via fd00::2 dev tap0\"'
+    " >>$docker_service_override_conf
 
     # Set the predefined ipv6 parameters to docker daemon config.
     mkdir -p $user_dir/.config/docker && vim $user_dir/.config/docker/daemon.json
@@ -174,21 +182,12 @@ if [ "$outbound_ipv6" != "-"]; then
         \"ip6tables\": true,
         \"mtu\": 65520
     }"
+    
+    # Add the outbound ipv6 address to the specified network interface.
+    ip addr add $outbound_ipv6 $outbound_net_interface
 
-    # TODO: ****important**** We need a mechanism to run the following command ever time dockerd proces is started by systemd:
-    # This command opens up the dockerd process namespace and performs some static ip route configurations in that namespace
-    # that are required for ipv6 outbound address.
-    # Credits: https://github.com/containers/podman/issues/15850#issuecomment-1320028298
-    # nsenter -U --preserve-credentials -n -t \$(pgrep -u $user dockerd) bash -c 'ip addr add fd00::100/64 dev tap0 && ip route add default via fd00::2 dev tap0'
-
-    # TODO: ***important***
-    # We need to add the outbound ipv6 address to the host's main network interface.
-    # We may be able to find the correct interface with this command: ip -6 -br addr
-    # We may also need to get the ipv6 subnet from the administrator. ip -6 -br addr | grep <subnet>
-    # ip addr add $outbound_ipv6 dev <interface name>
-
-    # Store the oubound ipv6 address in a text file so we can use it to cleanup at user uninstall script.
-    echo $outbound_ipv6 >$user_dir/.outbound_ipv6
+    # Add instructions to the cleanup script so the outbound ip assignment will be removed upon user install.
+    echo "ip addr del $outbound_ipv6 $outbound_net_interface" >>$cleanup_script
 fi
 
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).

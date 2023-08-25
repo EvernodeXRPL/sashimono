@@ -26,6 +26,7 @@ user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
+cleanup_script=$user_dir/uninstall_cleanup.sh
 
 echo "Uninstalling user '$user'."
 
@@ -90,12 +91,10 @@ fi
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"
 
-ipv6file=/home/$user/.outbound_ipv6
-if [ -f $ipv6file ]; then
-    echo "Cleaning up ipv6 outbound address assignment..."
-    local ipv6addr=$(cat .ipv6file)
-    local netinterface=$(ip -6 -br addr | grep $ipv6addr | awk '{ print $1 }')
-    ip addr del $ipv6addr dev $netinterface
+if [ -f $cleanup_script ]; then
+    echo "Executing cleanup script..."
+    chmod +x $cleanup_script
+    /bin/bash -c $cleanup_script
 fi
 
 echo "Deleting user '$user'"

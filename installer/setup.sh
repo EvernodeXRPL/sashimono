@@ -15,6 +15,8 @@ cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 ramKB_per_instance=524288
 instances_per_core=3
+max_non_ipv6_instances=5
+max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
@@ -482,9 +484,11 @@ function set_ipv6_subnet() {
             
             # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
             local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet)"
+            local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
             local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
             local interface_count=$(echo "$net_interfaces" | wc -l)
 
+            [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
             [ ! -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
             [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified upv6 subnet." && echo "$net_interfaces" && continue
 
@@ -499,6 +503,9 @@ function set_ipv6_subnet() {
                     # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
                     local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
                     [ -z "$nested_subnet" ] && echo "Invalid nested ipv6 subnet specified." && continue
+                    
+                    local prefix_len="$(cut -d'/' -f2 <<<$nested_subnet)"
+                    [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
 
                     ipv6_subnet=$nested_subnet
                     break
@@ -529,14 +536,19 @@ function set_instance_alloc() {
 
     # If instance count is not specified, decide it based on some rules.
     if [ -z $alloc_instcount ]; then
+
         # Instance count based on total RAM
         local ram_c=$(( alloc_ramKB / ramKB_per_instance ))
         # Instance count based on no. of CPU cores.
         local cores=$(grep -c ^processor /proc/cpuinfo)
         local cpu_c=$(( cores * instances_per_core ))
-
-        # Final instance count will be the lower of the two.
+        # Hardware spec-based maximum instance count will be the lower of the two.
         alloc_instcount=$(( ram_c < cpu_c ? ram_c : cpu_c ))
+
+        # If the host does not have a ipv6 subnet, limit the max instance count further.
+        if [ -z "$ipv6_subnet" ] && [ $alloc_instcount -gt $max_non_ipv6_instances ] ; then
+            $alloc_instcount=$max_non_ipv6_instances
+        fi
     fi
 
 

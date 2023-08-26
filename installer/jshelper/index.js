@@ -173,8 +173,8 @@ const funcs = {
     'ip6-nested-subnet': async (args) => {
         checkParams(args, 2);
 
-        const nestedSubnet = args[0];
-        const primarySubnet = args[1];
+        const primarySubnet = args[0];
+        const nestedSubnet = args[1];
 
         // Expecting ipv6 subnet CIDR strings as the arguments.
         const [primaryIp, primaryPrefixLen] = primarySubnet.split('/');

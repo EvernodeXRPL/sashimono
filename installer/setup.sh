@@ -465,14 +465,14 @@ function set_ipv6_subnet() {
 
     if $interactive ; then
 
-        $ipv6_subnet="-"
-        $ipv6_net_interface="-"
+        ipv6_subnet="-"
+        ipv6_net_interface="-"
 
         echomult "If your host has IPv6 support, Evernode can assign individual outbound IPv6 addresses to each
             contract instance. This will prevent your host's primary IP address from getting blocked by external
             services in case many contracts on your host attempt to contact the same external service."
 
-        ! confirm "\nDoes your host have an IPv6 subnet assigned to it? (The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\")" && return 0
+        ! confirm "\nDoes your host have an IPv6 subnet assigned to it? The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\"" && return 0
     
         while true; do
             local subnet_input
@@ -489,20 +489,20 @@ function set_ipv6_subnet() {
             local interface_count=$(echo "$net_interfaces" | wc -l)
 
             [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
-            [ ! -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
+            [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
             [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified upv6 subnet." && echo "$net_interfaces" && continue
 
             ipv6_subnet=$primary_subnet
             ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
 
-            if ! confirm "\n Do you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
+            if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
 
                 while true; do
                     read -p "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
                     
                     # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
                     local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
-                    [ -z "$nested_subnet" ] && echo "Invalid nested ipv6 subnet specified." && continue
+                    [ -z "$nested_subnet" ] && echo "Invalid nested IPv6 subnet specified." && continue
                     
                     local prefix_len="$(cut -d'/' -f2 <<<$nested_subnet)"
                     [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
@@ -1243,8 +1243,9 @@ if [ "$mode" == "install" ]; then
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-    if [ "$NO_MB" == "" ]; then
-        init_setup_helpers
+    init_setup_helpers
+
+    if [ "$NO_MB" == "" ]; then    
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
         set_host_xrpl_account
@@ -1261,7 +1262,7 @@ if [ "$mode" == "install" ]; then
     echo -e "Using '$countrycode' as country code.\n"
 
     set_ipv6_subnet
-    [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet ipv6 subnet on $ipv6_net_interface for contract instances.\n"
+    [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
 
     set_cgrules_svc
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"

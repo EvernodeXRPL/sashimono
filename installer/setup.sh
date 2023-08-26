@@ -475,20 +475,37 @@ function set_ipv6_subnet() {
         while true; do
             local subnet_input
             read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
-            local validated_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
-            [ -z "$validated_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid CIDR subnet in the format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
-            local net_interfaces=$(ip -6 -br addr | grep $validated_subnet)
+            
+            # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+            local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
+            [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
+            
+            # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
+            local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet)"
+            local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
             local interface_count=$(echo "$net_interfaces" | wc -l)
 
-            if [ -n "$net_interfaces" ]; then
-                echo "Could not find a network interface with the specified ipv6 subnet."
-            if [ "$interface_count" -eq 1 ]; then
-                echo "Found more than 1 network interface with the specified upv6 subnet."
-                echo $net_interfaces
-            else
-                ipv6_subnet=$validated_subnet
-                ipv6_net_interface=$(echo $net_interfaces | awk '{ print $1 }')
+            [ ! -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
+            [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified upv6 subnet." && echo "$net_interfaces" && continue
+
+            ipv6_subnet=$primary_subnet
+            ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
+
+            if ! confirm "\n Do you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
+
+                while true; do
+                    read -p "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
+                    
+                    # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+                    local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
+                    [ -z "$nested_subnet" ] && echo "Invalid nested ipv6 subnet specified." && continue
+
+                    ipv6_subnet=$nested_subnet
+                    break
+                done
             fi
+
+            break
         done
     fi
 

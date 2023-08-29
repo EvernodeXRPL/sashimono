@@ -174,14 +174,14 @@ if [ "$outbound_ipv6" != "-"] && [ "$outbound_net_interface" != "-"]; then
     " >>$docker_service_override_conf
 
     # Set the predefined ipv6 parameters to docker daemon config.
-    mkdir -p $user_dir/.config/docker && vim $user_dir/.config/docker/daemon.json
+    mkdir -p $user_dir/.config/docker
     echo "{
         \"experimental\": true,
         \"ipv6\": true,
         \"fixed-cidr-v6\": \"2001:db8:1::/64\",
         \"ip6tables\": true,
         \"mtu\": 65520
-    }"
+    }" >$user_dir/.config/docker/daemon.json
     
     # Add the outbound ipv6 address to the specified network interface.
     ip addr add $outbound_ipv6 $outbound_net_interface

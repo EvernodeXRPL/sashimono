@@ -26,6 +26,7 @@ jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
+default_fallback_rippled_servers=()
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_temp_bin="$setup_helper_dir/node"
 jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
@@ -322,7 +323,7 @@ function validate_rippled_url() {
     ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
 
     echo "Checking server $1..."
-    ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1
+    ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server $1." && return 1
     return 0
 }
 
@@ -574,6 +575,50 @@ function set_rippled_server() {
     fi
 }
 
+function set_fallback_rippled_servers() {
+    ([ -z $fallback_rippled_servers ] || [ "$fallback_rippled_servers" == "default" ]) && fallback_rippled_servers=$default_fallback_rippled_servers
+
+    if $interactive; then
+        fallback_rippled_servers=()
+        if confirm "Do you want to set ($(display_list "${default_fallback_rippled_servers[@]}")) the default fallback rippled servers ?"; then
+            for url in "${default_fallback_rippled_servers[@]}"; do
+                ! validate_rippled_url $url && exit 1
+                fallback_rippled_servers+=("$url")
+            done
+        else
+            local fallback_urls_input=""
+            while true; do
+                read -p "Specify the comma-separated list of fallback server URLs: " fallback_urls_input </dev/tty
+                IFS=',' read -ra fallback_urls <<<"$fallback_urls_input"
+                unset IFS
+                for url in "${fallback_urls[@]}"; do
+                    url=$(echo "$url" | sed -e 's/^[[:space:][:punct:]]*//' -e 's/[[:space:][:punct:]]*$//')
+                    if validate_rippled_url "$url"; then
+                        fallback_rippled_servers+=("$url")
+                    fi
+                done
+                if confirm "Do you want to set ($(display_list "${fallback_rippled_servers[@]}")) as the fallback rippled servers ?"; then
+                    break
+                fi
+            done
+        fi
+    else
+        fallback_rippled_servers=("${default_fallback_rippled_servers[@]}")
+    fi
+}
+
+function display_list() {
+    local items=("$@")
+    local list_length=${#items[@]}
+
+    for ((i = 0; i < list_length; i++)); do
+        echo -n "${items[i]}"
+        if ((i < list_length - 1)); then
+            echo -n ", "
+        fi
+    done
+}
+
 function set_transferee_address() {
     # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
     [ -z $transferee_address ] && transferee_address=''
@@ -617,7 +662,7 @@ function set_host_xrpl_account() {
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
 
             echo "Checking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret "${fallback_rippled_servers[*]}" && xrpl_secret="" && continue
 
             break
 
@@ -679,12 +724,11 @@ function install_evernode() {
     echo "Installing Sashimono..."
 
     init_setup_helpers
-    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
-
+    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress "${fallback_rippled_servers[*]}" )
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server "${fallback_rippled_servers[*]}" $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -1141,23 +1185,23 @@ function delete_instance()
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}              # IP or DNS address.
-        init_peer_port=${4}        # Starting peer port for instances.
-        init_user_port=${5}        # Starting user port for instances.
-        countrycode=${6}           # 2-letter country code.
-        alloc_cpu=${7}             # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}           # Memory to allocate for contract instances.
-        alloc_swapKB=${9}          # Swap to allocate for contract instances.
-        alloc_diskKB=${10}         # Disk space to allocate for contract instances.
-        alloc_instcount=${11}      # Total contract instance count.
-        lease_amount=${12}         # Contract instance lease amount in EVRs.
-        rippled_server=${13}       # Rippled server URL
-        xrpl_account_address=${14} # XRPL account address.
-        xrpl_account_secret=${15}  # XRPL account secret.
-        email_address=${16}        # User email address
-        tls_key_file=${17}         # File path to the tls private key.
-        tls_cert_file=${18}        # File path to the tls certificate.
-        tls_cabundle_file=${19}    # File path to the tls ca bundle.
+        inetaddr=${3}                   # IP or DNS address.
+        init_peer_port=${4}             # Starting peer port for instances.
+        init_user_port=${5}             # Starting user port for instances.
+        countrycode=${6}                # 2-letter country code.
+        alloc_cpu=${7}                  # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}                # Memory to allocate for contract instances.
+        alloc_swapKB=${9}               # Swap to allocate for contract instances.
+        alloc_diskKB=${10}              # Disk space to allocate for contract instances.
+        alloc_instcount=${11}           # Total contract instance count.
+        lease_amount=${12}              # Contract instance lease amount in EVRs.
+        rippled_server=${13}            # Rippled server URL
+        xrpl_account_address=${14}      # XRPL account address.
+        xrpl_account_secret=${15}       # XRPL account secret.
+        email_address=${16}             # User email address
+        tls_key_file=${17}              # File path to the tls private key.
+        tls_cert_file=${18}             # File path to the tls certificate.
+        tls_cabundle_file=${19}         # File path to the tls ca bundle.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1180,6 +1224,8 @@ if [ "$mode" == "install" ]; then
         init_setup_helpers
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
+        set_fallback_rippled_servers
+        echo -e "Using Fallback Rippled servers ($(display_list "${fallback_rippled_servers[@]}")).\n"
         set_host_xrpl_account
         echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
     fi

@@ -71,12 +71,13 @@ const funcs = {
         return { success: true };
     },
     'validate-keys': async (args) => {
-        checkParams(args, 3);
+        checkParams(args, 4);
         const rippledUrl = args[0];
         const accountAddress = args[1];
         const accountSecret = args[2];
+        const fallbackRippledServers = args[3];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { fallbackRippledServers: fallbackRippledServers });
         await xrplApi.connect();
 
         const xrplAcc = new evernode.XrplAccount(accountAddress, accountSecret, {
@@ -90,13 +91,14 @@ const funcs = {
     },
 
     'access-evernode-cfg': async (args) => {
-        checkParams(args, 4);
+        checkParams(args, 5);
         const rippledUrl = args[0];
         const governorAddress = args[1];
         const accountAddress = args[2];
         const configName = args[3];
+        const fallbackRippledServers = args[4];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { fallbackRippledServers: fallbackRippledServers });
         await xrplApi.connect();
 
         const hostClient = new evernode.HostClient(accountAddress, null, {

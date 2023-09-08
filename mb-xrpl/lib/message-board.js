@@ -52,14 +52,14 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress)
             throw "Required cfg fields cannot be empty.";
 
-        this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
+        this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer, {fallbackRippledServers: this.cfg.xrpl.fallbackRippledServers});
         evernode.Defaults.set({
             governorAddress: this.cfg.xrpl.governorAddress,
             xrplApi: this.xrplApi
         })
         await this.xrplApi.connect();
 
-        this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret);
+        this.hostClient = new evernode.HostClient(this.cfg.xrpl.address, this.cfg.xrpl.secret,  {xrplApi: this.xrplApi});
         await this.#connectHost();
 
         console.log("Using,");

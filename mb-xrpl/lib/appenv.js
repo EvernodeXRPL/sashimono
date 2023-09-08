@@ -7,6 +7,7 @@ let appenv = {
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
     FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet-v3.xrpl-labs.com/newcreds",
     DEFAULT_RIPPLED_SERVER: 'wss://hooks-testnet-v3.xrpl-labs.com',
+    DEFAULT_FALLBACK_RIPPLED_SERVERS: [],
     DEFAULT_FULL_HISTORY_NODE: 'wss://hooks-testnet-v3.xrpl-labs.com' // If we migrate to Main NET, this should be configured with the relevant full history Node WebSocket.
 }
 

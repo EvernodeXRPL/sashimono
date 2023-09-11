@@ -121,7 +121,7 @@ namespace hp
      * @param image Docker image name to use (image prefix name must exists).
      * @return 0 on success and -1 on error.
      */
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image)
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
     {
         // Creating an instance with same name is not allowed.
         hp::instance_info existing_instance;
@@ -186,8 +186,8 @@ namespace hp
         int user_id;
         std::string username;
         if (install_user(
-            user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes,
-            instance_resources.storage_kbytes, container_name, instance_ports, image_name, "-", "-") == -1)
+                user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes,
+                instance_resources.storage_kbytes, container_name, instance_ports, image_name, outbound_ipv6, outbound_net_interface) == -1)
         {
             error_msg = USER_INSTALL_ERROR;
             return -1;

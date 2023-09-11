@@ -27,7 +27,7 @@ namespace cli
 
     int execute_basic(std::string_view type, std::string_view container_name);
 
-    int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image);
+    int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image, std::string_view outbound_ipv6, std::string_view outbound_net_interface);
 
     int list();
 
@@ -38,7 +38,7 @@ namespace cli
     const std::string value_to_string(const jsoncons::json &val);
 
     void deinit();
-    
+
     uint32_t uint32_from_bytes(const uint8_t *data);
 }
 

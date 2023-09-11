@@ -68,7 +68,7 @@ namespace hp
 
     void deinit();
 
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key);
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key, std::string_view outbound_ipv6, std::string_view outbound_net_interface);
 
     int initiate_instance(std::string &error_msg, std::string_view container_name, const msg::initiate_msg &config_msg);
 

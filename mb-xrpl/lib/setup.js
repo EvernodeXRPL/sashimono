@@ -6,6 +6,8 @@ const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
+const ip6addr = require('ip6addr');
+
 
 function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
@@ -13,6 +15,52 @@ function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
         rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
         xrplApi: xrplApi
     });
+}
+
+function generateIPV6Addresses(subnetStr, addressCount) {
+
+    // Incrementally assign IPv6 addresses
+    const generatedIPs = [];
+
+    for (let i = 0; generatedIPs.length < addressCount; i++) {
+        const generatedIP = generateValidIPV6Address(subnetStr, (i > 0) ? generatedIPs[i - 1] : null);
+        if (generatedIP) {
+            generatedIPs.push(generatedIP);
+        }
+    }
+
+    return generatedIPs;
+}
+
+function generateValidIPV6Address(subnetStr, offsetIP = null) {
+    // Define your IPv6 subnet
+    const subnet = ip6addr.createCIDR(subnetStr);
+
+    if (offsetIP && !subnet.contains(offsetIP))
+        throw "Invalid offset IP Address."
+
+    if (offsetIP) {
+        const newAddressBuf = ip6addr.parse(offsetIP).toBuffer();
+        let j = newAddressBuf.length - 1;
+        while (j >= 0) {
+            if (newAddressBuf[j] + 1 > parseInt("0xFF", 16)) {
+                newAddressBuf[j] = 0;
+                j--;
+                continue;
+            }
+            else {
+                newAddressBuf[j]++;
+                break;
+            }
+        }
+
+        const ipString = newAddressBuf.toString('hex').toUpperCase().replace(/(.{4})(?!$)/g, "$1:");
+        if (subnet.contains(ipString)) {
+            return ipString;
+        }
+    } else
+        return subnet.first().toBuffer().toString('hex').toUpperCase().replace(/(.{4})(?!$)/g, "$1:");
+
 }
 
 class Setup {
@@ -56,8 +104,8 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null) {
-        this.#saveConfig({
+    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null) {
+        const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
@@ -66,7 +114,9 @@ class Setup {
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
             }
-        });
+        };
+
+        this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
     async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
@@ -176,7 +226,8 @@ class Setup {
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
-        const acc = this.#getConfig().xrpl;
+        const config = this.#getConfig();
+        const acc = config.xrpl;
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -200,10 +251,15 @@ class Setup {
                 await hostClient.register(countryCode, cpuMicroSec,
                     Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
+                // Generate IPV6 Address (If the host has done relevant configuration)
+                let ipV6AddressList = null;
+                if (config.networking.ipv6)
+                    ipV6AddressList = generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
+
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, ipV6AddressList.length > 0 ? ipV6AddressList[i] : null);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -316,7 +372,7 @@ class Setup {
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
         const hostInfo = await hostClient.getHostInfo();
-        
+
         await hostClient.disconnect();
 
         console.log(JSON.stringify(hostInfo, null, 2));
@@ -493,6 +549,31 @@ class Setup {
             return vacant;
         }
 
+        // TODO Need to test.
+        async function getAvaibaleIPV6Addresses(includeUnsold = true) {
+            let acquired = includeUnsold ? [] : unsoldUriTokens.map(n => n.ipv6Address);
+            let vacant = [];
+            for (const l of leaseRecords) {
+                try {
+                    const tenantAddress = l.tenant_xrp_address;
+                    const uriTokenId = l.container_name;
+                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
+                    if (uriToken) {
+                        const ipv6Address = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).ipv6Address;
+                        acquired.push(ipv6Address);
+                    }
+                } catch {
+                }
+            }
+            let i = 0;
+            while (vacant.length + acquired.length < totalInstanceCount) {
+                if (!acquired.includes(i))
+                    vacant.push(i);
+                i++;
+            }
+            return vacant;
+        }
+
         let uriTokensToBurn = [];
         let uriTokenIndexesToCreate = [];
         // If lease amount is changed we need to burn all the unsold uriTokens
@@ -601,7 +682,7 @@ class Setup {
                     // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo.ipv6Address).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

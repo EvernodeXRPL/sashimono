@@ -23,7 +23,7 @@ rm -r $tmp
 
 # Override rootlesskit with our own version based on original rootlesskit v1.1.1
 # We need this custom version to have outbound ipv6 address support (https://github.com/EvernodeXRPL/rootlesskit/tree/outbound-addr-support)
-curl -s https://github.com/EvernodeXRPL/rootlesskit/releases/download/v1.1.1-evernode-patch1/rootlesskit --output $docker_bin/rootlesskit
+curl -fsSL https://github.com/EvernodeXRPL/rootlesskit/releases/download/v1.1.1-evernode-patch1/rootlesskit --output $docker_bin/rootlesskit
 chmod +x $docker_bin/rootlesskit
 
 chown -R $(id -u):$(id -g) $docker_bin/*

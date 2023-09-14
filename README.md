@@ -35,7 +35,7 @@ Run `make installer` ('installer.tar.gz' will be placed in build directory)
 ## Run Sashimono
 
 1. `./build/sagent new <data_dir> <ip> <init_peer_port> <init_user_port> <docker_registry_port(optional[0])> <instant_count> <cpu_us> <ram_kbytes> <swap_kbytes> <disk_kbytes>` (This will create the Sashimono config in build directory. You only have to do this once)
-   1. Example: `sudo ./build/sagent new ./build 22861 26201 0 3 900000 1048576 3145728 5242880`
+   1. Example: `sudo ./build/sagent new ./build 127.0.0.1 22861 26201 0 3 900000 1048576 3145728 5242880`
 1. `sudo ./build/sagent run`
 
 ## Sashimono Client

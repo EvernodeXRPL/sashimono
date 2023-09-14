@@ -17,7 +17,7 @@ const funcs = {
     'validate-server': async (args) => {
         checkParams(args, 1);
         const rippledUrl = args[0];
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
         await xrplApi.disconnect();
         return { success: true };
@@ -29,7 +29,7 @@ const funcs = {
         const accountAddress = args[2];
         const validateFor = args[3] || "register";
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
         const hostClient = new evernode.HostClient(accountAddress, null, {
@@ -76,7 +76,7 @@ const funcs = {
         const accountAddress = args[1];
         const accountSecret = args[2];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
         const xrplAcc = new evernode.XrplAccount(accountAddress, accountSecret, {
@@ -96,7 +96,7 @@ const funcs = {
         const accountAddress = args[2];
         const configName = args[3];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
         const hostClient = new evernode.HostClient(accountAddress, null, {
@@ -125,7 +125,7 @@ const funcs = {
         const accountSecret = args[3];
         const transfereeAddress = args[4];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl);
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
         const hostClient = new evernode.HostClient(accountAddress, accountSecret, {

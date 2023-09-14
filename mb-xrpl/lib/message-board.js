@@ -796,7 +796,7 @@ class MessageBoard {
                 await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, uriInfo.ipv6Address);
             }
             else {
-                const instanceRequirements = (uriInfo.ipv6Address) ? { ...r.payload, outbound_ipv6: uriInfo.ipv6Address, outbound_net_interface: this.cfg.networking.ipv6.interface } : r.payload;
+                const instanceRequirements = { ...r.payload, outbound_ipv6: (uriInfo.ipv6Address) ? uriInfo.ipv6Address : "-", outbound_net_interface: (uriInfo.ipv6Address) ? this.cfg.networking.ipv6.interface : "-" };
                 createRes = await this.sashiCli.createInstance(containerName, instanceRequirements);
 
                 // Number of validated ledgers passed while the instance is created.
@@ -981,7 +981,7 @@ class MessageBoard {
             { name: 'value', type: DataTypes.INTEGER, notNull: true }
         ]);
         await this.createLastWatchedLedgerEntryIfNotExists();
-        if (this.cfg.networking.ipv6.subnet) {
+        if (this.cfg?.networking?.ipv6?.subnet && this.cfg?.networking?.ipv6?.interface) {
             await this.createLastAssignedIPEntryIfNotExists();
         }
     }

@@ -272,8 +272,8 @@ class Setup {
                     Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
                 // Generate IPV6 Address (If the host has done relevant configuration)
-                let ipV6AddressList = null;
-                if (config.networking.ipv6)
+                let ipV6AddressList = [];
+                if (config?.networking?.ipv6)
                     ipV6AddressList = generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
 
                 // Create lease offers.

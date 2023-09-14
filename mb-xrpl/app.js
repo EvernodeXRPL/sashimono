@@ -20,8 +20,8 @@ async function main() {
                 const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
-                const ipv6Subnet = process.argv[9];
-                const ipv6NetInterface = process.argv[10];
+                const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
+                const ipv6NetInterface = (process.argv[10] === '-') ? null : process.argv[10];
                 const setup = new Setup();
                 const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain);
                 setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface);

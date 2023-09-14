@@ -73,7 +73,7 @@ async function main() {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [governorAddress] [leaseAmount] - Create new config files.
+        node index.js new [address] [secret] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] - Create new config files.
         node index.js betagen [governorAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.

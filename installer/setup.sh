@@ -19,7 +19,7 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-ipv6-e950651b-461c-4e4d-8339-30c7743a14f4"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -1008,6 +1008,8 @@ function config() {
     local update_mb=0
 
     local sub_mode=${1}
+    local occupied_instance_count=$(sashi list | jq length)
+
     if [ "$sub_mode" == "resources" ] ; then
 
         local ramMB=${2}       # memory to allocate for contract instances.
@@ -1021,6 +1023,10 @@ function config() {
             \n Swap: $(GB $max_swap_kbytes)
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
 
         local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
@@ -1057,7 +1063,11 @@ function config() {
 
         local amount=${2}      # Contract instance lease amount in EVRs.
         [ -z $amount ] && echomult "Your current lease amount is: $cfg_lease_amount EVRs.\n" && exit 0
-        
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
+
         ! validate_positive_decimal $amount &&
             echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
             exit 1

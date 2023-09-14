@@ -32,7 +32,7 @@ function generateIPV6Addresses(subnetStr, addressCount) {
     return generatedIPs;
 }
 
-function generateValidIPV6Address(subnetStr, offsetIP = null) {
+function generateValidIPV6Address(subnetStr, offsetIP = null, isBelowOffset = false) {
     // Define your IPv6 subnet
     const subnet = ip6addr.createCIDR(subnetStr);
 
@@ -40,17 +40,37 @@ function generateValidIPV6Address(subnetStr, offsetIP = null) {
         throw "Invalid offset IP Address."
 
     if (offsetIP) {
-        const newAddressBuf = ip6addr.parse(offsetIP).toBuffer();
+        const newAddressBuf = Buffer.from(offsetIP.split(':').map(v => {
+            const bytes = [];
+            for (let i = 0; i < v.length; i += 2) {
+                bytes.push(parseInt(v.substr(i, 2), 16));
+            }
+            return bytes;
+        }).flat());
+
         let j = newAddressBuf.length - 1;
         while (j >= 0) {
-            if (newAddressBuf[j] + 1 > parseInt("0xFF", 16)) {
-                newAddressBuf[j] = 0;
-                j--;
-                continue;
-            }
-            else {
-                newAddressBuf[j]++;
-                break;
+            if (isBelowOffset) {
+                if (newAddressBuf[j] - 1 < 0) {
+                    newAddressBuf[j] = parseInt("0xFF", 16);
+                    j--;
+                    continue;
+                }
+                else {
+                    newAddressBuf[j]--;
+                    break;
+                }
+
+            } else {
+                if (newAddressBuf[j] + 1 > parseInt("0xFF", 16)) {
+                    newAddressBuf[j] = 0;
+                    j--;
+                    continue;
+                }
+                else {
+                    newAddressBuf[j]++;
+                    break;
+                }
             }
         }
 
@@ -485,10 +505,21 @@ class Setup {
         // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
+        const utilTable = appenv.DB_UTIL_TABLE_NAME;
+        const config = this.#getConfig();
 
         db.open();
         const leaseRecords = (await db.getValues(leaseTable).finally(() => { db.close() })).filter(i => (i.status === "Acquired" || i.status === "Extended"));
         const soldCount = leaseRecords.length;
+
+        // NOTE : This was added after IPV6 address assignment to URI tokens. If we allow to change the instance count
+        // there may be an issue of loosing the IP address assignment order, because the acquisitions never follows any order.
+        // Due to that nature there may a chance of having sold instances with intermediate IP addresses. Hence in such kind of a scenario
+        // we cannot handle the LAST_ASSIGNED_IPV6_ADDRESS property as we expect.
+        // TODO : Should cater to reconfigure with occupied leases (sold instances).
+        if (soldCount)
+            throw `There are ${soldCount} active instances. Hence it is not possible to reconfigure.`;
+
 
         if (totalInstanceCount && soldCount > totalInstanceCount)
             throw `There are ${soldCount} active instances, So max instance count cannot be less than that.`;
@@ -549,31 +580,6 @@ class Setup {
             return vacant;
         }
 
-        // TODO Need to test.
-        async function getAvaibaleIPV6Addresses(includeUnsold = true) {
-            let acquired = includeUnsold ? [] : unsoldUriTokens.map(n => n.ipv6Address);
-            let vacant = [];
-            for (const l of leaseRecords) {
-                try {
-                    const tenantAddress = l.tenant_xrp_address;
-                    const uriTokenId = l.container_name;
-                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
-                    if (uriToken) {
-                        const ipv6Address = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).ipv6Address;
-                        acquired.push(ipv6Address);
-                    }
-                } catch {
-                }
-            }
-            let i = 0;
-            while (vacant.length + acquired.length < totalInstanceCount) {
-                if (!acquired.includes(i))
-                    vacant.push(i);
-                i++;
-            }
-            return vacant;
-        }
-
         let uriTokensToBurn = [];
         let uriTokenIndexesToCreate = [];
         // If lease amount is changed we need to burn all the unsold uriTokens
@@ -607,8 +613,12 @@ class Setup {
             }
         }
 
+        db.open();
+        let lastCreatedIP = (config.networking.ipv6.subnet) ? (await db.getValues(utilTable).finally(() => { db.close() })).find(i => (i.name === appenv.LAST_ASSIGNED_IPV6_ADDRESS)).value : null;
         for (const uriToken of uriTokensToBurn) {
             try {
+                if (lastCreatedIP)
+                    lastCreatedIP = generateValidIPV6Address(config.networking.ipv6.subnet, lastCreatedIP, true);
                 await hostClient.expireLease(uriToken.uriTokenId);
             }
             catch (e) {
@@ -621,15 +631,24 @@ class Setup {
             await initClients(rippledServer);
         }
 
-        for (const idx of uriTokenIndexesToCreate) {
+        for (const idx of uriTokenIndexesToCreate.sort((a, b) => { return a - b; })) {
             try {
+                if (lastCreatedIP)
+                    lastCreatedIP = generateValidIPV6Address(config.networking.ipv6.subnet, lastCreatedIP);
+
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
-                    appenv.TOS_HASH);
+                    appenv.TOS_HASH,
+                    lastCreatedIP);
             }
             catch (e) {
                 console.error(e);
             }
+        }
+
+        if (lastCreatedIP) {
+            db.open();
+            (await db.updateValue(utilTable, { value: lastCreatedIP }, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS }).finally(() => { db.close() }));
         }
 
         await deinitClients();
@@ -682,7 +701,7 @@ class Setup {
                     // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo.ipv6Address).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.ipv6Address).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

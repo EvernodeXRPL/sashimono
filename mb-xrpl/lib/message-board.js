@@ -977,12 +977,25 @@ class MessageBoard {
             { name: 'value', type: DataTypes.INTEGER, notNull: true }
         ]);
         await this.createLastWatchedLedgerEntryIfNotExists();
+        if (this.cfg.networking.ipv6.subnet) {
+            await this.createLastAssignedIPEntryIfNotExists();
+        }
     }
 
     async createLastWatchedLedgerEntryIfNotExists() {
         const ret = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
         if (ret.length === 0) {
             await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: -1 });
+        }
+    }
+
+    async createLastAssignedIPEntryIfNotExists() {
+        let ret = await this.db.getValues(this.utilTable, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS });
+        if (ret.length === 0) {
+            const lastMintedLeaseToken = (await this.hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX)).sort((a, b) => b.PreviousTxnLgrSeq - a.PreviousTxnLgrSeq)[0];
+            const lastMintedLeaseTokenData = evernode.UtilHelpers.decodeLeaseTokenUri(lastMintedLeaseToken.URI);
+
+            await this.db.insertValue(this.utilTable, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS, value: lastMintedLeaseTokenData.ipv6Address });
         }
     }
 

@@ -6,8 +6,7 @@ const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
-const ip6addr = require('ip6addr');
-
+const { UtilHelper } = require('./util-helper');
 
 function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
@@ -15,72 +14,6 @@ function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
         rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
         xrplApi: xrplApi
     });
-}
-
-function generateIPV6Addresses(subnetStr, addressCount) {
-
-    // Incrementally assign IPv6 addresses
-    const generatedIPs = [];
-
-    for (let i = 0; generatedIPs.length < addressCount; i++) {
-        const generatedIP = generateValidIPV6Address(subnetStr, (i > 0) ? generatedIPs[i - 1] : null);
-        if (generatedIP) {
-            generatedIPs.push(generatedIP);
-        }
-    }
-
-    return generatedIPs;
-}
-
-function generateValidIPV6Address(subnetStr, offsetIP = null, isBelowOffset = false) {
-    // Define your IPv6 subnet
-    const subnet = ip6addr.createCIDR(subnetStr);
-
-    if (offsetIP && !subnet.contains(offsetIP))
-        throw "Invalid offset IP Address."
-
-    if (offsetIP) {
-        const newAddressBuf = Buffer.from(offsetIP.split(':').map(v => {
-            const bytes = [];
-            for (let i = 0; i < v.length; i += 2) {
-                bytes.push(parseInt(v.substr(i, 2), 16));
-            }
-            return bytes;
-        }).flat());
-
-        let j = newAddressBuf.length - 1;
-        while (j >= 0) {
-            if (isBelowOffset) {
-                if (newAddressBuf[j] - 1 < 0) {
-                    newAddressBuf[j] = parseInt("0xFF", 16);
-                    j--;
-                    continue;
-                }
-                else {
-                    newAddressBuf[j]--;
-                    break;
-                }
-
-            } else {
-                if (newAddressBuf[j] + 1 > parseInt("0xFF", 16)) {
-                    newAddressBuf[j] = 0;
-                    j--;
-                    continue;
-                }
-                else {
-                    newAddressBuf[j]++;
-                    break;
-                }
-            }
-        }
-
-        const ipString = newAddressBuf.toString('hex').toUpperCase().replace(/(.{4})(?!$)/g, "$1:");
-        if (subnet.contains(ipString)) {
-            return ipString;
-        }
-    } else
-        return subnet.first().toBuffer().toString('hex').toUpperCase().replace(/(.{4})(?!$)/g, "$1:");
-
 }
 
 class Setup {
@@ -273,8 +206,8 @@ class Setup {
 
                 // Generate IPV6 Address (If the host has done relevant configuration)
                 let ipV6AddressList = [];
-                if (config?.networking?.ipv6)
-                    ipV6AddressList = generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
+                if (config?.networking?.ipv6?.subnet)
+                    ipV6AddressList = UtilHelper.generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
@@ -614,11 +547,11 @@ class Setup {
         }
 
         db.open();
-        let lastCreatedIP = (config.networking.ipv6.subnet) ? (await db.getValues(utilTable).finally(() => { db.close() })).find(i => (i.name === appenv.LAST_ASSIGNED_IPV6_ADDRESS)).value : null;
+        let lastAssignedIPV6 = (config?.networking?.ipv6?.subnet) ? (await db.getValues(utilTable).finally(() => { db.close() })).find(i => (i.name === appenv.LAST_ASSIGNED_IPV6_ADDRESS)).value : null;
         for (const uriToken of uriTokensToBurn) {
             try {
-                if (lastCreatedIP)
-                    lastCreatedIP = generateValidIPV6Address(config.networking.ipv6.subnet, lastCreatedIP, true);
+                if (lastAssignedIPV6)
+                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6, true);
                 await hostClient.expireLease(uriToken.uriTokenId);
             }
             catch (e) {
@@ -633,22 +566,22 @@ class Setup {
 
         for (const idx of uriTokenIndexesToCreate.sort((a, b) => { return a - b; })) {
             try {
-                if (lastCreatedIP)
-                    lastCreatedIP = generateValidIPV6Address(config.networking.ipv6.subnet, lastCreatedIP);
+                if (lastAssignedIPV6)
+                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6);
 
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
                     appenv.TOS_HASH,
-                    lastCreatedIP);
+                    lastAssignedIPV6);
             }
             catch (e) {
                 console.error(e);
             }
         }
 
-        if (lastCreatedIP) {
+        if (lastAssignedIPV6) {
             db.open();
-            (await db.updateValue(utilTable, { value: lastCreatedIP }, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS }).finally(() => { db.close() }));
+            (await db.updateValue(utilTable, { value: lastAssignedIPV6 }, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS }).finally(() => { db.close() }));
         }
 
         await deinitClients();
@@ -701,7 +634,7 @@ class Setup {
                     // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.ipv6Address).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.outboundIP?.address).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

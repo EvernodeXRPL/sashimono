@@ -185,7 +185,9 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports, image_name) == -1)
+        if (install_user(
+            user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes,
+            instance_resources.storage_kbytes, container_name, instance_ports, image_name, "-", "-") == -1)
         {
             error_msg = USER_INSTALL_ERROR;
             return -1;
@@ -892,7 +894,9 @@ namespace hp
      * @param storage_kbytes Disk quota allowed for this user.
      * @param instance_ports Ports assigned to the instance.
      */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image)
+    int install_user(
+        int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes,
+        std::string_view container_name, const ports instance_ports, std::string_view docker_image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
@@ -905,7 +909,9 @@ namespace hp
             std::to_string(instance_ports.peer_port),
             std::to_string(instance_ports.user_port),
             docker_image,
-            conf::cfg.docker.registry_address};
+            conf::cfg.docker.registry_address,
+            outbound_ipv6,
+            outbound_net_interface};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

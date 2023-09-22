@@ -135,21 +135,27 @@ done
 echo "Allowing user and peer ports in firewall"
 rule_list=$(sudo ufw status)
 comment=$prefix-$contract_dir
-# Rule is added such that the ports are in ascending order. So adjust the string to match the rule.
-if ((peer_port > user_port)); then
-    p1=$user_port
-    p2=$peer_port
-else
-    p1=$peer_port
-    p2=$user_port
-fi
-sed -n -r -e "/${p1},${p2}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+
+# Add rules for user port.
+sed -n -r -e "/${$user_port}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
 res=$?
 if [ ! $res -eq 100 ]; then
-    echo "Adding new rule to allow ports for new instance from firewall."
-    sudo ufw allow "$peer_port","$user_port"/tcp comment "$comment"
+    user_port_comment=$comment-user
+    echo "Adding new rule to allow user port for new instance from firewall."
+    sudo ufw allow "$user_port"/tcp comment "$user_port_comment"
 else
-    echo "Rule already exists. Skipping."
+    echo "User port rule already exists. Skipping."
+fi
+
+# Add rules for peer port.
+sed -n -r -e "/${$peer_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+res=$?
+if [ ! $res -eq 100 ]; then
+    peer_port_comment=$comment-peer
+    echo "Adding new rule to allow peer port for new instance from firewall."
+    sudo ufw allow "$peer_port" comment "$peer_port_comment"
+else
+    echo "Peer port rule already exists. Skipping."
 fi
 
 echo "Installing rootless dockerd for user."

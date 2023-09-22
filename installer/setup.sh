@@ -478,7 +478,7 @@ function set_ipv6_subnet() {
             local subnet_input
             read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
             
-            # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/"
+            # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
             local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
             [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
             

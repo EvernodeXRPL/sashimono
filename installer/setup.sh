@@ -483,14 +483,14 @@ function set_ipv6_subnet() {
             [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
             
             # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
-            local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet)"
+            local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet | sed 's/::*$//g')"
             local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
             local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
             local interface_count=$(echo "$net_interfaces" | wc -l)
 
             [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
             [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
-            [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified upv6 subnet." && echo "$net_interfaces" && continue
+            [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified ipv6 subnet." && echo "$net_interfaces" && continue
 
             ipv6_subnet=$primary_subnet
             ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
@@ -1008,6 +1008,8 @@ function config() {
     local update_mb=0
 
     local sub_mode=${1}
+    local occupied_instance_count=$(sashi list | jq length)
+
     if [ "$sub_mode" == "resources" ] ; then
 
         local ramMB=${2}       # memory to allocate for contract instances.
@@ -1021,6 +1023,10 @@ function config() {
             \n Swap: $(GB $max_swap_kbytes)
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
 
         local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
@@ -1057,7 +1063,11 @@ function config() {
 
         local amount=${2}      # Contract instance lease amount in EVRs.
         [ -z $amount ] && echomult "Your current lease amount is: $cfg_lease_amount EVRs.\n" && exit 0
-        
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
+
         ! validate_positive_decimal $amount &&
             echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
             exit 1

@@ -274,7 +274,7 @@ if [ "$NO_MB" == "" ]; then
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

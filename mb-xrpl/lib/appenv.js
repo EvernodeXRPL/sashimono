@@ -23,12 +23,13 @@ appenv = {
     SASHI_CONFIG_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.cfg",
     SASHI_TABLE_NAME: 'instances',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
+    LAST_ASSIGNED_IPV6_ADDRESS: 'last_assigned_ipv6_address',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,
     ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD: 0.4,
     ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS: 4,
     SASHIMONO_SCHEDULER_INTERVAL_SECONDS: 2,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '0.6.7',
+    MB_VERSION: '0.6.8',
     TOS_HASH: '757A0237B44D8B2BBB04AE2BAD5813858E0AECD2F0B217075E27E0630BA74314' // This is the sha256 hash of TOS text.
 }
 Object.freeze(appenv);

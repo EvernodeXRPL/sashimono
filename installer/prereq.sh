@@ -27,7 +27,7 @@ stage "Installing dependencies"
 # Added --allow-releaseinfo-change
 # To fix - Repository 'https://apprepo.vultr.com/ubuntu universal InRelease' changed its 'Codename' value from 'buster' to 'universal'
 apt-get update --allow-releaseinfo-change
-apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
+apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq
 # uidmap        # Required for rootless docker.
 # slirp4netns   # Required for high performance rootless networking.
 # fuse3         # Required for hpfs.
@@ -36,6 +36,12 @@ apt-get install -y uidmap slirp4netns fuse3 cgroup-tools quota curl openssl jq
 # curl          # Required to download installation artifacts.
 # openssl       # Required by Sashimono agent to create contract tls certs.
 # jq            # Used for json config file manipulation.
+
+# Install slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
+stage "Installing slirp4netns"
+curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v1.2.1/slirp4netns-$(uname -m)
+chmod +x /tmp/slirp4netns
+mv /tmp/slirp4netns /usr/bin/
 
 # Install nodejs if not exists.
 if ! command -v node &>/dev/null; then

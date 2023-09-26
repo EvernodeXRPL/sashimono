@@ -14,9 +14,12 @@ peer_port=$8
 user_port=$9
 docker_image=${10}
 docker_registry=${11}
+outbound_ipv6=${12}
+outbound_net_interface=${13}
+
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
     [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] ||
-    [ -z "$docker_image" ] || [ -z "$docker_registry" ]; then
+    [ -z "$docker_image" ] || [ -z "$docker_registry" ] || [ -z "$outbound_ipv6" ] || [ -z "$outbound_net_interface" ]; then
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -31,6 +34,7 @@ script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 docker_service="docker.service"
 docker_pull_timeout_secs=120
+cleanup_script=$user_dir/uninstall_cleanup.sh
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -131,21 +135,27 @@ done
 echo "Allowing user and peer ports in firewall"
 rule_list=$(sudo ufw status)
 comment=$prefix-$contract_dir
-# Rule is added such that the ports are in ascending order. So adjust the string to match the rule.
-if ((peer_port > user_port)); then
-    p1=$user_port
-    p2=$peer_port
-else
-    p1=$peer_port
-    p2=$user_port
-fi
-sed -n -r -e "/${p1},${p2}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+
+# Add rules for user port.
+sed -n -r -e "/${$user_port}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
 res=$?
 if [ ! $res -eq 100 ]; then
-    echo "Adding new rule to allow ports for new instance from firewall."
-    sudo ufw allow "$peer_port","$user_port"/tcp comment "$comment"
+    user_port_comment=$comment-user
+    echo "Adding new rule to allow user port for new instance from firewall."
+    sudo ufw allow "$user_port"/tcp comment "$user_port_comment"
 else
-    echo "Rule already exists. Skipping."
+    echo "User port rule already exists. Skipping."
+fi
+
+# Add rules for peer port.
+sed -n -r -e "/${$peer_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+res=$?
+if [ ! $res -eq 100 ]; then
+    peer_port_comment=$comment-peer
+    echo "Adding new rule to allow peer port for new instance from firewall."
+    sudo ufw allow "$peer_port" comment "$peer_port_comment"
+else
+    echo "Peer port rule already exists. Skipping."
 fi
 
 echo "Installing rootless dockerd for user."
@@ -153,10 +163,38 @@ sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir
 
 # Add environment variables as an override to docker service unit file.
 echo "Applying $docker_service env overrides."
+docker_service_override_conf="$user_dir/.config/systemd/user/$docker_service.d/override.conf"
 sudo -H -u "$user" mkdir $user_dir/.config/systemd/user/$docker_service.d
-sudo -H -u "$user" touch $user_dir/.config/systemd/user/$docker_service.d/override.conf
+sudo -H -u "$user" touch $docker_service_override_conf
 echo "[Service]
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$user_dir/.config/systemd/user/$docker_service.d/override.conf
+    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$docker_service_override_conf
+
+# We need to enable ipv6 configurations if outbound ipv6 address is specified.
+if [ "$outbound_ipv6" != "-" ] && [ "$outbound_net_interface" != "-" ]; then
+    
+    # Pass the relevant ipv6 parameters to rootlesskit flags. rootlesskit will in turn pass these to slirp4nets.
+    # Also apply ipv6 route configuration patch in the dockerd process namespace (credits: https://github.com/containers/podman/issues/15850#issuecomment-1320028298)
+    echo "
+    Environment=\"DOCKERD_ROOTLESS_ROOTLESSKIT_FLAGS=--ipv6 --outbound-addr6=$outbound_ipv6\"
+    ExecStartPost=/bin/bash -c 'nsenter -U --preserve-credentials -n -t $""(pgrep -u $user dockerd) /bin/bash -c \"ip addr add fd00::100/64 dev tap0 && ip route add default via fd00::2 dev tap0\"'
+    " >>$docker_service_override_conf
+
+    # Set the predefined ipv6 parameters to docker daemon config.
+    mkdir -p $user_dir/.config/docker
+    echo "{
+        \"experimental\": true,
+        \"ipv6\": true,
+        \"fixed-cidr-v6\": \"2001:db8:1::/64\",
+        \"ip6tables\": true,
+        \"mtu\": 65520
+    }" >$user_dir/.config/docker/daemon.json
+    
+    # Add the outbound ipv6 address to the specified network interface.
+    ip addr add $outbound_ipv6 dev $outbound_net_interface
+
+    # Add instructions to the cleanup script so the outbound ip assignment will be removed upon user install.
+    echo "ip addr del $outbound_ipv6 dev $outbound_net_interface" >>$cleanup_script
+fi
 
 # Overwrite docker-rootless cli args on the docker service unit file (ExecStart is not supported by override.conf).
 echo "Applying $docker_service extra args."

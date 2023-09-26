@@ -211,7 +211,7 @@ namespace comm
 
             hp::instance_info info;
             std::string error_msg;
-            if (hp::create_new_instance(error_msg, info, msg.container_name, msg.pubkey, msg.contract_id, msg.image) == -1)
+            if (hp::create_new_instance(error_msg, info, msg.container_name, msg.pubkey, msg.contract_id, msg.image, msg.outbound_ipv6, msg.outbound_net_interface) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
 
             if (hp::initiate_instance(error_msg, info.container_name, init_msg) == -1)
@@ -283,7 +283,7 @@ namespace comm
         }
         else
             __HANDLE_RESPONSE("error", TYPE_ERROR, -1);
-        
+
         return 0;
     }
 
@@ -302,7 +302,8 @@ namespace comm
         uint32_to_bytes(length_buffer, message.length());
 
         int res = write(ctx.data_socket, length_buffer, 8);
-        if (res == -1) {
+        if (res == -1)
+        {
             disconnect();
             return -1;
         }
@@ -310,16 +311,15 @@ namespace comm
         res = write(ctx.data_socket, message.data(), message.length());
         // Close connection after sending the response to the client.
         disconnect();
-        
-        return res ==  -1 ? -1 : 0;
-    }
 
+        return res == -1 ? -1 : 0;
+    }
 
     /**
      * Convert the given uint32_t number to bytes in big endian format.
      * @param dest Byte array pointer.
      * @param x Number to be converted.
-    */
+     */
     void uint32_to_bytes(uint8_t *dest, const uint32_t x)
     {
         dest[0] = (uint8_t)((x >> 24) & 0xff);

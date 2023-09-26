@@ -15,6 +15,8 @@ cgrulesengd_default="cgrulesengd"
 alloc_ratio=80
 ramKB_per_instance=524288
 instances_per_core=3
+max_non_ipv6_instances=5
+max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
@@ -459,6 +461,63 @@ function set_country_code() {
     fi
 }
 
+function set_ipv6_subnet() {
+
+    if $interactive ; then
+
+        ipv6_subnet="-"
+        ipv6_net_interface="-"
+
+        echomult "If your host has IPv6 support, Evernode can assign individual outbound IPv6 addresses to each
+            contract instance. This will prevent your host's primary IP address from getting blocked by external
+            services in case many contracts on your host attempt to contact the same external service."
+
+        ! confirm "\nDoes your host have an IPv6 subnet assigned to it? The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\"" && return 0
+    
+        while true; do
+            local subnet_input
+            read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
+            
+            # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+            local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
+            [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
+            
+            # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
+            local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet | sed 's/::*$//g')"
+            local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
+            local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
+            local interface_count=$(echo "$net_interfaces" | wc -l)
+
+            [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
+            [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
+            [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified ipv6 subnet." && echo "$net_interfaces" && continue
+
+            ipv6_subnet=$primary_subnet
+            ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
+
+            if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
+
+                while true; do
+                    read -p "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
+                    
+                    # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+                    local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
+                    [ -z "$nested_subnet" ] && echo "Invalid nested IPv6 subnet specified." && continue
+                    
+                    local prefix_len="$(cut -d'/' -f2 <<<$nested_subnet)"
+                    [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
+
+                    ipv6_subnet=$nested_subnet
+                    break
+                done
+            fi
+
+            break
+        done
+    fi
+
+}
+
 function set_cgrules_svc() {
     local filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
     if [ -n "$filepath" ] ; then
@@ -477,14 +536,19 @@ function set_instance_alloc() {
 
     # If instance count is not specified, decide it based on some rules.
     if [ -z $alloc_instcount ]; then
+
         # Instance count based on total RAM
         local ram_c=$(( alloc_ramKB / ramKB_per_instance ))
         # Instance count based on no. of CPU cores.
         local cores=$(grep -c ^processor /proc/cpuinfo)
         local cpu_c=$(( cores * instances_per_core ))
-
-        # Final instance count will be the lower of the two.
+        # Hardware spec-based maximum instance count will be the lower of the two.
         alloc_instcount=$(( ram_c < cpu_c ? ram_c : cpu_c ))
+
+        # If the host does not have a ipv6 subnet, limit the max instance count further.
+        if [ -z "$ipv6_subnet" ] && [ $alloc_instcount -gt $max_non_ipv6_instances ] ; then
+            $alloc_instcount=$max_non_ipv6_instances
+        fi
     fi
 
 
@@ -672,9 +736,9 @@ function install_evernode() {
     # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
     ! create_evernode_alias && install_failure
 
-    # Adding ip address as the host description.
-    # Currently the domain address saved only in account_info and an empty value in Hook states )
-    description=""
+    # Currently the domain address saved only in account_info and an empty value in Hook states.
+    # Set description to empty value ('_' will be treated as empty)
+    description="_"
 
     echo "Installing Sashimono..."
 
@@ -684,7 +748,8 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address $tls_key_file $tls_cert_file $tls_cabundle_file $description 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address \
+                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -943,6 +1008,8 @@ function config() {
     local update_mb=0
 
     local sub_mode=${1}
+    local occupied_instance_count=$(sashi list | jq length)
+
     if [ "$sub_mode" == "resources" ] ; then
 
         local ramMB=${2}       # memory to allocate for contract instances.
@@ -956,6 +1023,10 @@ function config() {
             \n Swap: $(GB $max_swap_kbytes)
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
 
         local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
@@ -992,7 +1063,11 @@ function config() {
 
         local amount=${2}      # Contract instance lease amount in EVRs.
         [ -z $amount ] && echomult "Your current lease amount is: $cfg_lease_amount EVRs.\n" && exit 0
-        
+
+        if ( [[ $occupied_instance_count -gt 0 ]] ); then
+            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
+        fi
+
         ! validate_positive_decimal $amount &&
             echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
             exit 1
@@ -1158,6 +1233,8 @@ if [ "$mode" == "install" ]; then
         tls_key_file=${17}         # File path to the tls private key.
         tls_cert_file=${18}        # File path to the tls certificate.
         tls_cabundle_file=${19}    # File path to the tls ca bundle.
+        ipv6_subnet=${20}          # ipv6 subnet to be used for ipv6 instance address assignment.
+        ipv6_net_interface=${21}   # ipv6 bound network interface to be used for outbound communication.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1176,8 +1253,9 @@ if [ "$mode" == "install" ]; then
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-    if [ "$NO_MB" == "" ]; then
-        init_setup_helpers
+    init_setup_helpers
+
+    if [ "$NO_MB" == "" ]; then    
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
         set_host_xrpl_account
@@ -1192,6 +1270,9 @@ if [ "$mode" == "install" ]; then
 
     set_country_code
     echo -e "Using '$countrycode' as country code.\n"
+
+    set_ipv6_subnet
+    [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
 
     set_cgrules_svc
     echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"

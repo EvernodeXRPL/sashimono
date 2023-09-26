@@ -6,6 +6,7 @@ const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
+const { UtilHelper } = require('./util-helper');
 
 function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
@@ -56,8 +57,8 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null) {
-        this.#saveConfig({
+    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null) {
+        const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
@@ -66,7 +67,9 @@ class Setup {
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
             }
-        });
+        };
+
+        this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
     async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
@@ -173,10 +176,11 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description = "") {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
-        const acc = this.#getConfig().xrpl;
+        const config = this.#getConfig();
+        const acc = config.xrpl;
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -200,10 +204,15 @@ class Setup {
                 await hostClient.register(countryCode, cpuMicroSec,
                     Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
+                // Generate IPV6 Address (If the host has done relevant configuration)
+                let ipV6AddressList = [];
+                if (config?.networking?.ipv6?.subnet)
+                    ipV6AddressList = UtilHelper.generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
+
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, ipV6AddressList.length > 0 ? ipV6AddressList[i] : null);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -316,7 +325,7 @@ class Setup {
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
 
         const hostInfo = await hostClient.getHostInfo();
-        
+
         await hostClient.disconnect();
 
         console.log(JSON.stringify(hostInfo, null, 2));
@@ -429,10 +438,21 @@ class Setup {
         // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
+        const utilTable = appenv.DB_UTIL_TABLE_NAME;
+        const config = this.#getConfig();
 
         db.open();
         const leaseRecords = (await db.getValues(leaseTable).finally(() => { db.close() })).filter(i => (i.status === "Acquired" || i.status === "Extended"));
         const soldCount = leaseRecords.length;
+
+        // NOTE : This was added after IPV6 address assignment to URI tokens. If we allow to change the instance count
+        // there may be an issue of loosing the IP address assignment order, because the acquisitions never follows any order.
+        // Due to that nature there may a chance of having sold instances with intermediate IP addresses. Hence in such kind of a scenario
+        // we cannot handle the LAST_ASSIGNED_IPV6_ADDRESS property as we expect.
+        // TODO : Should cater to reconfigure with occupied leases (sold instances).
+        if (soldCount)
+            throw `There are ${soldCount} active instances. Hence it is not possible to reconfigure.`;
+
 
         if (totalInstanceCount && soldCount > totalInstanceCount)
             throw `There are ${soldCount} active instances, So max instance count cannot be less than that.`;
@@ -526,8 +546,12 @@ class Setup {
             }
         }
 
+        db.open();
+        let lastAssignedIPV6 = (config?.networking?.ipv6?.subnet) ? (await db.getValues(utilTable).finally(() => { db.close() })).find(i => (i.name === appenv.LAST_ASSIGNED_IPV6_ADDRESS)).value : null;
         for (const uriToken of uriTokensToBurn) {
             try {
+                if (lastAssignedIPV6)
+                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6, true);
                 await hostClient.expireLease(uriToken.uriTokenId);
             }
             catch (e) {
@@ -540,15 +564,24 @@ class Setup {
             await initClients(rippledServer);
         }
 
-        for (const idx of uriTokenIndexesToCreate) {
+        for (const idx of uriTokenIndexesToCreate.sort((a, b) => { return a - b; })) {
             try {
+                if (lastAssignedIPV6)
+                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6);
+
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
-                    appenv.TOS_HASH);
+                    appenv.TOS_HASH,
+                    lastAssignedIPV6);
             }
             catch (e) {
                 console.error(e);
             }
+        }
+
+        if (lastAssignedIPV6) {
+            db.open();
+            (await db.updateValue(utilTable, { value: lastAssignedIPV6 }, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS }).finally(() => { db.close() }));
         }
 
         await deinitClients();
@@ -601,7 +634,7 @@ class Setup {
                     // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.outboundIP?.address).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

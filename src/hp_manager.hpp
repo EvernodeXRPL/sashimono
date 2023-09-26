@@ -68,7 +68,7 @@ namespace hp
 
     void deinit();
 
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key);
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image_key, std::string_view outbound_ipv6, std::string_view outbound_net_interface);
 
     int initiate_instance(std::string &error_msg, std::string_view container_name, const msg::initiate_msg &config_msg);
 
@@ -95,7 +95,9 @@ namespace hp
 
     int write_json_values(jsoncons::ojson &d, const msg::config_struct &config);
 
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image);
+    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes,
+                     const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image,
+                     std::string_view outbound_ipv6, std::string_view outbound_net_interface);
 
     int uninstall_user(std::string_view username, const ports assigned_ports, std::string_view instance_name);
 

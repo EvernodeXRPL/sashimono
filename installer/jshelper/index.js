@@ -3,6 +3,7 @@
 const evernode = require("evernode-js-client");
 const process = require("process");
 const fs = require("fs");
+const ip6addr = require('ip6addr');
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -145,6 +146,63 @@ const funcs = {
         await xrplApi.disconnect();
 
         return { success: true };
+    },
+
+    'ip6-getsubnet': async (args) => {
+        checkParams(args, 1);
+
+        // Expecting an ipv6 subnet CIDR string as the argument.
+        const [ip, prefixLen] = args[0].split('/');
+
+        if (ip && prefixLen && !isNaN(prefixLen)) {
+
+            try {
+                // This will return the normalized abbreviated subnet CIDR notation.
+                const cidr = ip6addr.createCIDR(ip, parseInt(prefixLen));
+                return { success: true, result: cidr.toString() };
+            }
+            catch {
+                // Silent catch so that we don't log exceptions to console.
+                // This will be treated as ip validation failure.
+            }
+        }
+
+        return { success: false };
+    },
+
+    'ip6-nested-subnet': async (args) => {
+        checkParams(args, 2);
+
+        const primarySubnet = args[0];
+        const nestedSubnet = args[1];
+
+        // Expecting ipv6 subnet CIDR strings as the arguments.
+        const [primaryIp, primaryPrefixLen] = primarySubnet.split('/');
+        const [nestedIp, nestedPrefixLen] = nestedSubnet.split('/');
+
+        if (primaryIp && primaryPrefixLen && !isNaN(primaryPrefixLen) &&
+            nestedIp && nestedPrefixLen && !isNaN(nestedPrefixLen)) {
+
+            try {
+
+                const primaryCidr = ip6addr.createCIDR(primaryIp, parseInt(primaryPrefixLen));
+                const nestedCidr = ip6addr.createCIDR(nestedIp, parseInt(nestedPrefixLen));
+
+                // Check whether nested cidr address range is inside primary cidr address range.
+                if (primaryCidr.first().compare(nestedCidr.first()) <= 0 &&
+                    primaryCidr.last().compare(nestedCidr.last()) >= 0) {
+
+                    // This will return the normalized abbreviated nested subnet CIDR notation.
+                    return { success: true, result: nestedCidr.toString() };
+                }
+            }
+            catch {
+                // Silent catch so that we don't log exceptions to console.
+                // This will be treated as ip validation failure.
+            }
+        }
+
+        return { success: false };
     }
 }
 

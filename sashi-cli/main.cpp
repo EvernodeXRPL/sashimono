@@ -90,10 +90,12 @@ int parse_cmd(int argc, char **argv)
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
 
-    std::string owner, contract_id, image;
+    std::string owner, contract_id, image, outbound_ipv6, outbound_net_interface;
     create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
     create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
     create->add_option("-i,--image", image, "Container image to use");
+    create->add_option("-a,--outbound-ipv6", outbound_ipv6, "Outbound IPV6 Address");
+    create->add_option("-f,--outbound-net-interface", outbound_net_interface, "Outbound IPV6 Network Interface (Façade)");
 
     std::string container_name;
     create->add_option("-n,--name", container_name, "Instance name");
@@ -134,8 +136,7 @@ int parse_cmd(int argc, char **argv)
         return execute_cli([]()
                            {
                                std::cout << cli::ctx.socket_path << std::endl;
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (list->parsed())
     {
@@ -146,8 +147,7 @@ int parse_cmd(int argc, char **argv)
                                    std::cerr << "Failed to list instances." << std::endl;
                                    return -1;
                                }
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (json->parsed() && !json_message.empty())
     {
@@ -158,13 +158,12 @@ int parse_cmd(int argc, char **argv)
                                    return -1;
 
                                std::cout << output << std::endl;
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (create->parsed() && !container_name.empty() && !owner.empty() && !contract_id.empty() && !image.empty())
     {
         return execute_cli([&]()
-                           { return cli::create(container_name, owner, contract_id, image); });
+                           { return cli::create(container_name, owner, contract_id, image, outbound_ipv6, outbound_net_interface); });
     }
     else if (start->parsed() && !container_name.empty())
     {

@@ -23,7 +23,6 @@ appenv = {
     SASHI_CONFIG_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.cfg",
     SASHI_TABLE_NAME: 'instances',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
-    LAST_ASSIGNED_IPV6_ADDRESS: 'last_assigned_ipv6_address',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,
     ACQUIRE_LEASE_WAIT_TIMEOUT_THRESHOLD: 0.4,
     ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS: 4,

@@ -978,7 +978,7 @@ function reconfig_sashi() {
 function reconfig_mb() {
     echomult "Configuaring message board...\n"
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server &&
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface &&
         echo "There was an error in updating message board configuration." && return 1
     return 0
 }
@@ -992,7 +992,9 @@ function config() {
     alloc_swapKB=0
     alloc_diskKB=0
     lease_amount=0
-    rippled_server=''
+    rippled_server='-'
+    ipv6_subnet='-'
+    ipv6_net_interface='-'
 
     local saconfig="$SASHIMONO_DATA/sa.cfg"
     local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
@@ -1003,6 +1005,9 @@ function config() {
     local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
     local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
     local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
+
+    local cfg_ipv6_subnet=$(jq -r '.networking.ipv6.subnet' $mbconfig)
+    local cfg_ipv6_net_interface=$(jq -r '.networking.ipv6.interface' $mbconfig)
 
     local update_sashi=0
     local update_mb=0
@@ -1024,9 +1029,6 @@ function config() {
             \n Disk space: $(GB $max_storage_kbytes)
             \n Instance count: $max_instance_count\n" && exit 0
 
-        if ( [[ $occupied_instance_count -gt 0 ]] ); then
-            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
-        fi
 
         local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
         [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
@@ -1064,9 +1066,6 @@ function config() {
         local amount=${2}      # Contract instance lease amount in EVRs.
         [ -z $amount ] && echomult "Your current lease amount is: $cfg_lease_amount EVRs.\n" && exit 0
 
-        if ( [[ $occupied_instance_count -gt 0 ]] ); then
-            echomult "Could not proceed the re-configuration as there are occupied instances." && exit 1
-        fi
 
         ! validate_positive_decimal $amount &&
             echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
@@ -1155,9 +1154,34 @@ function config() {
         # We do not need to restart services for email update.
         echomult "\nSuccessfully changed the email address!\n" && exit 0
 
+    elif [ "$sub_mode" == "instance" ] ; then
+        local attribute=${2}
+
+        if [ "$attribute" == "ipv6" ] ; then
+            ([ ! -z $cfg_ipv6_subnet ] && [ ! -z $cfg_ipv6_net_interface ]) &&
+            echomult "You have already enabled IPv6 for instance outbound communication.
+            \n Network Interface: $cfg_ipv6_net_interface
+            \n Subnet: $cfg_ipv6_subnet" &&
+            ! confirm "\nDo you want to go for a reconfiguration?" && return 0
+
+            if ( [[ $occupied_instance_count -gt 0 ]] ); then
+                echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
+            fi
+
+            set_ipv6_subnet
+            if [[ "$ipv6_subnet" == "-" || "$ipv6_net_interface" == "-" ]]; then
+                echo -e "Could not proceed with provided details." && exit 1
+            fi
+
+            echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
+            update_mb=1
+
+        else
+            echomult "Invalid arguments.\n  Usage: evernode config instance [ipv6]\n" && exit 1
+        fi
 
     else
-        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email] [arguments]\n" && exit 1
+        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email|instance] [arguments]\n" && exit 1
     fi
 
     local mb_user_id=$(id -u "$MB_XRPL_USER")

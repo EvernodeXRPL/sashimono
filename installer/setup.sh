@@ -1158,7 +1158,7 @@ function config() {
         local attribute=${2}
 
         if [ "$attribute" == "ipv6" ] ; then
-            ([ ! -z $cfg_ipv6_subnet ] && [ ! -z $cfg_ipv6_net_interface ]) &&
+            ([ "$cfg_ipv6_subnet" != null ] && [ "$cfg_ipv6_net_interface" != null ]) &&
             echomult "You have already enabled IPv6 for instance outbound communication.
             \n Network Interface: $cfg_ipv6_net_interface
             \n Subnet: $cfg_ipv6_subnet" &&

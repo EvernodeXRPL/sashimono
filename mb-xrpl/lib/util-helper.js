@@ -5,7 +5,6 @@ class UtilHelper {
     static generateIPV6Address(subnetStr, incrementor) {
         const subnet = ip6addr.createCIDR(subnetStr);
         const firstIP = subnet.first().toString({ zeroElide: false, zeroPad: true }).toUpperCase();
-        console.log(firstIP)
         const ipv6BigInt = BigInt("0x" + firstIP.replace(/:/g, ""));
 
         const resultBigInt = ipv6BigInt + BigInt(incrementor);

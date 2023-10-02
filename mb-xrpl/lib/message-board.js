@@ -831,7 +831,8 @@ class MessageBoard {
                         // Send the acquire response with created instance info.
                         // Modify Response.
                         createRes.content.domain = createRes.content.ip;
-                        createRes.content.outbound_ip = uriInfo.outboundIP?.address;
+                        if (uriInfo.outboundIP)
+                            createRes.content.outbound_ip = uriInfo.outboundIP.address;
                         delete createRes.content.ip;
                         const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
                         await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, options);

@@ -204,15 +204,10 @@ class Setup {
                 await hostClient.register(countryCode, cpuMicroSec,
                     Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
 
-                // Generate IPV6 Address (If the host has done relevant configuration)
-                let ipV6AddressList = [];
-                if (config?.networking?.ipv6?.subnet)
-                    ipV6AddressList = UtilHelper.generateIPV6Addresses(config.networking.ipv6.subnet, totalInstanceCount);
-
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, ipV6AddressList.length > 0 ? ipV6AddressList[i] : null);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -403,7 +398,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -421,10 +416,12 @@ class Setup {
         // Return if not changed.
         if (!totalInstanceCount &&
             (!leaseAmount || cfg.xrpl.leaseAmount == leaseAmount) &&
-            (!rippledServer || cfg.xrpl.rippledServer == leaseAmount))
+            (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
+            (!ipv6Subnet) &&
+            (!ipv6NetInterface))
             return;
 
-        await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, cfg);
+        await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
 
         if (leaseAmountParsed)
             cfg.xrpl.leaseAmount = leaseAmountParsed;
@@ -434,25 +431,14 @@ class Setup {
     }
 
     // Recreate unsold URITokens
-    async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, existingCfg) {
+    async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, outboundSubnet, outboundNetInterface, existingCfg) {
         // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
-        const utilTable = appenv.DB_UTIL_TABLE_NAME;
-        const config = this.#getConfig();
 
         db.open();
         const leaseRecords = (await db.getValues(leaseTable).finally(() => { db.close() })).filter(i => (i.status === "Acquired" || i.status === "Extended"));
         const soldCount = leaseRecords.length;
-
-        // NOTE : This was added after IPV6 address assignment to URI tokens. If we allow to change the instance count
-        // there may be an issue of loosing the IP address assignment order, because the acquisitions never follows any order.
-        // Due to that nature there may a chance of having sold instances with intermediate IP addresses. Hence in such kind of a scenario
-        // we cannot handle the LAST_ASSIGNED_IPV6_ADDRESS property as we expect.
-        // TODO : Should cater to reconfigure with occupied leases (sold instances).
-        if (soldCount)
-            throw `There are ${soldCount} active instances. Hence it is not possible to reconfigure.`;
-
 
         if (totalInstanceCount && soldCount > totalInstanceCount)
             throw `There are ${soldCount} active instances, So max instance count cannot be less than that.`;
@@ -484,7 +470,7 @@ class Setup {
         const unsoldCount = unsoldUriTokens.length;
 
         // Return if not changed.
-        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount)) {
+        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount) && (!outboundSubnet || !outboundNetInterface)) {
             await deinitClients();
             return;
         }
@@ -545,13 +531,17 @@ class Setup {
                 uriTokenIndexesToCreate = await getVacantLeaseIndexes(false);
             }
         }
+        // If only instance outbound networking was changed.
+        else if (outboundSubnet && outboundNetInterface) {
+            uriTokensToBurn = unsoldUriTokens;
+            uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex);
 
-        db.open();
-        let lastAssignedIPV6 = (config?.networking?.ipv6?.subnet) ? (await db.getValues(utilTable).finally(() => { db.close() })).find(i => (i.name === appenv.LAST_ASSIGNED_IPV6_ADDRESS)).value : null;
+            // Updating the config object fields.
+            existingCfg.networking = { ipv6: { subnet: outboundSubnet, interface: outboundNetInterface } }
+        }
+
         for (const uriToken of uriTokensToBurn) {
             try {
-                if (lastAssignedIPV6)
-                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6, true);
                 await hostClient.expireLease(uriToken.uriTokenId);
             }
             catch (e) {
@@ -564,24 +554,16 @@ class Setup {
             await initClients(rippledServer);
         }
 
-        for (const idx of uriTokenIndexesToCreate.sort((a, b) => { return a - b; })) {
+        for (const idx of uriTokenIndexesToCreate) {
             try {
-                if (lastAssignedIPV6)
-                    lastAssignedIPV6 = UtilHelper.generateValidIPV6Address(config.networking.ipv6.subnet, lastAssignedIPV6);
-
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
                     appenv.TOS_HASH,
-                    lastAssignedIPV6);
+                    (existingCfg?.networking?.ipv6?.subnet) ? UtilHelper.generateIPV6Address(existingCfg.networking.ipv6.subnet, idx) : null);
             }
             catch (e) {
                 console.error(e);
             }
-        }
-
-        if (lastAssignedIPV6) {
-            db.open();
-            (await db.updateValue(utilTable, { value: lastAssignedIPV6 }, { name: appenv.LAST_ASSIGNED_IPV6_ADDRESS }).finally(() => { db.close() }));
         }
 
         await deinitClients();

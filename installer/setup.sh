@@ -1082,6 +1082,8 @@ function config() {
         local server=${2}    # Rippled server URL
         [ -z $server ] && echomult "Your current rippled server is: $cfg_rippled_server\n" && exit 0
 
+        init_setup_helpers
+
         ! validate_rippled_url $server &&
             echomult "\nUsage: evernode config rippled | evernode config rippled <rippled server>\n" &&
             exit 1
@@ -1168,6 +1170,8 @@ function config() {
                 echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
             fi
 
+            init_setup_helpers
+
             set_ipv6_subnet
             if [[ "$ipv6_subnet" == "-" || "$ipv6_net_interface" == "-" ]]; then
                 echo -e "Could not proceed with provided details." && exit 1
@@ -1188,7 +1192,7 @@ function config() {
     local mb_user_runtime_dir="/run/user/$mb_user_id"
     local has_error=0
 
-    echomult "\nStaring the reconfiguration...\n"
+    echomult "\nStarting the reconfiguration...\n"
 
     # Stop the message board service.
     echomult "Stopping the message board..."

@@ -173,7 +173,6 @@ function check_prereq() {
         echo "host command not found. Installing.."
         apt-get -y install bind9-host >/dev/null
     fi
-
 }
 
 function check_sys_req() {
@@ -802,7 +801,6 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-
     local latest_installer_script_version=$(online_version_timestamp $installer_url)
     local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
@@ -1172,7 +1170,6 @@ function config() {
                 echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
             fi
 
-            # Setup JS helpers if the directory is removed.
             init_setup_helpers
 
             set_ipv6_subnet

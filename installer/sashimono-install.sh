@@ -26,6 +26,7 @@ ipv6_subnet=${19}
 ipv6_net_interface=${20}
 
 script_dir=$(dirname "$(realpath "$0")")
+desired_slirp4netns_version="1.2.1"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -175,6 +176,28 @@ function setup_tls_certs() {
     fi
 }
 
+function check_dependencies(){
+    local setup_slirp4netns=0
+
+    if command -v slirp4netns &> /dev/null; then
+        installed_version=$(slirp4netns --version | awk 'NR==1 {print $3}')
+        if [ "$installed_version" != "$desired_slirp4netns_version" ]; then
+            apt-get -y remove slirp4netns >/dev/null
+            setup_slirp4netns=1
+        fi
+    else
+        setup_slirp4netns=1
+    fi
+
+    if [ $setup_slirp4netns -gt 0 ] ; then
+        # Setting up slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
+        stage "Setting up slirp4netns.."
+        curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v$desired_slirp4netns_version/slirp4netns-$(uname -m)
+        chmod +x /tmp/slirp4netns
+        mv /tmp/slirp4netns /usr/bin/
+    fi
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -219,6 +242,9 @@ chmod -R +x $SASHIMONO_BIN
 
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $USER_BIN
+
+# Check whether denedencies are installed or not. (slirp4netns)
+check_dependencies
 
 # Download and install rootless dockerd.
 stage "Installing docker packages"

@@ -31,6 +31,7 @@ default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_temp_bin="$setup_helper_dir/node"
 jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
+desired_slirp4netns_version="1.2.1"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -172,6 +173,25 @@ function check_prereq() {
     if ! command -v host &> /dev/null; then
         echo "host command not found. Installing.."
         apt-get -y install bind9-host >/dev/null
+    fi
+
+    local setup_slirp4netns=0
+    if command -v slirp4netns &> /dev/null; then
+        installed_version=$(slirp4netns --version | awk 'NR==1 {print $3}')
+        if [ "$installed_version" != "$desired_slirp4netns_version" ]; then
+            apt-get -y remove slirp4netns >/dev/null
+            setup_slirp4netns=1
+        fi
+    else
+        setup_slirp4netns=1
+    fi
+
+    if [ $setup_slirp4netns -gt 0 ] ; then
+        # Setting up slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
+        echo "Setting up slirp4netns.."
+        curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v$desired_slirp4netns_version/slirp4netns-$(uname -m)
+        chmod +x /tmp/slirp4netns
+        mv /tmp/slirp4netns /usr/bin/
     fi
 }
 
@@ -801,6 +821,10 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
+
+    # Installing any missing pre-requisites.(Ensuring to install pre-requisites in auto-update even)
+    check_prereq
+
     local latest_installer_script_version=$(online_version_timestamp $installer_url)
     local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
@@ -1170,6 +1194,10 @@ function config() {
                 echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
             fi
 
+            # Installing any missing pre-requisites. (slirp4netns dependency)
+            check_prereq
+
+            # Setup JS helpers if it is cleared.
             init_setup_helpers
 
             set_ipv6_subnet

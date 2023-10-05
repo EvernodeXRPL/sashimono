@@ -1172,7 +1172,7 @@ function config() {
                 echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
             fi
 
-            # Setup JS helpers if it is cleared.
+            # Setup JS helpers if the directory is removed.
             init_setup_helpers
 
             set_ipv6_subnet

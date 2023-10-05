@@ -191,7 +191,7 @@ function check_dependencies(){
 
     if [ $setup_slirp4netns -gt 0 ] ; then
         # Setting up slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
-        stage "Setting up slirp4netns.."
+        stage "Setting up slirp4netns"
         curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v$desired_slirp4netns_version/slirp4netns-$(uname -m)
         chmod +x /tmp/slirp4netns
         mv /tmp/slirp4netns /usr/bin/

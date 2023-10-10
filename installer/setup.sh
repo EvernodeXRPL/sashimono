@@ -29,8 +29,8 @@ installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
-nodejs_temp_bin="$setup_helper_dir/node"
-jshelper_temp_bin="$setup_helper_dir/jshelper/index.js"
+nodejs_util_bin="$setup_helper_dir/node"
+jshelper_bin="$setup_helper_dir/jshelper/index.js"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -146,6 +146,13 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     (! $transfer || $installed) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
+# Change the relevant setup helper path based on the evernode installation condition and the command mode.
+if $installed && [ "$mode" != "update" ] ; then
+    setup_helper_dir="$SASHIMONO_BIN/evernode-setup-helpers"
+    nodejs_util_bin="$setup_helper_dir/node"
+    jshelper_bin="$setup_helper_dir/jshelper/index.js"
+fi
+
 # Format the given KB number into GB units.
 function GB() {
     echo "$(bc <<<"scale=2; $1 / 1000000") GB"
@@ -214,22 +221,22 @@ function init_setup_helpers() {
 
     echo "Downloading setup support files..."
 
-    local jshelper_dir=$(dirname $jshelper_temp_bin)
+    local jshelper_dir=$(dirname $jshelper_bin)
     rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
-    [ ! -f "$nodejs_temp_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_temp_bin
-    [ ! -f "$nodejs_temp_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
-    chmod +x $nodejs_temp_bin
+    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_util_bin
+    [ ! -f "$nodejs_util_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
+    chmod +x $nodejs_util_bin
 
-    if [ ! -f "$jshelper_temp_bin" ]; then
+    if [ ! -f "$jshelper_bin" ]; then
         pushd $jshelper_dir >/dev/null 2>&1
         sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
         sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
         rm jshelper.tar.gz
         popd >/dev/null 2>&1
     fi
-    [ ! -f "$jshelper_temp_bin" ] && echo "Could not download helper tool for setup checks." && exit 1
+    [ ! -f "$jshelper_bin" ] && echo "Could not download helper tool for setup checks." && exit 1
     echo -e "Done.\n"
 }
 
@@ -240,7 +247,7 @@ function exec_jshelper() {
     [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_temp_bin $jshelper_temp_bin "$@" >/dev/null 2>&1 &
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     
@@ -826,6 +833,8 @@ function update_evernode() {
         echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
+    rm -r $setup_helper_dir >/dev/null 2>&1
+
     echo "Upgrade complete."
 }
 
@@ -1082,8 +1091,6 @@ function config() {
         local server=${2}    # Rippled server URL
         [ -z $server ] && echomult "Your current rippled server is: $cfg_rippled_server\n" && exit 0
 
-        init_setup_helpers
-
         ! validate_rippled_url $server &&
             echomult "\nUsage: evernode config rippled | evernode config rippled <rippled server>\n" &&
             exit 1
@@ -1169,8 +1176,6 @@ function config() {
             if ( [[ $occupied_instance_count -gt 0 ]] ); then
                 echomult "Could not proceed the reconfiguration as there are occupied instances." && exit 1
             fi
-
-            init_setup_helpers
 
             set_ipv6_subnet
             if [[ "$ipv6_subnet" == "-" || "$ipv6_net_interface" == "-" ]]; then

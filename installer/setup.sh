@@ -146,7 +146,7 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     (! $transfer || $installed) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
-# Change the relevant setup helper path based on the evernode installation condition and the command mode.
+# Change the relevant setup helper path based on Evernode installation condition and the command mode.
 if $installed && [ "$mode" != "update" ] ; then
     setup_helper_dir="$SASHIMONO_BIN/evernode-setup-helpers"
     nodejs_util_bin="$setup_helper_dir/node"

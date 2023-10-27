@@ -60,8 +60,8 @@ i=0
 while true; do
     sleep 1
     procs=$(ps -U $user 2>/dev/null | wc -l)
-    [ "$procs" == "1" ] && echo "All user procs terminated." && break
-    [[ $i -ge $max_kill_attempts ]] && echo "Max force user proc kill attempts $max_kill_attempts reached. Abondaning." && break
+    [ "$procs" == "1" ] && echo "All user processes terminated." && break
+    [[ $i -ge $max_kill_attempts ]] && echo "Max force user process kill attempts $max_kill_attempts reached. Abondaning." && break
     ((i++))
     echo "Force killing user processes. Retrying $i..."
     pkill -SIGKILL -u "$user"

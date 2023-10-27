@@ -27,6 +27,7 @@ ipv6_net_interface=${20}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
+setup_helper_dir="/tmp/evernode-setup-helpers"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -236,6 +237,9 @@ rm -r "$tmp"
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
+
+# Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
+cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig

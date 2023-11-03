@@ -23,8 +23,12 @@ tls_key_file=${16}
 tls_cert_file=${17}
 tls_cabundle_file=${18}
 description=${19}
+ipv6_subnet=${20}
+ipv6_net_interface=${21}
 
 script_dir=$(dirname "$(realpath "$0")")
+desired_slirp4netns_version="1.2.1"
+setup_helper_dir="/tmp/evernode-setup-helpers"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -174,6 +178,28 @@ function setup_tls_certs() {
     fi
 }
 
+function check_dependencies(){
+    local setup_slirp4netns=0
+
+    if command -v slirp4netns &> /dev/null; then
+        installed_version=$(slirp4netns --version | awk 'NR==1 {print $3}')
+        if [ "$installed_version" != "$desired_slirp4netns_version" ]; then
+            apt-get -y remove slirp4netns >/dev/null
+            setup_slirp4netns=1
+        fi
+    else
+        setup_slirp4netns=1
+    fi
+
+    if [ $setup_slirp4netns -gt 0 ] ; then
+        # Setting up slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
+        stage "Setting up slirp4netns"
+        curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v$desired_slirp4netns_version/slirp4netns-$(uname -m)
+        chmod +x /tmp/slirp4netns
+        mv /tmp/slirp4netns /usr/bin/
+    fi
+}
+
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
@@ -213,11 +239,17 @@ rm -r "$tmp"
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
+# Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
+cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
+
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
 
 # Install Sashimono CLI binaries into user bin dir.
 cp "$script_dir"/sashi $USER_BIN
+
+# Check whether denedencies are installed or not. (slirp4netns)
+check_dependencies
 
 # Download and install rootless dockerd.
 stage "Installing docker packages"
@@ -273,7 +305,7 @@ if [ "$NO_MB" == "" ]; then
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server "${fallback_rippled_servers[*]}" && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server "${fallback_rippled_servers[*]}" $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 
@@ -283,7 +315,8 @@ if [ "$NO_MB" == "" ]; then
             set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
             # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
             # Add -p to the progress logs so they would be printed overwriting the same line.
-            echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
+            echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count \
+                $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
                 $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description |
                 stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
@@ -331,7 +364,8 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
 else
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT \
+        $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
 fi
 
 if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then

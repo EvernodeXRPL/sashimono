@@ -6,6 +6,7 @@ const fs = require('fs');
 const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
+const { UtilHelper } = require('./util-helper');
 
 function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
     evernode.Defaults.set({
@@ -56,8 +57,8 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, fallbackRippledServers = []) {
-        this.#saveConfig({
+    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, fallbackRippledServers = [], ipv6Subnet = null, ipv6NetInterface = null) {
+        const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
@@ -67,7 +68,9 @@ class Setup {
                 fallbackRippledServers: fallbackRippledServers,
                 leaseAmount: leaseAmount
             }
-        });
+        };
+
+        this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
     async setupHostAccount(address, secret, rippledServer, governorAddress, domain, fallbackRippledServers) {
@@ -175,10 +178,11 @@ class Setup {
         return acc;
     }
 
-    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description = "") {
+    async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
-        const acc = this.#getConfig().xrpl;
+        const config = this.#getConfig();
+        const acc = config.xrpl;
         setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
 
         const xrplApi = new evernode.XrplApi(acc.rippledServer, { fallbackRippledServers: acc.fallbackRippledServers });
@@ -206,7 +210,7 @@ class Setup {
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null);
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -409,7 +413,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -427,10 +431,12 @@ class Setup {
         // Return if not changed.
         if (!totalInstanceCount &&
             (!leaseAmount || cfg.xrpl.leaseAmount == leaseAmount) &&
-            (!rippledServer || cfg.xrpl.rippledServer == leaseAmount))
+            (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
+            (!ipv6Subnet) &&
+            (!ipv6NetInterface))
             return;
 
-        await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, cfg);
+        await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
 
         if (leaseAmountParsed)
             cfg.xrpl.leaseAmount = leaseAmountParsed;
@@ -440,7 +446,7 @@ class Setup {
     }
 
     // Recreate unsold URITokens
-    async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, existingCfg) {
+    async recreateLeases(leaseAmount, totalInstanceCount, rippledServer, outboundSubnet, outboundNetInterface, existingCfg) {
         // Get sold URITokens.
         const db = new SqliteDatabase(appenv.DB_PATH);
         const leaseTable = appenv.DB_TABLE_NAME;
@@ -479,7 +485,7 @@ class Setup {
         const unsoldCount = unsoldUriTokens.length;
 
         // Return if not changed.
-        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount)) {
+        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount) && (!outboundSubnet || !outboundNetInterface)) {
             await deinitClients();
             return;
         }
@@ -540,6 +546,14 @@ class Setup {
                 uriTokenIndexesToCreate = await getVacantLeaseIndexes(false);
             }
         }
+        // If only instance outbound networking was changed.
+        else if (outboundSubnet && outboundNetInterface) {
+            uriTokensToBurn = unsoldUriTokens;
+            uriTokenIndexesToCreate = uriTokensToBurn.map(n => n.leaseIndex);
+
+            // Updating the config object fields.
+            existingCfg.networking = { ipv6: { subnet: outboundSubnet, interface: outboundNetInterface } }
+        }
 
         for (const uriToken of uriTokensToBurn) {
             try {
@@ -559,7 +573,8 @@ class Setup {
             try {
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
-                    appenv.TOS_HASH);
+                    appenv.TOS_HASH,
+                    (existingCfg?.networking?.ipv6?.subnet) ? UtilHelper.generateIPV6Address(existingCfg.networking.ipv6.subnet, idx) : null);
             }
             catch (e) {
                 console.error(e);
@@ -616,7 +631,7 @@ class Setup {
                     // Burn the URITokens and recreate the offer.
                     await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.outboundIP?.address).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();

@@ -13,7 +13,7 @@ async function main() {
 
     try {
         if (process.argv.length >= 3) {
-            if (process.argv.length == 10 && process.argv[2] === 'new') {
+            if (process.argv.length >= 9 && process.argv[2] === 'new') {
                 const accountAddress = process.argv[3];
                 const accountSecret = process.argv[4];
                 const governorAddress = process.argv[5];
@@ -21,9 +21,11 @@ async function main() {
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const fallbackRippledServers = process.argv[9].split(" ").filter(Boolean);
+                const ipv6Subnet = (process.argv[10] === '-') ? null : process.argv[10];
+                const ipv6NetInterface = (process.argv[11] === '-') ? null : process.argv[11];
                 const setup = new Setup();
                 const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain, fallbackRippledServers);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer, fallbackRippledServers);
+                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer, fallbackRippledServers, ipv6Subnet, ipv6NetInterface);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const governorAddress = process.argv[3];
@@ -53,8 +55,12 @@ async function main() {
             else if (process.argv.length === 4 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade(process.argv[3]);
             }
-            else if ((process.argv.length === 5 || process.argv.length === 6) && process.argv[2] === 'reconfig') {
-                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4]);
+            else if ((process.argv.length === 8) && process.argv[2] === 'reconfig') {
+                if (process.argv[5] == '-') process.argv[5] = null;
+                if (process.argv[6] == '-') process.argv[6] = null;
+                if (process.argv[7] == '-') process.argv[7] = null;
+
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7]);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);
@@ -72,7 +78,7 @@ async function main() {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [governorAddress] [leaseAmount] - Create new config files.
+        node index.js new [address] [secret] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] - Create new config files.
         node index.js betagen [governorAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.

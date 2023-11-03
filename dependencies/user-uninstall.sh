@@ -20,6 +20,7 @@ else
 fi
 
 contract_user="$user-secuser"
+hpsh_user="$user-secuserhpsh"
 cgroupsuffix="-cg"
 user_dir=/home/$user
 user_id=$(id -u "$user")
@@ -104,6 +105,9 @@ fi
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"
+
+echo "Deleting hpsh user '$hpsh_user'"
+userdel "$hpsh_user"
 
 if [ -f $cleanup_script ]; then
     echo "Executing cleanup script..."

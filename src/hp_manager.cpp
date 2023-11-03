@@ -27,6 +27,9 @@ namespace hp
     conf::ugid contract_ugid;
     constexpr int CONTRACT_USER_ID = 10000;
     constexpr int CONTRACT_GROUP_ID = 0;
+    conf::ugid hpsh_ugid;
+    constexpr int HPSH_USER_ID = 10001;
+    constexpr int HPSH_GROUP_ID = 0;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
@@ -95,8 +98,9 @@ namespace hp
         instance_resources.swap_kbytes = instance_resources.mem_kbytes + (conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count);
         instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
         // Set run as group id 0 (sashimono user group id, root user inside docker container).
-        // Because contract user is in sashimono user's group, so the contract user will get the group permissions.
+        // Because secondary users is in sashimono user's group, so the secondary users will get the group permissions.
         contract_ugid = {CONTRACT_USER_ID, CONTRACT_GROUP_ID};
+        hpsh_ugid = {HPSH_USER_ID, HPSH_GROUP_ID};
 
         return 0;
     }
@@ -569,6 +573,7 @@ namespace hp
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
         d["hpfs"]["external"] = true;
+        d["hpsh"]["run_as"] = hpsh_ugid.to_string();
 
         if (util::write_json_file(config_fd, d) == -1)
         {
@@ -911,7 +916,9 @@ namespace hp
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,
-            outbound_net_interface};
+            outbound_net_interface,
+            std::to_string(hpsh_ugid.uid),
+            std::to_string(hpsh_ugid.gid)};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

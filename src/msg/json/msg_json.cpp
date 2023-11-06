@@ -341,7 +341,7 @@ namespace msg::json
 
                 if (consensus.contains(msg::FLD_FALLBACK))
                 {
-                    const jsoncons::json &fallback = contract[msg::FLD_FALLBACK];
+                    const jsoncons::json &fallback = consensus[msg::FLD_FALLBACK];
                     if (fallback.contains(msg::FLD_EXECUTE))
                         msg.config.contract.consensus.fallback.execute = fallback[msg::FLD_EXECUTE].as<bool>();
                 }

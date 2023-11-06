@@ -720,7 +720,7 @@ namespace hp
                 d["contract"]["consensus"]["threshold"] = config.contract.consensus.threshold.value();
 
             if (config.contract.consensus.fallback.execute.has_value())
-                d["contract"]["consensus"]["fallback"]["fallback"]["execute"] = config.contract.consensus.fallback.execute.value();
+                d["contract"]["consensus"]["fallback"]["execute"] = config.contract.consensus.fallback.execute.value();
 
             if (config.contract.npl.mode.has_value())
                 d["contract"]["npl"]["mode"] = config.contract.npl.mode.value();
@@ -1068,11 +1068,11 @@ namespace hp
 
         close(fd);
 
-        if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
-        {
-            LOG_ERROR << "Cgrules config entry does not exist.";
-            return false;
-        }
+        // if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
+        // {
+        //     LOG_ERROR << "Cgrules config entry does not exist.";
+        //     return false;
+        // }
 
         // Check there's a pending reboot.
         if (util::is_file_exists(REBOOT_FILE))

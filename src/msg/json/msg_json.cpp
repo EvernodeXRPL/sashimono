@@ -467,6 +467,15 @@ namespace msg::json
             if (hpfs.contains(msg::FLD_LOG) && hpfs[msg::FLD_LOG].contains(msg::FLD_LOG_LEVEL))
                 msg.config.hpfs.log.log_level = hpfs[msg::FLD_LOG][msg::FLD_LOG_LEVEL].as<std::string>();
         }
+        if (config.contains(msg::FLD_HPSH))
+        {
+            const jsoncons::json &hpsh = config[msg::FLD_HPFS];
+            if (hpsh.contains(msg::FLD_ENABLED))
+                    msg.config.hpsh.enabled = hpsh[msg::FLD_ENABLED].as<bool>();
+            if (hpsh.contains(msg::FLD_ENABLED)){
+                msg.config.hpsh.run_as = hpsh[msg::FLD_RUN_AS].as<std::string>();
+            }
+        }
 
         if (config.contains(msg::FLD_LOG))
         {

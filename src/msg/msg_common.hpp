@@ -124,6 +124,12 @@ namespace msg
         std::optional<size_t> max_file_count;      // Max no. of log files to keep.
     };
 
+    struct hpsh_config
+    {
+        std::optional<bool> enabled;
+        std::optional<std::string> run_as;
+    };
+
     // Keep numerical config valus as optional so when updating the config if the value is empty
     // We do nothing otherwise we take the value and update the config.
     struct config_struct
@@ -134,7 +140,10 @@ namespace msg
         user_config user;
         hpfs_config hpfs;
         log_config log;
+        hpsh_config hpsh;
     };
+
+    
 
     struct initiate_msg
     {
@@ -200,6 +209,7 @@ namespace msg
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";
     constexpr const char *FLD_ENABLED = "enabled";
+    constexpr const char *FLD_RUN_AS = "run_as";
     constexpr const char *FLD_INTERVAL = "interval";
     constexpr const char *FLD_MAX_MB_PER_FILE = "max_mbytes_per_file";
     constexpr const char *FLD_MAX_FILE_COUNT = "max_file_count";
@@ -207,6 +217,7 @@ namespace msg
     constexpr const char *FLD_CONTRACT = "contract";
     constexpr const char *FLD_NODE = "node";
     constexpr const char *FLD_HPFS = "hpfs";
+    constexpr const char *FLD_HPSH = "hpsh";
     constexpr const char *FLD_CONFIG = "config";
     constexpr const char *FLD_ROLE = "role";
     constexpr const char *FLD_HISTORY = "history";

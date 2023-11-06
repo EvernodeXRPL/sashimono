@@ -867,6 +867,10 @@ namespace hp
                 d["hpfs"]["log"]["log_level"] = config.hpfs.log.log_level;
         }
 
+        // Hpsh
+            if(!config.hpsh.enabled.has_value())
+                d["hpsh"]["enabled"] = config.hpsh.enabled.value();
+
         // Log
         {
             if (!config.log.log_level.empty())

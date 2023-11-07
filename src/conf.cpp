@@ -113,7 +113,6 @@ namespace conf
         ctx.data_dir = datadir.empty() ? ctx.exe_dir : util::realpath(datadir);
 
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
-        ctx.hpsh_exe_path = ctx.exe_dir + "/hpsh";
         ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 

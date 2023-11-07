@@ -128,6 +128,7 @@ namespace msg
     {
         std::optional<bool> enabled;
         std::optional<std::string> run_as;
+        std::set<std::string> users; // List of users who are allowed to perform hpsh (list of binary public keys).
     };
 
     // Keep numerical config valus as optional so when updating the config if the value is empty
@@ -209,7 +210,6 @@ namespace msg
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";
     constexpr const char *FLD_ENABLED = "enabled";
-    constexpr const char *FLD_RUN_AS = "run_as";
     constexpr const char *FLD_INTERVAL = "interval";
     constexpr const char *FLD_MAX_MB_PER_FILE = "max_mbytes_per_file";
     constexpr const char *FLD_MAX_FILE_COUNT = "max_file_count";
@@ -218,6 +218,7 @@ namespace msg
     constexpr const char *FLD_NODE = "node";
     constexpr const char *FLD_HPFS = "hpfs";
     constexpr const char *FLD_HPSH = "hpsh";
+    constexpr const char *FLD_USERS = "users";
     constexpr const char *FLD_CONFIG = "config";
     constexpr const char *FLD_ROLE = "role";
     constexpr const char *FLD_HISTORY = "history";

@@ -103,7 +103,6 @@ namespace conf
         std::string command;                // The CLI command issued to launch Sashimono agent
         std::string exe_dir;                // Sashimono Agent executable dir.
         std::string hpfs_exe_path;          // hpfs executable file path.
-        std::string hpsh_exe_path;          // hpsh executable file path.
         std::string contract_template_path; // Path to default contract.
 
         std::string socket_path; // Path to the unix socket file.

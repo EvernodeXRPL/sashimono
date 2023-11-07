@@ -462,11 +462,21 @@ class MessageBoard {
             await this.#sendHeartbeat();
         };
 
+        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
+        const currentMoment = await this.hostClient.getMoment();
+        const currentMomentDuration = currentTimestamp - currentMomentStartIdx;
+        const hostInfo = await this.hostClient.getRegistration();
 
-        // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
+        // Schedule the next heartbeat based on last heartbeat occurrence.
+        const schedule = (this.lastHeartbeatMoment < currentMoment)
+            ? (currentMomentDuration > halfMomentSize && currentMomentDuration < momentSize) ? halfMomentSize : 0
+            : momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex);
 
+        // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+
+        console.log("Testing logs", currentTimestamp, currentMomentStartIdx, currentMomentDuration, halfMomentSize, startTimeout, schedule)
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

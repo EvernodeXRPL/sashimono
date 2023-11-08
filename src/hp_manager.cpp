@@ -1068,11 +1068,11 @@ namespace hp
 
         close(fd);
 
-        // if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
-        // {
-        //     LOG_ERROR << "Cgrules config entry does not exist.";
-        //     return false;
-        // }
+        if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
+        {
+            LOG_ERROR << "Cgrules config entry does not exist.";
+            return false;
+        }
 
         // Check there's a pending reboot.
         if (util::is_file_exists(REBOOT_FILE))

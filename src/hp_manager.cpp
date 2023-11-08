@@ -719,6 +719,9 @@ namespace hp
             if (config.contract.consensus.threshold.has_value())
                 d["contract"]["consensus"]["threshold"] = config.contract.consensus.threshold.value();
 
+            if (config.contract.consensus.fallback.execute.has_value())
+                d["contract"]["consensus"]["fallback"]["execute"] = config.contract.consensus.fallback.execute.value();
+
             if (config.contract.npl.mode.has_value())
                 d["contract"]["npl"]["mode"] = config.contract.npl.mode.value();
 

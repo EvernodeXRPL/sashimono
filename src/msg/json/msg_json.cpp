@@ -338,6 +338,13 @@ namespace msg::json
 
                 if (consensus.contains(msg::FLD_THRESHOLD))
                     msg.config.contract.consensus.threshold = consensus[msg::FLD_THRESHOLD].as<uint16_t>();
+
+                if (consensus.contains(msg::FLD_FALLBACK))
+                {
+                    const jsoncons::json &fallback = consensus[msg::FLD_FALLBACK];
+                    if (fallback.contains(msg::FLD_EXECUTE))
+                        msg.config.contract.consensus.fallback.execute = fallback[msg::FLD_EXECUTE].as<bool>();
+                }
             }
 
             if (contract.contains(msg::FLD_NPL))

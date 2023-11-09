@@ -328,6 +328,13 @@ function validate_positive_decimal() {
     return 0
 }
 
+function validate_primary_server() {
+    if [ $1 = "-" ]; then
+        return 0
+    fi
+    validate_rippled_url $1
+}
+
 function validate_rippled_url() {
     ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
 
@@ -633,13 +640,13 @@ function set_rippled_server() {
     ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
     if $interactive; then
-        if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?" ; then
-            ! validate_rippled_url $rippled_server && exit 1
+        if confirm "Do you want to connect to the default primary server ($default_rippled_server)?" ; then
+            ! validate_primary_server $rippled_server && exit 1
         else
             local new_url=""
             while true ; do
-                read -p "Specify the Rippled server URL: " new_url </dev/tty
-                ! validate_rippled_url $new_url || break
+                read -p "Specify the primary server URL. (Enter '-' for no primary server): " new_url </dev/tty
+                ! validate_primary_server $new_url || break
             done
             rippled_server=$new_url
         fi
@@ -668,13 +675,27 @@ function set_fallback_rippled_servers() {
                         fallback_rippled_servers+=("$url")
                     fi
                 done
-                if confirm "Do you want to set ($(display_list "${fallback_rippled_servers[@]}")) as the fallback rippled servers ?"; then
-                    break
+                if [ "$rippled_server" == '-' ] && [ -z $fallback_rippled_servers ]; then
+                    echo "Both primary server and fallback servers cannpt be empty."  
+                else 
+                    if confirm "Do you want to set ($(display_list "${fallback_rippled_servers[@]}")) as the fallback rippled servers ?"; then
+                        break
+                    fi
                 fi
             done
         fi
     else
         fallback_rippled_servers=("${default_fallback_rippled_servers[@]}")
+    fi
+    fallback_rippled_servers_string=$(IFS=, ; echo "${fallback_rippled_servers[*]}")
+}
+
+function set_validator_server() {
+    if [ "$rippled_server" != '-' ]; then
+        validator_server=$rippled_server
+    else
+        IFS=',' read -ra fallback_servers <<<"$fallback_rippled_servers"
+        validator_server=${fallback_servers[0]}
     fi
 }
 
@@ -726,14 +747,14 @@ function set_host_xrpl_account() {
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
 
             echo "Checking account $xrpl_address..."
-            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+            ! exec_jshelper validate-account $validator_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
 
             # Take hidden input and print empty echo (new line) at the end.
             read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
 
             echo "Checking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret "${fallback_rippled_servers[*]}" && xrpl_secret="" && continue
+            ! exec_jshelper validate-keys $validator_server $xrpl_address $xrpl_secret "${fallback_rippled_servers[*]}" && xrpl_secret="" && continue
 
             break
 
@@ -799,8 +820,8 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server "${fallback_rippled_servers[*]}" $xrpl_account_address $xrpl_account_secret $email_address \
-                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address \
+                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $fallback_rippled_servers_string2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -1334,9 +1355,10 @@ if [ "$mode" == "install" ]; then
 
     if [ "$NO_MB" == "" ]; then    
         set_rippled_server
-        echo -e "Using Rippled server '$rippled_server'.\n"
+        echo -e "Using primary server: '$rippled_server'\n"
         set_fallback_rippled_servers
-        echo -e "Using Fallback Rippled servers ($(display_list "${fallback_rippled_servers[@]}")).\n"
+        echo -e "Using fallback servers: ($(display_list "${fallback_rippled_servers[@]}"))\n"
+        set_validator_server
         set_host_xrpl_account
         echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
     fi

@@ -15,16 +15,16 @@ swapKB=${8}
 diskKB=${9}
 lease_amount=${10}
 rippled_server=${11}
-fallback_rippled_servers=${12}
-xrpl_account_address=${13}
-xrpl_account_secret=${14}
-email_address=${15}
-tls_key_file=${16}
-tls_cert_file=${17}
-tls_cabundle_file=${18}
-description=${19}
-ipv6_subnet=${20}
-ipv6_net_interface=${21}
+xrpl_account_address=${12}
+xrpl_account_secret=${13}
+email_address=${14}
+tls_key_file=${15}
+tls_cert_file=${16}
+tls_cabundle_file=${17}
+description=${18}
+ipv6_subnet=${19}
+ipv6_net_interface=${20}
+fallback_rippled_servers=${21}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
@@ -304,8 +304,7 @@ if [ "$NO_MB" == "" ]; then
             # Commented for now, because 'betagen' will no longer be used.
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
-
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server "${fallback_rippled_servers[*]}" $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $fallback_rippled_servers $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

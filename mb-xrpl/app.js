@@ -19,8 +19,8 @@ async function main() {
                 const governorAddress = process.argv[5];
                 const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
-                const rippledServer = process.argv[8];
-                const fallbackRippledServers = process.argv[9].split(" ").filter(Boolean);
+                const rippledServer = (process.argv[8] === '-') ? null : process.argv[8];
+                const fallbackRippledServers = process.argv[9];
                 const ipv6Subnet = (process.argv[10] === '-') ? null : process.argv[10];
                 const ipv6NetInterface = (process.argv[11] === '-') ? null : process.argv[11];
                 const setup = new Setup();

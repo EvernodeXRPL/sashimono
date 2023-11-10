@@ -256,6 +256,22 @@ function exec_jshelper() {
     rm $resp_file && return 1
 }
 
+function exec_jshelper_root() {
+
+    # Create fifo file to read response data from the helper script.
+    local resp_file=$setup_helper_dir/helper_fifo
+    [ -p $resp_file ] || mkfifo $resp_file
+
+    # Execute js helper asynchronously while collecting response to fifo file.
+    RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
+    local pid=$!
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+    
+    # Wait for js helper to exit and reflect the error exit code in this function return.
+    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+    rm $resp_file && return 1
+}
+
 function resolve_filepath() {
     # name reference the variable name provided as first argument.
     local -n filepath=$1
@@ -297,7 +313,25 @@ function set_domain_certs() {
 }
 
 function validate_inet_addr_domain() {
-    host $inetaddr >/dev/null 2>&1 && return 0
+    if host $inetaddr >/dev/null 2>&1 ; then
+        local port="80"
+        echo "Verifying domain $inetaddr on port $port..."
+        local domain_result=$(exec_jshelper_root validate-domain $inetaddr $port)
+        [[ "$domain_result" == "ok" ]] && echo "Domain verification successful." && return 0
+
+        if [ "$domain_result" == "listen_error" ]; then
+            echomult "Could not initiate domain verification. It's likely that port $port is already in use by another application.\n
+                It's recommended that you abandon the setup and correct this. You should consider continuing only if you are an advanced user
+                who knows what they are doing, and is going to provide your own SSL certificates."
+            confirm "Do you want to abandon the setup (recommended)?" && echo "Setup abandoned." && exit 1
+            echo "Continuing with unverified domain $inetaddr" && return 0
+        fi
+
+        [[ "$domain_result" == "domain_error" ]] &&
+            echo "Domain verification for $inetaddr failed. Please make sure that this host is reachable via $inetaddr"
+    fi
+
+    # Reaching this point means some error has occured. So we clear the inetaddress to allow to try again.
     inetaddr="" && return 1
 }
 

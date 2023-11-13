@@ -5,6 +5,7 @@ let appenv = {
     IS_DEV_MODE: process.env.MB_DEV === "1",
     FILE_LOG_ENABLED: process.env.MB_FILE_LOG === "1",
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
+    SECURE_DATA_DIR: '/root/.evernode/.keys',
     FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet-v3.xrpl-labs.com/newcreds",
     DEFAULT_RIPPLED_SERVER: 'wss://hooks-testnet-v3.xrpl-labs.com',
     DEFAULT_FULL_HISTORY_NODE: 'wss://hooks-testnet-v3.xrpl-labs.com' // If we migrate to Main NET, this should be configured with the relevant full history Node WebSocket.
@@ -13,7 +14,7 @@ let appenv = {
 appenv = {
     ...appenv,
     CONFIG_PATH: appenv.DATA_DIR + '/mb-xrpl.cfg',
-    SECRET_CONFIG_PATH: appenv.DATA_DIR + '/secret.cfg',
+    SECRET_CONFIG_PATH: appenv.SECURE_DATA_DIR + '/secret.cfg',
     GOVERNANCE_CONFIG_PATH: appenv.DATA_DIR + '/governance.cfg',
     LOG_PATH: appenv.DATA_DIR + '/log/mb-xrpl.log',
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',

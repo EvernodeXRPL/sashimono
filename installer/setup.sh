@@ -31,6 +31,11 @@ default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="$setup_helper_dir/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
+config_json_path="$setup_helper_dir/configuration.json"
+config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
+operation="register"
+min_xrp_amount_per_month=25
+spinner=( '|' '/' '-' '\');
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -50,8 +55,7 @@ export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
 # TODO: Verify if the correct Governor address is present in the DEV/BETA envs.
-export EVERNODE_GOVERNOR_ADDRESS="raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF"
-export MIN_EVR_BALANCE=5120
+export NETWORK="${NETWORK:-testnet}"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -75,11 +79,22 @@ function confirm() {
     # Default choice is 'y'
     [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
-        read -p "'y' or 'n' expected: " yn </dev/tty
+        read -ep "'y' or 'n' expected: " yn </dev/tty
     done
 
     echo "" # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
+}
+
+function spin(){
+  while [ 1 ]
+  do
+    for i in ${spinner[@]};
+    do
+      echo -ne "\r$i";
+      sleep 0.2;
+    done;
+  done
 }
 
 # Configuring the sashimono service is the last stage of the installation.
@@ -190,8 +205,6 @@ function check_sys_req() {
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 
-    [ "$SKIP_SYSREQ" == "1" ] && echo "System requirements check skipped." && return 0
-
     local proc1=$(ps --no-headers -o comm 1)
     if [ "$proc1" != "systemd" ]; then
         echo "$evernode host installation requires systemd. Your system does not have systemd running. Aborting."
@@ -215,6 +228,36 @@ function check_sys_req() {
             2 GB Swap and 4 GB free disk space for /home. Aborting setup."
         exit 1
     fi
+}
+
+function set_environment_configs() {
+
+    sudo -u $noroot_user mkdir -p $setup_helper_dir
+    echomult "\nDownloading Enviroment configuration...\n"
+    sudo -u $noroot_user curl $config_url --output $config_json_path
+
+    # Network config selection.
+    case $NETWORK in
+    "mainnet")
+        echomult "\nChecking Evernode Mainnet environment details for setting up your host...\n"
+        ;;
+    "testnet")
+        echomult "\nChecking Evernode Testnet environment details for setting up your host...\n"
+        ;;
+    "devnet")
+        echomult "\nChecking Evernode Devnet environment details for setting up your host...\n"
+        ;;
+    *)
+        echomult "\nYou have specified invalid network." && exit 1
+        ;;
+    esac
+
+    if ! jq -e ".${NETWORK}" "$config_json_path" >/dev/null 2>&1; then
+        echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
+    fi
+
+    export EVERNODE_GOVERNOR_ADDRESS=$(jq -r ".$NETWORK.governorAddress" $config_json_path)
+    default_rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
 }
 
 function init_setup_helpers() {
@@ -348,7 +391,7 @@ function set_inet_addr() {
     if $interactive && [ "$NO_DOMAIN" == "" ] ; then
         echo ""
         while [ -z "$inetaddr" ]; do
-            read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+            read -ep "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
             validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
             echo "Invalid or unreachable domain name."
         done
@@ -370,7 +413,7 @@ function set_inet_addr() {
 
     if $interactive ; then
         while [ -z "$inetaddr" ]; do
-            read -p "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+            read -ep "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
             validate_inet_addr && return 0
             echo "Invalid ip/domain address."
         done
@@ -404,11 +447,11 @@ function set_init_ports() {
         init_peer_port=""
         init_user_port=""
         while [ -z "$init_peer_port" ]; do
-            read -p "Please specify the starting port of the public 'Peer port range' your server is reachable at: " init_peer_port </dev/tty
+            read -ep "Please specify the starting port of the public 'Peer port range' your server is reachable at: " init_peer_port </dev/tty
             ! check_port_validity $init_peer_port && init_peer_port="" && echo "Invalid port."
         done
         while [ -z "$init_user_port" ]; do
-            read -p "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
+            read -ep "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
             ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
         done
 
@@ -459,7 +502,7 @@ function set_country_code() {
 
         while [ -z "$countrycode" ]; do
             # This will be asked if auto-detection fails or if user wants to specify manually.
-            read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
+            read -ep "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
             resolve_countrycode || echo "Invalid country code."
         done
 
@@ -483,7 +526,7 @@ function set_ipv6_subnet() {
     
         while true; do
             local subnet_input
-            read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
+            read -ep "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
             
             # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
             local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
@@ -505,7 +548,7 @@ function set_ipv6_subnet() {
             if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
 
                 while true; do
-                    read -p "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
+                    read -ep "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
                     
                     # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
                     local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
@@ -570,22 +613,22 @@ function set_instance_alloc() {
         local ramMB=0 swapMB=0 diskMB=0
 
         while true ; do
-            read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
+            read -ep "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
             ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
         done
 
         while true ; do
-            read -p "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
+            read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
             ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
         done
 
         while true ; do
-            read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
+            read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
             ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
         done
 
         while true ; do
-            read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
+            read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
             ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
         done
 
@@ -606,7 +649,7 @@ function set_lease_amount() {
     if $interactive; then
         local amount=0
         while true ; do
-            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
+            read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
             ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
         done
 
@@ -618,7 +661,7 @@ function set_email_address() {
     if $interactive; then
         local emailAddress=""
         while true ; do
-            read -p "Specify the contact email address for your host (this will be published on the host registry and is publicly visible to anyone): " emailAddress </dev/tty
+            read -ep "Specify the contact email address for your host (this will be published on the host registry and is publicly visible to anyone): " emailAddress </dev/tty
             ! validate_email_address $emailAddress || break
         done
 
@@ -637,7 +680,7 @@ function set_rippled_server() {
         else
             local new_url=""
             while true ; do
-                read -p "Specify the Rippled server URL: " new_url </dev/tty
+                read -ep "Specify the Rippled server URL: " new_url </dev/tty
                 ! validate_rippled_url $new_url || break
             done
             rippled_server=$new_url
@@ -654,7 +697,7 @@ function set_transferee_address() {
 
         local address=''
         while true ; do
-            read -p "Specify the XRPL account address of the transferee: " address </dev/tty
+            read -ep "Specify the XRPL account address of the transferee: " address </dev/tty
             ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
 
         done
@@ -671,28 +714,71 @@ function set_host_xrpl_account() {
     [ ! -z $1 ] && account_validate_criteria=$1
 
     if $interactive; then
-        [ "$account_validate_criteria" == "register" ] &&
-            echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
-        local xrpl_address=""
-        local xrpl_secret=""
-        while true ; do
+        if [ "$account_validate_criteria" == "register" ]; then
+            local xrpl_address="-" # Should assign the generated account r address in the middle.
+            local xrpl_secret="-" # Should assign the generated account secret in the middle.
 
-            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
-            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+            echomult "Generating new keypair for the host...\n"
+            # Call the relevant method for performing new account creation.
+            # Return the r-address to create the QR code and the gerated secret.
+            echomult "To initiate the process, you need to fund sufficient amount of XAHAU XRPs for the newly created Host Account.\
+                    \nAccording to the current estimates, you'll need approximately $min_xrp_amount_per_month XAHs to cover your monthly expenses on Evernode.
+                    \n\nTo access your account details for payment, simply scan the QR code provided below:\n"
 
-            echo "Checking account $xrpl_address..."
-            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+            # Call the QR code generating function based on the r address of the new account.
+            qrencode -s 1 -l L -t UTF8 "rUUEbwjioRp4Hmbq3jZQQuwV973H1oEYsR"
 
-            # Take hidden input and print empty echo (new line) at the end.
-            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
-            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
+            # Start Wait animation...
+            echomult "\nWating for funds..."
+            spin &
+            spin_pid=$!
+            # Replace 10 second sleep with waiting task of checking sufficient amount of XRPs in the wallet.
+            sleep 10
+            kill $spin_pid
+            printf "\r"
+            # End Wait animation...
 
-            echo "Checking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+            echomult "Thank you for your contribution. Funds have been received to $xrpl_address account."
+            echomult "\n\nIn order to register in Evernode you need to have sufficient Ever (EVR) balance in your Host Account.\
+                    \nPlease proceed to submit the registration fee to the recently established account by scanning the QR code."
 
-            break
+            # Start Wait animation...
+            echomult "\nWating for funds..."
+            spin &
+            spin_pid=$!
+            # Replace 10 second sleep with waiting task of waitning sufficient EVR balance in the wallet.
+            sleep 10
+            kill $spin_pid
+            printf "\r"
+            # End Wait animation...
 
-        done
+            echomult "Your registration fee amount has been received to $xrpl_address account."
+
+        elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
+            
+            if [ "$account_validate_criteria" == "re-register" ]; then
+                account_validate_criteria="register"
+            fi
+
+            while true ; do
+                read -ep "Specify the XRPL account address: " xrpl_address </dev/tty
+                ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+
+                echo "Checking account $xrpl_address..."
+                ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+
+                read -ep "Specify the path of the Host Account secret: " xrpl_secret_path </dev/tty
+                ! [ -f "$xrpl_secret_path" ] && echo "Invalid Path." && continue
+                xrpl_secret=$(<"$xrpl_secret_path")
+
+                ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
+
+                echo "Checking account keys..."
+                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+                break
+            done
+        fi
 
         xrpl_account_address=$xrpl_address
         xrpl_account_secret=$xrpl_secret
@@ -1249,25 +1335,25 @@ function delete_instance()
 if [ "$mode" == "install" ]; then
 
     if ! $interactive ; then
-        inetaddr=${3}              # IP or DNS address.
-        init_peer_port=${4}        # Starting peer port for instances.
-        init_user_port=${5}        # Starting user port for instances.
-        countrycode=${6}           # 2-letter country code.
-        alloc_cpu=${7}             # CPU microsec to allocate for contract instances (max 1000000).
-        alloc_ramKB=${8}           # Memory to allocate for contract instances.
-        alloc_swapKB=${9}          # Swap to allocate for contract instances.
-        alloc_diskKB=${10}         # Disk space to allocate for contract instances.
-        alloc_instcount=${11}      # Total contract instance count.
-        lease_amount=${12}         # Contract instance lease amount in EVRs.
-        rippled_server=${13}       # Rippled server URL
-        xrpl_account_address=${14} # XRPL account address.
-        xrpl_account_secret=${15}  # XRPL account secret.
-        email_address=${16}        # User email address
-        tls_key_file=${17}         # File path to the tls private key.
-        tls_cert_file=${18}        # File path to the tls certificate.
-        tls_cabundle_file=${19}    # File path to the tls ca bundle.
-        ipv6_subnet=${20}          # ipv6 subnet to be used for ipv6 instance address assignment.
-        ipv6_net_interface=${21}   # ipv6 bound network interface to be used for outbound communication.
+        inetaddr=${3}                   # IP or DNS address.
+        init_peer_port=${4}             # Starting peer port for instances.
+        init_user_port=${5}             # Starting user port for instances.
+        countrycode=${6}                # 2-letter country code.
+        alloc_cpu=${7}                  # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}                # Memory to allocate for contract instances.
+        alloc_swapKB=${9}               # Swap to allocate for contract instances.
+        alloc_diskKB=${10}              # Disk space to allocate for contract instances.
+        alloc_instcount=${11}           # Total contract instance count.
+        lease_amount=${12}              # Contract instance lease amount in EVRs.
+        rippled_server=${13}            # Rippled server URL
+        xrpl_account_address=${14}      # XRPL account address.
+        xrpl_account_secret=$(<"${15}")  # XRPL account secret based on the provided path.
+        email_address=${16}             # User email address
+        tls_key_file=${17}              # File path to the tls private key.
+        tls_cert_file=${18}             # File path to the tls certificate.
+        tls_cabundle_file=${19}         # File path to the tls ca bundle.
+        ipv6_subnet=${20}               # ipv6 subnet to be used for ipv6 instance address assignment.
+        ipv6_net_interface=${21}        # ipv6 bound network interface to be used for outbound communication.
     fi
 
     $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
@@ -1286,13 +1372,16 @@ if [ "$mode" == "install" ]; then
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
+    $interactive && ! confirm "\nAre you performing a fresh Evernode installation?
+            \nNOTE: Pressing 'n' would implies that you are in the process of transferring from a previous installation." && operation="re-register"
+
+    set_environment_configs
+
     init_setup_helpers
 
-    if [ "$NO_MB" == "" ]; then    
+    if [ "$NO_MB" == "" ]; then
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
-        set_host_xrpl_account
-        echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
     fi
 
     set_email_address
@@ -1319,6 +1408,9 @@ if [ "$mode" == "install" ]; then
     if [ "$NO_MB" == "" ]; then
         set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+
+        set_host_xrpl_account $operation
+        echo -e "\nAccount setup is complete.\n"
     fi
 
     $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
@@ -1372,10 +1464,10 @@ elif [ "$mode" == "transfer" ]; then
 
     else
         if ! $interactive ; then
-            xrpl_account_address=${3} # XRPL account address.
-            xrpl_account_secret=${4}  # XRPL account secret.
-            transferee_address=${5}   # Address of the transferee.
-            rippled_server=${6}       # Rippled server URL
+            xrpl_account_address=${3}       # XRPL account address.
+            xrpl_account_secret=$(<"${4}")  # XRPL account secret based on the provided path.
+            transferee_address=${5}         # Address of the transferee.
+            rippled_server=${6}             # Rippled server URL
         fi
 
         init_setup_helpers

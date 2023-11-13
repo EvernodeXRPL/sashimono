@@ -36,6 +36,7 @@ config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/ma
 operation="register"
 min_xrp_amount_per_month=25
 spinner=( '|' '/' '-' '\');
+default_key_filepath=$HOME/.evernode/.host-account-secret.key
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -54,7 +55,6 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-# TODO: Verify if the correct Governor address is present in the DEV/BETA envs.
 export NETWORK="${NETWORK:-testnet}"
 
 # Private docker registry (not used for now)
@@ -233,24 +233,12 @@ function check_sys_req() {
 function set_environment_configs() {
 
     sudo -u $noroot_user mkdir -p $setup_helper_dir
-    echomult "\nDownloading Enviroment configuration...\n"
+    echomult "\nDownloading Environment configuration...\n"
     sudo -u $noroot_user curl $config_url --output $config_json_path
 
     # Network config selection.
-    case $NETWORK in
-    "mainnet")
-        echomult "\nChecking Evernode Mainnet environment details for setting up your host...\n"
-        ;;
-    "testnet")
-        echomult "\nChecking Evernode Testnet environment details for setting up your host...\n"
-        ;;
-    "devnet")
-        echomult "\nChecking Evernode Devnet environment details for setting up your host...\n"
-        ;;
-    *)
-        echomult "\nYou have specified invalid network." && exit 1
-        ;;
-    esac
+
+    echomult "\nChecking Evernode $NETWORK environment details..."
 
     if ! jq -e ".${NETWORK}" "$config_json_path" >/dev/null 2>&1; then
         echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
@@ -258,6 +246,7 @@ function set_environment_configs() {
 
     export EVERNODE_GOVERNOR_ADDRESS=$(jq -r ".$NETWORK.governorAddress" $config_json_path)
     default_rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
+
 }
 
 function init_setup_helpers() {
@@ -713,19 +702,37 @@ function set_transferee_address() {
 
 function set_host_xrpl_account() {
     local account_validate_criteria="register"
+    local balance=0
     [ ! -z $1 ] && account_validate_criteria=$1
+
+    local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
 
     if $interactive; then
         if [ "$account_validate_criteria" == "register" ]; then
             local xrpl_address="-" # Should assign the generated account r address in the middle.
             local xrpl_secret="-" # Should assign the generated account secret in the middle.
+            local file_path='-'
+
+            confirm "\nDo you want to use the default key file path ${default_key_filepath}?" && file_path=$default_key_filepath
+            
+            if [ "$file_path" != "$default_key_filepath" ]; then
+                while true ; do
+                    read -ep "Specify the preferred key file path: " file_path </dev/tty
+                    parent_directory=$(dirname "$file_path")
+
+                    ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
+
+                done
+            fi
 
             echomult "Generating new keypair for the host...\n"
-            # Call the relevant method for performing new account creation.
+            # Call the relevant method for performing new account creation. Pass specified path to save the secret.
             # Return the r-address to create the QR code and the gerated secret.
-            echomult "To initiate the process, you need to fund sufficient amount of XAHAU XRPs for the newly created Host Account.\
-                    \nAccording to the current estimates, you'll need approximately $min_xrp_amount_per_month XAHs to cover your monthly expenses on Evernode.
-                    \n\nTo access your account details for payment, simply scan the QR code provided below:\n"
+            echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK. The secret key of the account is located at $file_path.
+                    \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.\
+                    \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.\
+                    \n2. At least $reg_fee EVR to cover Evernode registration fee.\
+                    \n\nYou can scan the following QR code in your wallet app to send funds:\n"
 
             # Call the QR code generating function based on the r address of the new account.
             qrencode -s 1 -l L -t UTF8 "rUUEbwjioRp4Hmbq3jZQQuwV973H1oEYsR"
@@ -738,11 +745,14 @@ function set_host_xrpl_account() {
             sleep 10
             kill $spin_pid
             printf "\r"
+
+            # TODO : Remove this temporary assignment and set the XAH XRP balance to $balance variable
+            balance=$min_xrp_amount_per_month
             # End Wait animation...
 
-            echomult "Thank you for your contribution. Funds have been received to $xrpl_address account."
-            echomult "\n\nIn order to register in Evernode you need to have sufficient Ever (EVR) balance in your Host Account.\
-                    \nPlease proceed to submit the registration fee to the recently established account by scanning the QR code."
+            echomult "Thank you. $balance XAH has been received to your host account."
+            echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
+                    \nYou can scan the following QR code in your wallet app to send funds:"
 
             # Start Wait animation...
             echomult "\nWating for funds..."
@@ -754,7 +764,10 @@ function set_host_xrpl_account() {
             printf "\r"
             # End Wait animation...
 
-            echomult "Your registration fee amount has been received to $xrpl_address account."
+            # TODO : Remove this temporary assignment and set the EVR balance to $balance variable
+            balance=$reg_fee
+
+            echomult "Thank you. $balance EVR has been received to your host account."
 
         elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
             
@@ -838,7 +851,7 @@ function install_evernode() {
     echo "Installing Sashimono..."
 
     init_setup_helpers
-    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
+    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress)
 
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
@@ -1375,7 +1388,7 @@ if [ "$mode" == "install" ]; then
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
     $interactive && ! confirm "\nAre you performing a fresh Evernode installation?
-            \nNOTE: Pressing 'n' would implies that you are in the process of transferring from a previous installation." && operation="re-register"
+            \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
 
     set_environment_configs
 
@@ -1412,7 +1425,7 @@ if [ "$mode" == "install" ]; then
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
 
         set_host_xrpl_account $operation
-        echo -e "\nAccount setup is complete.\n"
+        echo -e "\nAccount setup is complete."
     fi
 
     $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1

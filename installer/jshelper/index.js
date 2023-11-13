@@ -91,31 +91,28 @@ const funcs = {
     },
 
     'access-evernode-cfg': async (args) => {
-        checkParams(args, 4);
+        checkParams(args, 3);
         const rippledUrl = args[0];
         const governorAddress = args[1];
-        const accountAddress = args[2];
-        const configName = args[3];
+        const configName = args[2];
 
         const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
-        const hostClient = new evernode.HostClient(accountAddress, null, {
+        evernode.Defaults.set({
             rippledServer: rippledUrl,
             governorAddress: governorAddress,
             xrplApi: xrplApi
         });
 
-        if (!await hostClient.xrplAcc.exists())
-            return { success: false, result: "Account not found." };
+        const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
+        await governorClient.connect();
+        const config = await governorClient.config;
 
-        await hostClient.connect();
-        const config = hostClient.config;
-
-        await hostClient.disconnect();
+        await governorClient.disconnect();
         await xrplApi.disconnect();
 
-        return { success: true, result: config[configName] };
+        return { success: true, result: typeof config[configName] === 'object' ? JSON.stringify(config[configName]) : `${config[configName]}` };
     },
 
     'transfer': async (args) => {

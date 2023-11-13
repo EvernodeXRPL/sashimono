@@ -388,6 +388,7 @@ function validate_email_address() {
 
 function set_inet_addr() {
 
+    # TODO : Remove NO_DOMAIN usage (Kept for local testing)
     if $interactive && [ "$NO_DOMAIN" == "" ] ; then
         echo ""
         while [ -z "$inetaddr" ]; do
@@ -397,6 +398,7 @@ function set_inet_addr() {
         done
     fi
 
+    # TODO : Remove below block ones the flow is stabilized (Kept for local testing)
     # Rest of this function flow will be used for debugging and internal testing puposes only.
 
     tls_key_file="self"

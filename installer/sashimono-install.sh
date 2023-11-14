@@ -16,7 +16,7 @@ diskKB=${9}
 lease_amount=${10}
 rippled_server=${11}
 xrpl_account_address=${12}
-xrpl_account_secret=${13}
+xrpl_account_secret_path=${13}
 email_address=${14}
 tls_key_file=${15}
 tls_cert_file=${16}
@@ -304,7 +304,7 @@ if [ "$NO_MB" == "" ]; then
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

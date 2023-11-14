@@ -54,15 +54,15 @@ class Setup {
     }
 
     #saveConfig(cfg) {
-        ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
+        ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null) {
+    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null) {
         const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
                 address: address,
-                secret: secret,
+                secretPath: secretPath,
                 governorAddress: governorAddress,
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
@@ -72,11 +72,14 @@ class Setup {
         this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
-    async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
+    async setupHostAccount(address, secretPath, rippledServer, governorAddress, domain) {
 
         setEvernodeDefaults(governorAddress, rippledServer);
 
         const xrplApi = new evernode.XrplApi(rippledServer);
+
+        const secret = JSON.parse(fs.readFileSync(secretPath).toString()).xrpl.secret;
+
         const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
 
         // Prepare host account.

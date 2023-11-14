@@ -1076,7 +1076,7 @@ class MessageBoard {
     }
 
     persistConfig() {
-        ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
+        ConfigHelper.writeConfig(this.cfg, this.configPath);
     }
 }
 

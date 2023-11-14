@@ -762,7 +762,7 @@ function set_host_xrpl_account() {
             echomult "\nWaiting for funds..."
             spin &
             spin_pid=$!
-            # Replace 10 second sleep with waiting task of waitning sufficient EVR balance in the wallet.
+
             required_balance=$reg_fee
 
             while true ; do
@@ -798,12 +798,14 @@ function set_host_xrpl_account() {
                 echo "Checking account keys..."
                 ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
 
+                xrpl_account_secret=$xrpl_secret
+
                 break
             done
         fi
 
         xrpl_account_address=$xrpl_address
-        xrpl_account_secret=$xrpl_secret
+        xrpl_account_secret_path=$key_file_path
     fi
 }
 
@@ -863,7 +865,7 @@ function install_evernode() {
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
                             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \

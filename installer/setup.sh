@@ -281,7 +281,7 @@ function exec_jshelper() {
     # Execute js helper asynchronously while collecting response to fifo file.
     sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
     local pid=$!
-    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo -e $result
     
     # Wait for js helper to exit and reflect the error exit code in this function return.
     wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
@@ -702,23 +702,23 @@ function set_transferee_address() {
 
 function set_host_xrpl_account() {
     local account_validate_criteria="register"
-    local balance=0
+    local required_balance=0
     [ ! -z $1 ] && account_validate_criteria=$1
 
     local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
 
     if $interactive; then
         if [ "$account_validate_criteria" == "register" ]; then
-            local xrpl_address="-" # Should assign the generated account r address in the middle.
+            local xrpl_address="rUUEbwjioRp4Hmbq3jZQQuwV973H1oEYsR" # Should assign the generated account r address in the middle.
             local xrpl_secret="-" # Should assign the generated account secret in the middle.
-            local file_path='-'
+            local key_file_path='-'
 
-            confirm "\nDo you want to use the default key file path ${default_key_filepath}?" && file_path=$default_key_filepath
+            confirm "\nDo you want to use the default key file path ${default_key_filepath}?" && key_file_path=$default_key_filepath
             
-            if [ "$file_path" != "$default_key_filepath" ]; then
+            if [ "$key_file_path" != "$default_key_filepath" ]; then
                 while true ; do
-                    read -ep "Specify the preferred key file path: " file_path </dev/tty
-                    parent_directory=$(dirname "$file_path")
+                    read -ep "Specify the preferred key file path: " key_file_path </dev/tty
+                    parent_directory=$(dirname "$key_file_path")
 
                     ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
 
@@ -728,7 +728,7 @@ function set_host_xrpl_account() {
             echomult "Generating new keypair for the host...\n"
             # Call the relevant method for performing new account creation. Pass specified path to save the secret.
             # Return the r-address to create the QR code and the gerated secret.
-            echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK. The secret key of the account is located at $file_path.
+            echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK. The secret key of the account is located at $key_file_path.
                     \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.\
                     \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.\
                     \n2. At least $reg_fee EVR to cover Evernode registration fee.\
@@ -738,36 +738,43 @@ function set_host_xrpl_account() {
             qrencode -s 1 -l L -t UTF8 "rUUEbwjioRp4Hmbq3jZQQuwV973H1oEYsR"
 
             # Start Wait animation...
-            echomult "\nWating for funds..."
+            echomult "\nWaiting for funds..."
             spin &
             spin_pid=$!
-            # Replace 10 second sleep with waiting task of checking sufficient amount of XRPs in the wallet.
-            sleep 10
+
+            required_balance=$min_xrp_amount_per_month
+
+            while true ; do
+                ! exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance && echomult "\nRe-checking balance..." && continue
+                break;
+            done
+
             kill $spin_pid
             printf "\r"
 
-            # TODO : Remove this temporary assignment and set the XAH XRP balance to $balance variable
-            balance=$min_xrp_amount_per_month
             # End Wait animation...
 
-            echomult "Thank you. $balance XAH has been received to your host account."
+            echomult "Thank you. $required_balance XAH has been received to your host account."
             echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
                     \nYou can scan the following QR code in your wallet app to send funds:"
 
             # Start Wait animation...
-            echomult "\nWating for funds..."
+            echomult "\nWaiting for funds..."
             spin &
             spin_pid=$!
             # Replace 10 second sleep with waiting task of waitning sufficient EVR balance in the wallet.
-            sleep 10
+            required_balance=$reg_fee
+
+            while true ; do
+                ! exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance && echomult "\nRe-checking balance..." && continue
+                break;
+            done
+
             kill $spin_pid
             printf "\r"
             # End Wait animation...
 
-            # TODO : Remove this temporary assignment and set the EVR balance to $balance variable
-            balance=$reg_fee
-
-            echomult "Thank you. $balance EVR has been received to your host account."
+            echomult "Thank you. $required_balance EVR has been received to your host account."
 
         elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
             

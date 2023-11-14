@@ -200,6 +200,48 @@ const funcs = {
         }
 
         return { success: false };
+    },
+
+    'check-balance': async (args) => {
+        checkParams(args, 5);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const tokenType = args[3];
+        const expectedBalance = args[4];
+
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await xrplApi.connect();
+
+        const hostClient = new evernode.HostClient(accountAddress, null, {
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress,
+            xrplApi: xrplApi
+        });
+
+        await hostClient.connect();
+
+        let attempts = 0;
+        while (attempts >= 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            let balance = 0;
+            if (tokenType === 'NATIVE')
+                balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
+            else
+                balance = Number(await hostClient.getEVRBalance());
+
+            if (balance < expectedBalance) {
+                if (++attempts <= 60)
+                    continue;
+                return { success: false, result: "\\bFunds not received within timeout." };
+            }
+            break;
+        }
+
+        await hostClient.disconnect();
+        await xrplApi.disconnect();
+
+        return { success: true };
     }
 }
 

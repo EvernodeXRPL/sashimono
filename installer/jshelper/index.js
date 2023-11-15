@@ -222,9 +222,9 @@ const funcs = {
         await hostClient.connect();
 
         let attempts = 0;
+        let balance = 0;
         while (attempts >= 0) {
             await new Promise(resolve => setTimeout(resolve, 1000));
-            let balance = 0;
             if (tokenType === 'NATIVE')
                 balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
             else
@@ -241,7 +241,7 @@ const funcs = {
         await hostClient.disconnect();
         await xrplApi.disconnect();
 
-        return { success: true };
+        return { success: true, result: `${balance}` };
     }
 }
 

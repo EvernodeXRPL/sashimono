@@ -19,14 +19,23 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
-setup_script_url="$cloud_storage/setup.sh"
-installer_url="$cloud_storage/installer.tar.gz"
-licence_url="$cloud_storage/licence.txt"
-nodejs_url="$cloud_storage/node"
-jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
+
+cloud_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download"
+latest_version_endpoint="https://api.github.com/repos/EvernodeXRPL/evernode-resources/releases/latest"
+
+latest_version_data=$(curl -s "$latest_version_endpoint")
+latest_version=$(echo "$latest_version_data" | jq -r '.name')
+if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
+    echo "Failed to retrieve latest version data."
+    exit 1
+fi
+
+setup_script_url="$cloud_storage/$latest_version/setup.sh"
+installer_url="$cloud_storage/$latest_version/installer.tar.gz"
+licence_url="$cloud_storage/$latest_version/licence.txt"
+nodejs_url="$cloud_storage/$latest_version/node"
+jshelper_url="$cloud_storage/$latest_version/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
-setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="$setup_helper_dir/node"
@@ -225,13 +234,13 @@ function init_setup_helpers() {
     rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
-    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_util_bin
+    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl -L $nodejs_url --output $nodejs_util_bin
     [ ! -f "$nodejs_util_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
     chmod +x $nodejs_util_bin
 
     if [ ! -f "$jshelper_bin" ]; then
         pushd $jshelper_dir >/dev/null 2>&1
-        sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
+        sudo -u $noroot_user curl -L $jshelper_url --output jshelper.tar.gz
         sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
         rm jshelper.tar.gz
         popd >/dev/null 2>&1
@@ -710,22 +719,21 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
-    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
+    latest_version_data=$(curl -s "$latest_version_endpoint")
+    latest_version_timestamp=$(echo "$latest_version_data" | jq -r '.published_at')
+    echo "$latest_version_timestamp"
 }
 
 function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local installer_version_timestamp=$(online_version_timestamp $installer_url)
+    local installer_version_timestamp=$(online_version_timestamp)
     [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
-    # Get setup version (timestamp).
-    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl --silent $installer_url --output installer.tgz
+    curl --silent -L $installer_url --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
@@ -766,7 +774,6 @@ function install_evernode() {
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
-    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function check_exisiting_contracts() {
@@ -808,13 +815,11 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest_installer_script_version=$(online_version_timestamp $installer_url)
-    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
+    local latest_installer_script_version=$(online_version_timestamp)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
     local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
-    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
-    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
@@ -825,12 +830,6 @@ function update_evernode() {
     if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
         uninstall_evernode 1
         install_evernode 1
-    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
-        [ -d $log_dir ] || mkdir -p $log_dir
-        logfile="$log_dir/installer-$(date +%s).log"
-        remove_evernode_alias
-        ! create_evernode_alias && echo "Alias creation failed."
-        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
     rm -r $setup_helper_dir >/dev/null 2>&1
@@ -1282,7 +1281,7 @@ if [ "$mode" == "install" ]; then
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
-    curl --silent $licence_url | cat
+    curl -s -L $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
     $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 

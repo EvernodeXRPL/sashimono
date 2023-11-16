@@ -37,6 +37,9 @@ operation="register"
 min_xrp_amount_per_month=25
 spinner=( '|' '/' '-' '\');
 default_key_filepath=$HOME/.evernode/.host-account-secret.key
+default_address_filepath=$MB_XRPL_DATA/mb-xrpl.cfg
+xrpl_address="-"
+xrpl_secret="-"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -648,6 +651,90 @@ function set_transferee_address() {
     ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
 }
 
+# Function to generate QR code in the terminal
+function generate_qrcode(){
+    if [ -z "$1" ]; then
+        echo "Argument error > Usage: generate_qrcode <string>"
+        return 1
+    fi
+    local input_string="$1"
+    qrencode -s 1 -l L -t UTF8 "$input_string"
+}
+
+function generate_and_save_keyfile() {
+
+    local secret_json=$(exec_jshelper generate-account)
+    local account=$(jq -r '.account' <<< "$secret_json")
+    local secret=$(jq -r '.secret' <<< "$secret_json")
+
+    if [ "$#" -ne 2 ]; then
+        echo "Error: Please provide the full path of the address and secret"
+        return 1
+    fi
+
+    address_path="$1"
+    key_path="$2"
+
+    key_dir=$(dirname "$key_path")
+    if [ ! -d "$key_dir" ]; then
+        mkdir -p "$key_dir"
+    fi
+
+    # address_dir=$(dirname "$address_path")
+    # if [ ! -d "$address_dir" ]; then
+    #     mkdir -p "$address_dir"
+    # fi
+
+    # if [[ ! "$key_path" =~ \.key$ ]]; then
+    #     key_path="$key_path.key"
+    # fi
+
+    if [ -e "$key_path" ]; then
+        local response=$(confirm "The file '$key_path' already exists. Do you want to override it?")
+        if [ "$response" != 1 ]; then
+            existing_secret=$(jq -r '.xrpl.secret' "$key_path" 2>/dev/null)
+            existing_address=$(jq -r '.xrpl.address' "$address_path" 2>/dev/null)
+            if [ "$existing_secret" != "null" ]; then
+                echo "Existing secret retrieved from '$key_path': $existing_secret"
+            else
+                echo "Error: Existing secret file does not have the expected format."
+                return 1
+            fi
+            if [ "$existing_address" != "null" ]; then
+                echo "Existing address retrieved from '$address_path': $existing_address"
+                xrpl_address=$existing_address
+                xrpl_secret=$existing_secret
+                return 0
+            else
+                echo "Error: Existing address file does not have the expected format."
+                return 1
+            fi
+        fi
+    fi
+
+    
+
+    # have to implement address already exists in mb-xrpl.cfg. check for address path too.
+    # just for now returning the address generated
+
+    if [ -e "$address_path" ]; then
+        existing_data=$(cat "$address_path" 2>/dev/null)
+        updated_data=$(echo "$existing_data" | jq --arg account "$account" '.xrpl.address = $account')
+        echo "$updated_data" > "$address_path"
+    else
+        echo "{ \"xrpl\": { \"address\": \"$account\" } }" >> "$address_path"
+    fi
+
+    chmod 644 "$address_path"
+    echo "Address field updated successfully in $address_path"
+
+    echo "{ \"xrpl\": { \"secret\": \"$secret\" } }" > "$key_path"
+    chmod 600 "$key_path"
+    echo "Key file saved successfully at $key_path"
+
+    xrpl_address=$account
+    xrpl_secret=$secret
+}
 
 function set_host_xrpl_account() {
     local account_validate_criteria="register"
@@ -657,8 +744,8 @@ function set_host_xrpl_account() {
     local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
 
     if [ "$account_validate_criteria" == "register" ]; then
-        local xrpl_address="rUgYGyrdFitPWcGos6hMEspwY7J12Ut8kY" # Should assign the generated account r address in the middle.
-        local xrpl_secret="-" # Should assign the generated account secret in the middle.
+        # local xrpl_address="rUgYGyrdFitPWcGos6hMEspwY7J12Ut8kY" # Should assign the generated account r address in the middle.
+        # local xrpl_secret="-" # Should assign the generated account secret in the middle.
         local key_file_path='-'
 
         confirm "\nDo you want to use the default key file path ${default_key_filepath}?" && key_file_path=$default_key_filepath
@@ -674,8 +761,8 @@ function set_host_xrpl_account() {
         fi
 
         echomult "Generating new keypair for the host...\n"
-        # Call the relevant method for performing new account creation. Pass specified path to save the secret.
-        # Return the r-address to create the QR code and the gerated secret.
+        generate_and_save_keyfile "$default_address_filepath" "$key_file_path"
+
         echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK.
                 \nThe secret key of the account is located at $key_file_path.
                 \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
@@ -683,13 +770,8 @@ function set_host_xrpl_account() {
                 \n2. At least $reg_fee EVR to cover Evernode registration fee.
                 \n\nYou can scan the following QR code in your wallet app to send funds:\n"
 
-        # Call the QR code generating function based on the r address of the new account.
 
-        # TODO: Remove the test secret
-        # secret : ss821G5saC7YHpf2Hptp1hxYgftME
-
-        # TODO: Remove the dummy QR code
-        qrencode -s 1 -l L -t UTF8 "rUgYGyrdFitPWcGos6hMEspwY7J12Ut8kY"
+        generate_qrcode "$xrpl_address"
 
         # Start Wait animation...
         echomult "\nWaiting for funds..."

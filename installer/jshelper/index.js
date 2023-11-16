@@ -4,6 +4,7 @@ const evernode = require("evernode-js-client");
 const process = require("process");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
+const keypairs = require('ripple-keypairs');
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -242,6 +243,14 @@ const funcs = {
         await xrplApi.disconnect();
 
         return { success: true, result: `${balance}` };
+    },
+    'generate-account': async () => {
+        const seed = keypairs.generateSeed({ algorithm: "ecdsa-secp256k1" });
+        const keypair = keypairs.deriveKeypair(nodeSecret);
+        return {
+            account: keypairs.deriveAddress(keypair.publicKey),
+            secret: seed
+        };
     }
 }
 

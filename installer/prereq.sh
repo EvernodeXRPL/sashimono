@@ -27,7 +27,7 @@ stage "Installing dependencies"
 # Added --allow-releaseinfo-change
 # To fix - Repository 'https://apprepo.vultr.com/ubuntu universal InRelease' changed its 'Codename' value from 'buster' to 'universal'
 apt-get update --allow-releaseinfo-change
-apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq qrencode
+apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq
 
 # uidmap        # Required for rootless docker.
 # slirp4netns   # Required for high performance rootless networking.
@@ -76,6 +76,12 @@ fi
 if ! command -v snap &>/dev/null; then
     stage "Installing snapd"
     apt-get install -y snapd
+fi
+
+# Install qrencode
+if ! command -v qrencode &>/dev/null; then
+    stage "Installing qrencode"
+    apt-get install -y qrencode
 fi
 
 # -------------------------------

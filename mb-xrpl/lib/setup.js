@@ -82,37 +82,6 @@ class Setup {
 
         const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
 
-        // Prepare host account.
-        {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            await hostClient.connect();
-
-            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
-
-            // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
-            // haven't still updated the ledger. In such cases, we retry several times before giving up.
-            {
-                let attempts = 0;
-                while (attempts >= 0) {
-                    try {
-                        await hostClient.prepareAccount(domain);
-                        break;
-                    }
-                    catch (err) {
-                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
-                            console.log("actNotFound - retrying...")
-                            // Wait and retry.
-                            await new Promise(resolve => setTimeout(resolve, 3000));
-                            continue;
-                        }
-                        throw err;
-                    }
-                }
-            }
-
-            await hostClient.disconnect();
-        }
-
         return acc;
     }
 

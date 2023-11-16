@@ -56,48 +56,6 @@ function set_cpu_info() {
     [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
 }
 
-function enable_evernode_auto_updater() {
-    # Create the service.
-    echo "[Unit]
-Description=Service for the Evernode auto-update.
-After=network.target
-[Service]
-User=root
-Group=root
-Type=oneshot
-ExecStart=/usr/bin/evernode update -q
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    # Create a timer for the service (every two hours).
-    echo "[Unit]
-Description=Timer for the Evernode auto-update.
-# Allow manual starts
-RefuseManualStart=no
-# Allow manual stops
-RefuseManualStop=no
-[Timer]
-Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
-OnCalendar=0/12:00:00
-# Execute job if it missed a run due to machine being off
-Persistent=true
-# To prevent rush time, adding 2 hours delay
-RandomizedDelaySec=7200
-[Install]
-WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-
-    echo "Enabling Evernode auto update service..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    echo "Enabling Evernode auto update timer..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    echo "Starting Evernode auto update timer..."
-    systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
-}
-
 function setup_certbot() {
     stage "Setting up letsencrypt certbot"
 
@@ -451,11 +409,6 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
     fi
 fi
-
-stage "Configuring auto updater service"
-
-# Enable the Evernode Auto Updater Service.
-enable_evernode_auto_updater
 
 echo "Sashimono installed successfully."
 

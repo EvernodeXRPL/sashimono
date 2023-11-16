@@ -24,6 +24,7 @@ const funcs = {
         await xrplApi.disconnect();
         return { success: true };
     },
+
     'validate-account': async (args) => {
         checkParams(args, 3);
         const rippledUrl = args[0];
@@ -72,6 +73,7 @@ const funcs = {
         await xrplApi.disconnect();
         return { success: true };
     },
+
     'validate-keys': async (args) => {
         checkParams(args, 3);
         const rippledUrl = args[0];
@@ -232,9 +234,9 @@ const funcs = {
                 balance = Number(await hostClient.getEVRBalance());
 
             if (balance < expectedBalance) {
-                if (++attempts <= 60)
+                if (++attempts <= 120)
                     continue;
-                return { success: false, result: "\\bFunds not received within timeout." };
+                return { success: false, result: "Funds not received within timeout." };
             }
             break;
         }
@@ -251,6 +253,49 @@ const funcs = {
             account: keypairs.deriveAddress(keypair.publicKey),
             secret: seed
         };
+    },
+
+    'prepare-host': async (args) => {
+        checkParams(args, 4);
+        console.log(args)
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const accountSecret = args[3];
+        // Optional
+        const domain = args[4] ? args[4] : "";
+
+        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await xrplApi.connect();
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret, {
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress,
+            xrplApi: xrplApi
+        });
+        await hostClient.connect();
+
+        {
+            let attempts = 0;
+            while (attempts >= 0) {
+                try {
+                    await hostClient.prepareAccount(domain);
+                    break;
+                }
+                catch (err) {
+                    if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
+                        // Wait and retry.
+                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        continue;
+                    }
+                    return { success: false, result: "Error occurred in account preparation." };
+                }
+            }
+        }
+
+        await hostClient.disconnect();
+        await xrplApi.disconnect();
+        return { success: true };
     }
 }
 

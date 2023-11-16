@@ -89,7 +89,7 @@ function confirm() {
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
 }
 
-function spin(){
+function spin() {
   while [ 1 ]
   do
     for i in ${spinner[@]};
@@ -98,6 +98,27 @@ function spin(){
       sleep 0.2;
     done;
   done
+}
+
+function wait_call() {
+    local command_to_execute="$1"
+    local output_template="$2"
+
+    echo $command_to_execute > cc.txt
+
+    echomult "\nWaiting for the process to complete..."
+    spin &
+    local spin_pid=$!
+
+    command_output=$($command_to_execute)
+    return_code=$?
+
+    kill $spin_pid
+    wait $spin_pid
+    printf "\r"
+
+    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e "\b$command_output"
+    return $return_code
 }
 
 # Configuring the sashimono service is the last stage of the installation.
@@ -284,7 +305,7 @@ function exec_jshelper() {
     # Execute js helper asynchronously while collecting response to fifo file.
     sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
     local pid=$!
-    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo -e $result
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     
     # Wait for js helper to exit and reflect the error exit code in this function return.
     wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
@@ -748,8 +769,8 @@ function set_host_xrpl_account() {
         # local xrpl_secret="-" # Should assign the generated account secret in the middle.
         local key_file_path='-'
 
-        confirm "\nDo you want to use the default key file path ${default_key_filepath}?" && key_file_path=$default_key_filepath
-        
+        confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
+
         if [ "$key_file_path" != "$default_key_filepath" ]; then
             while true ; do
                 read -ep "Specify the preferred key file path: " key_file_path </dev/tty
@@ -783,36 +804,19 @@ function set_host_xrpl_account() {
         # TODO : Need to get the actual balance to the prompts. (As the deposited amount may vary)
         # Currentlty balance is logged in the fifo file and it is echoed when calling 
         while true ; do
-            ! exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance && echomult "\nRe-checking balance..." && continue
-            break;
+            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "\\b\\nAccount preparation is successfull." && break
+            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        kill $spin_pid
-        printf "\r"
-
-        # End Wait animation...
-
-        echomult "Thank you. $required_balance XAH has been received to your host account."
         echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
                 \nYou can scan the following QR code in your wallet app to send funds:"
-
-        # Start Wait animation...
-        echomult "\nWaiting for funds..."
-        spin &
-        spin_pid=$!
-
         required_balance=$reg_fee
-
         while true ; do
-            ! exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance && echomult "\nRe-checking balance..." && continue
-            break;
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
+            && break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        kill $spin_pid
-        printf "\r"
-        # End Wait animation...
-
-        echomult "Thank you. $required_balance EVR has been received to your host account."
 
     elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
         

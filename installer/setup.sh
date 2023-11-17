@@ -1208,9 +1208,6 @@ function config() {
 
         local cfg_host_address=$(jq -r '.xrpl.address' $mbconfig)
 
-        local mbsecretconfig="$MB_XRPL_DATA/secret.cfg"
-        local cfg_host_secret=$(jq -r '.xrpl.secret' $mbsecretconfig)
-
         [ ! -z $email_address ] && ! validate_email_address $email_address &&
             echomult "\nUsage: evernode config email | evernode config email <email address>\n" &&
             exit 1

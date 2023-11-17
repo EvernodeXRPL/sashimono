@@ -33,7 +33,7 @@ appenv = {
 }
 
 const getSecretPath = () => {
-    return JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath;
+    return fs.existsSync(appenv.CONFIG_PATH) ? JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath : "";
 }
 
 appenv = { ...appenv, SECRET_CONFIG_PATH: getSecretPath() }

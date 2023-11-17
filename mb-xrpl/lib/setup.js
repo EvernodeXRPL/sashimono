@@ -72,19 +72,6 @@ class Setup {
         this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
-    async setupHostAccount(address, secretPath, rippledServer, governorAddress, domain) {
-
-        setEvernodeDefaults(governorAddress, rippledServer);
-
-        const xrplApi = new evernode.XrplApi(rippledServer);
-
-        const secret = JSON.parse(fs.readFileSync(secretPath).toString()).xrpl.secret;
-
-        const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
-
-        return acc;
-    }
-
     async generateBetaHostAccount(rippledServer, governorAddress, domain) {
 
         setEvernodeDefaults(governorAddress, rippledServer);

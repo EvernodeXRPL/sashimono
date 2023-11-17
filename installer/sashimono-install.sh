@@ -231,12 +231,12 @@ rm -r "$tmp"
     openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
         -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
-# Setup tls certs used for contract instance websockets.
-[ "$UPGRADE" == "0" ] && setup_tls_certs
-
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
+
+# Setup tls certs used for contract instance websockets.
+[ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
 cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
@@ -279,9 +279,8 @@ if [ "$NO_MB" == "" ]; then
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-    # Creating message board user (if not exists).
-    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    # Assign message board user priviledges.
+    if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
         usermod --lock $MB_XRPL_USER
         usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
         loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.

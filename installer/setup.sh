@@ -19,7 +19,7 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-ipv6-e950651b-461c-4e4d-8339-30c7743a14f4"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-test-78bf412d-19e4-447c-b4a4-36ff0f71c1f7"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -706,7 +706,7 @@ function generate_qrcode(){
 
 function generate_and_save_keyfile() {
 
-    local secret_json=$(exec_jshelper generate-account)
+    local secret_json=$(exec_jshelper generate-account).
     local account=$(jq -r '.account' <<< "$secret_json")
     local secret=$(jq -r '.secret' <<< "$secret_json")
 
@@ -728,9 +728,8 @@ function generate_and_save_keyfile() {
         mkdir -p "$address_dir"
     fi
 
-    if [ -e "$key_path" ]; then
-        local response=$(confirm "The file '$key_path' already exists. Do you want to override it?")
-        if [ "$response" != 1 ]; then
+    if [ -e "$key_path" ]; then 
+        if ! confirm "The file '$key_path' already exists. Do you want to override it?"; then
             existing_secret=$(jq -r '.xrpl.secret' "$key_path" 2>/dev/null)
             existing_address=$(jq -r '.xrpl.address' "$address_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ]; then
@@ -768,6 +767,7 @@ function generate_and_save_keyfile() {
 
     xrpl_address=$account
     xrpl_secret=$secret
+    return 0
 }
 
 function set_host_xrpl_account() {
@@ -796,8 +796,8 @@ function set_host_xrpl_account() {
 
         echomult "Generating new keypair for the host...\n"
         generate_and_save_keyfile "$default_address_filepath" "$key_file_path"
-
-        echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK.
+        
+        echomult "Your host account with the address $xrpl_address : $xrpl_secret has been generated on Xahau $NETWORK.
                 \nThe secret key of the account is located at $key_file_path.
                 \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
                 \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.

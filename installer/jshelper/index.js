@@ -249,13 +249,11 @@ const funcs = {
     'generate-account': async () => {
         const seed = keypairs.generateSeed({ algorithm: "ecdsa-secp256k1" });
         const keypair = keypairs.deriveKeypair(seed);
-        const obj = {
+        const createdKeypair = {
             account: keypairs.deriveAddress(keypair.publicKey),
             secret: seed
         }
-        // return { success: true, result: typeof config[configName] === 'object' ? JSON.stringify(config[configName]) : `${config[configName]}` };
-
-        return {success: true, result: typeof obj === 'object' ? JSON.stringify(obj) : `${obj}`};
+        return {success: true, result: typeof createdKeypair === 'object' ? JSON.stringify(createdKeypair) : `${createdKeypair}`};
     },
 
     'prepare-host': async (args) => {

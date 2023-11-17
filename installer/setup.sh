@@ -723,14 +723,10 @@ function generate_and_save_keyfile() {
         mkdir -p "$key_dir"
     fi
 
-    # address_dir=$(dirname "$address_path")
-    # if [ ! -d "$address_dir" ]; then
-    #     mkdir -p "$address_dir"
-    # fi
-
-    # if [[ ! "$key_path" =~ \.key$ ]]; then
-    #     key_path="$key_path.key"
-    # fi
+    address_dir=$(dirname "$address_path")
+    if [ ! -d "$address_dir" ]; then
+        mkdir -p "$address_dir"
+    fi
 
     if [ -e "$key_path" ]; then
         local response=$(confirm "The file '$key_path' already exists. Do you want to override it?")
@@ -754,11 +750,6 @@ function generate_and_save_keyfile() {
             fi
         fi
     fi
-
-    
-
-    # have to implement address already exists in mb-xrpl.cfg. check for address path too.
-    # just for now returning the address generated
 
     if [ -e "$address_path" ]; then
         existing_data=$(cat "$address_path" 2>/dev/null)

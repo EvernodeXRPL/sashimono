@@ -248,11 +248,14 @@ const funcs = {
     },
     'generate-account': async () => {
         const seed = keypairs.generateSeed({ algorithm: "ecdsa-secp256k1" });
-        const keypair = keypairs.deriveKeypair(nodeSecret);
-        return {
+        const keypair = keypairs.deriveKeypair(seed);
+        const obj = {
             account: keypairs.deriveAddress(keypair.publicKey),
             secret: seed
-        };
+        }
+        // return { success: true, result: typeof config[configName] === 'object' ? JSON.stringify(config[configName]) : `${config[configName]}` };
+
+        return {success: true, result: typeof obj === 'object' ? JSON.stringify(obj) : `${obj}`};
     },
 
     'prepare-host': async (args) => {

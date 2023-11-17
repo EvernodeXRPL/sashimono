@@ -19,7 +19,7 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-ipv6-e950651b-461c-4e4d-8339-30c7743a14f4"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -58,7 +58,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-export NETWORK="${NETWORK:-testnet}"
+export NETWORK="${NETWORK:-devnet}"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -67,6 +67,9 @@ export DOCKER_REGISTRY_PORT=0
 # We execute some commands as unprivileged user for better security.
 # (we execute as the user who launched this script as sudo)
 noroot_user=${SUDO_USER:-$(whoami)}
+
+# Default key path is set to Messagebaord-user.
+default_key_filepath="/home/$MB_XRPL_USER/.evernode/.host-account-secret.key"
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -104,8 +107,6 @@ function wait_call() {
     local command_to_execute="$1"
     local output_template="$2"
 
-    echo $command_to_execute > cc.txt
-
     echomult "\nWaiting for the process to complete..."
     spin &
     local spin_pid=$!
@@ -115,9 +116,9 @@ function wait_call() {
 
     kill $spin_pid
     wait $spin_pid
-    printf "\r"
+    echo -ne "\r"
 
-    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e "\b$command_output"
+    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e $command_output
     return $return_code
 }
 
@@ -410,6 +411,27 @@ function set_inet_addr() {
             echo "Invalid or unreachable domain name."
         done
     fi
+
+    # TODO : Remove this once testing is performed.
+    tls_key_file="self"
+    tls_cert_file="self"
+    tls_cabundle_file="self"
+
+    # Attempt auto-detection.
+    
+    inetaddr=$(hostname -I | awk '{print $1}')
+    validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                            internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
+    inetaddr=""
+
+    while [ -z "$inetaddr" ]; do
+        read -ep "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+        validate_inet_addr && return 0
+        echo "Invalid ip/domain address."
+    done
+
+    ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
+
 }
 
 function check_port_validity() {
@@ -791,20 +813,17 @@ function set_host_xrpl_account() {
                 \n2. At least $reg_fee EVR to cover Evernode registration fee.
                 \n\nYou can scan the following QR code in your wallet app to send funds:\n"
 
-
         generate_qrcode "$xrpl_address"
 
-        # Start Wait animation...
-        echomult "\nWaiting for funds..."
-        spin &
-        spin_pid=$!
-
-        required_balance=$min_xrp_amount_per_month
-
-        # TODO : Need to get the actual balance to the prompts. (As the deposited amount may vary)
-        # Currentlty balance is logged in the fifo file and it is echoed when calling 
         while true ; do
-            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "\\b\\nAccount preparation is successfull." && break
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
+            && break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
+
+        echomult "\nPreparing account with EVR trusline..."
+        while true ; do
+            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
             confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
         done
 

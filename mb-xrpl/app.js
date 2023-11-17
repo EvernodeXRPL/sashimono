@@ -17,14 +17,13 @@ async function main() {
                 const accountAddress = process.argv[3];
                 const accountSecretPath = process.argv[4];
                 const governorAddress = process.argv[5];
-                const domain = process.argv[6];
+                // const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
                 const ipv6NetInterface = (process.argv[10] === '-') ? null : process.argv[10];
                 const setup = new Setup();
-                const acc = await setup.setupHostAccount(accountAddress, accountSecretPath, rippledServer, governorAddress, domain);
-                setup.newConfig(acc.address, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface);
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface);
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const governorAddress = process.argv[3];

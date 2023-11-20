@@ -706,12 +706,13 @@ function generate_qrcode(){
 
 function generate_and_save_keyfile() {
 
-    local secret_json=$(exec_jshelper generate-account).
-    local account=$(jq -r '.account' <<< "$secret_json")
-    local secret=$(jq -r '.secret' <<< "$secret_json")
+    local secret_json=$(exec_jshelper generate-account)
+    echo "$secret_json"
+    local account=$(echo "$secret_json" | jq -r '.account')
+    local secret=$(echo "$secret_json" | jq -r '.secret')
 
     if [ "$#" -ne 2 ]; then
-        echo "Error: Please provide the full path of the address and secret"
+        echomult "Error: Please provide the full path of the address and secret"
         return 1
     fi
 
@@ -728,23 +729,25 @@ function generate_and_save_keyfile() {
         mkdir -p "$address_dir"
     fi
 
+    echomult "address dir created"
+
     if [ -e "$key_path" ]; then 
         if ! confirm "The file '$key_path' already exists. Do you want to override it?"; then
             existing_secret=$(jq -r '.xrpl.secret' "$key_path" 2>/dev/null)
             existing_address=$(jq -r '.xrpl.address' "$address_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ]; then
-                echo "Existing secret retrieved from '$key_path': $existing_secret"
+                echomult "Existing secret retrieved from '$key_path': $existing_secret"
             else
-                echo "Error: Existing secret file does not have the expected format."
+                echomult "Error: Existing secret file does not have the expected format."
                 return 1
             fi
             if [ "$existing_address" != "null" ]; then
-                echo "Existing address retrieved from '$address_path': $existing_address"
+                echomult "Existing address retrieved from '$address_path': $existing_address"
                 xrpl_address=$existing_address
                 xrpl_secret=$existing_secret
                 return 0
             else
-                echo "Error: Existing address file does not have the expected format."
+                echomult "Error: Existing address file does not have the expected format."
                 return 1
             fi
         fi
@@ -752,18 +755,18 @@ function generate_and_save_keyfile() {
 
     if [ -e "$address_path" ]; then
         existing_data=$(cat "$address_path" 2>/dev/null)
-        updated_data=$(echo "$existing_data" | jq --arg account "$account" '.xrpl.address = $account')
-        echo "$updated_data" > "$address_path"
+        updated_data=$(echomult "$existing_data" | jq --arg account "$account" '.xrpl.address = $account')
+        echomult "$updated_data" > "$address_path"
     else
         echo "{ \"xrpl\": { \"address\": \"$account\" } }" >> "$address_path"
     fi
 
     chmod 644 "$address_path"
-    echo "Address field updated successfully in $address_path"
+    echomult "Address field updated successfully in $address_path"
 
     echo "{ \"xrpl\": { \"secret\": \"$secret\" } }" > "$key_path"
     chmod 600 "$key_path"
-    echo "Key file saved successfully at $key_path"
+    echomult "Key file saved successfully at $key_path"
 
     xrpl_address=$account
     xrpl_secret=$secret

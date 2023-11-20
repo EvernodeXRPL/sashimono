@@ -20,9 +20,7 @@ max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 
-cloud_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download"
 latest_version_endpoint="https://api.github.com/repos/EvernodeXRPL/evernode-resources/releases/latest"
-
 latest_version_data=$(curl -s "$latest_version_endpoint")
 latest_version=$(echo "$latest_version_data" | jq -r '.name')
 if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
@@ -30,11 +28,12 @@ if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
     exit 1
 fi
 
-setup_script_url="$cloud_storage/$latest_version/setup.sh"
-installer_url="$cloud_storage/$latest_version/installer.tar.gz"
-licence_url="$cloud_storage/$latest_version/licence.txt"
-nodejs_url="$cloud_storage/$latest_version/node"
-jshelper_url="$cloud_storage/$latest_version/setup-jshelper.tar.gz"
+cloud_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download/$latest_version"
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
+licence_url="$cloud_storage/licence.txt"
+nodejs_url="$cloud_storage/node"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
@@ -113,7 +112,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "autoupdater" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -127,7 +126,7 @@ if $installed ; then
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
-                \nautoupdater - Evernode Auto Updater management" \
+                \nauto-update - Evernode Auto Updater management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -1537,13 +1536,13 @@ elif [ "$mode" == "governance" ]; then
             \nhelp - Print help." && exit 0
     ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
-elif [ "$mode" == "autoupdater" ]; then
+elif [ "$mode" == "auto-update" ]; then
     if [ "$2" == "enable" ]; then
         enable_evernode_auto_updater && exit 0
     elif [ "$2" == "disable" ]; then
         remove_evernode_auto_updater && exit 0
     else
-        echomult "$evernode auto updater
+        echomult "$evernode auto update
             \nSupported commands:
             \nenable - Enable $evernode auto updater service.
             \ndisable - Disable $evernode auto updater service." && exit 1

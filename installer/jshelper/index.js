@@ -4,6 +4,8 @@ const evernode = require("evernode-js-client");
 const process = require("process");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
+const http = require('http');
+const crypto = require('crypto');
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -287,6 +289,85 @@ const funcs = {
         await hostClient.disconnect();
         await xrplApi.disconnect();
         return { success: true };
+
+    },
+
+    // Starts an HTTP server on port 80 and check whether that's reachable via
+    // the provided domain.
+    'validate-domain': async (args) => {
+        checkParams(args, 2);
+        const domain = args[0];
+        const port = parseInt(args[1]);
+        const urlPath = "/" + crypto.randomBytes(16).toString('hex');
+        const responseString = crypto.randomBytes(16).toString('hex');
+
+        const server = http.createServer((req, res) => {
+            if (req.url === urlPath) {
+                res.writeHead(200, { "Content-Type": "text/plain" });
+                res.end(responseString + '\n');
+            } else {
+                res.writeHead(404, { 'Content-Type': 'text/plain' });
+                res.end('Not Found\n');
+            }
+        });
+
+        try {
+            await new Promise((resolve, reject) => {
+                server.on('error', function (e) {
+                    // We assume this is an error when starting to listen.
+                    reject("listen_error");
+                });
+
+                server.listen(port, () => {
+                    // Server started. Now send a request via public domain.
+
+                    const reqOptions = {
+                        hostname: domain,
+                        port: port,
+                        path: urlPath,
+                        method: "GET"
+                    };
+
+                    const req = http.request(reqOptions, (res) => {
+                        let data = "";
+
+                        res.on("data", (chunk) => {
+                            data += chunk;
+                        });
+
+                        // request completion event.
+                        res.on("end", () => {
+                            server.close();
+                            if (data.startsWith(responseString)) {
+                                resolve();
+                            } else {
+                                // Return string does not match our responseString. Most probably response was
+                                // sent by some other server. Not by us.
+                                reject("domain_error")
+                            }
+                        });
+                    });
+
+                    req.on("error", (e) => {
+                        server.close();
+                        reject("domain_error")
+                    });
+
+                    req.setTimeout(3000, () => { // 3 second request timeout
+                        req.destroy();
+                        server.close();
+                        reject("domain_error");
+                    });
+
+                    req.end();
+                });
+            });
+
+            return { success: true, result: "ok" };
+
+        } catch (errorCode) {
+            return { success: false, result: errorCode };
+        }
     }
 }
 

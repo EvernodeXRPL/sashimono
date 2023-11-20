@@ -19,7 +19,7 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-test-78bf412d-19e4-447c-b4a4-36ff0f71c1f7"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
@@ -780,8 +780,6 @@ function set_host_xrpl_account() {
     local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
 
     if [ "$account_validate_criteria" == "register" ]; then
-        # local xrpl_address="rUgYGyrdFitPWcGos6hMEspwY7J12Ut8kY" # Should assign the generated account r address in the middle.
-        # local xrpl_secret="-" # Should assign the generated account secret in the middle.
         local key_file_path='-'
 
         confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath

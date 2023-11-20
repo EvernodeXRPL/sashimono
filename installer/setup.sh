@@ -707,9 +707,8 @@ function generate_qrcode(){
 function generate_and_save_keyfile() {
 
     local secret_json=$(exec_jshelper generate-account)
-    echo "$secret_json"
-    local account=$(echo "$secret_json" | jq -r '.account')
-    local secret=$(echo "$secret_json" | jq -r '.secret')
+    local account=$(jq -r '.account' <<< "$secret_json")
+    local secret=$(jq -r '.secret' <<< "$secret_json")
 
     if [ "$#" -ne 2 ]; then
         echomult "Error: Please provide the full path of the address and secret"
@@ -735,13 +734,13 @@ function generate_and_save_keyfile() {
         if ! confirm "The file '$key_path' already exists. Do you want to override it?"; then
             existing_secret=$(jq -r '.xrpl.secret' "$key_path" 2>/dev/null)
             existing_address=$(jq -r '.xrpl.address' "$address_path" 2>/dev/null)
-            if [ "$existing_secret" != "null" ]; then
+            if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
                 echomult "Existing secret retrieved from '$key_path': $existing_secret"
             else
                 echomult "Error: Existing secret file does not have the expected format."
                 return 1
             fi
-            if [ "$existing_address" != "null" ]; then
+            if [ "$existing_address" != "null" ] && [ "$existing_address" != "-" ]; then
                 echomult "Existing address retrieved from '$address_path': $existing_address"
                 xrpl_address=$existing_address
                 xrpl_secret=$existing_secret
@@ -798,6 +797,21 @@ function set_host_xrpl_account() {
         fi
 
         echomult "Generating new keypair for the host...\n"
+
+        # Create Messageboard user and set the key file ownership.
+        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        fi
+
+        if [ "$key_file_path" == "$default_key_filepath" ]; then
+            parent_directory=$(dirname "$key_file_path")
+            mkdir $parent_directory
+            chown -R $MB_XRPL_USER: $parent_directory
+            chmod -R 700 $parent_directory
+        fi
+
+        chown $MB_XRPL_USER: $key_file_path
+
         generate_and_save_keyfile "$default_address_filepath" "$key_file_path"
         
         echomult "Your host account with the address $xrpl_address : $xrpl_secret has been generated on Xahau $NETWORK.

@@ -2,6 +2,8 @@
 # Sashimono agent uninstall script.
 # This must be executed with root privileges.
 
+export TRANSFER=${TRANSFER:-0}
+
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1

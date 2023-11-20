@@ -28,6 +28,7 @@ ipv6_net_interface=${20}
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 setup_helper_dir="/tmp/evernode-setup-helpers"
+secret_backup_location="/root/.evernode/.host-account-secret.key"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -50,10 +51,22 @@ function confirm() {
 
 function rollback() {
     [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
-    ! confirm "To address this, we can either rollback the installation or keep the current setup.\nNOTE: If you rollback the installation the account information also will be cleared.\nDo you want to proceed with the rollback?" && exit 1
+
+    # Backup secret in order to mitigate loss of secret.
+    # NOTE: When removing MB_XRPL_USER the home directory also get removed. Hence, if the user has selected default path the secret file also will be removed.
+    # By Backing up secret in a known location, we can restore that in the next installation attempt rather than creating new account.
+    [ "$OPERATION" == "register" ] && echo "Backing up account secret in $secret_backup_location ." && mkdir -p $(dirname $secret_backup_location) && cp -p --no-preserve=ownership $xrpl_account_secret_path $secret_backup_location
+
     echo "Rolling back sashimono installation."
     "$script_dir"/sashimono-uninstall.sh -f
     echo "Rolled back the installation."
+
+    # Revert ownership of provided secret file to ROOT user (as MB_XRPL_USER is not there anymore).
+    [ "$OPERATION" == "re-register" ] && chown root:root $xrpl_account_secret_path
+
+    # Remove secret from original path as this was backed up.
+     [ "$OPERATION" == "register" ] && [ -e $xrpl_account_secret_path ] && rm -f $xrpl_account_secret_path
+
     exit 1
 }
 

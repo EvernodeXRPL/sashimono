@@ -68,8 +68,13 @@ export DOCKER_REGISTRY_PORT=0
 # (we execute as the user who launched this script as sudo)
 noroot_user=${SUDO_USER:-$(whoami)}
 
-# Default key path is set to Messagebaord-user.
-default_key_filepath="/home/$MB_XRPL_USER/.evernode/.host-account-secret.key"
+# Default key path is set to a path in MB_XRPL_USER home
+default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
+
+# Backed up secret location.
+# Used to restore secret related to a previous installation attempt
+secret_backup_location="/root/.evernode/.host-account-secret.key"
+
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -313,6 +318,22 @@ function exec_jshelper() {
     rm $resp_file && return 1
 }
 
+function exec_jshelper_root() {
+
+    # Create fifo file to read response data from the helper script.
+    local resp_file=$setup_helper_dir/helper_fifo
+    [ -p $resp_file ] || mkfifo $resp_file
+
+    # Execute js helper asynchronously while collecting response to fifo file.
+    RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
+    local pid=$!
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+    
+    # Wait for js helper to exit and reflect the error exit code in this function return.
+    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+    rm $resp_file && return 1
+}
+
 function resolve_filepath() {
     # name reference the variable name provided as first argument.
     local -n filepath=$1
@@ -354,7 +375,25 @@ function set_domain_certs() {
 }
 
 function validate_inet_addr_domain() {
-    host $inetaddr >/dev/null 2>&1 && return 0
+    if host $inetaddr >/dev/null 2>&1 ; then
+        local port="80"
+        echo "Verifying domain $inetaddr on port $port..."
+        local domain_result=$(exec_jshelper_root validate-domain $inetaddr $port)
+        [[ "$domain_result" == "ok" ]] && echo "Domain verification successful." && return 0
+
+        if [ "$domain_result" == "listen_error" ]; then
+            echomult "Could not initiate domain verification. It's likely that port $port is already in use by another application.\n
+                It's recommended that you abandon the setup and correct this. You should consider continuing only if you are an advanced user
+                who knows what they are doing, and is going to provide your own SSL certificates."
+            confirm "Do you want to abandon the setup (recommended)?" && echo "Setup abandoned." && exit 1
+            echo "Continuing with unverified domain $inetaddr" && return 0
+        fi
+
+        [[ "$domain_result" == "domain_error" ]] &&
+            echo "Domain verification for $inetaddr failed. Please make sure that this host is reachable via $inetaddr"
+    fi
+
+    # Reaching this point means some error has occured. So we clear the inetaddress to allow to try again.
     inetaddr="" && return 1
 }
 
@@ -779,6 +818,12 @@ function set_host_xrpl_account() {
 
     local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
 
+    # Create MB_XRPL_USER as we require that user for secret key ownership management.
+    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+        echomult "Creating Message-board User."
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    fi
+
     if [ "$account_validate_criteria" == "register" ]; then
         local key_file_path='-'
 
@@ -795,11 +840,6 @@ function set_host_xrpl_account() {
         fi
 
         echomult "Generating new keypair for the host...\n"
-
-        # Create Messageboard user and set the key file ownership.
-        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-        fi
 
         if [ "$key_file_path" == "$default_key_filepath" ]; then
             parent_directory=$(dirname "$key_file_path")
@@ -858,12 +898,16 @@ function set_host_xrpl_account() {
 
             read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
             ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
-            xrpl_secret=$(<"$key_file_path")
+            xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
 
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
 
             echo "Checking account keys..."
             ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+            # Modifying key file ownership to MB_XRPL_USER.
+            chown $MB_XRPL_USER: $key_file_path
+            chmod 600 $key_file_path
 
             xrpl_account_secret=$xrpl_secret
 
@@ -930,7 +974,7 @@ function install_evernode() {
 
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
                             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \

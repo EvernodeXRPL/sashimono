@@ -37,18 +37,12 @@ namespace msg
         std::optional<size_t> max_file_count;
     };
 
-    struct fallback_config
-    {
-        std::optional<bool> execute;
-    };
-
     struct consensus_config
     {
         std::optional<std::string> mode;
         std::optional<uint32_t> roundtime;
         std::optional<uint32_t> stage_slice;
         std::optional<uint16_t> threshold;
-        fallback_config fallback;
     };
 
     struct npl_config
@@ -194,7 +188,6 @@ namespace msg
     constexpr const char *FLD_ROUNDTIME = "roundtime";
     constexpr const char *FLD_STAGE_SLICE = "stage_slice";
     constexpr const char *FLD_THRESHOLD = "threshold";
-    constexpr const char *FLD_FALLBACK = "fallback";
     constexpr const char *FLD_ROUND_LIMITS = "round_limits";
     constexpr const char *FLD_USER_INP_BYTES = "user_input_bytes";
     constexpr const char *FLD_USER_OUTP_BYTES = "user_output_bytes";

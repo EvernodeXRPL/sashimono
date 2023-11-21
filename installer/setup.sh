@@ -755,9 +755,9 @@ function generate_and_save_keyfile() {
     fi
 
     address_path="$1"
-    key_path="$2"
+    key_file_path="$2"
 
-    key_dir=$(dirname "$key_path")
+    key_dir=$(dirname "$key_file_path")
     if [ ! -d "$key_dir" ]; then
         mkdir -p "$key_dir"
     fi
@@ -767,14 +767,12 @@ function generate_and_save_keyfile() {
         mkdir -p "$address_dir"
     fi
 
-    echomult "address dir created"
-
-    if [ -e "$key_path" ]; then 
-        if ! confirm "The file '$key_path' already exists. Do you want to override it?"; then
-            existing_secret=$(jq -r '.xrpl.secret' "$key_path" 2>/dev/null)
+    if [ -e "$key_file_path" ]; then 
+        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?"; then
+            existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             existing_address=$(jq -r '.xrpl.address' "$address_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                echomult "Existing secret retrieved from '$key_path': $existing_secret"
+                echomult "Existing secret retrieved from '$key_file_path': $existing_secret"
             else
                 echomult "Error: Existing secret file does not have the expected format."
                 return 1
@@ -802,9 +800,17 @@ function generate_and_save_keyfile() {
     chmod 644 "$address_path"
     echomult "Address field updated successfully in $address_path"
 
-    echo "{ \"xrpl\": { \"secret\": \"$secret\" } }" > "$key_path"
-    chmod 600 "$key_path"
-    echomult "Key file saved successfully at $key_path"
+    echo "{ \"xrpl\": { \"secret\": \"$secret\" } }" > "$key_file_path"
+    chmod 600 "$key_file_path"
+    echomult "Key file saved successfully at $key_file_path"
+
+    if [ "$key_file_path" == "$default_key_filepath" ]; then
+        parent_directory=$(dirname "$key_file_path")
+        chown -R $MB_XRPL_USER: "$parent_directory"
+        chmod -R 700 "$parent_directory"
+    fi
+
+    chown $MB_XRPL_USER: $key_file_path
 
     xrpl_address=$account
     xrpl_secret=$secret
@@ -841,17 +847,8 @@ function set_host_xrpl_account() {
 
         echomult "Generating new keypair for the host...\n"
 
-        if [ "$key_file_path" == "$default_key_filepath" ]; then
-            parent_directory=$(dirname "$key_file_path")
-            mkdir $parent_directory
-            chown -R $MB_XRPL_USER: $parent_directory
-            chmod -R 700 $parent_directory
-        fi
-
-        chown $MB_XRPL_USER: $key_file_path
-
         generate_and_save_keyfile "$default_address_filepath" "$key_file_path"
-        
+       
         echomult "Your host account with the address $xrpl_address : $xrpl_secret has been generated on Xahau $NETWORK.
                 \nThe secret key of the account is located at $key_file_path.
                 \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.

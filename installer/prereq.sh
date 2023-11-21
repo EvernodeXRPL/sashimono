@@ -37,7 +37,6 @@ apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq
 # curl          # Required to download installation artifacts.
 # openssl       # Required by Sashimono agent to create contract tls certs.
 # jq            # Used for json config file manipulation.
-# qrencode      # Used for QR code generating.
 
 # Install nodejs if not exists.
 if ! command -v node &>/dev/null; then

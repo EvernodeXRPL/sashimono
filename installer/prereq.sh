@@ -78,12 +78,6 @@ if ! command -v snap &>/dev/null; then
     apt-get install -y snapd
 fi
 
-# Install qrencode
-if ! command -v qrencode &>/dev/null; then
-    stage "Installing qrencode"
-    apt-get install -y qrencode
-fi
-
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.

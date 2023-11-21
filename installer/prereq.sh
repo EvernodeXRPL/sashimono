@@ -27,7 +27,7 @@ stage "Installing dependencies"
 # Added --allow-releaseinfo-change
 # To fix - Repository 'https://apprepo.vultr.com/ubuntu universal InRelease' changed its 'Codename' value from 'buster' to 'universal'
 apt-get update --allow-releaseinfo-change
-apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq qrencode
+apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq
 
 # uidmap        # Required for rootless docker.
 # slirp4netns   # Required for high performance rootless networking.
@@ -37,7 +37,6 @@ apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq qrencode
 # curl          # Required to download installation artifacts.
 # openssl       # Required by Sashimono agent to create contract tls certs.
 # jq            # Used for json config file manipulation.
-# qrencode      # Used for QR code generating.
 
 # Install nodejs if not exists.
 if ! command -v node &>/dev/null; then

@@ -4,6 +4,7 @@ const evernode = require("evernode-js-client");
 const process = require("process");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
+const keypairs = require('ripple-keypairs');
 const http = require('http');
 const crypto = require('crypto');
 
@@ -217,40 +218,62 @@ const funcs = {
         const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
-        const hostClient = new evernode.HostClient(accountAddress, null, {
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress,
-            xrplApi: xrplApi
-        });
-
-        await hostClient.connect();
-
         let attempts = 0;
         let balance = 0;
         while (attempts >= 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            if (tokenType === 'NATIVE')
-                balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
-            else
-                balance = Number(await hostClient.getEVRBalance());
+            try {
+                const hostClient = new evernode.HostClient(accountAddress, null, {
+                    rippledServer: rippledUrl,
+                    governorAddress: governorAddress,
+                    xrplApi: xrplApi
+                });
 
-            if (balance < expectedBalance) {
-                if (++attempts <= 120)
+                await hostClient.connect();
+
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                if (tokenType === 'NATIVE')
+                    balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
+                else
+                    balance = Number(await hostClient.getEVRBalance());
+
+                if (balance < expectedBalance) {
+                    if (++attempts <= 120)
+                        continue;
+                    return { success: false, result: "Funds not received within timeout." };
+                }
+
+                await hostClient.disconnect();
+                break;
+            } catch (err) {
+                if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
+                    await new Promise(resolve => setTimeout(resolve, 3000));
                     continue;
-                return { success: false, result: "Funds not received within timeout." };
+                }
+                return { success: false, result: (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check." };
             }
-            break;
         }
 
-        await hostClient.disconnect();
         await xrplApi.disconnect();
-
         return { success: true, result: `${balance}` };
+    },
+
+    'generate-account': async (args) => {
+        let seed = null;
+        if (args[0])
+            seed = args[0];
+        else
+            seed = keypairs.generateSeed({ algorithm: "ecdsa-secp256k1" });
+
+        const keypair = keypairs.deriveKeypair(seed);
+        const createdKeypair = {
+            address: keypairs.deriveAddress(keypair.publicKey),
+            secret: seed
+        }
+        return { success: true, result: typeof createdKeypair === 'object' ? JSON.stringify(createdKeypair) : `${createdKeypair}` };
     },
 
     'prepare-host': async (args) => {
         checkParams(args, 4);
-        console.log(args)
         const rippledUrl = args[0];
         const governorAddress = args[1];
         const accountAddress = args[2];

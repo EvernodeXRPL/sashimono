@@ -1,3 +1,4 @@
 [submodule "evernode-bootstrap-contract"]
 	path = evernode-bootstrap-contract
 	url = https://github.com/HotPocketDev/evernode-bootstrap-contract.git
+	branch = release

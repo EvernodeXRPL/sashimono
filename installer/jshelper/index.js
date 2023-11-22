@@ -7,6 +7,7 @@ const ip6addr = require('ip6addr');
 const keypairs = require('ripple-keypairs');
 const http = require('http');
 const crypto = require('crypto');
+const { appenv } = require("../../mb-xrpl/lib/appenv");
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -21,7 +22,11 @@ const funcs = {
     'validate-server': async (args) => {
         checkParams(args, 1);
         const rippledUrl = args[0];
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        evernode.Defaults.set({
+            rippledServer: rippledUrl
+        });
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
         await xrplApi.disconnect();
         return { success: true };
@@ -34,14 +39,21 @@ const funcs = {
         const accountAddress = args[2];
         const validateFor = args[3] || "register";
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
-        const hostClient = new evernode.HostClient(accountAddress, null, {
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress,
+        evernode.Defaults.set({
             xrplApi: xrplApi
         });
+
+        const hostClient = new evernode.HostClient(accountAddress, null);
 
         if (!await hostClient.xrplAcc.exists())
             return { success: false, result: "Account not found." };
@@ -82,8 +94,18 @@ const funcs = {
         const accountAddress = args[1];
         const accountSecret = args[2];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
 
         const xrplAcc = new evernode.XrplAccount(accountAddress, accountSecret, {
             xrplApi: xrplApi
@@ -101,12 +123,17 @@ const funcs = {
         const governorAddress = args[1];
         const configName = args[2];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
-        await xrplApi.connect();
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
-            governorAddress: governorAddress,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
             xrplApi: xrplApi
         });
 
@@ -128,14 +155,21 @@ const funcs = {
         const accountSecret = args[3];
         const transfereeAddress = args[4];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
-        const hostClient = new evernode.HostClient(accountAddress, accountSecret, {
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress,
+        evernode.Defaults.set({
             xrplApi: xrplApi
         });
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret);
 
         if (!await hostClient.xrplAcc.exists())
             return { success: false, result: "Account not found." };
@@ -215,18 +249,25 @@ const funcs = {
         const tokenType = args[3];
         const expectedBalance = args[4];
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
 
         let attempts = 0;
         let balance = 0;
         while (attempts >= 0) {
             try {
-                const hostClient = new evernode.HostClient(accountAddress, null, {
-                    rippledServer: rippledUrl,
-                    governorAddress: governorAddress,
-                    xrplApi: xrplApi
-                });
+                const hostClient = new evernode.HostClient(accountAddress, null);
 
                 await hostClient.connect();
 
@@ -281,14 +322,21 @@ const funcs = {
         // Optional
         const domain = args[4] ? args[4] : "";
 
-        const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
-        const hostClient = new evernode.HostClient(accountAddress, accountSecret, {
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress,
+        evernode.Defaults.set({
             xrplApi: xrplApi
         });
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret);
         await hostClient.connect();
 
         {

@@ -19,14 +19,22 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
+
+latest_version_endpoint="https://api.github.com/repos/EvernodeXRPL/evernode-resources/releases/latest"
+latest_version_data=$(curl -s "$latest_version_endpoint")
+latest_version=$(echo "$latest_version_data" | jq -r '.name')
+if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
+    echo "Failed to retrieve latest version data."
+    exit 1
+fi
+
+cloud_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download/$latest_version"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
 licence_url="$cloud_storage/licence.txt"
 nodejs_url="$cloud_storage/node"
 jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
-setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="$setup_helper_dir/node"
@@ -81,12 +89,20 @@ function echomult() {
 }
 
 function confirm() {
-    echo -en $1" [Y/n] "
+    local prompt=$1
+    local defaultChoice=${2:-y}  #Default choice is set to 'y' if $2 parameter is not provided.
+
+    local choiceDisplay="[Y/n]"
+    if [ "$defaultChoice" == "n" ]; then
+        choiceDisplay="[y/N]"
+    fi
+    
+    echo -en "$prompt $choiceDisplay "
     local yn=""
     read yn </dev/tty
 
     # Default choice is 'y'
-    [ -z $yn ] && yn="y"
+    [ -z $yn ] && yn="$defaultChoice"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
         read -ep "'y' or 'n' expected: " yn </dev/tty
     done
@@ -139,7 +155,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -152,7 +168,8 @@ if $installed ; then
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
-                \ngovernance - Governance candidate management" \
+                \ngovernance - Governance candidate management
+                \nauto-update - Evernode Auto Updater management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -291,13 +308,13 @@ function init_setup_helpers() {
     rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
-    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_util_bin
+    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl -L $nodejs_url --output $nodejs_util_bin
     [ ! -f "$nodejs_util_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
     chmod +x $nodejs_util_bin
 
     if [ ! -f "$jshelper_bin" ]; then
         pushd $jshelper_dir >/dev/null 2>&1
-        sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
+        sudo -u $noroot_user curl -L $jshelper_url --output jshelper.tar.gz
         sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
         rm jshelper.tar.gz
         popd >/dev/null 2>&1
@@ -717,6 +734,15 @@ function set_rippled_server() {
     fi
 }
 
+function set_auto_update() {
+    enable_auto_update=false
+    if $interactive; then
+        if confirm "Do you want to enable auto updates?" "n" ; then
+            enable_auto_update=true
+        fi
+    fi
+}
+
 function set_transferee_address() {
     # Here we set the default transferee address as 'CURRENT_HOST_ADDRESS', but we set it to the exact current host address in host client side.
     [ -z $transferee_address ] && transferee_address=''
@@ -940,22 +966,86 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
-    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
+    latest_version_data=$(curl -s "$latest_version_endpoint")
+    latest_version_timestamp=$(echo "$latest_version_data" | jq -r '.published_at')
+    echo "$latest_version_timestamp"
+}
+
+function enable_evernode_auto_updater() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    enable_auto_update=true
+
+    # Create the service.
+    echo "[Unit]
+Description=Service for the Evernode auto-update.
+After=network.target
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=/usr/bin/evernode update -q
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service
+
+    # Create a timer for the service (every two hours).
+    echo "[Unit]
+Description=Timer for the Evernode auto-update.
+# Allow manual starts
+RefuseManualStart=no
+# Allow manual stops
+RefuseManualStop=no
+[Timer]
+Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
+OnCalendar=0/12:00:00
+# Execute job if it missed a run due to machine being off
+Persistent=true
+# To prevent rush time, adding 2 hours delay
+RandomizedDelaySec=7200
+[Install]
+WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
+
+    # Reload the systemd daemon.
+    systemctl daemon-reload
+
+    echo "Enabling Evernode auto update service..."
+    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.service
+
+    echo "Enabling Evernode auto update timer..."
+    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    echo "Starting Evernode auto update timer..."
+    systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
+}
+
+function remove_evernode_auto_updater() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    enable_auto_update=false
+
+    echo "Removing Evernode auto update timer..."
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
+    rm -f $service_path
+
+    echo "Removing Evernode auto update service..."
+    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
+    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
+    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
+    rm -f $service_path
+
+    # Reload the systemd daemon.
+    systemctl daemon-reload
 }
 
 function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local installer_version_timestamp=$(online_version_timestamp $installer_url)
+    local installer_version_timestamp=$(online_version_timestamp)
     [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
-    # Get setup version (timestamp).
-    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl --silent $installer_url --output installer.tgz
+    curl --silent -L $installer_url --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
@@ -990,13 +1080,19 @@ function install_evernode() {
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
+    
+    # Enable the Evernode Auto Updater Service.
+    if [ "$enable_auto_update" = true ]; then
+        stage "Configuring auto updater service"
+        enable_evernode_auto_updater
+    fi
+
     set +o pipefail
 
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
-    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function check_exisiting_contracts() {
@@ -1026,6 +1122,9 @@ function uninstall_evernode() {
     if ! $transfer ; then
         [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
         ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
+        
+        # Remove the Evernode Auto Updater Service.
+        [ "$upgrade" == "0" ] && remove_evernode_auto_updater
     else
         echo "Intiating Transfer..."
         echo "Uninstalling for transfer..."
@@ -1038,13 +1137,11 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest_installer_script_version=$(online_version_timestamp $installer_url)
-    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
+    local latest_installer_script_version=$(online_version_timestamp)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
     local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
-    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
-    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
@@ -1055,12 +1152,6 @@ function update_evernode() {
     if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
         uninstall_evernode 1
         install_evernode 1
-    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
-        [ -d $log_dir ] || mkdir -p $log_dir
-        logfile="$log_dir/installer-$(date +%s).log"
-        remove_evernode_alias
-        ! create_evernode_alias && echo "Alias creation failed."
-        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
     rm -r $setup_helper_dir >/dev/null 2>&1
@@ -1486,7 +1577,7 @@ if [ "$mode" == "install" ]; then
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
-    curl --silent $licence_url | cat
+    curl -s -L $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
     ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
@@ -1533,7 +1624,14 @@ if [ "$mode" == "install" ]; then
         echo -e "\nAccount setup is complete."
     fi
 
-    ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
+    set_auto_update
+    if [ "$enable_auto_update" = true ]; then
+        echo -e "Auto updater will be enabled."
+    else
+        echo -e "Auto updater will be disabled."
+    fi
+
+    $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
     # TODO - CHECKPOINT - 03
     echo "Starting installation..."
@@ -1650,6 +1748,17 @@ elif [ "$mode" == "governance" ]; then
             \nhelp - Print help." && exit 0
     ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
+elif [ "$mode" == "auto-update" ]; then
+    if [ "$2" == "enable" ]; then
+        enable_evernode_auto_updater && exit 0
+    elif [ "$2" == "disable" ]; then
+        remove_evernode_auto_updater && exit 0
+    else
+        echomult "$evernode auto update
+            \nSupported commands:
+            \nenable - Enable $evernode auto updater service.
+            \ndisable - Disable $evernode auto updater service." && exit 1
+    fi
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

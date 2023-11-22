@@ -32,24 +32,6 @@ function cgrulesengd_servicename() {
     fi
 }
 
-function remove_evernode_auto_updater() {
-
-    echo "Removing Evernode auto update timer..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-    rm $service_path
-
-    echo "Removing Evernode auto update service..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-    rm $service_path
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-}
-
 function cleanup_certbot_ssl() {
     # revoke/delete certs if certbot is used.
     if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ]; then
@@ -216,8 +198,5 @@ fi
 groupdel $SASHIADMIN_GROUP
 
 [ "$UPGRADE" == "0" ] && echo "Sashimono uninstalled successfully." || echo "Sashimono uninstalled successfully. Your data has been preserved."
-
-# Remove the Evernode Auto Updater Service.
-[ "$UPGRADE" == "0" ] && remove_evernode_auto_updater
 
 exit 0

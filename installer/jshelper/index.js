@@ -266,8 +266,6 @@ const funcs = {
         });
 
         const hostClient = new evernode.HostClient(accountAddress, null);
-        await hostClient.connect();
-
         const terminateConnections = async () => {
             await hostClient.disconnect();
             await xrplApi.disconnect();
@@ -277,6 +275,9 @@ const funcs = {
         let balance = 0;
         while (attempts >= 0) {
             try {
+                // In order to handle the account not found issue via catch block.
+                await hostClient.connect();
+
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 if (tokenType === 'NATIVE')
                     balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;

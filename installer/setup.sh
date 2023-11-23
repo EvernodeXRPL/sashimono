@@ -22,6 +22,7 @@ log_dir=/tmp/evernode-beta
 
 repo_owner="EvernodeXRPL"
 repo_name="evernode-resources"
+desired_branch="main"
 
 latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
 latest_version_data=$(curl -s "$latest_version_endpoint")
@@ -33,8 +34,8 @@ fi
 
 # Prepare resources URLs
 resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/main/installer/licence.txt"
-config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/main/definitions/definitions.json"
+licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/installer/licence.txt"
+config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$resource_storage/setup.sh"
 installer_url="$resource_storage/installer.tar.gz"
 jshelper_url="$resource_storage/setup-jshelper.tar.gz"
@@ -318,7 +319,7 @@ function set_environment_configs() {
         echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
     fi
 
-    export EVERNODE_GOVERNOR_ADDRESS=$(jq -r ".$NETWORK.governorAddress" $config_json_path)
+    export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
     default_rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
 
 }

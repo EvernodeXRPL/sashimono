@@ -1755,6 +1755,9 @@ elif [ "$mode" == "list" ]; then
     sashi list
 
 elif [ "$mode" == "update" ]; then
+    config_json_path="$SASHIMONO_BIN/evernode-setup-helpers/configuration.json"
+    export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
+
     update_evernode
 
 elif [ "$mode" == "log" ]; then

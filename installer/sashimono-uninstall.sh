@@ -7,6 +7,7 @@ export TRANSFER=${TRANSFER:-0}
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
+secret_backup_location="/root/.evernode/.host-account-secret.key"
 
 function confirm() {
     echo -en $1" [Y/n] "
@@ -68,6 +69,16 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     if [ -f $mb_service_path ]; then
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $MB_XRPL_SERVICE
+    fi
+
+    # Backup the secret in upgrade process.
+    if [[ "$UPGRADE" != "0" ]]; then
+
+        mb_xrpl_config_data=$(cat $MB_XRPL_DATA/mb-xrpl.cfg)
+        secret_stored_path=$(echo $mb_xrpl_config_data | jq -r '.xrpl.secretPath')
+        backup_dir=$(dirname $secret_backup_location)
+        echo "Backing up account secret at $secret_backup_location." && mkdir -p $backup_dir && cp -p --no-preserve=ownership $secret_stored_path $secret_backup_location
+        echo $secret_stored_path >"$backup_dir/previous_secret_path.txt"
     fi
 
 fi
@@ -170,6 +181,12 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
             ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
             echo "Continuing uninstallation..."
         fi
+
+        mb_xrpl_config_data=$(cat $MB_XRPL_DATA/mb-xrpl.cfg)
+        current_secret_path=$(echo $mb_xrpl_config_data | jq -r '.xrpl.secretPath')
+        
+        # Remove secret from the saved location.
+        rm -rf $current_secret_path
     fi
 
     echo "Deleting message board user..."

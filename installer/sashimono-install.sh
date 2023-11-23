@@ -29,6 +29,9 @@ script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 secret_backup_location="/root/.evernode/.host-account-secret.key"
+default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
+
+secret_stored_path="-"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -266,11 +269,36 @@ if [ "$NO_MB" == "" ]; then
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
+    # Create MB_XRPL_USER if does not exists.
+    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    fi
+
     # Assign message board user priviledges.
     if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
         usermod --lock $MB_XRPL_USER
         usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
         loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    fi
+
+    if [ "$UPGRADE" != "0" ]; then
+        # Restore keyfile.
+        if [ -f $secret_backup_location ]; then
+            echo "Restoring secret file..."
+            backup_dir=$(dirname $secret_backup_location)
+            secret_stored_path=$(cat $backup_dir/previous_secret_path.txt)
+
+            if [ "$secret_stored_path" == "$default_key_filepath" ]; then
+                key_directory=$(dirname "$secret_stored_path")
+                if [ ! -d "$key_directory" ]; then
+                    mkdir -p "$key_directory"
+                fi
+            fi
+
+            mv $secret_backup_location $secret_stored_path
+            chown $MB_XRPL_USER: $secret_stored_path
+            chmod 600 $secret_stored_path
+        fi
     fi
 
     # First create the folder from root and then transfer ownership to the user

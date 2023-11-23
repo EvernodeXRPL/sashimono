@@ -146,11 +146,11 @@ function wait_call() {
 }
 
 # Configuring the sashimono service is the last stage of the installation.
-# Removing the sashimono service is the first stage of ununstallation.
+# Removing the sashimono service is the first stage of un-installation.
 # So if the service exists, Previous sashimono installation has been complete.
 # Creating bin dir is the first stage of installation.
-# Removing bin dir is the last stage of uninstalltion.
-# So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
+# Removing bin dir is the last stage of un-installation.
+# So if the service does not exists but the bin dir exists, Previous installation or un-installation is failed partially.
 installed=false
 [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] && installed=true
 
@@ -275,7 +275,7 @@ function check_sys_req() {
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 
-    # Skip system requirement check in non-production enviroments if SKIP_SYSREQ=1.
+    # Skip system requirement check in non-production environments if SKIP_SYSREQ=1.
     ([ "$NETWORK" != "mainnet" ] && [ "$SKIP_SYSREQ" == "1" ]) && echo "System requirements check skipped." && return 0
 
 
@@ -1668,7 +1668,7 @@ elif [ "$mode" == "uninstall" ]; then
 
     echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
             stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-            \nNOTE: Secret path can be found '$MB_XRPL_DATA/mb-xrpl.cfg'.
+            \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
             \nThis is irreversible. Make sure you have your account address and
             secret elsewhere before proceeding.\n"
 
@@ -1695,7 +1695,7 @@ elif [ "$mode" == "transfer" ]; then
 
             echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
                 stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-                \nNOTE: Secret path can be found in '$MB_XRPL_DATA/mb-xrpl.cfg'.
+                \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
                 \nThis is irreversible. Make sure you have your account address and
                 secret elsewhere before proceeding.\n"
 

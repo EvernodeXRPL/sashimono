@@ -215,19 +215,26 @@ const funcs = {
         const tokenType = args[3];
         const expectedBalance = args[4];
 
+        const WAIT_PERIOD = 120; // seconds
+
         const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
+
+        const hostClient = new evernode.HostClient(accountAddress, null, {
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress,
+            xrplApi: xrplApi
+        });
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
 
         let attempts = 0;
         let balance = 0;
         while (attempts >= 0) {
             try {
-                const hostClient = new evernode.HostClient(accountAddress, null, {
-                    rippledServer: rippledUrl,
-                    governorAddress: governorAddress,
-                    xrplApi: xrplApi
-                });
-
                 await hostClient.connect();
 
                 await new Promise(resolve => setTimeout(resolve, 1000));
@@ -237,23 +244,25 @@ const funcs = {
                     balance = Number(await hostClient.getEVRBalance());
 
                 if (balance < expectedBalance) {
-                    if (++attempts <= 120)
+                    if (++attempts <= WAIT_PERIOD)
                         continue;
+
+                    await terminateConnections();
                     return { success: false, result: "Funds not received within timeout." };
                 }
 
-                await hostClient.disconnect();
                 break;
             } catch (err) {
-                if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
-                    await new Promise(resolve => setTimeout(resolve, 3000));
+                if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     continue;
                 }
+                await terminateConnections();
                 return { success: false, result: (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check." };
             }
         }
 
-        await xrplApi.disconnect();
+        await terminateConnections();
         return { success: true, result: `${balance}` };
     },
 
@@ -281,6 +290,8 @@ const funcs = {
         // Optional
         const domain = args[4] ? args[4] : "";
 
+        const WAIT_PERIOD = 120; // seconds
+
         const xrplApi = new evernode.XrplApi(rippledUrl, { autoReconnect: false });
         await xrplApi.connect();
 
@@ -289,6 +300,12 @@ const funcs = {
             governorAddress: governorAddress,
             xrplApi: xrplApi
         });
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
         await hostClient.connect();
 
         {
@@ -299,18 +316,19 @@ const funcs = {
                     break;
                 }
                 catch (err) {
-                    if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
+                    if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
                         // Wait and retry.
-                        await new Promise(resolve => setTimeout(resolve, 3000));
+                        await new Promise(resolve => setTimeout(resolve, 1000));
                         continue;
                     }
+
+                    await terminateConnections();
                     return { success: false, result: "Error occurred in account preparation." };
                 }
             }
         }
 
-        await hostClient.disconnect();
-        await xrplApi.disconnect();
+        await terminateConnections();
         return { success: true };
 
     },

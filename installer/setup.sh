@@ -97,7 +97,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
     
-    echo -en "$prompt $choiceDisplay "
+    echo -en $prompt $choiceDisplay
     local yn=""
     read yn </dev/tty
 
@@ -902,7 +902,7 @@ function set_host_xrpl_account() {
             confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        echomult "\nPreparing account with EVR trusline..."
+        echomult "\nPreparing account with EVR trust-line..."
         while true ; do
             wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
             confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
@@ -1122,9 +1122,9 @@ function uninstall_evernode() {
     if ! $transfer ; then
         [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
         ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-        
+
         # Remove the Evernode Auto Updater Service.
-        [ "$upgrade" == "0" ] && remove_evernode_auto_updater
+        [ "$upgrade" == "0" ] && systemctl list-unit-files | grep -q $EVERNODE_AUTO_UPDATE_SERVICE.service && remove_evernode_auto_updater
     else
         echo "Intiating Transfer..."
         echo "Uninstalling for transfer..."
@@ -1644,12 +1644,15 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
-    # echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
-    #         stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
-    #         secret elsewhere before proceeding.\n"
-
-    # ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
+
+    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
+            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
+            \nNOTE: Secret path can be found '$MB_XRPL_DATA/mb-xrpl.cfg'.
+            \nThis is irreversible. Make sure you have your account address and
+            secret elsewhere before proceeding.\n"
+
+    ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0
@@ -1661,12 +1664,23 @@ elif [ "$mode" == "uninstall" ]; then
 elif [ "$mode" == "transfer" ]; then
     # If evernode is not installed download setup helpers and call for transfer.
     if $installed ; then
-        $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
-            while allowing you to transfer the registration to a preferred transferee.
-            \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
         if ! $interactive ; then
             transferee_address=${3}           # Address of the transferee.
+        else
+
+            ! confirm "\nThis will uninstall and deregister this host from $evernode
+                while allowing you to transfer the registration to a preferred transferee.
+                \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
+
+            echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
+                stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
+                \nNOTE: Secret path can be found in '$MB_XRPL_DATA/mb-xrpl.cfg'.
+                \nThis is irreversible. Make sure you have your account address and
+                secret elsewhere before proceeding.\n"
+
+            ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+
         fi
 
         # Set transferee based on the user input.

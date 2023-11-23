@@ -41,8 +41,13 @@ apt-get install -y uidmap fuse3 cgroup-tools quota curl openssl jq
 # Install nodejs if not exists.
 if ! command -v node &>/dev/null; then
     stage "Installing nodejs"
-    apt-get -y install ca-certificates # In case nodejs package certitficates are renewed.
-    curl -sL https://deb.nodesource.com/setup_16.x | bash -
+    apt-get install -y ca-certificates curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+
+    NODE_MAJOR=16
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+    apt-get update
     apt-get -y install nodejs
 else
     version=$(node -v | cut -d '.' -f1)

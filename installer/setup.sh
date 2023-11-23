@@ -22,7 +22,7 @@ log_dir=/tmp/evernode-beta
 
 latest_version_endpoint="https://api.github.com/repos/EvernodeXRPL/evernode-resources/releases/latest"
 latest_version_data=$(curl -s "$latest_version_endpoint")
-latest_version=$(echo "$latest_version_data" | jq -r '.name')
+latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
 if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
     echo "Failed to retrieve latest version data."
     exit 1

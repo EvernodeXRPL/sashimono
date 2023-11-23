@@ -28,16 +28,15 @@ if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
     exit 1
 fi
 
-cloud_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download/$latest_version"
-setup_script_url="$cloud_storage/setup.sh"
-installer_url="$cloud_storage/installer.tar.gz"
-licence_url="$cloud_storage/licence.txt"
-nodejs_url="$cloud_storage/node"
-jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
+resource_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download/$latest_version"
+setup_script_url="$resource_storage/setup.sh"
+installer_url="$resource_storage/installer.tar.gz"
+licence_url="$resource_storage/licence.txt"
+jshelper_url="$resource_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
-nodejs_util_bin="$setup_helper_dir/node"
+nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
 config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
@@ -209,7 +208,6 @@ fi
 # Change the relevant setup helper path based on Evernode installation condition and the command mode.
 if $installed && [ "$mode" != "update" ] ; then
     setup_helper_dir="$SASHIMONO_BIN/evernode-setup-helpers"
-    nodejs_util_bin="$setup_helper_dir/node"
     jshelper_bin="$setup_helper_dir/jshelper/index.js"
 fi
 
@@ -218,9 +216,25 @@ function GB() {
     echo "$(bc <<<"scale=2; $1 / 1000000") GB"
 }
 
+function install_nodejs_utility() {
+    apt-get update
+    apt-get install -y ca-certificates curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+
+    NODE_MAJOR=16
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+    apt-get update
+    apt-get -y install nodejs
+}
+
 function check_prereq() {
-    # Check if node js installed.
-    if command -v node &>/dev/null; then
+    echomult "\nChecking initial level pre-requisites..."
+
+    if ! command -v node &>/dev/null; then
+        echo "Installing nodejs..."
+        install_nodejs_utility >/dev/null
+    else
         version=$(node -v | cut -d '.' -f1)
         version=${version:1}
         if [[ $version -lt 16 ]]; then
@@ -244,7 +258,7 @@ function check_prereq() {
     # Check qrencode command is installed.
     if ! command -v qrencode &>/dev/null; then
         stage "qrencode command not found. Installing.."
-        apt-get install -y qrencode
+        apt-get install -y qrencode >/dev/null
     fi
 }
 
@@ -255,6 +269,10 @@ function check_sys_req() {
     swapKB=$(free | grep -i Swap | awk '{print $2}')
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
+
+    # Skip system requirement check in non-production enviroments if SKIP_SYSREQ=1.
+    ([ "$NETWORK" != "mainnet" ] && [ "$SKIP_SYSREQ" == "1" ]) && echo "System requirements check skipped." && return 0
+
 
     local proc1=$(ps --no-headers -o comm 1)
     if [ "$proc1" != "systemd" ]; then
@@ -308,9 +326,6 @@ function init_setup_helpers() {
     rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
-    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl -L $nodejs_url --output $nodejs_util_bin
-    [ ! -f "$nodejs_util_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
-    chmod +x $nodejs_util_bin
 
     if [ ! -f "$jshelper_bin" ]; then
         pushd $jshelper_dir >/dev/null 2>&1
@@ -1054,7 +1069,7 @@ function install_evernode() {
     logfile="$log_dir/installer-$(date +%s).log"
 
     if [ "$upgrade" == "0" ] ; then
-        echo "Installing prerequisites..."
+        echo "Installing other prerequisites..."
         ! ./prereq.sh $cgrulesengd_service 2>&1 \
                                 | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     fi

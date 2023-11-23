@@ -7,7 +7,6 @@ let appenv = {
     FILE_LOG_ENABLED: process.env.MB_FILE_LOG === "1",
     DATA_DIR: process.env.MB_DATA_DIR || __dirname,
     FAUCET_URL: process.env.MB_FAUCET_URL || "https://hooks-testnet-v3.xrpl-labs.com/newcreds",
-    DEFAULT_RIPPLED_SERVER: 'wss://hooks-testnet-v3.xrpl-labs.com',
     DEFAULT_FULL_HISTORY_NODE: 'wss://hooks-testnet-v3.xrpl-labs.com' // If we migrate to Main NET, this should be configured with the relevant full history Node WebSocket.
 }
 
@@ -28,8 +27,9 @@ appenv = {
     ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS: 4,
     SASHIMONO_SCHEDULER_INTERVAL_SECONDS: 2,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '0.7.2',
-    TOS_HASH: '757A0237B44D8B2BBB04AE2BAD5813858E0AECD2F0B217075E27E0630BA74314' // This is the sha256 hash of TOS text.
+    MB_VERSION: '0.8.0',
+    TOS_HASH: '757A0237B44D8B2BBB04AE2BAD5813858E0AECD2F0B217075E27E0630BA74314', // This is the sha256 hash of TOS text.
+    NETWORK: 'testnet'
 }
 
 const getSecretPath = () => {

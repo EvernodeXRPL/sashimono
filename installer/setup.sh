@@ -20,7 +20,10 @@ max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
 
-latest_version_endpoint="https://api.github.com/repos/EvernodeXRPL/evernode-resources/releases/latest"
+repo_owner="EvernodeXRPL"
+repo_name="evernode-resources"
+
+latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
 latest_version_data=$(curl -s "$latest_version_endpoint")
 latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
 if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
@@ -28,18 +31,20 @@ if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
     exit 1
 fi
 
-resource_storage="https://github.com/EvernodeXRPL/evernode-resources/releases/download/$latest_version"
+# Prepare resources URLs
+resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
+licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/main/installer/licence.txt"
+config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/main/definitions/definitions.json"
 setup_script_url="$resource_storage/setup.sh"
 installer_url="$resource_storage/installer.tar.gz"
-licence_url="$resource_storage/licence.txt"
 jshelper_url="$resource_storage/setup-jshelper.tar.gz"
+
 installer_version_timestamp_file="installer.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
-config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
 operation="register"
 min_xrp_amount_per_month=25
 spinner=( '|' '/' '-' '\');

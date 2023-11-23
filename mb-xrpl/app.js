@@ -101,7 +101,6 @@ async function main() {
             console.log('Starting the Evernode xrpl message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
-            console.log(appenv)
 
             const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH);
             await mb.init();

@@ -29,6 +29,7 @@ script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 secret_backup_location="/root/.evernode/.host-account-secret.key"
+previous_secret_path_note=/root/.evernode/previous_secret_path.txt
 default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
 
 secret_stored_path="-"
@@ -284,9 +285,8 @@ if [ "$NO_MB" == "" ]; then
     if [ "$UPGRADE" != "0" ]; then
         # Restore keyfile.
         if [ -f $secret_backup_location ]; then
-            echo "Restoring secret file..."
-            backup_dir=$(dirname $secret_backup_location)
-            secret_stored_path=$(cat $backup_dir/previous_secret_path.txt)
+            echo "Restoring secret file via $secret_backup_location."
+            secret_stored_path=$(cat $previous_secret_path_note)
 
             if [ "$secret_stored_path" == "$default_key_filepath" ]; then
                 key_directory=$(dirname "$secret_stored_path")
@@ -295,9 +295,9 @@ if [ "$NO_MB" == "" ]; then
                 fi
             fi
 
-            mv $secret_backup_location $secret_stored_path
-            chown $MB_XRPL_USER: $secret_stored_path
-            chmod 600 $secret_stored_path
+            [ -d $(dirname "$secret_stored_path") ] && mv $secret_backup_location $secret_stored_path && \
+            chown $MB_XRPL_USER: $secret_stored_path && \
+            chmod 600 $secret_stored_path && rm -f $previous_secret_path_note
         fi
     fi
 

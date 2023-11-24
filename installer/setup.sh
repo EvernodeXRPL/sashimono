@@ -879,25 +879,30 @@ function set_host_xrpl_account() {
             done
         fi
 
-        # Check for backups due to a previous installation.
-        if [ -f "$secret_backup_location" ]; then
+        # Check for saved secrets due to a previous installation.
+        if [[ -f "$secret_backup_location" || -f "$key_file_path" ]]; then
 
-            echomult "Retrived account details via a previously backed-up secret."
+            if [ -f "$secret_backup_location" ]; then
+                echomult "Retrived account details via a backed-up secret." && mv $secret_backup_location $key_file_path
+            else
+                echomult "Retrived account details via a previously specified secret."
+            fi
 
-            local existing_secret=$(jq -r '.xrpl.secret' "$secret_backup_location" 2>/dev/null)
+            local existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
                 account_json=$(exec_jshelper generate-account $existing_secret)
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
 
-                # Move key to specified location.
-                mv $secret_backup_location $key_file_path
+                key_file_dir=$(dirname "$key_file_path")
+                if [ ! -d "$key_file_dir" ]; then
+                    mkdir -p "$key_file_dir"
+                fi
 
-                # Modify the ownership and the permission mode of the key file
-                chown $MB_XRPL_USER: $key_file_path
-                chmod 600 $key_file_path
-
-                echomult "Retrived account details via the backed-up secret."
+                # Modify the permissions accordingly
+                chown $MB_XRPL_USER: $key_file_path && \
+                chmod 600 $key_file_path && \
+                echomult "Retrived account details via the backed-up secret." || (echomult "Error occurred in secret restoring." && exit 1)
             else
                 echomult "Error: Backup secret file format does not support." && exit 1
             fi

@@ -22,7 +22,7 @@ log_dir=/tmp/evernode-beta
 
 repo_owner="EvernodeXRPL"
 repo_name="evernode-resources"
-desired_branch="main"
+desired_branch="test"
 
 latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
 latest_version_data=$(curl -s "$latest_version_endpoint")

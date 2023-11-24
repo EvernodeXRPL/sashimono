@@ -8,12 +8,18 @@ const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 const { UtilHelper } = require('./util-helper');
 
-function setEvernodeDefaults(governorAddress, rippledServer, xrplApi = null) {
-    evernode.Defaults.set({
-        governorAddress: governorAddress,
-        rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
-        xrplApi: xrplApi
-    });
+async function setEvernodeDefaults(network, governorAddress, rippledServer) {
+    await evernode.Defaults.useNetwork(network || appenv.NETWORK);
+
+    if (governorAddress)
+        evernode.Defaults.set({
+            governorAddress: governorAddress
+        });
+
+    if (rippledServer)
+        evernode.Defaults.set({
+            rippledServer: rippledServer
+        });
 }
 
 class Setup {
@@ -54,15 +60,16 @@ class Setup {
     }
 
     #saveConfig(cfg) {
-        ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH);
+        ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH);
     }
 
-    newConfig(address = "", secret = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null) {
+    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "") {
         const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
+                network: network,
                 address: address,
-                secret: secret,
+                secretPath: secretPath,
                 governorAddress: governorAddress,
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount
@@ -72,50 +79,9 @@ class Setup {
         this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
-    async setupHostAccount(address, secret, rippledServer, governorAddress, domain) {
+    async generateBetaHostAccount(rippledServer, governorAddress, domain, network = null) {
 
-        setEvernodeDefaults(governorAddress, rippledServer);
-
-        const xrplApi = new evernode.XrplApi(rippledServer);
-        const acc = new evernode.XrplAccount(address, secret, { xrplApi: xrplApi });
-
-        // Prepare host account.
-        {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            await hostClient.connect();
-
-            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
-
-            // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
-            // haven't still updated the ledger. In such cases, we retry several times before giving up.
-            {
-                let attempts = 0;
-                while (attempts >= 0) {
-                    try {
-                        await hostClient.prepareAccount(domain);
-                        break;
-                    }
-                    catch (err) {
-                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
-                            console.log("actNotFound - retrying...")
-                            // Wait and retry.
-                            await new Promise(resolve => setTimeout(resolve, 3000));
-                            continue;
-                        }
-                        throw err;
-                    }
-                }
-            }
-
-            await hostClient.disconnect();
-        }
-
-        return acc;
-    }
-
-    async generateBetaHostAccount(rippledServer, governorAddress, domain) {
-
-        setEvernodeDefaults(governorAddress, rippledServer);
+        await setEvernodeDefaults(network, governorAddress, rippledServer);
 
         const acc = await this.#generateFaucetAccount();
 
@@ -181,13 +147,15 @@ class Setup {
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const config = this.#getConfig();
         const acc = config.xrpl;
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
         const isAReReg = await hostClient.isTransferee();
         const evrBalance = await hostClient.getEVRBalance();
@@ -230,13 +198,15 @@ class Setup {
     async deregister() {
         console.log("Deregistering host...");
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
         await this.burnMintedURITokens(hostClient.xrplAcc);
         await hostClient.deregister();
@@ -249,7 +219,7 @@ class Setup {
         console.log(`Governor address: ${acc?.governorAddress}`);
 
         if (!isBasic) {
-            setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
             try {
                 const hostClient = new evernode.HostClient(acc.address);
@@ -257,7 +227,9 @@ class Setup {
                 console.log(`Registry address: ${hostClient.config.registryAddress}`);
                 console.log(`Heartbeat address: ${hostClient.config.heartbeatAddress}`);
 
-                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+                evernode.Defaults.set({
+                    xrplApi: hostClient.xrplApi
+                });
 
                 const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
                 if (hostInfo) {
@@ -290,12 +262,14 @@ class Setup {
             cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
 
         if (!cfg.xrpl.governorAddress) {
-            setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer);
+            await setEvernodeDefaults(cfg.xrpl.network, governorAddress, cfg.xrpl.rippledServer);
 
             const hostClient = new evernode.HostClient(cfg.xrpl.address, cfg.xrpl.secret);
             await hostClient.connect();
 
-            setEvernodeDefaults(governorAddress, cfg.xrpl.rippledServer, hostClient.xrplApi);
+            evernode.Defaults.set({
+                xrplApi: hostClient.xrplApi
+            });
 
             cfg.xrpl.governorAddress = governorAddress;
 
@@ -311,13 +285,15 @@ class Setup {
     async hostInfo() {
 
         const acc = this.#getConfig(false).xrpl;
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address);
         await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
         const hostInfo = await hostClient.getHostInfo();
 
@@ -331,13 +307,15 @@ class Setup {
 
         console.log("Updating host...");
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
         const hostInfo = await hostClient.getHostInfo();
         await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress);
@@ -385,12 +363,14 @@ class Setup {
     async transfer(transfereeAddress) {
         console.log("Transferring host...");
         const acc = this.#getConfig().xrpl;
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
 
-        setEvernodeDefaults(acc.governorAddress, acc.rippledServer, hostClient.xrplApi);
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
         await hostClient.transfer(transfereeAddress);
         await this.burnMintedURITokens(hostClient.xrplAcc);
@@ -448,13 +428,14 @@ class Setup {
         let hostClient;
 
         async function initClients(rippledServer) {
-            setEvernodeDefaults(acc.governorAddress, rippledServer);
+            await setEvernodeDefaults(acc.network, acc.governorAddress, rippledServer);
             xrplApi = new evernode.XrplApi();
             hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
             await xrplApi.connect();
             await hostClient.connect();
-            setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
-
+            evernode.Defaults.set({
+                xrplApi: xrplApi
+            });
         }
 
         async function deinitClients() {
@@ -594,12 +575,14 @@ class Setup {
                 lease = lease[0];
 
                 const acc = this.#getConfig().xrpl;
-                setEvernodeDefaults(acc.governorAddress, acc.rippledServer);
+                await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
                 xrplApi = new evernode.XrplApi(acc.rippledServer);
                 await xrplApi.connect();
 
-                setEvernodeDefaults(acc.governorAddress, acc.rippledServer, xrplApi);
+                evernode.Defaults.set({
+                    xrplApi: xrplApi
+                });
 
                 // Get the existing uriToken of the lease.
                 const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);

@@ -19,38 +19,18 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
-
-repo_owner="EvernodeXRPL"
-repo_name="evernode-resources"
-desired_branch="main"
-
-latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
-latest_version_data=$(curl -s "$latest_version_endpoint")
-latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
-if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
-    echo "Failed to retrieve latest version data."
-    exit 1
-fi
-
-# Prepare resources URLs
-resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/installer/licence.txt"
-config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
-setup_script_url="$resource_storage/setup.sh"
-installer_url="$resource_storage/installer.tar.gz"
-jshelper_url="$resource_storage/setup-jshelper.tar.gz"
-
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-dev-v3-a86733dc-c0fc-4b1f-97cf-2071ae9c5bee"
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
+licence_url="$cloud_storage/licence.txt"
+nodejs_url="$cloud_storage/node"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
 default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
 setup_helper_dir="/tmp/evernode-setup-helpers"
-nodejs_util_bin="/usr/bin/node"
+nodejs_util_bin="$setup_helper_dir/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
-config_json_path="$setup_helper_dir/configuration.json"
-operation="register"
-min_xrp_amount_per_month=25
-spinner=( '|' '/' '-' '\');
-xrpl_address="-"
-xrpl_secret="-"
 
 # export vars used by Sashimono installer.
 export USER_BIN=/usr/bin
@@ -69,7 +49,9 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-export NETWORK="${NETWORK:-devnet}"
+# TODO: Verify if the correct Governor address is present in the DEV/BETA envs.
+export EVERNODE_GOVERNOR_ADDRESS="raVhw4Q8FQr296jdaDLDfZ4JDhh7tFG7SF"
+export MIN_EVR_BALANCE=5120
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -79,14 +61,6 @@ export DOCKER_REGISTRY_PORT=0
 # (we execute as the user who launched this script as sudo)
 noroot_user=${SUDO_USER:-$(whoami)}
 
-# Default key path is set to a path in MB_XRPL_USER home
-default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
-
-# Backed up secret location.
-# Used to restore secret related to a previous installation attempt
-secret_backup_location="/root/.evernode/.host-account-secret.key"
-
-
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
@@ -94,64 +68,26 @@ function echomult() {
 }
 
 function confirm() {
-    local prompt=$1
-    local defaultChoice=${2:-y}  #Default choice is set to 'y' if $2 parameter is not provided.
-
-    local choiceDisplay="[Y/n]"
-    if [ "$defaultChoice" == "n" ]; then
-        choiceDisplay="[y/N]"
-    fi
-    
-    echo -en $prompt $choiceDisplay
+    echo -en $1" [Y/n] "
     local yn=""
     read yn </dev/tty
 
     # Default choice is 'y'
-    [ -z $yn ] && yn="$defaultChoice"
+    [ -z $yn ] && yn="y"
     while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
-        read -ep "'y' or 'n' expected: " yn </dev/tty
+        read -p "'y' or 'n' expected: " yn </dev/tty
     done
 
     echo "" # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
 }
 
-function spin() {
-  while [ 1 ]
-  do
-    for i in ${spinner[@]};
-    do
-      echo -ne "\r$i";
-      sleep 0.2;
-    done;
-  done
-}
-
-function wait_call() {
-    local command_to_execute="$1"
-    local output_template="$2"
-
-    echomult "\nWaiting for the process to complete..."
-    spin &
-    local spin_pid=$!
-
-    command_output=$($command_to_execute)
-    return_code=$?
-
-    kill $spin_pid
-    wait $spin_pid
-    echo -ne "\r"
-
-    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e $command_output
-    return $return_code
-}
-
 # Configuring the sashimono service is the last stage of the installation.
-# Removing the sashimono service is the first stage of un-installation.
+# Removing the sashimono service is the first stage of ununstallation.
 # So if the service exists, Previous sashimono installation has been complete.
 # Creating bin dir is the first stage of installation.
-# Removing bin dir is the last stage of un-installation.
-# So if the service does not exists but the bin dir exists, Previous installation or un-installation is failed partially.
+# Removing bin dir is the last stage of uninstalltion.
+# So if the service does not exists but the bin dir exists, Previous installation or uninstalltion is failed partially.
 installed=false
 [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] && installed=true
 
@@ -160,7 +96,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -173,8 +109,7 @@ if $installed ; then
                 \ntransfer - Initiate an $evernode transfer for your machine
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
-                \ngovernance - Governance candidate management
-                \nauto-update - Evernode Auto Updater management" \
+                \ngovernance - Governance candidate management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -214,6 +149,7 @@ fi
 # Change the relevant setup helper path based on Evernode installation condition and the command mode.
 if $installed && [ "$mode" != "update" ] ; then
     setup_helper_dir="$SASHIMONO_BIN/evernode-setup-helpers"
+    nodejs_util_bin="$setup_helper_dir/node"
     jshelper_bin="$setup_helper_dir/jshelper/index.js"
 fi
 
@@ -222,25 +158,9 @@ function GB() {
     echo "$(bc <<<"scale=2; $1 / 1000000") GB"
 }
 
-function install_nodejs_utility() {
-    apt-get update
-    apt-get install -y ca-certificates curl gnupg
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
-
-    NODE_MAJOR=16
-    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
-    apt-get update
-    apt-get -y install nodejs
-}
-
 function check_prereq() {
-    echomult "\nChecking initial level pre-requisites..."
-
-    if ! command -v node &>/dev/null; then
-        echo "Installing nodejs..."
-        install_nodejs_utility >/dev/null
-    else
+    # Check if node js installed.
+    if command -v node &>/dev/null; then
         version=$(node -v | cut -d '.' -f1)
         version=${version:1}
         if [[ $version -lt 16 ]]; then
@@ -260,12 +180,6 @@ function check_prereq() {
         echo "host command not found. Installing.."
         apt-get -y install bind9-host >/dev/null
     fi
-
-    # Check qrencode command is installed.
-    if ! command -v qrencode &>/dev/null; then
-        stage "qrencode command not found. Installing.."
-        apt-get install -y qrencode >/dev/null
-    fi
 }
 
 function check_sys_req() {
@@ -276,9 +190,7 @@ function check_sys_req() {
     diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
     [ -z "$diskKB" ] && diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
 
-    # Skip system requirement check in non-production environments if SKIP_SYSREQ=1.
-    ([ "$NETWORK" != "mainnet" ] && [ "$SKIP_SYSREQ" == "1" ]) && echo "System requirements check skipped." && return 0
-
+    [ "$SKIP_SYSREQ" == "1" ] && echo "System requirements check skipped." && return 0
 
     local proc1=$(ps --no-headers -o comm 1)
     if [ "$proc1" != "systemd" ]; then
@@ -305,25 +217,6 @@ function check_sys_req() {
     fi
 }
 
-function set_environment_configs() {
-
-    sudo -u $noroot_user mkdir -p $setup_helper_dir
-    echomult "\nDownloading Environment configuration...\n"
-    sudo -u $noroot_user curl $config_url --output $config_json_path
-
-    # Network config selection.
-
-    echomult "\nChecking Evernode $NETWORK environment details..."
-
-    if ! jq -e ".${NETWORK}" "$config_json_path" >/dev/null 2>&1; then
-        echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
-    fi
-
-    export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
-    default_rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
-
-}
-
 function init_setup_helpers() {
 
     echo "Downloading setup support files..."
@@ -332,10 +225,13 @@ function init_setup_helpers() {
     rm -r $jshelper_dir >/dev/null 2>&1
     sudo -u $noroot_user mkdir -p $jshelper_dir
 
+    [ ! -f "$nodejs_util_bin" ] && sudo -u $noroot_user curl $nodejs_url --output $nodejs_util_bin
+    [ ! -f "$nodejs_util_bin" ] && echo "Could not download nodejs for setup checks." && exit 1
+    chmod +x $nodejs_util_bin
 
     if [ ! -f "$jshelper_bin" ]; then
         pushd $jshelper_dir >/dev/null 2>&1
-        sudo -u $noroot_user curl -L $jshelper_url --output jshelper.tar.gz
+        sudo -u $noroot_user curl $jshelper_url --output jshelper.tar.gz
         sudo -u $noroot_user tar zxf jshelper.tar.gz --strip-components=1
         rm jshelper.tar.gz
         popd >/dev/null 2>&1
@@ -352,22 +248,6 @@ function exec_jshelper() {
 
     # Execute js helper asynchronously while collecting response to fifo file.
     sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
-    local pid=$!
-    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
-    
-    # Wait for js helper to exit and reflect the error exit code in this function return.
-    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
-    rm $resp_file && return 1
-}
-
-function exec_jshelper_root() {
-
-    # Create fifo file to read response data from the helper script.
-    local resp_file=$setup_helper_dir/helper_fifo
-    [ -p $resp_file ] || mkfifo $resp_file
-
-    # Execute js helper asynchronously while collecting response to fifo file.
-    RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     
@@ -417,25 +297,7 @@ function set_domain_certs() {
 }
 
 function validate_inet_addr_domain() {
-    if host $inetaddr >/dev/null 2>&1 ; then
-        local port="80"
-        echo "Verifying domain $inetaddr on port $port..."
-        local domain_result=$(exec_jshelper_root validate-domain $inetaddr $port)
-        [[ "$domain_result" == "ok" ]] && echo "Domain verification successful." && return 0
-
-        if [ "$domain_result" == "listen_error" ]; then
-            echomult "Could not initiate domain verification. It's likely that port $port is already in use by another application.\n
-                It's recommended that you abandon the setup and correct this. You should consider continuing only if you are an advanced user
-                who knows what they are doing, and is going to provide your own SSL certificates."
-            confirm "Do you want to abandon the setup (recommended)?" && echo "Setup abandoned." && exit 1
-            echo "Continuing with unverified domain $inetaddr" && return 0
-        fi
-
-        [[ "$domain_result" == "domain_error" ]] &&
-            echo "Domain verification for $inetaddr failed. Please make sure that this host is reachable via $inetaddr"
-    fi
-
-    # Reaching this point means some error has occured. So we clear the inetaddress to allow to try again.
+    host $inetaddr >/dev/null 2>&1 && return 0
     inetaddr="" && return 1
 }
 
@@ -483,36 +345,38 @@ function validate_email_address() {
 
 function set_inet_addr() {
 
-    # TODO : Remove NO_DOMAIN usage (Kept for local testing)
-    if [ "$NO_DOMAIN" == "" ] ; then
+    if $interactive && [ "$NO_DOMAIN" == "" ] ; then
         echo ""
         while [ -z "$inetaddr" ]; do
-            read -ep "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
+            read -p "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
             validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
             echo "Invalid or unreachable domain name."
         done
     fi
 
-    # TODO : Remove this once testing is performed.
+    # Rest of this function flow will be used for debugging and internal testing puposes only.
+
     tls_key_file="self"
     tls_cert_file="self"
     tls_cabundle_file="self"
 
     # Attempt auto-detection.
-    
-    inetaddr=$(hostname -I | awk '{print $1}')
-    validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
-                            internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
-    inetaddr=""
+    if [ "$inetaddr" == "auto" ] || $interactive ; then
+        inetaddr=$(hostname -I | awk '{print $1}')
+        validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
+        $interactive && inetaddr=""
+    fi
 
-    while [ -z "$inetaddr" ]; do
-        read -ep "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
-        validate_inet_addr && return 0
-        echo "Invalid ip/domain address."
-    done
+    if $interactive ; then
+        while [ -z "$inetaddr" ]; do
+            read -p "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && return 0
+            echo "Invalid ip/domain address."
+        done
+    fi
 
     ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
-
 }
 
 function check_port_validity() {
@@ -527,26 +391,31 @@ function set_init_ports() {
     # Take default ports in interactive mode or if 'default' is specified.
     # Picked default ports according to https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers
     # (22223 - 23073) and (26000 - 26822) range is uncommon.
+    ([ "$init_peer_port" == "default" ] || $interactive) && init_peer_port=22861
+    ([ "$init_user_port" == "default" ] || $interactive) && init_user_port=26201
 
-    # Default starting ports.
-    init_peer_port=22861
-    init_user_port=26201
+    if $interactive ; then
 
-    if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
-                                        This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?" ; then
-        return 0
+        if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
+                                            This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?" ; then
+            return 0
+        fi
+
+        init_peer_port=""
+        init_user_port=""
+        while [ -z "$init_peer_port" ]; do
+            read -p "Please specify the starting port of the public 'Peer port range' your server is reachable at: " init_peer_port </dev/tty
+            ! check_port_validity $init_peer_port && init_peer_port="" && echo "Invalid port."
+        done
+        while [ -z "$init_user_port" ]; do
+            read -p "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
+            ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
+        done
+
+    else
+        [ -z "$init_peer_port" ] && echo "Invalid starting peer port '$init_peer_port'" && exit 1
+        [ -z "$init_user_port" ] && echo "Invalid starting user port '$init_user_port'" && exit 1
     fi
-
-    init_peer_port=""
-    init_user_port=""
-    while [ -z "$init_peer_port" ]; do
-        read -ep "Please specify the starting port of the public 'Peer port range' your server is reachable at: " init_peer_port </dev/tty
-        ! check_port_validity $init_peer_port && init_peer_port="" && echo "Invalid port."
-    done
-    while [ -z "$init_user_port" ]; do
-        read -ep "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
-        ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
-    done
 }
 
 # Validate country code and convert to uppercase if valid.
@@ -564,85 +433,96 @@ function resolve_countrycode() {
 function set_country_code() {
 
     # Attempt to auto-detect in interactive mode or if 'auto' is specified.
-    echo "Checking country code..."
-    echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
+    if [ "$countrycode" == "auto" ] || $interactive ; then
+        echo "Checking country code..."
+        echo "Using GeoLite2 data created by MaxMind, available from https://www.maxmind.com"
 
-    # MaxMind needs a ip address to detect country code. DNS is not supported by it.
-    # Use getent to resolve ip address in case inetaddr is a DNS name.
-    local mxm_ip=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
-    # If getent fails (mxm_ip empty) for some reason, keep using inetaddr for MaxMind api call.
-    [ -z "$mxm_ip" ] && mxm_ip="$inetaddr"
+        # MaxMind needs a ip address to detect country code. DNS is not supported by it.
+        # Use getent to resolve ip address in case inetaddr is a DNS name.
+        local mxm_ip=$(getent hosts $inetaddr | head -1 | awk '{ print $1 }')
+        # If getent fails (mxm_ip empty) for some reason, keep using inetaddr for MaxMind api call.
+        [ -z "$mxm_ip" ] && mxm_ip="$inetaddr"
 
-    local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$mxm_ip?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
-    countrycode=${detected:1:2}
-    resolve_countrycode || echo "Could not detect country code."
+        local detected=$(curl -s -u "$maxmind_creds" "https://geolite.info/geoip/v2.1/country/$mxm_ip?pretty" | grep "iso_code" | head -1 | awk '{print $2}')
+        countrycode=${detected:1:2}
+        resolve_countrycode || echo "Could not detect country code."
+    fi
 
+    if $interactive ; then
 
-    # Uncomment this if we want the user to manually change the auto-detected country code.
-    # if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
-    #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
-    #     return 0
-    # fi
-    # countrycode=""
+        # Uncomment this if we want the user to manually change the auto-detected country code.
+        # if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
+        #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
+        #     return 0
+        # fi
+        # countrycode=""
 
-    while [ -z "$countrycode" ]; do
-        # This will be asked if auto-detection fails or if user wants to specify manually.
-        read -ep "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
-        resolve_countrycode || echo "Invalid country code."
-    done
+        while [ -z "$countrycode" ]; do
+            # This will be asked if auto-detection fails or if user wants to specify manually.
+            read -p "Please specify the two-letter country code where your server is located in (eg. AU): " countrycode </dev/tty
+            resolve_countrycode || echo "Invalid country code."
+        done
+
+    else
+        resolve_countrycode || (echo "Invalid country code '$countrycode'" && exit 1)
+    fi
 }
 
 function set_ipv6_subnet() {
 
-    ipv6_subnet="-"
-    ipv6_net_interface="-"
+    if $interactive ; then
 
-    echomult "If your host has IPv6 support, Evernode can assign individual outbound IPv6 addresses to each
-        contract instance. This will prevent your host's primary IP address from getting blocked by external
-        services in case many contracts on your host attempt to contact the same external service."
+        ipv6_subnet="-"
+        ipv6_net_interface="-"
 
-    ! confirm "\nDoes your host have an IPv6 subnet assigned to it? The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\"" && return 0
+        echomult "If your host has IPv6 support, Evernode can assign individual outbound IPv6 addresses to each
+            contract instance. This will prevent your host's primary IP address from getting blocked by external
+            services in case many contracts on your host attempt to contact the same external service."
 
-    while true; do
-        local subnet_input
-        read -ep "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
-        
-        # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
-        local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
-        [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
-        
-        # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
-        local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet | sed 's/::*$//g')"
-        local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
-        local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
-        local interface_count=$(echo "$net_interfaces" | wc -l)
+        ! confirm "\nDoes your host have an IPv6 subnet assigned to it? The CIDR notation for this usually looks like \"xxxx:xxxx:xxxx:xxxx::/64\"" && return 0
+    
+        while true; do
+            local subnet_input
+            read -p "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
+            
+            # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+            local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
+            [ -z "$primary_subnet" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
+            
+            # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
+            local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet | sed 's/::*$//g')"
+            local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
+            local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
+            local interface_count=$(echo "$net_interfaces" | wc -l)
 
-        [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
-        [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
-        [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified ipv6 subnet." && echo "$net_interfaces" && continue
+            [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
+            [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
+            [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified ipv6 subnet." && echo "$net_interfaces" && continue
 
-        ipv6_subnet=$primary_subnet
-        ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
+            ipv6_subnet=$primary_subnet
+            ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
 
-        if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
+            if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?" ; then
 
-            while true; do
-                read -ep "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
-                
-                # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
-                local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
-                [ -z "$nested_subnet" ] && echo "Invalid nested IPv6 subnet specified." && continue
-                
-                local prefix_len="$(cut -d'/' -f2 <<<$nested_subnet)"
-                [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
+                while true; do
+                    read -p "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
+                    
+                    # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
+                    local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
+                    [ -z "$nested_subnet" ] && echo "Invalid nested IPv6 subnet specified." && continue
+                    
+                    local prefix_len="$(cut -d'/' -f2 <<<$nested_subnet)"
+                    [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
 
-                ipv6_subnet=$nested_subnet
-                break
-            done
-        fi
+                    ipv6_subnet=$nested_subnet
+                    break
+                done
+            fi
 
-        break
-    done
+            break
+        done
+    fi
+
 }
 
 function set_cgrules_svc() {
@@ -677,39 +557,42 @@ function set_instance_alloc() {
             $alloc_instcount=$max_non_ipv6_instances
         fi
     fi
-    
-    echomult "Based on your system resources, we have chosen the following allocation:\n
-            $(GB $alloc_ramKB) memory\n
-            $(GB $alloc_swapKB) Swap\n
-            $(GB $alloc_diskKB) disk space\n
-            Distributed among $alloc_instcount contract instances"
-    confirm "\nIs this the allocation you want to use?" && return 0
 
-    local ramMB=0 swapMB=0 diskMB=0
 
-    while true ; do
-        read -ep "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
-        ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
-    done
+    if $interactive; then
+        echomult "Based on your system resources, we have chosen the following allocation:\n
+                $(GB $alloc_ramKB) memory\n
+                $(GB $alloc_swapKB) Swap\n
+                $(GB $alloc_diskKB) disk space\n
+                Distributed among $alloc_instcount contract instances"
+        confirm "\nIs this the allocation you want to use?" && return 0
 
-    while true ; do
-        read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
-        ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
-    done
+        local ramMB=0 swapMB=0 diskMB=0
 
-    while true ; do
-        read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-        ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
-    done
+        while true ; do
+            read -p "Specify the number of contract instances that you wish to host: " alloc_instcount </dev/tty
+            ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
+        done
 
-    while true ; do
-        read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-        ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
-    done
+        while true ; do
+            read -p "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
+        done
 
-    alloc_ramKB=$(( ramMB * 1000 ))
-    alloc_swapKB=$(( swapMB * 1000 ))
-    alloc_diskKB=$(( diskMB * 1000 ))
+        while true ; do
+            read -p "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
+            ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
+        done
+
+        while true ; do
+            read -p "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
+            ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
+        done
+
+        alloc_ramKB=$(( ramMB * 1000 ))
+        alloc_swapKB=$(( swapMB * 1000 ))
+        alloc_diskKB=$(( diskMB * 1000 ))
+    fi
 
     if ! [[ $alloc_ramKB -gt 0 ]] || ! [[ $alloc_swapKB -gt 0 ]] || ! [[ $alloc_diskKB -gt 0 ]] ||
        ! [[ $alloc_cpu -gt 0 ]] || ! [[ $alloc_instcount -gt 0 ]]; then
@@ -720,46 +603,44 @@ function set_instance_alloc() {
 function set_lease_amount() {
 
     # Lease amount is mandatory field set by the user
-    local amount=0
-    while true ; do
-        read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
-        ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
-    done
+    if $interactive; then
+        local amount=0
+        while true ; do
+            read -p "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
+            ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
+        done
 
-    lease_amount=$amount
+        lease_amount=$amount
+    fi
 }
 
 function set_email_address() {
+    if $interactive; then
+        local emailAddress=""
+        while true ; do
+            read -p "Specify the contact email address for your host (this will be published on the host registry and is publicly visible to anyone): " emailAddress </dev/tty
+            ! validate_email_address $emailAddress || break
+        done
 
-    local emailAddress=""
-    while true ; do
-        read -ep "Specify the contact email address for your host (this will be published on the host registry and is publicly visible to anyone): " emailAddress </dev/tty
-        ! validate_email_address $emailAddress || break
-    done
+        email_address=$emailAddress
+    fi
 
-    email_address=$emailAddress
+    validate_email_address $email_address || exit 1
 }
 
 function set_rippled_server() {
     ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
 
-    if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?" ; then
-        ! validate_rippled_url $rippled_server && exit 1
-    else
-        local new_url=""
-        while true ; do
-            read -ep "Specify the Rippled server URL: " new_url </dev/tty
-            ! validate_rippled_url $new_url || break
-        done
-        rippled_server=$new_url
-    fi
-}
-
-function set_auto_update() {
-    enable_auto_update=false
     if $interactive; then
-        if confirm "Do you want to enable auto updates?" "n" ; then
-            enable_auto_update=true
+        if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?" ; then
+            ! validate_rippled_url $rippled_server && exit 1
+        else
+            local new_url=""
+            while true ; do
+                read -p "Specify the Rippled server URL: " new_url </dev/tty
+                ! validate_rippled_url $new_url || break
+            done
+            rippled_server=$new_url
         fi
     fi
 }
@@ -773,7 +654,7 @@ function set_transferee_address() {
 
         local address=''
         while true ; do
-            read -ep "Specify the XRPL account address of the transferee: " address </dev/tty
+            read -p "Specify the XRPL account address of the transferee: " address </dev/tty
             ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
 
         done
@@ -784,201 +665,38 @@ function set_transferee_address() {
     ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
 }
 
-# Function to generate QR code in the terminal
-function generate_qrcode() {
-    if [ -z "$1" ]; then
-        echo "Argument error > Usage: generate_qrcode <string>"
-        return 1
-    fi
-    local input_string="$1"
-    qrencode -s 1 -l L -t UTF8 "$input_string"
-}
-
-function generate_and_save_keyfile() {
-
-    local account_json=$(exec_jshelper generate-account)
-    xrpl_address=$(jq -r '.address' <<< "$account_json")
-    xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-
-    if [ "$#" -ne 1 ]; then
-        echomult "Error: Please provide the full path of the secret file."
-        return 1
-    fi
-
-    key_file_path="$1"
-
-    key_dir=$(dirname "$key_file_path")
-    if [ ! -d "$key_dir" ]; then
-        mkdir -p "$key_dir"
-    fi
-
-    if [ -e "$key_file_path" ]; then
-        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?"; then
-            existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
-            if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret)
-                xrpl_address=$(jq -r '.address' <<< "$account_json")
-                xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-                echomult "Retrived account details via secret."
-                return 0
-            else
-                echomult "Error: Existing secret file does not have the expected format."
-                return 1
-            fi
-        fi
-    fi
-
-    if [ "$key_file_path" == "$default_key_filepath" ]; then
-        parent_directory=$(dirname "$key_file_path")
-        chown -R $MB_XRPL_USER: "$parent_directory"
-        chmod -R 700 "$parent_directory"
-    fi
-
-    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path"
-    chmod 600 "$key_file_path"
-    echomult "Key file saved successfully at $key_file_path"
-
-    chown $MB_XRPL_USER: $key_file_path
-
-    return 0
-}
 
 function set_host_xrpl_account() {
     local account_validate_criteria="register"
-    local required_balance=0
     [ ! -z $1 ] && account_validate_criteria=$1
 
-    local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
-
-    # Create MB_XRPL_USER as we require that user for secret key ownership management.
-    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-        echomult "Creating Message-board User..."
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
-    fi
-
-    if [ "$account_validate_criteria" == "register" ]; then
-        local key_file_path='-'
-
-        confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
-
-        if [ "$key_file_path" != "$default_key_filepath" ]; then
-            while true ; do
-                read -ep "Specify the preferred key file path: " key_file_path </dev/tty
-                parent_directory=$(dirname "$key_file_path")
-
-                canonicalized_directory=$(realpath "$parent_directory")
-                root_directory="/root"
-                canonicalized_root=$(realpath "$root_directory")
-
-                if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
-                    echo "Key should not be located in /root directory." && continue
-                fi
-
-                ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
-
-            done
-        fi
-
-        # Check for saved secrets due to a previous installation.
-        if [[ -f "$secret_backup_location" || -f "$key_file_path" ]]; then
-
-            if [ -f "$secret_backup_location" ]; then
-                echomult "Retrived account details via a backed-up secret." && mv $secret_backup_location $key_file_path
-            else
-                echomult "Retrived account details via a previously specified secret."
-            fi
-
-            local existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
-            if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret)
-                xrpl_address=$(jq -r '.address' <<< "$account_json")
-                xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-
-                key_file_dir=$(dirname "$key_file_path")
-                if [ ! -d "$key_file_dir" ]; then
-                    mkdir -p "$key_file_dir"
-                fi
-
-                # Modify the permissions accordingly
-                chown $MB_XRPL_USER: $key_file_path && \
-                chmod 600 $key_file_path && \
-                echomult "Retrived account details via the backed-up secret." || (echomult "Error occurred in secret restoring." && exit 1)
-            else
-                echomult "Error: Backup secret file format does not support." && exit 1
-            fi
-        else
-
-            echomult "Generating new keypair for the host...\n"
-            generate_and_save_keyfile "$key_file_path"
-        fi
-
-        echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK.
-                \nThe secret key of the account is located at $key_file_path.
-                \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-                \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.
-                \n2. At least $reg_fee EVR to cover Evernode registration fee.
-                \n\nYou can scan the following QR code in your wallet app to send funds:\n"
-
-        generate_qrcode "$xrpl_address"
-
-        required_balance=$min_xrp_amount_per_month
+    if $interactive; then
+        [ "$account_validate_criteria" == "register" ] &&
+            echomult "In order to register in Evernode you need to have an XRPL account with sufficient Ever (EVR) balance.\n"
+        local xrpl_address=""
+        local xrpl_secret=""
         while true ; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
-            && break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-        done
 
-        echomult "\nPreparing account with EVR trust-line..."
-        while true ; do
-            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
-            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
-        done
-
-        echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
-                \nYou can scan the following QR code in your wallet app to send funds:"
-
-        required_balance=$reg_fee
-        while true ; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
-            && break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-        done
-
-
-    elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
-        
-        if [ "$account_validate_criteria" == "re-register" ]; then
-            account_validate_criteria="register"
-        fi
-
-        while true ; do
-            read -ep "Specify the XRPL account address: " xrpl_address </dev/tty
+            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
 
             echo "Checking account $xrpl_address..."
             ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
 
-            read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
-            ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
-            xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
-
-            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
+            # Take hidden input and print empty echo (new line) at the end.
+            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
 
             echo "Checking account keys..."
             ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
 
-            # Modifying key file ownership to MB_XRPL_USER.
-            chown $MB_XRPL_USER: $key_file_path
-            chmod 600 $key_file_path
-
-            xrpl_account_secret=$xrpl_secret
-
             break
-        done
-    fi
 
-    xrpl_account_address=$xrpl_address
-    xrpl_account_secret_path=$key_file_path
+        done
+
+        xrpl_account_address=$xrpl_address
+        xrpl_account_secret=$xrpl_secret
+    fi
 }
 
 function install_failure() {
@@ -992,86 +710,22 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    latest_version_data=$(curl -s "$latest_version_endpoint")
-    latest_version_timestamp=$(echo "$latest_version_data" | jq -r '.published_at')
-    echo "$latest_version_timestamp"
-}
-
-function enable_evernode_auto_updater() {
-    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-    enable_auto_update=true
-
-    # Create the service.
-    echo "[Unit]
-Description=Service for the Evernode auto-update.
-After=network.target
-[Service]
-User=root
-Group=root
-Type=oneshot
-ExecStart=/usr/bin/evernode update -q
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    # Create a timer for the service (every two hours).
-    echo "[Unit]
-Description=Timer for the Evernode auto-update.
-# Allow manual starts
-RefuseManualStart=no
-# Allow manual stops
-RefuseManualStop=no
-[Timer]
-Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
-OnCalendar=0/12:00:00
-# Execute job if it missed a run due to machine being off
-Persistent=true
-# To prevent rush time, adding 2 hours delay
-RandomizedDelaySec=7200
-[Install]
-WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-
-    echo "Enabling Evernode auto update service..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    echo "Enabling Evernode auto update timer..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    echo "Starting Evernode auto update timer..."
-    systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
-}
-
-function remove_evernode_auto_updater() {
-    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-    enable_auto_update=false
-
-    echo "Removing Evernode auto update timer..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-    rm -f $service_path
-
-    echo "Removing Evernode auto update service..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-    rm -f $service_path
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
+    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
+    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
 }
 
 function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local installer_version_timestamp=$(online_version_timestamp)
+    local installer_version_timestamp=$(online_version_timestamp $installer_url)
     [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
+    # Get setup version (timestamp).
+    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
-    curl --silent -L $installer_url --output installer.tgz
+    curl --silent $installer_url --output installer.tgz
     tar zxf $tmp/installer.tgz --strip-components=1
     rm installer.tgz
 
@@ -1080,7 +734,7 @@ function install_evernode() {
     logfile="$log_dir/installer-$(date +%s).log"
 
     if [ "$upgrade" == "0" ] ; then
-        echo "Installing other prerequisites..."
+        echo "Installing prerequisites..."
         ! ./prereq.sh $cgrulesengd_service 2>&1 \
                                 | tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
     fi
@@ -1096,29 +750,23 @@ function install_evernode() {
     echo "Installing Sashimono..."
 
     init_setup_helpers
-    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress)
+    registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address registryAddress)
 
     # Filter logs with STAGE prefix and ommit the prefix when echoing.
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
+    ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+                            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret $email_address \
                             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
-    
-    # Enable the Evernode Auto Updater Service.
-    if [ "$enable_auto_update" = true ]; then
-        stage "Configuring auto updater service"
-        enable_evernode_auto_updater
-    fi
-
     set +o pipefail
 
     rm -r $tmp
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
+    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function check_exisiting_contracts() {
@@ -1148,9 +796,6 @@ function uninstall_evernode() {
     if ! $transfer ; then
         [ "$upgrade" == "0" ] && echo "Uninstalling..." ||  echo "Uninstalling for upgrade..."
         ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
-
-        # Remove the Evernode Auto Updater Service.
-        [ "$upgrade" == "0" ] && systemctl list-unit-files | grep -q $EVERNODE_AUTO_UPDATE_SERVICE.service && remove_evernode_auto_updater
     else
         echo "Intiating Transfer..."
         echo "Uninstalling for transfer..."
@@ -1163,11 +808,13 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest_installer_script_version=$(online_version_timestamp)
+    local latest_installer_script_version=$(online_version_timestamp $installer_url)
+    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
     local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
-    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
+    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
@@ -1178,6 +825,12 @@ function update_evernode() {
     if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
         uninstall_evernode 1
         install_evernode 1
+    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
+        [ -d $log_dir ] || mkdir -p $log_dir
+        logfile="$log_dir/installer-$(date +%s).log"
+        remove_evernode_alias
+        ! create_evernode_alias && echo "Alias creation failed."
+        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
     rm -r $setup_helper_dir >/dev/null 2>&1
@@ -1234,7 +887,8 @@ function remove_evernode_alias() {
 function check_installer_pending_finish() {
     if [ -f /run/reboot-required.pkgs ] && [ -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
         echo "Your system needs to be rebooted in order to complete Sashimono installation."
-        confirm "Reboot now?" && reboot
+        $interactive && confirm "Reboot now?" && reboot
+        ! $interactive && echo "Rebooting..." && reboot
         return 0
     else
         # If reboot not required, check whether re-login is required in case the setup was run with sudo.
@@ -1258,7 +912,7 @@ function reg_info() {
         local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
         echo "Sashimono agent status: $sashimono_agent_status"
         echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
-        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg and $MB_XRPL_DATA/secret.cfg."
     fi
 }
 
@@ -1453,6 +1107,9 @@ function config() {
 
         local cfg_host_address=$(jq -r '.xrpl.address' $mbconfig)
 
+        local mbsecretconfig="$MB_XRPL_DATA/secret.cfg"
+        local cfg_host_secret=$(jq -r '.xrpl.secret' $mbsecretconfig)
+
         [ ! -z $email_address ] && ! validate_email_address $email_address &&
             echomult "\nUsage: evernode config email | evernode config email <email address>\n" &&
             exit 1
@@ -1591,7 +1248,29 @@ function delete_instance()
 
 if [ "$mode" == "install" ]; then
 
-    ! confirm "This will install Sashimono, Evernode's contract instance management software,
+    if ! $interactive ; then
+        inetaddr=${3}              # IP or DNS address.
+        init_peer_port=${4}        # Starting peer port for instances.
+        init_user_port=${5}        # Starting user port for instances.
+        countrycode=${6}           # 2-letter country code.
+        alloc_cpu=${7}             # CPU microsec to allocate for contract instances (max 1000000).
+        alloc_ramKB=${8}           # Memory to allocate for contract instances.
+        alloc_swapKB=${9}          # Swap to allocate for contract instances.
+        alloc_diskKB=${10}         # Disk space to allocate for contract instances.
+        alloc_instcount=${11}      # Total contract instance count.
+        lease_amount=${12}         # Contract instance lease amount in EVRs.
+        rippled_server=${13}       # Rippled server URL
+        xrpl_account_address=${14} # XRPL account address.
+        xrpl_account_secret=${15}  # XRPL account secret.
+        email_address=${16}        # User email address
+        tls_key_file=${17}         # File path to the tls private key.
+        tls_cert_file=${18}        # File path to the tls certificate.
+        tls_cabundle_file=${19}    # File path to the tls ca bundle.
+        ipv6_subnet=${20}          # ipv6 subnet to be used for ipv6 instance address assignment.
+        ipv6_net_interface=${21}   # ipv6 bound network interface to be used for outbound communication.
+    fi
+
+    $interactive && ! confirm "This will install Sashimono, Evernode's contract instance management software,
             and register your system as an $evernode host.
             \nMake sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
@@ -1603,26 +1282,22 @@ if [ "$mode" == "install" ]; then
 
     # Display licence file and ask for concent.
     printf "\n*****************************************************************************************************\n\n"
-    curl -s -L $licence_url | cat
+    curl --silent $licence_url | cat
     printf "\n\n*****************************************************************************************************\n"
-    ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
-
-    ! confirm "\nAre you performing a fresh Evernode installation?
-            \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
-
-    set_environment_configs
+    $interactive && ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
     init_setup_helpers
 
-    if [ "$NO_MB" == "" ]; then
+    if [ "$NO_MB" == "" ]; then    
         set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
+        set_host_xrpl_account
+        echo -e "Using xrpl account $xrpl_account_address with the specified secret.\n"
     fi
 
     set_email_address
     echo -e "Using the contact email address '$email_address'.\n"
 
-    # TODO - CHECKPOINT - 01
     set_inet_addr
     echo -e "Using '$inetaddr' as host internet address.\n"
 
@@ -1644,22 +1319,10 @@ if [ "$mode" == "install" ]; then
     if [ "$NO_MB" == "" ]; then
         set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
-
-        # TODO - CHECKPOINT - 02
-        set_host_xrpl_account $operation
-        echo -e "\nAccount setup is complete."
-    fi
-
-    set_auto_update
-    if [ "$enable_auto_update" = true ]; then
-        echo -e "Auto updater will be enabled."
-    else
-        echo -e "Auto updater will be disabled."
     fi
 
     $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
-    # TODO - CHECKPOINT - 03
     echo "Starting installation..."
     install_evernode 0
 
@@ -1670,43 +1333,29 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
-    ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
+    # echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR XRPL ACCOUNT credentials
+    #         stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and '$MB_XRPL_DATA/secret.cfg'. This is irreversible. Make sure you have your account address and
+    #         secret elsewhere before proceeding.\n"
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-            \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-            \nThis is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
-
-    ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+    # $interactive && ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+    $interactive && ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0
 
-    # Perform Evernode uninstall
-    uninstall_evernode 0
+    # Force uninstall on quiet mode.
+    $interactive && uninstall_evernode 0 || uninstall_evernode 0 -f
     echo "Uninstallation complete!"
 
 elif [ "$mode" == "transfer" ]; then
     # If evernode is not installed download setup helpers and call for transfer.
     if $installed ; then
+        $interactive && ! confirm "\nThis will uninstall and deregister this host from $evernode
+            while allowing you to transfer the registration to a preferred transferee.
+            \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
         if ! $interactive ; then
             transferee_address=${3}           # Address of the transferee.
-        else
-
-            ! confirm "\nThis will uninstall and deregister this host from $evernode
-                while allowing you to transfer the registration to a preferred transferee.
-                \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
-
-            echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
-                stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-                \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-                \nThis is irreversible. Make sure you have your account address and
-                secret elsewhere before proceeding.\n"
-
-            ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
-
         fi
 
         # Set transferee based on the user input.
@@ -1723,10 +1372,10 @@ elif [ "$mode" == "transfer" ]; then
 
     else
         if ! $interactive ; then
-            xrpl_account_address=${3}       # XRPL account address.
-            xrpl_account_secret=$(<"${4}")  # XRPL account secret based on the provided path.
-            transferee_address=${5}         # Address of the transferee.
-            rippled_server=${6}             # Rippled server URL
+            xrpl_account_address=${3} # XRPL account address.
+            xrpl_account_secret=${4}  # XRPL account secret.
+            transferee_address=${5}   # Address of the transferee.
+            rippled_server=${6}       # Rippled server URL
         fi
 
         init_setup_helpers
@@ -1760,9 +1409,6 @@ elif [ "$mode" == "list" ]; then
     sashi list
 
 elif [ "$mode" == "update" ]; then
-    config_json_path="$SASHIMONO_BIN/evernode-setup-helpers/configuration.json"
-    export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
-
     update_evernode
 
 elif [ "$mode" == "log" ]; then
@@ -1791,17 +1437,6 @@ elif [ "$mode" == "governance" ]; then
             \nhelp - Print help." && exit 0
     ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
 
-elif [ "$mode" == "auto-update" ]; then
-    if [ "$2" == "enable" ]; then
-        enable_evernode_auto_updater && exit 0
-    elif [ "$2" == "disable" ]; then
-        remove_evernode_auto_updater && exit 0
-    else
-        echomult "$evernode auto update
-            \nSupported commands:
-            \nenable - Enable $evernode auto updater service.
-            \ndisable - Disable $evernode auto updater service." && exit 1
-    fi
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

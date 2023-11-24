@@ -16,7 +16,7 @@ diskKB=${9}
 lease_amount=${10}
 rippled_server=${11}
 xrpl_account_address=${12}
-xrpl_account_secret=${13}
+xrpl_account_secret_path=${13}
 email_address=${14}
 tls_key_file=${15}
 tls_cert_file=${16}
@@ -28,16 +28,49 @@ ipv6_net_interface=${20}
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 setup_helper_dir="/tmp/evernode-setup-helpers"
+secret_backup_location="/root/.evernode/.host-account-secret.key"
+previous_secret_path_note=/root/.evernode/previous_secret_path.txt
+default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
+
+secret_stored_path="-"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
 }
 
+function confirm() {
+    echo -en $1" [Y/n] "
+    local yn=""
+    read yn </dev/tty
+
+    # Default choice is 'y'
+    [ -z $yn ] && yn="y"
+    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
+        read -ep "'y' or 'n' expected: " yn </dev/tty
+    done
+
+    echo "" # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
+}
+
 function rollback() {
     [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
+
+    # Backup secret in order to mitigate loss of secret.
+    # NOTE: When removing MB_XRPL_USER the home directory also get removed. Hence, if the user has selected default path the secret file also will be removed.
+    # By Backing up secret in a known location, we can restore that in the next installation attempt rather than creating new account.
+    [ "$OPERATION" == "register" ] && echo "Backing up account secret in $secret_backup_location ." && mkdir -p $(dirname $secret_backup_location) && cp -p --no-preserve=ownership $xrpl_account_secret_path $secret_backup_location
+
     echo "Rolling back sashimono installation."
     "$script_dir"/sashimono-uninstall.sh -f
     echo "Rolled back the installation."
+
+    # Revert ownership of provided secret file to ROOT user (as MB_XRPL_USER is not there anymore).
+    [ "$OPERATION" == "re-register" ] && chown root:root $xrpl_account_secret_path
+
+    # Remove secret from original path as this was backed up.
+     [ "$OPERATION" == "register" ] && [ -e $xrpl_account_secret_path ] && rm -f $xrpl_account_secret_path
+
     exit 1
 }
 
@@ -189,12 +222,12 @@ rm -r "$tmp"
     openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
         -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
-# Setup tls certs used for contract instance websockets.
-[ "$UPGRADE" == "0" ] && setup_tls_certs
-
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
+
+# Setup tls certs used for contract instance websockets.
+[ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
 cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
@@ -237,12 +270,35 @@ if [ "$NO_MB" == "" ]; then
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-    # Creating message board user (if not exists).
+    # Create MB_XRPL_USER if does not exists.
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    fi
+
+    # Assign message board user priviledges.
+    if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
         usermod --lock $MB_XRPL_USER
         usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
         loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+    fi
+
+    if [ "$UPGRADE" != "0" ]; then
+        # Restore keyfile.
+        if [ -f $secret_backup_location ]; then
+            echo "Restoring secret file via $secret_backup_location."
+            secret_stored_path=$(cat $previous_secret_path_note)
+
+            if [ "$secret_stored_path" == "$default_key_filepath" ]; then
+                key_directory=$(dirname "$secret_stored_path")
+                if [ ! -d "$key_directory" ]; then
+                    mkdir -p "$key_directory"
+                fi
+            fi
+
+            [ -d $(dirname "$secret_stored_path") ] && mv $secret_backup_location $secret_stored_path && \
+            chown $MB_XRPL_USER: $secret_stored_path && \
+            chmod 600 $secret_stored_path && rm -f $previous_secret_path_note
+        fi
     fi
 
     # First create the folder from root and then transfer ownership to the user
@@ -262,7 +318,7 @@ if [ "$NO_MB" == "" ]; then
             # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
             # doreg=1
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

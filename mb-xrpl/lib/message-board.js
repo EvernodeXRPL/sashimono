@@ -52,9 +52,20 @@ class MessageBoard {
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret || !this.cfg.xrpl.governorAddress)
             throw "Required cfg fields cannot be empty.";
 
-        this.xrplApi = new evernode.XrplApi(this.cfg.xrpl.rippledServer);
+        await evernode.Defaults.useNetwork(this.cfg.xrpl.network || appenv.NETWORK);
+
+        if (this.cfg.xrpl.governorAddress)
+            evernode.Defaults.set({
+                governorAddress: this.cfg.xrpl.governorAddress
+            });
+
+        if (this.cfg.xrpl.rippledServer)
+            evernode.Defaults.set({
+                rippledServer: this.cfg.xrpl.rippledServer
+            });
+
+        this.xrplApi = new evernode.XrplApi();
         evernode.Defaults.set({
-            governorAddress: this.cfg.xrpl.governorAddress,
             xrplApi: this.xrplApi
         })
         await this.xrplApi.connect();
@@ -1076,7 +1087,7 @@ class MessageBoard {
     }
 
     persistConfig() {
-        ConfigHelper.writeConfig(this.cfg, this.configPath, this.secretConfigPath);
+        ConfigHelper.writeConfig(this.cfg, this.configPath);
     }
 }
 

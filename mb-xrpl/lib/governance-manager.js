@@ -4,12 +4,18 @@ const fs = require('fs');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
 
-function setEvernodeDefaults(governorAddress, rippledServer, xrplApi) {
-    evernode.Defaults.set({
-        governorAddress: governorAddress,
-        rippledServer: rippledServer,
-        xrplApi: xrplApi
-    });
+async function setEvernodeDefaults(network, governorAddress, rippledServer) {
+    await evernode.Defaults.useNetwork(network || appenv.NETWORK);
+
+    if (governorAddress)
+        evernode.Defaults.set({
+            governorAddress: governorAddress
+        });
+
+    if (rippledServer)
+        evernode.Defaults.set({
+            rippledServer: rippledServer
+        });
 }
 
 class GovernanceManager {
@@ -181,7 +187,7 @@ class GovernanceManager {
             // Secret is needed for propose, withdraw, and report in order to send the transaction
             const sashiMBConfig = ConfigHelper.readConfig(appenv.CONFIG_PATH,
                 (command == 'propose' || command === 'withdraw' || command === 'report') ? appenv.SECRET_CONFIG_PATH : null);
-            setEvernodeDefaults(sashiMBConfig.xrpl.governorAddress, sashiMBConfig.xrpl.rippledServer);
+            await setEvernodeDefaults(sashiMBConfig.xrpl.network, sashiMBConfig.xrpl.governorAddress, sashiMBConfig.xrpl.rippledServer);
             hostClient = new evernode.HostClient(sashiMBConfig.xrpl.address, sashiMBConfig.xrpl.secret);
         }
         const mgr = new GovernanceManager(appenv.GOVERNANCE_CONFIG_PATH);

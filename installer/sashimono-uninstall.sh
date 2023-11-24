@@ -2,9 +2,13 @@
 # Sashimono agent uninstall script.
 # This must be executed with root privileges.
 
+export TRANSFER=${TRANSFER:-0}
+
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
+secret_backup_location="/root/.evernode/.host-account-secret.key"
+previous_secret_path_note=/root/.evernode/previous_secret_path.txt
 
 function confirm() {
     echo -en $1" [Y/n] "
@@ -28,24 +32,6 @@ function cgrulesengd_servicename() {
         local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
         echo "${cgrulesengd_filename%.*}"
     fi
-}
-
-function remove_evernode_auto_updater() {
-
-    echo "Removing Evernode auto update timer..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-    rm $service_path
-
-    echo "Removing Evernode auto update service..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-    rm $service_path
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
 }
 
 function cleanup_certbot_ssl() {
@@ -84,6 +70,16 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     if [ -f $mb_service_path ]; then
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $MB_XRPL_SERVICE
+    fi
+
+    # Backup the secret in upgrade process.
+    if [[ "$UPGRADE" != "0" ]]; then
+
+        mb_xrpl_config_data=$(cat $MB_XRPL_DATA/mb-xrpl.cfg)
+        secret_stored_path=$(echo $mb_xrpl_config_data | jq -r '.xrpl.secretPath')
+        backup_dir=$(dirname $secret_backup_location)
+        echo "Backing up account secret at $secret_backup_location." && mkdir -p $backup_dir && cp -p --no-preserve=ownership $secret_stored_path $secret_backup_location
+        echo $secret_stored_path >$previous_secret_path_note
     fi
 
 fi
@@ -186,6 +182,15 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
             ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
             echo "Continuing uninstallation..."
         fi
+
+        mb_xrpl_config_data=$(cat $MB_XRPL_DATA/mb-xrpl.cfg)
+        current_secret_path=$(echo $mb_xrpl_config_data | jq -r '.xrpl.secretPath')
+        
+        # Remove secret from the saved location.(This is applied for secrets not specified in default path)
+        rm -f $current_secret_path
+
+        # Remove Evernode util directory
+        [ -d "/root/.evernode" ] && rm -rf "/root/.evernode"
     fi
 
     echo "Deleting message board user..."
@@ -214,8 +219,5 @@ fi
 groupdel $SASHIADMIN_GROUP
 
 [ "$UPGRADE" == "0" ] && echo "Sashimono uninstalled successfully." || echo "Sashimono uninstalled successfully. Your data has been preserved."
-
-# Remove the Evernode Auto Updater Service.
-[ "$UPGRADE" == "0" ] && remove_evernode_auto_updater
 
 exit 0

@@ -160,7 +160,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "regular-key" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -174,7 +174,8 @@ if $installed ; then
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
-                \nauto-update - Evernode Auto Updater management" \
+                \nauto-update - Evernode Auto Updater management
+                \nregular-key - Set regular key" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -762,6 +763,21 @@ function set_auto_update() {
             enable_auto_update=true
         fi
     fi
+}
+
+function set_regular_key() {
+    [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+    local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
+    local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
+    local cfg_host_address=$(jq -r '.xrpl.address' $mbconfig)
+    local cfg_host_secret_path=$(jq -r '.xrpl.secretPath' $mbconfig)
+
+    host_secret=$(cat $cfg_host_secret_path | jq -r '.xrpl.secret')
+    ! [[ $host_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && exit 1
+
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regular-key $cfg_rippled_server $cfg_host_address $host_secret $1 &&
+        echo "There was an error in setting the regular key." && return 1
 }
 
 function set_transferee_address() {
@@ -1802,6 +1818,15 @@ elif [ "$mode" == "auto-update" ]; then
             \nenable - Enable $evernode auto updater service.
             \ndisable - Disable $evernode auto updater service." && exit 1
     fi
+
+elif [ "$mode" == "regular-key" ]; then
+    if [ -z "$2" ]; then
+        echo "Regular key to be set must be provided." && exit 1
+    elif [[ ! "$2" =~ ^[[:alnum:]]+$ ]]; then
+        echo "Regular key is invalid." && exit 1
+    fi
+    set_regular_key $2
+    exit 0
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

@@ -241,6 +241,52 @@ const funcs = {
         return { success: false };
     },
 
+    'check-acc-condition': async (args) => {
+        checkParams(args, 3);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        const hostClient = new evernode.HostClient(accountAddress, null);
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        try {
+            // In order to handle the account not found issue via catch block.
+            await hostClient.connect();
+            const trustline = await hostClient.xrplAcc.getTrustLines(evernode.EvernodeConstants.EVR, hostClient.config.evrIssuerAddress);
+            if (trustline.length > 0) {
+                await terminateConnections();
+                return { success: true, result: 'RC-PREPARED' }
+            } else {
+                await terminateConnections();
+                return { success: true, result: 'RC-FRESH' };
+            }
+        } catch (err) {
+            await terminateConnections();
+
+            if ((err.data?.error === 'actNotFound'))
+                return { success: true, result: "RC-FRESH" };
+            return { success: false, result: "Error occurred in account condition check." };
+        }
+    },
+
     'check-balance': async (args) => {
         checkParams(args, 5);
         const rippledUrl = args[0];

@@ -69,7 +69,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-export NETWORK="${NETWORK:-devnet}"
+export NETWORK="${NETWORK:-testnet}"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -768,15 +768,7 @@ function set_auto_update() {
 function set_regular_key() {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
-    local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
-    local cfg_host_address=$(jq -r '.xrpl.address' $mbconfig)
-    local cfg_host_secret_path=$(jq -r '.xrpl.secretPath' $mbconfig)
-
-    host_secret=$(cat $cfg_host_secret_path | jq -r '.xrpl.secret')
-    ! [[ $host_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && exit 1
-
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regular-key $cfg_rippled_server $cfg_host_address $host_secret $1 &&
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regular-key $1 &&
         echo "There was an error in setting the regular key." && return 1
 }
 

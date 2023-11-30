@@ -1814,7 +1814,7 @@ elif [ "$mode" == "auto-update" ]; then
 elif [ "$mode" == "regular-key" ]; then
     if [ -z "$2" ]; then
         echo "Regular key to be set must be provided." && exit 1
-    elif [[ ! "$2" =~ ^[[:alnum:]]+$ ]]; then
+    elif [[ ! "$2" =~ ^[[:alnum:]]{24,34}$ ]]; then
         echo "Regular key is invalid." && exit 1
     fi
     set_regular_key $2

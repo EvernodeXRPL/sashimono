@@ -632,39 +632,16 @@ class Setup {
         {
             const acc = this.#getConfig().xrpl;
             await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
-            let accSecret = null;
 
             console.log(`Setting Regular Key...`);
-
-            if (!fs.existsSync(acc.secretPath))
-                throw `Key file does not exist at ${acc.secretPath}.`;
-            
-            fs.readFile(acc.secretPath, 'utf8', (err, data) => {
-                if (err) {
-                    throw `Error occured when accessing key file ${acc.secretPath}.`;
-                }
-
-                try {
-                    const jsonData = JSON.parse(data);
-                    accSecret = jsonData.xrpl.secret;
-                } catch (error) {
-                    throw `Error occured when parsing key file ${acc.secretPath}.`;
-                }
-            });
 
             try {
                 await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
-                if(!accSecret){
-                    throw `Failed to obtain XRPL account secret from ${acc.secretPath}`;
-                }
-
                 const xrplApi = new evernode.XrplApi(acc.rippledServer, { autoReconnect: false });
                 await xrplApi.connect();
 
-                const xrplAcc = new evernode.XrplAccount(acc.address, accSecret, {
-                    xrplApi: xrplApi
-                });
+                const xrplAcc = new evernode.XrplAccount(acc.address, acc.secret, { xrplApi: xrplApi });
 
                 await xrplAcc.setRegularKey(regularKey);
                 console.log(`Regular key ${regularKey} was assigned to account ${acc.address} successfully.`);

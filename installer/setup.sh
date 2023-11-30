@@ -142,7 +142,7 @@ function wait_call() {
     wait $spin_pid
     echo -ne "\r"
 
-    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e $command_output
+    [ $return_code -eq 0 ] && echo -e ${output_template/\[OUTPUT\]/$command_output} || echo -e "\r$command_output"
     return $return_code
 }
 
@@ -239,7 +239,7 @@ function check_prereq() {
 
     if ! command -v node &>/dev/null; then
         echo "Installing nodejs..."
-        install_nodejs_utility >/dev/null
+        ! install_nodejs_utility >/dev/null || exit 1
     else
         version=$(node -v | cut -d '.' -f1)
         version=${version:1}
@@ -901,8 +901,7 @@ function set_host_xrpl_account() {
 
                 # Modify the permissions accordingly
                 chown $MB_XRPL_USER: $key_file_path && \
-                chmod 600 $key_file_path && \
-                echomult "Retrived account details via the backed-up secret." || (echomult "Error occurred in secret restoring." && exit 1)
+                chmod 600 $key_file_path || (echomult "Error occurred in secret restoring." && exit 1)
             else
                 echomult "Error: Backup secret file format does not support." && exit 1
             fi
@@ -912,41 +911,61 @@ function set_host_xrpl_account() {
             generate_and_save_keyfile "$key_file_path"
         fi
 
-        echomult "Your host account with the address $xrpl_address has been generated on Xahau $NETWORK.
-                \nThe secret key of the account is located at $key_file_path.
-                \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-                \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.
-                \n2. At least $reg_fee EVR to cover Evernode registration fee.
-                \n\nYou can scan the following QR code in your wallet app to send funds:\n"
+        echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
+        \nThe secret key of the account is located at $key_file_path.
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
+        \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.
+        \n2. At least $reg_fee EVR to cover Evernode registration fee.
+        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
-        generate_qrcode "$xrpl_address"
+       generate_qrcode "$xrpl_address"
 
-        required_balance=$min_xrp_amount_per_month
+        account_condition='-'
+
+        echomult "\nChecking the account condition..."
         while true ; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
+            account_condition=$(exec_jshelper check-acc-condition $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address) \
             && break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+            confirm "\nDo you want to re-check the account condition?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        echomult "\nPreparing account with EVR trust-line..."
-        while true ; do
-            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
-            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
-        done
+        declare -Ar AccCondtionArry=( [0]="RC-FRESH" [1]="RC-PREPARED" )
 
-        echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
-                \nYou can scan the following QR code in your wallet app to send funds:"
+        if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
 
-        required_balance=$reg_fee
-        while true ; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
-            && break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-        done
+            echomult "To set up your host account, ensure a deposit of $min_xrp_amount_per_month XAH (Xahau XRP) to cover the regular transaction fees for the first month."
+
+            required_balance=$min_xrp_amount_per_month
+            while true ; do
+                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
+                && break
+                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+            done
+
+            echomult "\nPreparing account with EVR trust-line..."
+            while true ; do
+                wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
+                confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
+            done
+
+            account_condition=${AccCondtionArry[1]}
+        fi
+
+        if [ "$account_condition" == "${AccCondtionArry[1]}" ]; then
+            echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
+            \nYou can scan the provided QR code in your wallet app to send funds:"
+
+            required_balance=$reg_fee
+            while true ; do
+                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
+                && break
+                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+            done
+        fi
 
 
     elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
-        
+
         if [ "$account_validate_criteria" == "re-register" ]; then
             account_validate_criteria="register"
         fi

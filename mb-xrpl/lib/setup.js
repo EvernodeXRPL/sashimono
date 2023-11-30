@@ -626,7 +626,32 @@ class Setup {
             if (xrplApi)
                 await xrplApi.disconnect();
         }
+    }
 
+    async setRegularKey(regularKey) {
+        {
+            const acc = this.#getConfig().xrpl;
+            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+            console.log(`Setting Regular Key...`);
+
+            try {
+                await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+                const xrplApi = new evernode.XrplApi(acc.rippledServer, { autoReconnect: false });
+                await xrplApi.connect();
+
+                const xrplAcc = new evernode.XrplAccount(acc.address, acc.secret, { xrplApi: xrplApi });
+
+                await xrplAcc.setRegularKey(regularKey);
+                console.log(`Regular key ${regularKey} was assigned to account ${acc.address} successfully.`);
+
+                await xrplApi.disconnect();
+            }
+            catch (e) {
+                throw e;
+            }
+        }
     }
 }
 

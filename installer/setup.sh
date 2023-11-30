@@ -1278,16 +1278,26 @@ function check_installer_pending_finish() {
 }
 
 function reg_info() {
-    echo ""
-    if MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo ; then
-        local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
-        local mb_user_id=$(id -u "$MB_XRPL_USER")
-        local mb_user_runtime_dir="/run/user/$mb_user_id"
-        local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
-        echo "Sashimono agent status: $sashimono_agent_status"
-        echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
-        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
-    fi
+    local reg_info=$( MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo || echo ERROR)
+    local error=$(echo "$reg_info" | tail -1)
+    [ "$error" == "ERROR" ] && echo "${reg_info/ERROR/""}" && exit 1
+
+    # Get raddress from first line.
+    local address_line=$(echo "$reg_info" | head -1)
+    local host_address=$( echo "$address_line" | awk -F : ' { print $2 } ')
+    echo -e "\n$address_line\n"
+    generate_qrcode "$host_address"
+
+    # Remove first line and print.
+    echo -e "\n${reg_info/$address_line/""}"
+
+    local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+    local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
+    echo "Sashimono agent status: $sashimono_agent_status"
+    echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
+    echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
 }
 
 function apply_ssl() {

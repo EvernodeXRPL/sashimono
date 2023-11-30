@@ -209,7 +209,8 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$mode" == "transfer" ] && transfer=true || transfer=false
-    (! $transfer || $installed) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    [ "$mode" == "set-regkey" ] && set_regkey=true || set_regkey=false
+    (! $transfer || $installed || $set_regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
 # Change the relevant setup helper path based on Evernode installation condition and the command mode.

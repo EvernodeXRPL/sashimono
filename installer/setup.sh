@@ -160,7 +160,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "regular-key" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "set-regkey" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -175,7 +175,7 @@ if $installed ; then
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
                 \nauto-update - Evernode Auto Updater management
-                \nregular-key - Set regular key" \
+                \nset-regkey - Set regular key" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -768,7 +768,7 @@ function set_auto_update() {
 function set_regular_key() {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regular-key $1 &&
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN set-regkey $1 &&
         echo "There was an error in setting the regular key." && return 1
 }
 
@@ -1811,7 +1811,7 @@ elif [ "$mode" == "auto-update" ]; then
             \ndisable - Disable $evernode auto updater service." && exit 1
     fi
 
-elif [ "$mode" == "regular-key" ]; then
+elif [ "$mode" == "set-regkey" ]; then
     if [ -z "$2" ]; then
         echo "Regular key to be set must be provided." && exit 1
     elif [[ ! "$2" =~ ^[[:alnum:]]{24,34}$ ]]; then

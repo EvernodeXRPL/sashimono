@@ -74,7 +74,7 @@ async function main() {
             else if (process.argv.length >= 4 && process.argv[2] === 'governance') {
                 await GovernanceManager.handleCommand(process.argv[3], ...process.argv.slice(4));
             }
-            else if (process.argv.length === 4 && process.argv[2] === 'regular-key') {
+            else if (process.argv.length === 4 && process.argv[2] === 'set-regkey') {
                 await new Setup().setRegularKey(process.argv[3]);
             }
             else if (process.argv[2] === 'help') {
@@ -91,7 +91,7 @@ async function main() {
         node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
         node index.js delete [containerName] - Delete an instance and recreate the lease offer
         node index.js governance [command] [args] - Governance handling.
-        node index.js regular-key [regularKey] - Set regular key.
+        node index.js set-regkey [regularKey] - Set regular key.
         node index.js help - Print help.`);
             }
             else {

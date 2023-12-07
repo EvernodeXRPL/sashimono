@@ -47,7 +47,7 @@ Run `make installer` ('installer.tar.gz' will be placed in build directory)
 
 1. Node app which is listening to the host xrpl account.
 1. `cd mb-xrpl && npm install` (You only have to do this once)
-1. `node app.js new [address] [secret] [governerAddress] [domain or ip] [leaseAmount] [rippledServer]` will create new config files called `mb-xrpl.cfg` and `secret.cfg`
+1. `node app.js new [address] [secretPath] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network]` will create new config files called `mb-xrpl.cfg` and `secret.cfg`
 1. `node app.js betagen [governerAddress] [domain or ip] [leaseAmount]` will generate beta host account and populate the configs.
 1. `node app.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [cpuModel] [cpuCount] [cpuSpeed] [emailAddress] [description(optional)]` will register the host on Evernode.
 1. `node app.js deregister` will deregister the host from Evernode.

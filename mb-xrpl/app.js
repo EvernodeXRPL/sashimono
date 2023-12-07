@@ -26,16 +26,6 @@ async function main() {
                 const setup = new Setup();
                 setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network);
             }
-            else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
-                const governorAddress = process.argv[3];
-                const domain = process.argv[4];
-                const leaseAmount = process.argv[5];
-                const rippledServer = process.argv[6];
-                const network = process.argv.length > 7 ? process.argv[7] : appenv.NETWORK;
-                const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain, network);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer, null, null, network);
-            }
             else if (process.argv.length >= 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12], process.argv[13]);
@@ -82,8 +72,7 @@ async function main() {
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secret] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network] - Create new config files.
-        node index.js betagen [governorAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
-        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] [network] - Register the host on Evernode.
+        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.

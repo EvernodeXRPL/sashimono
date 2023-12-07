@@ -624,7 +624,7 @@ class MessageBoard {
     }
 
     async #catchupMissedLeases() {
-        const fullHistoryXrplApi = new evernode.XrplApi(appenv.DEFAULT_FULL_HISTORY_NODE);
+        const fullHistoryXrplApi = new evernode.XrplApi();
         await fullHistoryXrplApi.connect();
 
         this.db.open();

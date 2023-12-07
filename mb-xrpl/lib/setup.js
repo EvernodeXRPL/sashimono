@@ -43,18 +43,6 @@ class Setup {
         })
     }
 
-    async #generateFaucetAccount() {
-        console.log("Generating faucet account...");
-        const resp = await this.#httpPost(appenv.FAUCET_URL);
-        const json = JSON.parse(resp);
-
-        // If Hooks TEST NET is used.
-        return {
-            address: json.address,
-            secret: json.secret
-        };
-    }
-
     #getConfig(readSecret = true) {
         return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
     }
@@ -77,69 +65,6 @@ class Setup {
         };
 
         this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
-    }
-
-    async generateBetaHostAccount(rippledServer, governorAddress, domain, network = null) {
-
-        await setEvernodeDefaults(network, governorAddress, rippledServer);
-
-        const acc = await this.#generateFaucetAccount();
-
-        // Prepare host account.
-        {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            await hostClient.connect();
-
-            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
-
-            // Sometimes we may get 'account not found' error from rippled when some servers in the testnet cluster
-            // haven't still updated the ledger. In such cases, we retry several times before giving up.
-            {
-                let attempts = 0;
-                while (attempts >= 0) {
-                    try {
-                        await hostClient.prepareAccount(domain);
-                        break;
-                    }
-                    catch (err) {
-                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
-                            console.log("actNotFound - retrying...")
-                            // Wait and retry.
-                            await new Promise(resolve => setTimeout(resolve, 3000));
-                            continue;
-                        }
-                        throw err;
-                    }
-                }
-            }
-
-            // Get beta EVRs from foundation to host account.
-            {
-                console.log("Requesting beta EVRs...");
-                await hostClient.xrplAcc.makePayment(hostClient.config.foundationAddress,
-                    evernode.XrplConstants.MIN_XRP_AMOUNT,
-                    evernode.XrplConstants.XRP,
-                    null,
-                    [{ type: 'giftBetaEvr', format: '', data: '' }]);
-
-                // Keep watching our EVR balance.
-                let attempts = 0;
-                while (attempts >= 0) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    const balance = await hostClient.getEVRBalance();
-                    if (balance === '0') {
-                        if (++attempts <= 20)
-                            continue;
-                        throw "EVR funds not received within timeout.";
-                    }
-                    break;
-                }
-            }
-
-            await hostClient.disconnect();
-        }
-
-        return acc;
     }
 
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {

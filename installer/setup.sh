@@ -18,7 +18,7 @@ instances_per_core=3
 max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
-log_dir=/tmp/evernode-beta
+log_dir=/tmp/evernode
 
 repo_owner="EvernodeXRPL"
 repo_name="evernode-resources"
@@ -41,7 +41,7 @@ installer_url="$resource_storage/installer.tar.gz"
 jshelper_url="$resource_storage/setup-jshelper.tar.gz"
 
 installer_version_timestamp_file="installer.version.timestamp"
-default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
+default_rippled_server="wss://xahau.network"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
@@ -69,7 +69,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-export NETWORK="${NETWORK:-devnet}"
+export NETWORK="${NETWORK:-mainnet}"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"

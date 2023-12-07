@@ -69,7 +69,7 @@ namespace conf
             cfg.system.max_cpu_us = !cpu_us ? 900000 : cpu_us; // Total CPU allocation out of 1000000 microsec (1 sec).
             cfg.system.max_storage_kbytes = !disk_kbytes ? 5242880 : disk_kbytes;
 
-            cfg.docker.image_prefix = "evernodedev/sashimono:";
+            cfg.docker.image_prefix = "evernode/sashimono:";
             cfg.docker.registry_port = docker_registry_port;
 
             cfg.log.max_file_count = 50;

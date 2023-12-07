@@ -473,7 +473,7 @@ if [ $mode == "create" ] || [ $mode == "createall" ]; then
                 config=$(echo "$config" | jq -c ".mesh.known_peers = [$peers]" | jq -c ".contract.unl = [\"$pubkey\"]")
             fi
 
-            command="sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\",\"config\":$config}'"
+            command="DEV_MODE=1 sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\",\"config\":$config}'"
             output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
             # If an output received consider updating the json file.
             if [ ! "$output" = "" ]; then

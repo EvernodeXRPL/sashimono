@@ -49,7 +49,13 @@ class SashiCLI {
     execSashiCli(msg) {
         this.#waiting = true;
         return new Promise((resolve, reject) => {
-            exec(`${this.cliPath} json -m '${JSON.stringify(msg)}'`, { stdio: 'pipe' }, (err, stdout, stderr) => {
+            let command = `${this.cliPath} json -m '${JSON.stringify(msg)}'`;
+
+            if (msg.type === "create") {
+                command = `DEV_MODE=1 ${command}`;
+            }
+
+            exec(command, { stdio: 'pipe' }, (err, stdout, stderr) => {
                 this.#waiting = false;
 
                 if (err || stderr) {

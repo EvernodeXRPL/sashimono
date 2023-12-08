@@ -304,53 +304,57 @@ const funcs = {
             governorAddress: governorAddress
         });
 
-        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
+        try {
+            const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+            await xrplApi.connect();
 
-        evernode.Defaults.set({
-            xrplApi: xrplApi
-        });
+            evernode.Defaults.set({
+                xrplApi: xrplApi
+            });
 
-        const hostClient = new evernode.HostClient(accountAddress, null);
-        const terminateConnections = async () => {
-            await hostClient.disconnect();
-            await xrplApi.disconnect();
-        }
-
-        let attempts = 0;
-        let balance = 0;
-        while (attempts >= 0) {
-            try {
-                // In order to handle the account not found issue via catch block.
-                await hostClient.connect();
-
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                if (tokenType === 'NATIVE')
-                    balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
-                else
-                    balance = Number(await hostClient.getEVRBalance());
-
-                if (balance < expectedBalance) {
-                    if (++attempts <= WAIT_PERIOD)
-                        continue;
-
-                    await terminateConnections();
-                    return { success: false, result: "Funds not received within timeout." };
-                }
-
-                break;
-            } catch (err) {
-                if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    continue;
-                }
-                await terminateConnections();
-                return { success: false, result: (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check." };
+            const hostClient = new evernode.HostClient(accountAddress, null);
+            const terminateConnections = async () => {
+                await hostClient.disconnect();
+                await xrplApi.disconnect();
             }
-        }
 
-        await terminateConnections();
-        return { success: true, result: `${balance}` };
+            let attempts = 0;
+            let balance = 0;
+            while (attempts >= 0) {
+                try {
+                    // In order to handle the account not found issue via catch block.
+                    await hostClient.connect();
+
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (tokenType === 'NATIVE')
+                        balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
+                    else
+                        balance = Number(await hostClient.getEVRBalance());
+
+                    if (balance < expectedBalance) {
+                        if (++attempts <= WAIT_PERIOD)
+                            continue;
+
+                        await terminateConnections();
+                        return { success: false, result: "Funds not received within timeout." };
+                    }
+
+                    break;
+                } catch (err) {
+                    if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
+                    }
+                    await terminateConnections();
+                    return { success: false, result: (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check." };
+                }
+            }
+
+            await terminateConnections();
+            return { success: true, result: `${balance}` };
+        } catch {
+            return { success: false, result: "Error occurred in websocket connection." };
+        }
     },
 
     'generate-account': async (args) => {

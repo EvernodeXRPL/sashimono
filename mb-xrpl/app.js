@@ -17,7 +17,7 @@ async function main() {
                 const accountAddress = process.argv[3];
                 const accountSecretPath = process.argv[4];
                 const governorAddress = process.argv[5];
-                // const domain = process.argv[6];
+                const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
@@ -25,6 +25,10 @@ async function main() {
                 const network = process.argv.length > 11 ? process.argv[11] : appenv.NETWORK;
                 const setup = new Setup();
                 setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network);
+
+                if (appenv.IS_DEV_MODE) {
+                    await setup.prepareHostAccount(domain);
+                }
             }
             else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
                 const governorAddress = process.argv[3];
@@ -81,7 +85,7 @@ async function main() {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network] - Create new config files.
+        node index.js new [address] [secretPath] [governorAddress] [domain or ip] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network] - Create new config files.
         node index.js betagen [governorAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] [network] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.

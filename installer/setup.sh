@@ -485,35 +485,34 @@ function validate_email_address() {
 
 function set_inet_addr() {
 
-    # TODO : Remove NO_DOMAIN usage (Kept for local testing)
-    if [ "$NO_DOMAIN" == "" ] ; then
+    # Skip system requirement check in non-production environments if $NO_DOMAIN=1.
+    if [ "$NETWORK" == "mainnet" ] || [[ "$NETWORK" != "mainnet" && "$NO_DOMAIN" == "" ]] ; then
         echo ""
         while [ -z "$inetaddr" ]; do
             read -ep "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
             validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
             echo "Invalid or unreachable domain name."
         done
+    else
+        tls_key_file="self"
+        tls_cert_file="self"
+        tls_cabundle_file="self"
+
+        # Attempt auto-detection.
+        
+        inetaddr=$(hostname -I | awk '{print $1}')
+        validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
+                                internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
+        inetaddr=""
+
+        while [ -z "$inetaddr" ]; do
+            read -ep "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
+            validate_inet_addr && return 0
+            echo "Invalid ip/domain address."
+        done
+
+        ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
     fi
-
-    # TODO : Remove this once testing is performed.
-    tls_key_file="self"
-    tls_cert_file="self"
-    tls_cabundle_file="self"
-
-    # Attempt auto-detection.
-    
-    inetaddr=$(hostname -I | awk '{print $1}')
-    validate_inet_addr && $interactive && confirm "Detected ip address '$inetaddr'. This needs to be publicly reachable over
-                            internet.\n\nIs this the ip address you want others to use to reach your host?" && return 0
-    inetaddr=""
-
-    while [ -z "$inetaddr" ]; do
-        read -ep "Please specify the public ip/domain address your server is reachable at: " inetaddr </dev/tty
-        validate_inet_addr && return 0
-        echo "Invalid ip/domain address."
-    done
-
-    ! validate_inet_addr && echo "Invalid ip/domain address" && exit 1
 
 }
 

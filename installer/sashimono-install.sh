@@ -307,18 +307,14 @@ if [ "$NO_MB" == "" ]; then
     # Change ownership to message board user.
     chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
-    # Betage and register if not upgrade mode.
+    # Register if not upgrade mode.
     if [ "$UPGRADE" == "0" ]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-            # Commented for now, because 'betagen' will no longer be used.
-            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
-            # doreg=1
-
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

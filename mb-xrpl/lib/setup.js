@@ -67,6 +67,50 @@ class Setup {
         this.#saveConfig(ipv6NetInterface ? { ...baseConfig, networking: { ipv6: { subnet: ipv6Subnet, interface: ipv6NetInterface } } } : baseConfig);
     }
 
+    async prepareHostAccount(domain) {
+
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        // Prepare host account.
+        {
+            const hostClient = new evernode.HostClient(acc.address, acc.secret);
+            await hostClient.connect();
+
+            // Update the Defaults with "xrplApi" of the client.
+            evernode.Defaults.set({
+                xrplApi: hostClient.xrplApi
+            });
+
+            console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
+
+            // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
+            // haven't still updated the ledger. In such cases, we retry several times before giving up.
+            {
+                let attempts = 0;
+                while (attempts >= 0) {
+                    try {
+                        await hostClient.prepareAccount(domain);
+                        break;
+                    }
+                    catch (err) {
+                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
+                            console.log("actNotFound - retrying...")
+                            // Wait and retry.
+                            await new Promise(resolve => setTimeout(resolve, 3000));
+                            continue;
+                        }
+                        throw err;
+                    }
+                }
+            }
+
+            await hostClient.disconnect();
+        }
+
+    }
+
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');

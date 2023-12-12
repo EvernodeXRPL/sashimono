@@ -82,11 +82,6 @@ noroot_user=${SUDO_USER:-$(whoami)}
 # Default key path is set to a path in MB_XRPL_USER home
 default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
 
-# Backed up secret location.
-# Used to restore secret related to a previous installation attempt
-secret_backup_location="/root/.evernode/.host-account-secret.key"
-
-
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
@@ -888,25 +883,7 @@ function set_host_xrpl_account() {
             done
         fi
 
-        # Check for saved secrets due to a previous installation.
-        if [[ -f "$secret_backup_location" || -f "$key_file_path" ]]; then
-
-            key_file_dir=$(dirname "$key_file_path")
-            if [ ! -d "$key_file_dir" ]; then
-                mkdir -p "$key_file_dir"
-            fi
-
-            if [ -f "$secret_backup_location" ]; then
-                echomult "Retrived account details via a backed-up secret." && mv $secret_backup_location $key_file_path
-            fi
-
-            generate_and_save_keyfile "$key_file_path"
-
-        else
-
-            echomult "Generating new keypair for the host...\n"
-            generate_and_save_keyfile "$key_file_path"
-        fi
+        generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.

@@ -820,9 +820,10 @@ function generate_and_save_keyfile() {
             echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret)
+                account_json=$(exec_jshelper generate-account $existing_secret) || exit 1
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
+
                 echomult "Retrived account details via secret.\n"
                 return 0
             else
@@ -1674,15 +1675,11 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
+    echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-            \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-            \nThis is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
-
-    ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0
@@ -1703,13 +1700,10 @@ elif [ "$mode" == "transfer" ]; then
                 while allowing you to transfer the registration to a preferred transferee.
                 \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
-            echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
-                stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-                \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-                \nThis is irreversible. Make sure you have your account address and
-                secret elsewhere before proceeding.\n"
+            echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+            \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
 
-            ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+            ! confirm "\nAre you sure you want to continue?" && exit 1
 
         fi
 

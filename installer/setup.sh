@@ -816,32 +816,34 @@ function generate_and_save_keyfile() {
     fi
 
     if [ -e "$key_file_path" ]; then
-        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?"; then
+        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?" "n"; then
+            echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
                 account_json=$(exec_jshelper generate-account $existing_secret)
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-                echomult "Retrived account details via secret."
+                echomult "Retrived account details via secret.\n"
                 return 0
             else
                 echomult "Error: Existing secret file does not have the expected format."
                 return 1
             fi
+        else
+            ! confirm "Are you sure you want to override the existing key file?"  && exit 1
         fi
     fi
 
     if [ "$key_file_path" == "$default_key_filepath" ]; then
         parent_directory=$(dirname "$key_file_path")
-        chown -R $MB_XRPL_USER: "$parent_directory"
-        chmod -R 700 "$parent_directory"
+        chmod -R  500 "$parent_directory" && \
+        chown -R $MB_XRPL_USER: "$parent_directory" || (echomult "Error occurred in permission and ownership assignment of key file directory." &&  exit 1)
     fi
 
-    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path"
-    chmod 600 "$key_file_path"
-    echomult "Key file saved successfully at $key_file_path"
-
-    chown $MB_XRPL_USER: $key_file_path
+    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
+    chmod 400 "$key_file_path" && \
+    chown $MB_XRPL_USER: $key_file_path && \
+    echomult "Key file saved successfully at $key_file_path" || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
 
     return 0
 }

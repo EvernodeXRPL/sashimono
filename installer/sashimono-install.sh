@@ -33,21 +33,6 @@ function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
 }
 
-function confirm() {
-    echo -en $1" [Y/n] "
-    local yn=""
-    read yn </dev/tty
-
-    # Default choice is 'y'
-    [ -z $yn ] && yn="y"
-    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
-        read -ep "'y' or 'n' expected: " yn </dev/tty
-    done
-
-    echo "" # Insert new line after answering.
-    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1  # 0 means success.
-}
-
 function rollback() {
     [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
     echo "Rolling back sashimono installation."

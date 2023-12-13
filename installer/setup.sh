@@ -815,6 +815,12 @@ function generate_and_save_keyfile() {
         mkdir -p "$key_dir"
     fi
 
+    if [ "$key_file_path" == "$default_key_filepath" ]; then
+        parent_directory=$(dirname "$key_file_path")
+        chmod -R  500 "$parent_directory" && \
+        chown -R $MB_XRPL_USER: "$parent_directory" || (echomult "Error occurred in permission and ownership assignment of key file directory." &&  exit 1)
+    fi
+
     if [ -e "$key_file_path" ]; then
         if ! confirm "The file '$key_file_path' already exists. Do you want to override it?" "n"; then
             echomult "Continuing with the existing key file."
@@ -824,6 +830,8 @@ function generate_and_save_keyfile() {
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
 
+                chmod 400 "$key_file_path" && \
+                chown $MB_XRPL_USER: $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
                 echomult "Retrived account details via secret.\n"
                 return 0
             else
@@ -835,11 +843,6 @@ function generate_and_save_keyfile() {
         fi
     fi
 
-    if [ "$key_file_path" == "$default_key_filepath" ]; then
-        parent_directory=$(dirname "$key_file_path")
-        chmod -R  500 "$parent_directory" && \
-        chown -R $MB_XRPL_USER: "$parent_directory" || (echomult "Error occurred in permission and ownership assignment of key file directory." &&  exit 1)
-    fi
 
     echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
     chmod 400 "$key_file_path" && \
@@ -963,8 +966,8 @@ function set_host_xrpl_account() {
             ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
 
             # Modifying key file ownership to MB_XRPL_USER.
-            chown $MB_XRPL_USER: $key_file_path
-            chmod 600 $key_file_path
+            chown $MB_XRPL_USER: $key_file_path && \
+            chmod 400 $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
 
             xrpl_account_secret=$xrpl_secret
 

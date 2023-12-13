@@ -343,8 +343,6 @@ function init_setup_helpers() {
 
 function exec_jshelper() {
 
-    jshelper_bin="/home/kithmini/office/evenode/sashimono/installer/jshelper/dist/index.js"
-
     # Create fifo file to read response data from the helper script.
     local resp_file=$setup_helper_dir/helper_fifo
     [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file

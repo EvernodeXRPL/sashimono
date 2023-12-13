@@ -9,6 +9,8 @@ const http = require('http');
 const crypto = require('crypto');
 const { appenv } = require("../../mb-xrpl/lib/appenv");
 
+let NETWORK = appenv.NETWORK;
+
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
         if (!args[i]) throw "Params not specified.";
@@ -22,7 +24,7 @@ const funcs = {
     'validate-server': async (args) => {
         checkParams(args, 1);
         const rippledUrl = args[0];
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
         evernode.Defaults.set({
             rippledServer: rippledUrl
         });
@@ -39,7 +41,7 @@ const funcs = {
         const accountAddress = args[2];
         const validateFor = args[3] || "register";
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -94,7 +96,7 @@ const funcs = {
         const accountAddress = args[1];
         const accountSecret = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl
@@ -123,7 +125,7 @@ const funcs = {
         const governorAddress = args[1];
         const configName = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -155,7 +157,7 @@ const funcs = {
         const accountSecret = args[3];
         const transfereeAddress = args[4];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -247,7 +249,7 @@ const funcs = {
         const governorAddress = args[1];
         const accountAddress = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -297,7 +299,7 @@ const funcs = {
 
         const WAIT_PERIOD = 120; // seconds
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -383,7 +385,7 @@ const funcs = {
 
         const WAIT_PERIOD = 120; // seconds
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -513,7 +515,7 @@ const funcs = {
         const rippledUrl = args[0];
         const incReserveCount = Number(args[1]);
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl
@@ -533,12 +535,12 @@ const funcs = {
                 const estimate = reserves?.reserve_base_xrp + reserves?.reserve_inc_xrp * incReserveCount;
 
                 if (estimate > 0) {
-                     await xrplApi.disconnect();
+                    await xrplApi.disconnect();
                     return { success: true, result: `${estimate}` };
                 }
             }
 
-             await xrplApi.disconnect();
+            await xrplApi.disconnect();
             return { success: false, result: "Failed to retrieve the estimation." };
 
 
@@ -568,6 +570,13 @@ async function app() {
         const command = process.argv[2];
         if (!command)
             throw "Command not specified.";
+
+        const networkIdx = process.argv.findIndex(a => a.startsWith('network:'));
+        if (networkIdx >= 0) {
+            const sp = process.argv[networkIdx].split(':');
+            if (sp.length > 1 && sp[1])
+                NETWORK = sp[1];
+        }
 
         const resp = await funcs[command](process.argv.splice(3));
         if (!resp)

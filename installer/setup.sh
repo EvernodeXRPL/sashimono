@@ -34,7 +34,7 @@ fi
 
 # Prepare resources URLs
 resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/sashimono/installer/licence.txt"
+licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdflicence_url"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$resource_storage/setup.sh"
 installer_url="$resource_storage/installer.tar.gz"
@@ -47,7 +47,7 @@ nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
 operation="register"
-min_xrp_amount_per_month=25
+heartbeat_cost_per_month=5
 spinner=( '|' '/' '-' '\');
 xrpl_address="-"
 xrpl_secret="-"
@@ -342,6 +342,8 @@ function init_setup_helpers() {
 }
 
 function exec_jshelper() {
+
+    jshelper_bin="/home/kithmini/office/evenode/sashimono/installer/jshelper/dist/index.js"
 
     # Create fifo file to read response data from the helper script.
     local resp_file=$setup_helper_dir/helper_fifo
@@ -887,13 +889,18 @@ function set_host_xrpl_account() {
 
             done
         fi
-
+        
+        # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
+        # reserve_inc_xrp * n => trustline reserve + reserve_inc_xrp * instance_count
+        local inc_reserves_count=$((1 + $alloc_instcount))
+        min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
+        local min_xah_requirement=$(echo "$heartbeat_cost_per_month + $min_reserve_requirement" | bc )
         generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-        \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.
+        \n1. At least $min_xah_requirement XAH (Xahau XRP) to cover regular transaction fees for first month.
         \n2. At least $reg_fee EVR to cover Evernode registration fee.
         \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -912,9 +919,9 @@ function set_host_xrpl_account() {
 
         if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
 
-            echomult "To set up your host account, ensure a deposit of $min_xrp_amount_per_month XAH (Xahau XRP) to cover the regular transaction fees for the first month."
+            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH (Xahau XRP) to cover the regular transaction fees for the first month."
 
-            required_balance=$min_xrp_amount_per_month
+            required_balance=$min_xah_requirement
             while true ; do
                 wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
                 && break
@@ -1610,9 +1617,13 @@ if [ "$mode" == "install" ]; then
 
 
     # Display licence file and ask for concent.
-    printf "\n*****************************************************************************************************\n\n"
-    curl -s -L $licence_url | cat
-    printf "\n\n*****************************************************************************************************\n"
+    printf "\n***********************************************************************************************************************\n\n"
+    echomult "EVERNODE SOFTWARE LICENSE AGREEMENT"
+    echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENSE.
+    \nFor full details, please refer to the license document available at:
+    \n$licence_url"
+
+    printf "\n\n***********************************************************************************************************************\n"
     ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
     ! confirm "\nAre you performing a fresh Evernode installation?

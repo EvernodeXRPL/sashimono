@@ -506,7 +506,47 @@ const funcs = {
         } catch (errorCode) {
             return { success: false, result: errorCode };
         }
-    }
+    },
+
+    'compute-xah-requirement': async (args) => {
+        checkParams(args, 2);
+        const rippledUrl = args[0];
+        const incReserveCount = Number(args[1]);
+
+        await evernode.Defaults.useNetwork(appenv.NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl
+        });
+
+        try {
+            const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+            await xrplApi.connect();
+
+            evernode.Defaults.set({
+                xrplApi: xrplApi
+            });
+
+            const serverInfo = await xrplApi.getServerInfo();
+            if (serverInfo?.info?.validated_ledger) {
+                const reserves = serverInfo.info.validated_ledger
+                const estimate = reserves?.reserve_base_xrp + reserves?.reserve_inc_xrp * incReserveCount;
+
+                if (estimate > 0) {
+                     await xrplApi.disconnect();
+                    return { success: true, result: `${estimate}` };
+                }
+            }
+
+             await xrplApi.disconnect();
+            return { success: false, result: "Failed to retrieve the estimation." };
+
+
+        } catch {
+            return { success: false, result: "Error occurred in websocket connection." };
+        }
+    },
+
 }
 
 function handleResponse(resp) {

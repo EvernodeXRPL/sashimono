@@ -530,15 +530,15 @@ const funcs = {
             const serverInfo = await xrplApi.getServerInfo();
             if (serverInfo?.info?.validated_ledger) {
                 const reserves = serverInfo.info.validated_ledger
-                const estimate = reserves?.reserve_base_xrp + reserves?.reserve_inc_xrp * incReserveCount;
+                const estimate = (reserves?.reserve_base_native ?? reserves?.reserve_base_xrp) + (reserves?.reserve_inc_native ?? reserves?.reserve_inc_xrp) * incReserveCount;
 
                 if (estimate > 0) {
-                     await xrplApi.disconnect();
+                    await xrplApi.disconnect();
                     return { success: true, result: `${estimate}` };
                 }
             }
 
-             await xrplApi.disconnect();
+            await xrplApi.disconnect();
             return { success: false, result: "Failed to retrieve the estimation." };
 
 

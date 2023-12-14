@@ -47,7 +47,7 @@ nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
 operation="register"
-heartbeat_cost_per_month=5
+min_operational_cost_per_month=5
 spinner=( '|' '/' '-' '\');
 xrpl_address="-"
 xrpl_secret="-"
@@ -892,7 +892,7 @@ function set_host_xrpl_account() {
         # reserve_inc_xrp * n => trustline reserve + reserve_inc_xrp * instance_count
         local inc_reserves_count=$((1 + $alloc_instcount))
         min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
-        local min_xah_requirement=$(echo "$heartbeat_cost_per_month + $min_reserve_requirement" | bc )
+        local min_xah_requirement=$(echo "$min_operational_cost_per_month + $min_reserve_requirement" | bc )
         generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.

@@ -155,7 +155,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "set-regkey" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "regkey" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -170,7 +170,7 @@ if $installed ; then
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
                 \nauto-update - Evernode Auto Updater management
-                \nset-regkey - Set regular key" \
+                \nregkey - Regular key management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -204,8 +204,8 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$mode" == "transfer" ] && transfer=true || transfer=false
-    [ "$mode" == "set-regkey" ] && set_regkey=true || set_regkey=false
-    (! $transfer || $installed || $set_regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    [ "$mode" == "regkey" ] && regkey=true || regkey=false
+    (! $transfer || $installed || $regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
 # Change the relevant setup helper path based on Evernode installation condition and the command mode.
@@ -763,8 +763,8 @@ function set_auto_update() {
 function set_regular_key() {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN set-regkey $1 &&
-        echo "There was an error in setting the regular key." && return 1
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regkey $1 &&
+        echo "There was an error in changing the regular key." && return 1
 }
 
 function set_transferee_address() {
@@ -1804,14 +1804,24 @@ elif [ "$mode" == "auto-update" ]; then
             \ndisable - Disable $evernode auto updater service." && exit 1
     fi
 
-elif [ "$mode" == "set-regkey" ]; then
-    if [ -z "$2" ]; then
-        echo "Regular key to be set must be provided." && exit 1
-    elif [[ ! "$2" =~ ^[[:alnum:]]{24,34}$ ]]; then
-        echo "Regular key is invalid." && exit 1
+elif [ "$mode" == "regkey" ]; then
+    if [ "$2" == "set" ]; then
+        if [ -z "$3" ]; then
+            echo "Regular key to be set must be provided." && exit 1
+        elif [[ ! "$3" =~ ^[[:alnum:]]{24,34}$ ]]; then
+            echo "Regular key is invalid." && exit 1
+        fi
+        set_regular_key $3
+        exit 0  
+    elif [ "$2" == "delete" ]; then
+        set_regular_key
+        exit 0  
+    else
+        echomult "Regular key management tool
+            \nSupported commands:
+            \nset [regularKey] - Assign or update the regular key.
+            \ndelete - Delete the regular key" && exit 1
     fi
-    set_regular_key $2
-    exit 0
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

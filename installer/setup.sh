@@ -262,7 +262,7 @@ function check_prereq() {
 
     # Check qrencode command is installed.
     if ! command -v qrencode &>/dev/null; then
-        stage "qrencode command not found. Installing.."
+        echo "qrencode command not found. Installing.."
         apt-get install -y qrencode >/dev/null
     fi
 }

@@ -756,7 +756,7 @@ function set_rippled_server() {
 function set_auto_update() {
     enable_auto_update=false
     if $interactive; then
-        if confirm "Do you want to subscribe for auto-updates?\nThe auto-update service is offered subject to the terms set out in the Evernode Software Licence." "n" ; then
+        if confirm "\nDo you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." "n" ; then
             enable_auto_update=true
         fi
     fi
@@ -1825,7 +1825,7 @@ elif [ "$mode" == "governance" ]; then
 
 elif [ "$mode" == "auto-update" ]; then
     if [ "$2" == "enable" ]; then
-        enable_evernode_auto_updater && exit 0
+        confirm "Are you sure you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." && enable_evernode_auto_updater && exit 0
     elif [ "$2" == "disable" ]; then
         remove_evernode_auto_updater && exit 0
     else

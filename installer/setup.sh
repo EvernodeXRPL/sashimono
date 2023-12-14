@@ -756,7 +756,7 @@ function set_rippled_server() {
 function set_auto_update() {
     enable_auto_update=false
     if $interactive; then
-        if confirm "Do you want to enable auto updates?" "n" ; then
+        if confirm "Do you want to subscribe for auto-updates?\nThe auto-update service is offered subject to the terms set out in the Evernode Software Licence." "n" ; then
             enable_auto_update=true
         fi
     fi
@@ -824,7 +824,7 @@ function generate_and_save_keyfile() {
     fi
 
     if [ -e "$key_file_path" ]; then
-        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?" "n"; then
+        if confirm "The file '$key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation." ; then
             echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
@@ -838,20 +838,22 @@ function generate_and_save_keyfile() {
                 return 0
             else
                 echomult "Error: Existing secret file does not have the expected format."
-                return 1
+                exit 1
             fi
         else
-            ! confirm "Are you sure you want to override the existing key file?"  && exit 1
+            exit 1
         fi
+    else
+
+        echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
+        chmod 400 "$key_file_path" && \
+        chown $MB_XRPL_USER: $key_file_path && \
+        echomult "Key file saved successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
+
+        return 0
     fi
 
-
-    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
-    chmod 400 "$key_file_path" && \
-    chown $MB_XRPL_USER: $key_file_path && \
-    echomult "Key file saved successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
-
-    return 0
+    exit 1
 }
 
 function set_host_xrpl_account() {
@@ -1631,9 +1633,9 @@ if [ "$mode" == "install" ]; then
 
     # Display licence file and ask for concent.
     printf "\n***********************************************************************************************************************\n\n"
-    echomult "EVERNODE SOFTWARE LICENSE AGREEMENT"
-    echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENSE.
-    \nFor full details, please refer to the license document available at:
+    echomult "EVERNODE SOFTWARE LICENCE AGREEMENT"
+    echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENCE.
+    \nFor full details, please refer to the licence document available at:
     \n$licence_url"
 
     printf "\n\n***********************************************************************************************************************\n"

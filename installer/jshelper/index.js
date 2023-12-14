@@ -547,7 +547,7 @@ const funcs = {
         } catch {
             return { success: false, result: "Error occurred in websocket connection." };
         }
-    },
+    }
 
 }
 
@@ -567,16 +567,19 @@ function handleResponse(resp) {
 async function app() {
 
     try {
+        const networkIdx = process.argv.findIndex(a => a.startsWith('network:'));
+        if (networkIdx >= 0) {
+            const sp = process.argv[networkIdx].split(':');
+            if (sp.length > 1 && sp[1]) {
+                NETWORK = sp[1];
+                process.argv.splice(networkIdx, 1);
+            }
+        }
+
         const command = process.argv[2];
         if (!command)
             throw "Command not specified.";
 
-        const networkIdx = process.argv.findIndex(a => a.startsWith('network:'));
-        if (networkIdx >= 0) {
-            const sp = process.argv[networkIdx].split(':');
-            if (sp.length > 1 && sp[1])
-                NETWORK = sp[1];
-        }
 
         const resp = await funcs[command](process.argv.splice(3));
         if (!resp)

@@ -34,7 +34,7 @@ fi
 
 # Prepare resources URLs
 resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdflicence_url"
+licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$resource_storage/setup.sh"
 installer_url="$resource_storage/installer.tar.gz"
@@ -48,6 +48,8 @@ jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
 operation="register"
 min_operational_cost_per_month=5
+# 3 Month initial operational duration is considered.
+initial_operational_duration=3
 spinner=( '|' '/' '-' '\');
 xrpl_address="-"
 xrpl_secret="-"
@@ -799,7 +801,7 @@ function generate_qrcode() {
 
 function generate_and_save_keyfile() {
 
-    local account_json=$(exec_jshelper generate-account)
+    account_json=$(exec_jshelper generate-account) || { echo "Error occurred in account setting up."; exit 1; }
     xrpl_address=$(jq -r '.address' <<< "$account_json")
     xrpl_secret=$(jq -r '.secret' <<< "$account_json")
 
@@ -818,7 +820,7 @@ function generate_and_save_keyfile() {
     if [ "$key_file_path" == "$default_key_filepath" ]; then
         parent_directory=$(dirname "$key_file_path")
         chmod -R  500 "$parent_directory" && \
-        chown -R $MB_XRPL_USER: "$parent_directory" || (echomult "Error occurred in permission and ownership assignment of key file directory." &&  exit 1)
+        chown -R $MB_XRPL_USER: "$parent_directory" || { echomult "Error occurred in permission and ownership assignment of key file directory.";  exit 1; }
     fi
 
     if [ -e "$key_file_path" ]; then
@@ -826,12 +828,12 @@ function generate_and_save_keyfile() {
             echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret) || exit 1
+                account_json=$(exec_jshelper generate-account $existing_secret) || { echomult "Error occurred when existing account retrieval.";  exit 1; }
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
 
                 chmod 400 "$key_file_path" && \
-                chown $MB_XRPL_USER: $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
+                chown $MB_XRPL_USER: $key_file_path || { echomult "Error occurred in permission and ownership assignment of key file.";  exit 1; }
                 echomult "Retrived account details via secret.\n"
                 return 0
             else
@@ -847,7 +849,7 @@ function generate_and_save_keyfile() {
     echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
     chmod 400 "$key_file_path" && \
     chown $MB_XRPL_USER: $key_file_path && \
-    echomult "Key file saved successfully at $key_file_path" || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
+    echomult "Key file saved successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
 
     return 0
 }
@@ -889,16 +891,18 @@ function set_host_xrpl_account() {
         fi
         
         # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
-        # reserve_inc_xrp * n => trustline reserve + reserve_inc_xrp * instance_count
-        local inc_reserves_count=$((1 + $alloc_instcount))
-        min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
-        local min_xah_requirement=$(echo "$min_operational_cost_per_month + $min_reserve_requirement" | bc )
+        # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
+        local inc_reserves_count=$((1 + 1 + $alloc_instcount))
+        min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) || { echomult "Error occuured in checking XAH requirement."; exit 1; }
+        
+        min_xah_requirement=$(echo "$min_operational_cost_per_month*$initial_operational_duration + $min_reserve_requirement" | bc )
+
         generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-        \n1. At least $min_xah_requirement XAH (Xahau XRP) to cover regular transaction fees for first month.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
         \n2. At least $reg_fee EVR to cover Evernode registration fee.
         \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -917,7 +921,7 @@ function set_host_xrpl_account() {
 
         if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
 
-            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH (Xahau XRP) to cover the regular transaction fees for the first month."
+            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
 
             required_balance=$min_xah_requirement
             while true ; do
@@ -963,6 +967,17 @@ function set_host_xrpl_account() {
 
             read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
             ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
+
+            parent_directory=$(dirname "$key_file_path")
+
+            canonicalized_directory=$(realpath "$parent_directory")
+            root_directory="/root"
+            canonicalized_root=$(realpath "$root_directory")
+
+            if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
+                echo "Key should not be located in /root directory." && continue
+            fi
+
             xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
 
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
@@ -972,7 +987,7 @@ function set_host_xrpl_account() {
 
             # Modifying key file ownership to MB_XRPL_USER.
             chown $MB_XRPL_USER: $key_file_path && \
-            chmod 400 $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
+            chmod 400 $key_file_path || { echomult "Error occurred in permission and ownership assignment of key file.";  exit 1; }
 
             xrpl_account_secret=$xrpl_secret
 
@@ -1739,6 +1754,8 @@ elif [ "$mode" == "transfer" ]; then
             rippled_server=${6}             # Rippled server URL
         fi
 
+        set_environment_configs
+
         init_setup_helpers
 
         # Set rippled server based on the user input.
@@ -1754,6 +1771,9 @@ elif [ "$mode" == "transfer" ]; then
         $interactive && ! confirm "\nThis will deregister $xrpl_account_address from $evernode
             while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
+
+        config_json_path="/tmp/evernode-setup-helpers/configuration.json"
+        export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
 
         # Execute transfer from js helper.
         exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address $xrpl_account_secret $transferee_address

@@ -82,11 +82,6 @@ noroot_user=${SUDO_USER:-$(whoami)}
 # Default key path is set to a path in MB_XRPL_USER home
 default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
 
-# Backed up secret location.
-# Used to restore secret related to a previous installation attempt
-secret_backup_location="/root/.evernode/.host-account-secret.key"
-
-
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
@@ -820,33 +815,39 @@ function generate_and_save_keyfile() {
         mkdir -p "$key_dir"
     fi
 
+    if [ "$key_file_path" == "$default_key_filepath" ]; then
+        parent_directory=$(dirname "$key_file_path")
+        chmod -R  500 "$parent_directory" && \
+        chown -R $MB_XRPL_USER: "$parent_directory" || (echomult "Error occurred in permission and ownership assignment of key file directory." &&  exit 1)
+    fi
+
     if [ -e "$key_file_path" ]; then
-        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?"; then
+        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?" "n"; then
+            echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret)
+                account_json=$(exec_jshelper generate-account $existing_secret) || exit 1
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-                echomult "Retrived account details via secret."
+
+                chmod 400 "$key_file_path" && \
+                chown $MB_XRPL_USER: $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
+                echomult "Retrived account details via secret.\n"
                 return 0
             else
                 echomult "Error: Existing secret file does not have the expected format."
                 return 1
             fi
+        else
+            ! confirm "Are you sure you want to override the existing key file?"  && exit 1
         fi
     fi
 
-    if [ "$key_file_path" == "$default_key_filepath" ]; then
-        parent_directory=$(dirname "$key_file_path")
-        chown -R $MB_XRPL_USER: "$parent_directory"
-        chmod -R 700 "$parent_directory"
-    fi
 
-    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path"
-    chmod 600 "$key_file_path"
-    echomult "Key file saved successfully at $key_file_path"
-
-    chown $MB_XRPL_USER: $key_file_path
+    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
+    chmod 400 "$key_file_path" && \
+    chown $MB_XRPL_USER: $key_file_path && \
+    echomult "Key file saved successfully at $key_file_path" || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
 
     return 0
 }
@@ -887,25 +888,7 @@ function set_host_xrpl_account() {
             done
         fi
 
-        # Check for saved secrets due to a previous installation.
-        if [[ -f "$secret_backup_location" || -f "$key_file_path" ]]; then
-
-            key_file_dir=$(dirname "$key_file_path")
-            if [ ! -d "$key_file_dir" ]; then
-                mkdir -p "$key_file_dir"
-            fi
-
-            if [ -f "$secret_backup_location" ]; then
-                echomult "Retrived account details via a backed-up secret." && mv $secret_backup_location $key_file_path
-            fi
-
-            generate_and_save_keyfile "$key_file_path"
-
-        else
-
-            echomult "Generating new keypair for the host...\n"
-            generate_and_save_keyfile "$key_file_path"
-        fi
+        generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
@@ -983,8 +966,8 @@ function set_host_xrpl_account() {
             ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
 
             # Modifying key file ownership to MB_XRPL_USER.
-            chown $MB_XRPL_USER: $key_file_path
-            chmod 600 $key_file_path
+            chown $MB_XRPL_USER: $key_file_path && \
+            chmod 400 $key_file_path || (echomult "Error occurred in permission and ownership assignment of key file." &&  exit 1)
 
             xrpl_account_secret=$xrpl_secret
 
@@ -1695,15 +1678,11 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
+    echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-            \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-            \nThis is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
-
-    ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0
@@ -1724,13 +1703,10 @@ elif [ "$mode" == "transfer" ]; then
                 while allowing you to transfer the registration to a preferred transferee.
                 \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
-            echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
-                stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-                \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-                \nThis is irreversible. Make sure you have your account address and
-                secret elsewhere before proceeding.\n"
+            echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+            \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
 
-            ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+            ! confirm "\nAre you sure you want to continue?" && exit 1
 
         fi
 

@@ -602,7 +602,12 @@ class Setup {
             const acc = this.#getConfig().xrpl;
             await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
-            console.log(`Setting Regular Key...`);
+            if(regularKey){
+                console.log(`Setting Regular Key...`);
+            }
+            else{
+                console.log(`Deleting Regular Key...`);
+            }
 
             try {
                 await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
@@ -613,7 +618,13 @@ class Setup {
                 const xrplAcc = new evernode.XrplAccount(acc.address, acc.secret, { xrplApi: xrplApi });
 
                 await xrplAcc.setRegularKey(regularKey);
-                console.log(`Regular key ${regularKey} was assigned to account ${acc.address} successfully.`);
+
+                if(regularKey){
+                    console.log(`Regular key ${regularKey} was assigned to account ${acc.address} successfully.`);
+                }  
+                else{
+                    console.log(`Regular key was deleted from account ${acc.address} successfully.`);
+                }
 
                 await xrplApi.disconnect();
             }

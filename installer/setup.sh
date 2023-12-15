@@ -34,7 +34,7 @@ fi
 
 # Prepare resources URLs
 resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/sashimono/installer/licence.txt"
+licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$resource_storage/setup.sh"
 installer_url="$resource_storage/installer.tar.gz"
@@ -47,7 +47,9 @@ nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 config_json_path="$setup_helper_dir/configuration.json"
 operation="register"
-min_xrp_amount_per_month=25
+min_operational_cost_per_month=5
+# 3 Month initial operational duration is considered.
+initial_operational_duration=3
 spinner=( '|' '/' '-' '\');
 xrpl_address="-"
 xrpl_secret="-"
@@ -81,11 +83,6 @@ noroot_user=${SUDO_USER:-$(whoami)}
 
 # Default key path is set to a path in MB_XRPL_USER home
 default_key_filepath="/home/$MB_XRPL_USER/.evernode-host/.host-account-secret.key"
-
-# Backed up secret location.
-# Used to restore secret related to a previous installation attempt
-secret_backup_location="/root/.evernode/.host-account-secret.key"
-
 
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -160,7 +157,7 @@ if $installed ; then
         && echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." \
         && exit 1
 
-    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "set-regkey" ] \
+    [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] &&  [ "$1" != "delete" ] &&  [ "$1" != "governance" ] &&  [ "$1" != "auto-update" ] &&  [ "$1" != "regkey" ] \
         && echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -175,7 +172,7 @@ if $installed ; then
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
                 \nauto-update - Evernode Auto Updater management
-                \nset-regkey - Set regular key" \
+                \nregkey - Regular key management" \
         && exit 1
 elif [ -d $SASHIMONO_BIN ] ; then
     [ "$1" != "install" ] && [ "$1" != "uninstall" ] \
@@ -209,8 +206,8 @@ if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "updat
     [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
     [ "$2" == "-q" ] && interactive=false || interactive=true
     [ "$mode" == "transfer" ] && transfer=true || transfer=false
-    [ "$mode" == "set-regkey" ] && set_regkey=true || set_regkey=false
-    (! $transfer || $installed || $set_regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+    [ "$mode" == "regkey" ] && regkey=true || regkey=false
+    (! $transfer || $installed || $regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 fi
 
 # Change the relevant setup helper path based on Evernode installation condition and the command mode.
@@ -265,7 +262,7 @@ function check_prereq() {
 
     # Check qrencode command is installed.
     if ! command -v qrencode &>/dev/null; then
-        stage "qrencode command not found. Installing.."
+        echo "qrencode command not found. Installing.."
         apt-get install -y qrencode >/dev/null
     fi
 }
@@ -353,7 +350,7 @@ function exec_jshelper() {
     [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     
@@ -369,7 +366,7 @@ function exec_jshelper_root() {
     [ -p $resp_file ] || mkfifo $resp_file
 
     # Execute js helper asynchronously while collecting response to fifo file.
-    RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" >/dev/null 2>&1 &
+    RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
     local pid=$!
     local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
     
@@ -759,7 +756,7 @@ function set_rippled_server() {
 function set_auto_update() {
     enable_auto_update=false
     if $interactive; then
-        if confirm "Do you want to enable auto updates?" "n" ; then
+        if confirm "\nDo you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." "n" ; then
             enable_auto_update=true
         fi
     fi
@@ -768,8 +765,8 @@ function set_auto_update() {
 function set_regular_key() {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN set-regkey $1 &&
-        echo "There was an error in setting the regular key." && return 1
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN regkey $1 &&
+        echo "There was an error in changing the regular key." && return 1
 }
 
 function set_transferee_address() {
@@ -804,7 +801,7 @@ function generate_qrcode() {
 
 function generate_and_save_keyfile() {
 
-    local account_json=$(exec_jshelper generate-account)
+    account_json=$(exec_jshelper generate-account) || { echo "Error occurred in account setting up."; exit 1; }
     xrpl_address=$(jq -r '.address' <<< "$account_json")
     xrpl_secret=$(jq -r '.secret' <<< "$account_json")
 
@@ -820,35 +817,43 @@ function generate_and_save_keyfile() {
         mkdir -p "$key_dir"
     fi
 
+    if [ "$key_file_path" == "$default_key_filepath" ]; then
+        parent_directory=$(dirname "$key_file_path")
+        chmod -R  500 "$parent_directory" && \
+        chown -R $MB_XRPL_USER: "$parent_directory" || { echomult "Error occurred in permission and ownership assignment of key file directory.";  exit 1; }
+    fi
+
     if [ -e "$key_file_path" ]; then
-        if ! confirm "The file '$key_file_path' already exists. Do you want to override it?"; then
+        if confirm "The file '$key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation." ; then
+            echomult "Continuing with the existing key file."
             existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
             if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                account_json=$(exec_jshelper generate-account $existing_secret)
+                account_json=$(exec_jshelper generate-account $existing_secret) || { echomult "Error occurred when existing account retrieval.";  exit 1; }
                 xrpl_address=$(jq -r '.address' <<< "$account_json")
                 xrpl_secret=$(jq -r '.secret' <<< "$account_json")
-                echomult "Retrived account details via secret."
+
+                chmod 400 "$key_file_path" && \
+                chown $MB_XRPL_USER: $key_file_path || { echomult "Error occurred in permission and ownership assignment of key file.";  exit 1; }
+                echomult "Retrived account details via secret.\n"
                 return 0
             else
                 echomult "Error: Existing secret file does not have the expected format."
-                return 1
+                exit 1
             fi
+        else
+            exit 1
         fi
+    else
+
+        echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
+        chmod 400 "$key_file_path" && \
+        chown $MB_XRPL_USER: $key_file_path && \
+        echomult "Key file saved successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
+
+        return 0
     fi
 
-    if [ "$key_file_path" == "$default_key_filepath" ]; then
-        parent_directory=$(dirname "$key_file_path")
-        chown -R $MB_XRPL_USER: "$parent_directory"
-        chmod -R 700 "$parent_directory"
-    fi
-
-    echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path"
-    chmod 600 "$key_file_path"
-    echomult "Key file saved successfully at $key_file_path"
-
-    chown $MB_XRPL_USER: $key_file_path
-
-    return 0
+    exit 1
 }
 
 function set_host_xrpl_account() {
@@ -886,31 +891,20 @@ function set_host_xrpl_account() {
 
             done
         fi
+        
+        # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
+        # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
+        local inc_reserves_count=$((1 + 1 + $alloc_instcount))
+        min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) || { echomult "Error occuured in checking XAH requirement."; exit 1; }
+        
+        min_xah_requirement=$(echo "$min_operational_cost_per_month*$initial_operational_duration + $min_reserve_requirement" | bc )
 
-        # Check for saved secrets due to a previous installation.
-        if [[ -f "$secret_backup_location" || -f "$key_file_path" ]]; then
-
-            key_file_dir=$(dirname "$key_file_path")
-            if [ ! -d "$key_file_dir" ]; then
-                mkdir -p "$key_file_dir"
-            fi
-
-            if [ -f "$secret_backup_location" ]; then
-                echomult "Retrived account details via a backed-up secret." && mv $secret_backup_location $key_file_path
-            fi
-
-            generate_and_save_keyfile "$key_file_path"
-
-        else
-
-            echomult "Generating new keypair for the host...\n"
-            generate_and_save_keyfile "$key_file_path"
-        fi
+        generate_and_save_keyfile "$key_file_path"
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-        \n1. At least $min_xrp_amount_per_month XAH (Xahau XRP) to cover regular transaction fees for first month.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
         \n2. At least $reg_fee EVR to cover Evernode registration fee.
         \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -929,9 +923,9 @@ function set_host_xrpl_account() {
 
         if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
 
-            echomult "To set up your host account, ensure a deposit of $min_xrp_amount_per_month XAH (Xahau XRP) to cover the regular transaction fees for the first month."
+            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
 
-            required_balance=$min_xrp_amount_per_month
+            required_balance=$min_xah_requirement
             while true ; do
                 wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
                 && break
@@ -975,6 +969,17 @@ function set_host_xrpl_account() {
 
             read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
             ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
+
+            parent_directory=$(dirname "$key_file_path")
+
+            canonicalized_directory=$(realpath "$parent_directory")
+            root_directory="/root"
+            canonicalized_root=$(realpath "$root_directory")
+
+            if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
+                echo "Key should not be located in /root directory." && continue
+            fi
+
             xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
 
             ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
@@ -983,8 +988,8 @@ function set_host_xrpl_account() {
             ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
 
             # Modifying key file ownership to MB_XRPL_USER.
-            chown $MB_XRPL_USER: $key_file_path
-            chmod 600 $key_file_path
+            chown $MB_XRPL_USER: $key_file_path && \
+            chmod 400 $key_file_path || { echomult "Error occurred in permission and ownership assignment of key file.";  exit 1; }
 
             xrpl_account_secret=$xrpl_secret
 
@@ -1627,9 +1632,13 @@ if [ "$mode" == "install" ]; then
 
 
     # Display licence file and ask for concent.
-    printf "\n*****************************************************************************************************\n\n"
-    curl -s -L $licence_url | cat
-    printf "\n\n*****************************************************************************************************\n"
+    printf "\n***********************************************************************************************************************\n\n"
+    echomult "EVERNODE SOFTWARE LICENCE AGREEMENT"
+    echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENCE.
+    \nFor full details, please refer to the licence document available at:
+    \n$licence_url"
+
+    printf "\n\n***********************************************************************************************************************\n"
     ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
     ! confirm "\nAre you performing a fresh Evernode installation?
@@ -1695,15 +1704,11 @@ if [ "$mode" == "install" ]; then
 
 elif [ "$mode" == "uninstall" ]; then
 
+    echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
-    echomult "\nWARNING! Uninstalling will deregister your host from $evernode and you will LOSE YOUR ACCOUNT address
-            stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-            \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-            \nThis is irreversible. Make sure you have your account address and
-            secret elsewhere before proceeding.\n"
-
-    ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0
@@ -1724,13 +1729,10 @@ elif [ "$mode" == "transfer" ]; then
                 while allowing you to transfer the registration to a preferred transferee.
                 \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
-            echomult "\nWARNING! By proceeding this you will LOSE YOUR ACCOUNT address
-                stored in '$MB_XRPL_DATA/mb-xrpl.cfg' and the secret in the specified path.
-                \nNOTE: Secret path can be found at '$MB_XRPL_DATA/mb-xrpl.cfg'.
-                \nThis is irreversible. Make sure you have your account address and
-                secret elsewhere before proceeding.\n"
+            echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
+            \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
 
-            ! confirm "\nHave you read above warning and backed up your account credentials?" && exit 1
+            ! confirm "\nAre you sure you want to continue?" && exit 1
 
         fi
 
@@ -1754,6 +1756,8 @@ elif [ "$mode" == "transfer" ]; then
             rippled_server=${6}             # Rippled server URL
         fi
 
+        set_environment_configs
+
         init_setup_helpers
 
         # Set rippled server based on the user input.
@@ -1769,6 +1773,9 @@ elif [ "$mode" == "transfer" ]; then
         $interactive && ! confirm "\nThis will deregister $xrpl_account_address from $evernode
             while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
+
+        config_json_path="/tmp/evernode-setup-helpers/configuration.json"
+        export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
 
         # Execute transfer from js helper.
         exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address $xrpl_account_secret $transferee_address
@@ -1818,7 +1825,7 @@ elif [ "$mode" == "governance" ]; then
 
 elif [ "$mode" == "auto-update" ]; then
     if [ "$2" == "enable" ]; then
-        enable_evernode_auto_updater && exit 0
+        confirm "Are you sure you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." && enable_evernode_auto_updater && exit 0
     elif [ "$2" == "disable" ]; then
         remove_evernode_auto_updater && exit 0
     else
@@ -1828,14 +1835,24 @@ elif [ "$mode" == "auto-update" ]; then
             \ndisable - Disable $evernode auto updater service." && exit 1
     fi
 
-elif [ "$mode" == "set-regkey" ]; then
-    if [ -z "$2" ]; then
-        echo "Regular key to be set must be provided." && exit 1
-    elif [[ ! "$2" =~ ^[[:alnum:]]{24,34}$ ]]; then
-        echo "Regular key is invalid." && exit 1
+elif [ "$mode" == "regkey" ]; then
+    if [ "$2" == "set" ]; then
+        if [ -z "$3" ]; then
+            echo "Regular key to be set must be provided." && exit 1
+        elif [[ ! "$3" =~ ^[[:alnum:]]{24,34}$ ]]; then
+            echo "Regular key is invalid." && exit 1
+        fi
+        set_regular_key $3
+        exit 0  
+    elif [ "$2" == "delete" ]; then
+        set_regular_key
+        exit 0  
+    else
+        echomult "Regular key management tool
+            \nSupported commands:
+            \nset [regularKey] - Assign or update the regular key.
+            \ndelete - Delete the regular key" && exit 1
     fi
-    set_regular_key $2
-    exit 0
 fi
 
 [ "$mode" != "uninstall" ] && check_installer_pending_finish

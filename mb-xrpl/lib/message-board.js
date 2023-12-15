@@ -448,9 +448,6 @@ class MessageBoard {
     }
 
     async #startHeartBeatScheduler() {
-        // Sending a heartbeat at startup
-        await this.#sendHeartbeat();
-
         const momentSize = this.hostClient.config.momentSize;
         const halfMomentSize = momentSize / 2; // Getting half of moment size
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
@@ -462,10 +459,24 @@ class MessageBoard {
             await this.#sendHeartbeat();
         };
 
+        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
+        const currentMoment = await this.hostClient.getMoment();
+        const currentMomentDuration = currentTimestamp - currentMomentStartIdx;
+        const hostInfo = await this.hostClient.getRegistration();
 
-        // If the start index is in the begining of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (evernode.UtilHelpers.getCurrentUnixTime() - currentMomentStartIdx) < halfMomentSize ? ((momentSize + 60) * 1000) : ((momentSize) * 1000);
+        // Schedule the next heartbeat based on last heartbeat occurrence.
+        // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
+        // If schedule the next heartbeat based on its last heartbeat.
+        // If it is not further checks whether it is about to send the heartbeat at the second half of a moment or not.
+        // If the current timestamp lies in the second half of the moment, schedule the next heartbeat withing the next moment (in the its first half).
+        // If it is not schedule it right now.
+        const schedule = (this.lastHeartbeatMoment === currentMoment)
+            ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
+            : (currentMomentDuration > halfMomentSize && currentMomentDuration < momentSize) ? halfMomentSize : 0;
+
+        // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
+        const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
 
         setTimeout(async () => {
             await scheduler();

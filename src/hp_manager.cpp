@@ -870,6 +870,17 @@ namespace hp
                 d["hpfs"]["log"]["log_level"] = config.hpfs.log.log_level;
         }
 
+        // Hpsh
+            if(!config.hpsh.enabled.has_value())
+                d["hpsh"]["enabled"] = config.hpsh.enabled.value();
+            if (!config.hpsh.users.empty())
+            {
+                jsoncons::ojson users(jsoncons::json_array_arg);
+                for (auto &pubkey : config.hpsh.users)
+                    users.push_back(util::to_hex(pubkey));
+                d["hpsh"]["users"] = users;
+            }
+
         // Log
         {
             if (!config.log.log_level.empty())

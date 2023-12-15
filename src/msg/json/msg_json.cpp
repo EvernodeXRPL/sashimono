@@ -474,6 +474,41 @@ namespace msg::json
             if (hpfs.contains(msg::FLD_LOG) && hpfs[msg::FLD_LOG].contains(msg::FLD_LOG_LEVEL))
                 msg.config.hpfs.log.log_level = hpfs[msg::FLD_LOG][msg::FLD_LOG_LEVEL].as<std::string>();
         }
+        if (config.contains(msg::FLD_HPSH))
+        {
+            const jsoncons::json &hpsh = config[msg::FLD_HPFS];
+            if (hpsh.contains(msg::FLD_ENABLED))
+                    msg.config.hpsh.enabled = hpsh[msg::FLD_ENABLED].as<bool>();
+            if (hpsh.contains(msg::FLD_USERS))
+            {
+                if (!hpsh[msg::FLD_USERS].empty() && !hpsh[msg::FLD_USERS].is_array())
+                {
+                    LOG_ERROR << "Invalid users value.";
+                    return -1;
+                }
+                else if (!hpsh[msg::FLD_USERS].empty() && hpsh[msg::FLD_USERS].size() > 0)
+                {
+                    for (auto &val : hpsh[msg::FLD_USERS].array_range())
+                    {
+                        if (!val.is<std::string>())
+                        {
+                            LOG_ERROR << "Invalid user pubkey value.";
+                            return -1;
+                        }
+
+                        const std::string user_pubkey = val.as<std::string>();
+                        const std::string user_pubkey_bin = util::to_bin(user_pubkey);
+                        if (user_pubkey_bin.empty())
+                        {
+                            LOG_ERROR << "Invalid user pubkey value: " << user_pubkey_bin;
+                            return -1;
+                        }
+
+                        msg.config.hpsh.users.emplace(user_pubkey_bin);
+                    }
+                }
+            }
+        }
 
         if (config.contains(msg::FLD_LOG))
         {

@@ -903,6 +903,9 @@ function set_host_xrpl_account() {
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
+        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
+        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
+
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
         \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
         \n2. At least $reg_fee EVR to cover Evernode registration fee.

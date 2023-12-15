@@ -135,14 +135,14 @@ int parse_cmd(int argc, char **argv)
     if (!is_dev_mode)
     {
         if(create->parsed()){
-            std::cout << "Developer mode must be enabled to access this command." << std::endl;
+            std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
             return -1;
         }
-        if(json->parsed()){
+        if(json->parsed() && !json_message.empty()){
             jsoncons::json json_data = jsoncons::json::parse(json_message);
             if (json_data.contains("type") && json_data["type"].as_string() == "create")
             {
-                std::cout << "Developer mode must be enabled to access this command." << std::endl;
+                std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
                 return -1;
             }
         }

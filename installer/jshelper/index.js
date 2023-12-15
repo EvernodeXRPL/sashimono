@@ -9,6 +9,8 @@ const http = require('http');
 const crypto = require('crypto');
 const { appenv } = require("../../mb-xrpl/lib/appenv");
 
+let NETWORK = appenv.NETWORK;
+
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
         if (!args[i]) throw "Params not specified.";
@@ -22,7 +24,7 @@ const funcs = {
     'validate-server': async (args) => {
         checkParams(args, 1);
         const rippledUrl = args[0];
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
         evernode.Defaults.set({
             rippledServer: rippledUrl
         });
@@ -39,7 +41,7 @@ const funcs = {
         const accountAddress = args[2];
         const validateFor = args[3] || "register";
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -94,7 +96,7 @@ const funcs = {
         const accountAddress = args[1];
         const accountSecret = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl
@@ -123,7 +125,7 @@ const funcs = {
         const governorAddress = args[1];
         const configName = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -155,7 +157,7 @@ const funcs = {
         const accountSecret = args[3];
         const transfereeAddress = args[4];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -247,7 +249,7 @@ const funcs = {
         const governorAddress = args[1];
         const accountAddress = args[2];
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -297,7 +299,7 @@ const funcs = {
 
         const WAIT_PERIOD = 120; // seconds
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -383,7 +385,7 @@ const funcs = {
 
         const WAIT_PERIOD = 120; // seconds
 
-        await evernode.Defaults.useNetwork(appenv.NETWORK);
+        await evernode.Defaults.useNetwork(NETWORK);
 
         evernode.Defaults.set({
             rippledServer: rippledUrl,
@@ -506,7 +508,47 @@ const funcs = {
         } catch (errorCode) {
             return { success: false, result: errorCode };
         }
+    },
+
+    'compute-xah-requirement': async (args) => {
+        checkParams(args, 2);
+        const rippledUrl = args[0];
+        const incReserveCount = Number(args[1]);
+
+        await evernode.Defaults.useNetwork(NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl
+        });
+
+        try {
+            const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+            await xrplApi.connect();
+
+            evernode.Defaults.set({
+                xrplApi: xrplApi
+            });
+
+            const serverInfo = await xrplApi.getServerInfo();
+            if (serverInfo?.info?.validated_ledger) {
+                const reserves = serverInfo.info.validated_ledger
+                const estimate = (reserves?.reserve_base_native ?? reserves?.reserve_base_xrp) + (reserves?.reserve_inc_native ?? reserves?.reserve_inc_xrp) * incReserveCount;
+
+                if (estimate > 0) {
+                    await xrplApi.disconnect();
+                    return { success: true, result: `${estimate}` };
+                }
+            }
+
+            await xrplApi.disconnect();
+            return { success: false, result: "Failed to retrieve the estimation." };
+
+
+        } catch {
+            return { success: false, result: "Error occurred in websocket connection." };
+        }
     }
+
 }
 
 function handleResponse(resp) {
@@ -525,9 +567,19 @@ function handleResponse(resp) {
 async function app() {
 
     try {
+        const networkIdx = process.argv.findIndex(a => a.startsWith('network:'));
+        if (networkIdx >= 0) {
+            const sp = process.argv[networkIdx].split(':');
+            if (sp.length > 1 && sp[1]) {
+                NETWORK = sp[1];
+                process.argv.splice(networkIdx, 1);
+            }
+        }
+
         const command = process.argv[2];
         if (!command)
             throw "Command not specified.";
+
 
         const resp = await funcs[command](process.argv.splice(3));
         if (!resp)

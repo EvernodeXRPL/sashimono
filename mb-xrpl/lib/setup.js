@@ -359,7 +359,7 @@ class Setup {
         else if (totalInstanceCount && isNaN(totalInstanceCount))
             throw 'Maximum instance count should be a number';
 
-        const leaseAmountParsed = leaseAmount ? parseInt(leaseAmount) : 0;
+        const leaseAmountParsed = leaseAmount ? parseFloat(leaseAmount) : 0;
         const totalInstanceCountParsed = totalInstanceCount ? parseInt(totalInstanceCount) : 0;
 
         // Return if not changed.

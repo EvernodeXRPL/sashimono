@@ -220,7 +220,7 @@ class Setup {
     }
 
     // Upgrades existing message board data to the new version.
-    async upgrade(governorAddress) {
+    async upgrade() {
 
         // Do a simple version change in the config.
         const cfg = this.#getConfig();
@@ -233,20 +233,8 @@ class Setup {
         if (!cfg.xrpl.network)
             cfg.xrpl.network = appenv.NETWORK;
 
-        if (!cfg.xrpl.governorAddress) {
-            await setEvernodeDefaults(cfg.xrpl.network, governorAddress, cfg.xrpl.rippledServer);
-
-            const hostClient = new evernode.HostClient(cfg.xrpl.address, cfg.xrpl.secret);
-            await hostClient.connect();
-
-            evernode.Defaults.set({
-                xrplApi: hostClient.xrplApi
-            });
-
-            cfg.xrpl.governorAddress = governorAddress;
-
-            await hostClient.disconnect();
-        }
+        if (!cfg.xrpl.secretPath)
+            cfg.xrpl.secretPath = appenv.SECRET_CONFIG_PATH;
 
         this.#saveConfig(cfg);
 
@@ -605,10 +593,10 @@ class Setup {
             const acc = this.#getConfig().xrpl;
             await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
-            if(regularKey){
+            if (regularKey) {
                 console.log(`Setting Regular Key...`);
             }
-            else{
+            else {
                 console.log(`Deleting Regular Key...`);
             }
 
@@ -622,10 +610,10 @@ class Setup {
 
                 await xrplAcc.setRegularKey(regularKey);
 
-                if(regularKey){
+                if (regularKey) {
                     console.log(`Regular key ${regularKey} was assigned to account ${acc.address} successfully.`);
-                }  
-                else{
+                }
+                else {
                     console.log(`Regular key was deleted from account ${acc.address} successfully.`);
                 }
 

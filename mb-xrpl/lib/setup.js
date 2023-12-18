@@ -230,6 +230,9 @@ class Setup {
         if (!cfg.xrpl.rippledServer)
             cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
 
+        if (!cfg.xrpl.network)
+            cfg.xrpl.network = appenv.NETWORK;
+
         if (!cfg.xrpl.governorAddress) {
             await setEvernodeDefaults(cfg.xrpl.network, governorAddress, cfg.xrpl.rippledServer);
 

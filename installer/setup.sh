@@ -19,6 +19,12 @@ max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode-beta
+
+repo_owner="EvernodeXRPL"
+repo_name="evernode-resources"
+desired_branch="main"
+
+# Prepare resources URLs
 cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
@@ -26,15 +32,15 @@ licence_url="$cloud_storage/licence.txt"
 jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
 setup_version_timestamp_file="setup.version.timestamp"
-
-repo_owner="EvernodeXRPL"
-repo_name="evernode-resources"
-desired_branch="main"
-
-# Prepare resources URLs
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
+licence_url="$cloud_storage/licence.txt"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 
-default_rippled_server="wss://hooks-testnet-v3.xrpl-labs.com"
+installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
+default_rippled_server="wss://xahau.network"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
@@ -1210,15 +1216,9 @@ function update_evernode() {
     echo "Starting upgrade..."
     # Alias for setup.sh is created during 'install_evernode' too. 
     # If only the setup.sh is updated but not the installer, then the alias should be created again.
-    if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
+    if ([ "$latest_installer_script_version" != "$current_installer_script_version" ] || [ "$latest_setup_script_version" != "$current_setup_script_version" ]) ; then
         uninstall_evernode 1
         install_evernode 1
-    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
-        [ -d $log_dir ] || mkdir -p $log_dir
-        logfile="$log_dir/installer-$(date +%s).log"
-        remove_evernode_alias
-        ! create_evernode_alias && echo "Alias creation failed."
-        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
     rm -r $setup_helper_dir >/dev/null 2>&1

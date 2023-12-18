@@ -230,9 +230,6 @@ class Setup {
         if (!cfg.xrpl.rippledServer)
             cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
 
-        if (!cfg.xrpl.network)
-            cfg.xrpl.network = appenv.NETWORK;
-
         this.#saveConfig(cfg);
 
         await Promise.resolve(); // async placeholder.

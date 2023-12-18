@@ -25,7 +25,7 @@ repo_name="evernode-resources"
 desired_branch="main"
 
 # Prepare resources URLs
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-chalith-f79e066a-2501-41de-9fcc-f75fd508a5ba"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
 licence_url="$cloud_storage/licence.txt"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$cloud_storage/setup.sh"

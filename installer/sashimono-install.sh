@@ -16,7 +16,7 @@ diskKB=${9}
 lease_amount=${10}
 rippled_server=${11}
 xrpl_account_address=${12}
-xrpl_account_secret=${13}
+xrpl_account_secret_path=${13}
 email_address=${14}
 tls_key_file=${15}
 tls_cert_file=${16}
@@ -27,6 +27,7 @@ ipv6_net_interface=${20}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
+setup_helper_dir="/tmp/evernode-setup-helpers"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -53,48 +54,6 @@ function set_cpu_info() {
     [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
     [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
     [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
-}
-
-function enable_evernode_auto_updater() {
-    # Create the service.
-    echo "[Unit]
-Description=Service for the Evernode auto-update.
-After=network.target
-[Service]
-User=root
-Group=root
-Type=oneshot
-ExecStart=/usr/bin/evernode update -q
-[Install]
-WantedBy=multi-user.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    # Create a timer for the service (every two hours).
-    echo "[Unit]
-Description=Timer for the Evernode auto-update.
-# Allow manual starts
-RefuseManualStart=no
-# Allow manual stops
-RefuseManualStop=no
-[Timer]
-Unit=$EVERNODE_AUTO_UPDATE_SERVICE.service
-OnCalendar=0/12:00:00
-# Execute job if it missed a run due to machine being off
-Persistent=true
-# To prevent rush time, adding 2 hours delay
-RandomizedDelaySec=7200
-[Install]
-WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
-
-    echo "Enabling Evernode auto update service..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.service
-
-    echo "Enabling Evernode auto update timer..."
-    systemctl enable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    echo "Starting Evernode auto update timer..."
-    systemctl start $EVERNODE_AUTO_UPDATE_SERVICE.timer
 }
 
 function setup_certbot() {
@@ -230,12 +189,15 @@ rm -r "$tmp"
     openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
         -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
-# Setup tls certs used for contract instance websockets.
-[ "$UPGRADE" == "0" ] && setup_tls_certs
-
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
+
+# Setup tls certs used for contract instance websockets.
+[ "$UPGRADE" == "0" ] && setup_tls_certs
+
+# Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
+cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
@@ -275,9 +237,13 @@ if [ "$NO_MB" == "" ]; then
 
     cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-    # Creating message board user (if not exists).
+    # Create MB_XRPL_USER if does not exists.
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+    fi
+
+    # Assign message board user priviledges.
+    if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
         usermod --lock $MB_XRPL_USER
         usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
         loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
@@ -289,18 +255,14 @@ if [ "$NO_MB" == "" ]; then
     # Change ownership to message board user.
     chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
-    # Betage and register if not upgrade mode.
+    # Register if not upgrade mode.
     if [ "$UPGRADE" == "0" ]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host xrpl account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-            # Commented for now, because 'betagen' will no longer be used.
-            # ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN betagen $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $xrpl_account_secret && echo "XRPLACC_FAILURE" && rollback
-            # doreg=1
-
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 
@@ -447,11 +409,6 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
     fi
 fi
-
-stage "Configuring auto updater service"
-
-# Enable the Evernode Auto Updater Service.
-enable_evernode_auto_updater
 
 echo "Sashimono installed successfully."
 

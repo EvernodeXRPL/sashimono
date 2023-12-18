@@ -7,6 +7,7 @@ peer_port=$2
 user_port=$3
 instance_name=$4
 prefix="sashi"
+max_kill_attempts=5
 
 # Check whether this is a valid sashimono username.
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
@@ -55,18 +56,16 @@ for mnt in "${mntarr[@]}"; do
 done
 
 # Force kill user processes.
-procs=$(ps -U $user 2>/dev/null | wc -l)
-if [ "$procs" != "0" ]; then
-
-    # Wait for some time and check again.
+i=0
+while true; do
     sleep 1
     procs=$(ps -U $user 2>/dev/null | wc -l)
-    if [ "$procs" != "0" ]; then
-        echo "Force killing user processes."
-        pkill -SIGKILL -u "$user"
-    fi
-
-fi
+    [ "$procs" == "1" ] && echo "All user processes terminated." && break
+    [[ $i -ge $max_kill_attempts ]] && echo "Max force user process kill attempts $max_kill_attempts reached. Abondaning." && break
+    ((i++))
+    echo "Force killing user processes. Retrying $i..."
+    pkill -SIGKILL -u "$user"
+done
 
 echo "Removing cgroups"
 # Delete config values.

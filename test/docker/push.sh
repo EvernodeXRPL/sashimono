@@ -1,5 +1,5 @@
 #!/bin/bash
 
-img=evernodedev/sashimono
+img=evernode/sashimono
 
 docker image push --all-tags $img

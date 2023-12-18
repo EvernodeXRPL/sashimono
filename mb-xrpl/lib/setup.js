@@ -230,11 +230,13 @@ class Setup {
         if (!cfg.xrpl.rippledServer)
             cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
 
+        // Write network and secret for older installations //
         if (!cfg.xrpl.network)
             cfg.xrpl.network = appenv.NETWORK;
 
         if (!cfg.xrpl.secretPath)
             cfg.xrpl.secretPath = appenv.SECRET_CONFIG_PATH;
+        ////
 
         this.#saveConfig(cfg);
 

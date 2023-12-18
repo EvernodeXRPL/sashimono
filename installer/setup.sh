@@ -25,17 +25,16 @@ repo_name="evernode-resources"
 desired_branch="main"
 
 # Prepare resources URLs
-cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
-setup_script_url="$cloud_storage/setup.sh"
-installer_url="$cloud_storage/installer.tar.gz"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-chalith-f79e066a-2501-41de-9fcc-f75fd508a5ba"
 licence_url="$cloud_storage/licence.txt"
-jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
-installer_version_timestamp_file="installer.version.timestamp"
-setup_version_timestamp_file="setup.version.timestamp"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
 setup_script_url="$cloud_storage/setup.sh"
 installer_url="$cloud_storage/installer.tar.gz"
-licence_url="$cloud_storage/licence.txt"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
+installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
 jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 
 installer_version_timestamp_file="installer.version.timestamp"
@@ -800,25 +799,6 @@ function generate_qrcode() {
 
 function generate_and_save_keyfile() {
 
-    while true ; do
-
-        read -p "Specify the XRPL account address: " xrpl_address </dev/tty
-        ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
-
-        echo "Checking account $xrpl_address..."
-        ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
-
-        # Take hidden input and print empty echo (new line) at the end.
-        read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
-        ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
-
-        echo "Checking account keys..."
-        ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
-
-        break
-
-    done
-
     if [ "$#" -ne 1 ]; then
         echomult "Error: Please provide the full path of the secret file."
         return 1
@@ -858,6 +838,24 @@ function generate_and_save_keyfile() {
             exit 1
         fi
     else
+        while true ; do
+
+            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+
+            echo "Checking account $xrpl_address..."
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+
+            # Take hidden input and print empty echo (new line) at the end.
+            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
+
+            echo "Checking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+            break
+
+        done
 
         echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
         chmod 400 "$key_file_path" && \

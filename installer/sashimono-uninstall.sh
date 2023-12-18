@@ -2,6 +2,8 @@
 # Sashimono agent uninstall script.
 # This must be executed with root privileges.
 
+export TRANSFER=${TRANSFER:-0}
+
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
@@ -28,24 +30,6 @@ function cgrulesengd_servicename() {
         local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
         echo "${cgrulesengd_filename%.*}"
     fi
-}
-
-function remove_evernode_auto_updater() {
-
-    echo "Removing Evernode auto update timer..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-    rm $service_path
-
-    echo "Removing Evernode auto update service..."
-    systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-    systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-    service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-    rm $service_path
-
-    # Reload the systemd daemon.
-    systemctl daemon-reload
 }
 
 function cleanup_certbot_ssl() {
@@ -195,7 +179,6 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     pkill -u $MB_XRPL_USER # Kill any running processes.
     sleep 0.5
     userdel -f "$MB_XRPL_USER"
-    rm -r /home/"${MB_XRPL_USER:?}"
 
 fi
 
@@ -214,8 +197,5 @@ fi
 groupdel $SASHIADMIN_GROUP
 
 [ "$UPGRADE" == "0" ] && echo "Sashimono uninstalled successfully." || echo "Sashimono uninstalled successfully. Your data has been preserved."
-
-# Remove the Evernode Auto Updater Service.
-[ "$UPGRADE" == "0" ] && remove_evernode_auto_updater
 
 exit 0

@@ -15,25 +15,20 @@ async function main() {
         if (process.argv.length >= 3) {
             if (process.argv.length >= 9 && process.argv[2] === 'new') {
                 const accountAddress = process.argv[3];
-                const accountSecret = process.argv[4];
+                const accountSecretPath = process.argv[4];
                 const governorAddress = process.argv[5];
                 const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
                 const ipv6NetInterface = (process.argv[10] === '-') ? null : process.argv[10];
+                const network = process.argv.length > 11 ? process.argv[11] : appenv.NETWORK;
                 const setup = new Setup();
-                const acc = await setup.setupHostAccount(accountAddress, accountSecret, rippledServer, governorAddress, domain);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface);
-            }
-            else if (process.argv.length === 7 && process.argv[2] === 'betagen') {
-                const governorAddress = process.argv[3];
-                const domain = process.argv[4];
-                const leaseAmount = process.argv[5];
-                const rippledServer = process.argv[6];
-                const setup = new Setup();
-                const acc = await setup.generateBetaHostAccount(rippledServer, governorAddress, domain);
-                setup.newConfig(acc.address, acc.secret, governorAddress, parseFloat(leaseAmount), rippledServer);
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network);
+
+                if (appenv.IS_DEV_MODE) {
+                    await setup.prepareHostAccount(domain);
+                }
             }
             else if (process.argv.length >= 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
@@ -73,13 +68,15 @@ async function main() {
             else if (process.argv.length >= 4 && process.argv[2] === 'governance') {
                 await GovernanceManager.handleCommand(process.argv[3], ...process.argv.slice(4));
             }
+            else if (process.argv.length >= 3 && process.argv[2] === 'regkey') {
+                await new Setup().setRegularKey(process.argv[3]);
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.
         node index.js version - Print version.
-        node index.js new [address] [secret] [governorAddress] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] - Create new config files.
-        node index.js betagen [governorAddress] [domain or ip] [leaseAmount] [rippledServer] - Generate beta host account and populate the configs.
-        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] - Register the host on Evernode.
+        node index.js new [address] [secretPath] [governorAddress] [domain or ip] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network] - Create new config files.
+        node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [description] [network] - Register the host on Evernode.
         node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
@@ -87,6 +84,7 @@ async function main() {
         node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
         node index.js delete [containerName] - Delete an instance and recreate the lease offer
         node index.js governance [command] [args] - Governance handling.
+        node index.js regkey [regularKey] - Regular key management.
         node index.js help - Print help.`);
             }
             else {

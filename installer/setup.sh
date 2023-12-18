@@ -792,6 +792,20 @@ function generate_qrcode() {
     qrencode -s 1 -l L -t UTF8 "$input_string"
 }
 
+function backup_key_file() {
+    key_file_path="$default_key_filepath"
+
+    key_dir=$(dirname "$key_file_path")
+    if [ ! -d "$key_dir" ]; then
+        mkdir -p "$key_dir"
+    fi
+
+    [ -f "$MB_XRPL_DATA/secret.cfg" ] && cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" \
+    chmod 400 "$key_file_path" && \
+    chown $MB_XRPL_USER: $key_file_path && \
+    echomult "Key file backed up successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
+}
+
 function generate_and_save_keyfile() {
 
     if [ "$#" -ne 1 ]; then
@@ -1719,10 +1733,11 @@ if [ "$mode" == "install" ]; then
 elif [ "$mode" == "uninstall" ]; then
 
     echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
-    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+    \nThe secret can be found inside the configuration stored at '$default_key_filepath'."
 
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
+    ! backup_key_file && echo "Error backing up key file." && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0

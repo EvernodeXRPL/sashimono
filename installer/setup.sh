@@ -18,29 +18,22 @@ instances_per_core=3
 max_non_ipv6_instances=5
 max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
-log_dir=/tmp/evernode
+log_dir=/tmp/evernode-beta
 
 repo_owner="EvernodeXRPL"
 repo_name="evernode-resources"
 desired_branch="main"
 
-latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
-latest_version_data=$(curl -s "$latest_version_endpoint")
-latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
-if [ -z "$latest_version" ]|| [ "$latest_version" = "null" ]; then
-    echo "Failed to retrieve latest version data."
-    exit 1
-fi
-
 # Prepare resources URLs
-resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
-licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
+cloud_storage="https://stevernode.blob.core.windows.net/evernode-beta-v3"
+licence_url="$cloud_storage/licence.txt"
 config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
-setup_script_url="$resource_storage/setup.sh"
-installer_url="$resource_storage/installer.tar.gz"
-jshelper_url="$resource_storage/setup-jshelper.tar.gz"
-
+setup_script_url="$cloud_storage/setup.sh"
+installer_url="$cloud_storage/installer.tar.gz"
+jshelper_url="$cloud_storage/setup-jshelper.tar.gz"
 installer_version_timestamp_file="installer.version.timestamp"
+setup_version_timestamp_file="setup.version.timestamp"
+
 default_rippled_server="wss://xahau.network"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 nodejs_util_bin="/usr/bin/node"
@@ -71,7 +64,7 @@ export MB_XRPL_USER="sashimbxrpl"
 export CG_SUFFIX="-cg"
 export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
 
-export NETWORK="${NETWORK:-mainnet}"
+export NETWORK="${NETWORK:-testnet}"
 
 # Private docker registry (not used for now)
 export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -799,11 +792,21 @@ function generate_qrcode() {
     qrencode -s 1 -l L -t UTF8 "$input_string"
 }
 
-function generate_and_save_keyfile() {
+function backup_key_file() {
+    key_file_path="$default_key_filepath"
 
-    account_json=$(exec_jshelper generate-account) || { echo "Error occurred in account setting up."; exit 1; }
-    xrpl_address=$(jq -r '.address' <<< "$account_json")
-    xrpl_secret=$(jq -r '.secret' <<< "$account_json")
+    key_dir=$(dirname "$key_file_path")
+    if [ ! -d "$key_dir" ]; then
+        mkdir -p "$key_dir"
+    fi
+
+    [ -f "$MB_XRPL_DATA/secret.cfg" ] && cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" \
+    chmod 400 "$key_file_path" && \
+    chown $MB_XRPL_USER: $key_file_path && \
+    echomult "Key file backed up successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
+}
+
+function generate_and_save_keyfile() {
 
     if [ "$#" -ne 1 ]; then
         echomult "Error: Please provide the full path of the secret file."
@@ -844,6 +847,24 @@ function generate_and_save_keyfile() {
             exit 1
         fi
     else
+        while true ; do
+
+            read -p "Specify the XRPL account address: " xrpl_address </dev/tty
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+
+            echo "Checking account $xrpl_address..."
+            ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+
+            # Take hidden input and print empty echo (new line) at the end.
+            read -s -p "Specify the XRPL account secret (your input will be hidden on screen): " xrpl_secret </dev/tty && echo ""
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid XRPL account secret." && continue
+
+            echo "Checking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+            break
+
+        done
 
         echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" > "$key_file_path" && \
         chmod 400 "$key_file_path" && \
@@ -1015,9 +1036,8 @@ function uninstall_failure() {
 }
 
 function online_version_timestamp() {
-    latest_version_data=$(curl -s "$latest_version_endpoint")
-    latest_version_timestamp=$(echo "$latest_version_data" | jq -r '.published_at')
-    echo "$latest_version_timestamp"
+    # Send HTTP HEAD request and get last modified timestamp of the installer package or setup.sh.
+    curl --silent --head $1 | grep 'Last-Modified:' | sed 's/[^ ]* //'
 }
 
 function enable_evernode_auto_updater() {
@@ -1089,8 +1109,10 @@ function install_evernode() {
     local upgrade=$1
 
     # Get installer version (timestamp). We use this later to check for Evernode software updates.
-    local installer_version_timestamp=$(online_version_timestamp)
+    local installer_version_timestamp=$(online_version_timestamp $installer_url)
     [ -z "$installer_version_timestamp" ] && echo "Online installer not found." && exit 1
+    # Get setup version (timestamp).
+    local setup_version_timestamp=$(online_version_timestamp $setup_script_url)
 
     local tmp=$(mktemp -d)
     cd $tmp
@@ -1142,6 +1164,7 @@ function install_evernode() {
 
     # Write the verison timestamp to a file for later updated version comparison.
     echo $installer_version_timestamp > $SASHIMONO_DATA/$installer_version_timestamp_file
+    echo $setup_version_timestamp > $SASHIMONO_DATA/$setup_version_timestamp_file
 }
 
 function check_exisiting_contracts() {
@@ -1186,11 +1209,13 @@ function uninstall_evernode() {
 
 function update_evernode() {
     echo "Checking for updates..."
-    local latest_installer_script_version=$(online_version_timestamp)
+    local latest_installer_script_version=$(online_version_timestamp $installer_url)
+    local latest_setup_script_version=$(online_version_timestamp $setup_script_url)
     [ -z "$latest_installer_script_version" ] && echo "Could not check for updates. Online installer not found." && exit 1
 
     local current_installer_script_version=$(cat $SASHIMONO_DATA/$installer_version_timestamp_file)
-    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
+    local current_setup_script_version=$(cat $SASHIMONO_DATA/$setup_version_timestamp_file)
+    [ "$latest_installer_script_version" == "$current_installer_script_version" ] && [ "$latest_setup_script_version" == "$current_setup_script_version" ] && echo "Your $evernode installation is up to date." && exit 0
 
     echo "New $evernode update available. Setup will re-install $evernode with updated software. Your account and contract instances will be preserved."
     $interactive && ! confirm "\nDo you want to install the update?" && exit 1
@@ -1201,6 +1226,12 @@ function update_evernode() {
     if [ "$latest_installer_script_version" != "$current_installer_script_version" ] ; then
         uninstall_evernode 1
         install_evernode 1
+    elif [ "$latest_setup_script_version" != "$current_setup_script_version" ] ; then
+        [ -d $log_dir ] || mkdir -p $log_dir
+        logfile="$log_dir/installer-$(date +%s).log"
+        remove_evernode_alias
+        ! create_evernode_alias && echo "Alias creation failed."
+        echo $latest_setup_script_version > $SASHIMONO_DATA/$setup_version_timestamp_file
     fi
 
     rm -r $setup_helper_dir >/dev/null 2>&1
@@ -1708,10 +1739,11 @@ if [ "$mode" == "install" ]; then
 elif [ "$mode" == "uninstall" ]; then
 
     echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
-    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+    \nThe secret can be found inside the configuration stored at '$default_key_filepath'."
 
     ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
+    ! backup_key_file && echo "Error backing up key file." && exit 1
 
     # Check contract condtion.
     check_exisiting_contracts 0

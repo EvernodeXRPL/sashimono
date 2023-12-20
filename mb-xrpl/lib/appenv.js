@@ -25,13 +25,24 @@ appenv = {
     ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS: 4,
     SASHIMONO_SCHEDULER_INTERVAL_SECONDS: 2,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '0.8.0',
-    TOS_HASH: '0801677EBCB2F76EF97D531549D8B27DB2C7A4A8EE7F60032AE40184247F0810', // This is the sha256 hash of EVERNODE-HOSTING-PRINCIPLES.pdf.
-    NETWORK: 'mainnet'
+    MB_VERSION: '0.7.3',
+    TOS_HASH: '757A0237B44D8B2BBB04AE2BAD5813858E0AECD2F0B217075E27E0630BA74314', // This is the sha256 hash of TOS text.
+    NETWORK: 'testnet'
 }
 
 const getSecretPath = () => {
-    return fs.existsSync(appenv.CONFIG_PATH) ? JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath : "";
+    if (fs.existsSync(appenv.CONFIG_PATH)) {
+        const config = JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString());
+        if (config.xrpl && config.xrpl.secretPath) {
+            return config.xrpl.secretPath;
+        }
+        else {
+            return (appenv.DATA_DIR + '/secret.cfg');
+        }
+    }
+    else {
+        return "";
+    }
 }
 
 appenv = { ...appenv, SECRET_CONFIG_PATH: getSecretPath() }

@@ -64,7 +64,7 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     mb_user_id=$(id -u "$MB_XRPL_USER")
     mb_user_runtime_dir="/run/user/$mb_user_id"
     mb_service_path="$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service
-    # Remove xrpl message board service if exists.
+    # Remove Xahau message board service if exists.
     if [ -f $mb_service_path ]; then
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
         sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user disable $MB_XRPL_SERVICE

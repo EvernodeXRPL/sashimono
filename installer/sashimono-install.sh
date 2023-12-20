@@ -259,7 +259,7 @@ if [ "$NO_MB" == "" ]; then
     if [ "$UPGRADE" == "0" ]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
-            stage "Configuring host xrpl account"
+            stage "Configuring host Xahau account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
             ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK && echo "XRPLACC_FAILURE" && rollback
@@ -354,10 +354,10 @@ systemctl enable $SASHIMONO_SERVICE
 # the bottom of this script.
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
-# Install xrpl message board only of NO_MB environment is not set.
+# Install Xahau message board only of NO_MB environment is not set.
 if [ "$NO_MB" == "" ]; then
-    # Install xrpl message board systemd service.
-    echo "Installing Evernode xrpl message board..."
+    # Install Xahau message board systemd service.
+    echo "Installing Evernode Xahau message board..."
 
     mb_user_dir=/home/"$MB_XRPL_USER"
     mb_user_id=$(id -u "$MB_XRPL_USER")
@@ -376,11 +376,11 @@ if [ "$NO_MB" == "" ]; then
     done
     [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
 
-    stage "Configuring xrpl message board service"
+    stage "Configuring Xahau message board service"
     ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
     # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
     echo "[Unit]
-    Description=Running and monitoring evernode xrpl transactions.
+    Description=Running and monitoring evernode Xahau transactions.
     After=network.target
     StartLimitIntervalSec=0
     [Service]
@@ -396,7 +396,7 @@ if [ "$NO_MB" == "" ]; then
     # This service needs to be restarted whenever mb-xrpl.cfg or secret.cfg is changed.
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
     # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
-    echo "Installed Evernode xrpl message board."
+    echo "Installed Evernode Xahau message board."
 fi
 
 # If there's no pending reboot, start the sashimono and message board services now. Otherwise

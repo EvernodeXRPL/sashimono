@@ -964,7 +964,7 @@ function set_host_xrpl_account() {
         fi
 
         while true ; do
-            read -ep "Specify the XRPL account address: " xrpl_address </dev/tty
+            read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
             ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
 
             echo "Checking account $xrpl_address..."

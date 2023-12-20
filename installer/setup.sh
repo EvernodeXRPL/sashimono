@@ -800,7 +800,7 @@ function backup_key_file() {
         mkdir -p "$key_dir"
     fi
 
-    [ -f "$MB_XRPL_DATA/secret.cfg" ] && cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" \
+    [ -f "$MB_XRPL_DATA/secret.cfg" ] && cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" && \
     chmod 400 "$key_file_path" && \
     chown $MB_XRPL_USER: $key_file_path && \
     echomult "Key file backed up successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }

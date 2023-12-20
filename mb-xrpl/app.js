@@ -46,8 +46,8 @@ async function main() {
             else if (process.argv.length === 4 && process.argv[2] === 'reginfo' && process.argv[3] === 'basic') {
                 await new Setup().regInfo(true);
             }
-            else if (process.argv.length === 4 && process.argv[2] === 'upgrade') {
-                await new Setup().upgrade(process.argv[3]);
+            else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
+                await new Setup().upgrade();
             }
             else if ((process.argv.length === 8) && process.argv[2] === 'reconfig') {
                 if (process.argv[5] == '-') process.argv[5] = null;

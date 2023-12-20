@@ -174,7 +174,7 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 ! set_cpu_info && echo "Fetching CPU info failed" && rollback
 
-# Copy contract template and licence file (delete existing)
+# Copy contract template and beta licence file (delete existing)
 # Backup the ssl cert files if exists
 tmp=$(mktemp -d)
 [ "$UPGRADE" != "0" ] && cp $SASHIMONO_DATA/contract_template/cfg/{tlskey.pem,tlscert.pem} "$tmp"/

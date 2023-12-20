@@ -95,7 +95,7 @@ async function main() {
             // Logs are formatted with the timestamp and a log file will be created inside log directory.
             logger.init(appenv.LOG_PATH, appenv.FILE_LOG_ENABLED);
 
-            console.log('Starting the Evernode xrpl message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
+            console.log('Starting the Evernode Xahau message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
@@ -107,7 +107,7 @@ async function main() {
     catch (err) {
         // If error is a RippledError show internal error message, Otherwise show err.
         console.log(err?.data?.error_message || err);
-        console.log("Evernode xrpl message board exiting with error.");
+        console.log("Evernode Xahau message board exiting with error.");
         process.exit(1);
     }
 }

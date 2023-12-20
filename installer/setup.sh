@@ -793,17 +793,20 @@ function generate_qrcode() {
 }
 
 function backup_key_file() {
-    key_file_path="$default_key_filepath"
+    # Backup key if this is an older installation.
+    if [ -f "$MB_XRPL_DATA/secret.cfg" ]; then
+        key_file_path="$default_key_filepath"
 
-    key_dir=$(dirname "$key_file_path")
-    if [ ! -d "$key_dir" ]; then
-        mkdir -p "$key_dir"
+        key_dir=$(dirname "$key_file_path")
+        if [ ! -d "$key_dir" ]; then
+            mkdir -p "$key_dir"
+        fi
+
+        cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" && \
+        chmod 400 "$key_file_path" && \
+        chown $MB_XRPL_USER: $key_file_path && \
+        echomult "Key file backed up successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
     fi
-
-    [ -f "$MB_XRPL_DATA/secret.cfg" ] && cp "$MB_XRPL_DATA/secret.cfg" "$key_file_path" && \
-    chmod 400 "$key_file_path" && \
-    chown $MB_XRPL_USER: $key_file_path && \
-    echomult "Key file backed up successfully at $key_file_path" || { echomult "Error occurred in permission and ownership assignment of key file."; exit 1; }
 }
 
 function generate_and_save_keyfile() {

@@ -5,6 +5,8 @@
 #include "cli-manager.hpp"
 #include "version.hpp"
 
+#define DEV_MODE "DEV_MODE"
+
 std::string exec_dir;
 
 /**
@@ -90,6 +92,7 @@ int parse_cmd(int argc, char **argv)
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
 
+    create->group(""); //Hides 'create' command from help-all
     std::string owner, contract_id, image, outbound_ipv6, outbound_net_interface;
     create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
     create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
@@ -126,6 +129,25 @@ int parse_cmd(int argc, char **argv)
     }
 
     // Verifying subcommands.
+
+    bool is_dev_mode = (getenv(DEV_MODE) != nullptr);
+
+    if (!is_dev_mode)
+    {
+        if(create->parsed()){
+            std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
+            return -1;
+        }
+        if(json->parsed() && !json_message.empty()){
+            jsoncons::json json_data = jsoncons::json::parse(json_message);
+            if (json_data.contains("type") && json_data["type"].as_string() == "create")
+            {
+                std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
+                return -1;
+            }
+        }
+    }
+
     if (version->parsed())
     {
         std::cout << "Sashimono CLI version " << version::CLI_VERSION << std::endl;

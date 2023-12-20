@@ -28,15 +28,10 @@ class ConfigHelper {
         return config;
     }
 
-    static writeConfig(config, configPath, secretConfigPath) {
+    static writeConfig(config, configPath) {
         let publicCfg = JSON.parse(JSON.stringify(config)); // Make a copy. So, referenced object won't get changed.
-        const secretCfg = {
-            xrpl: {
-                secret: publicCfg.xrpl.secret
-            }
-        }
-        delete publicCfg.xrpl.secret;
-        fs.writeFileSync(secretConfigPath, JSON.stringify(secretCfg, null, 2), { mode: 0o600 }); // Set file permission so only current user can read/write.
+        if ('secret' in publicCfg.xrpl)
+            delete publicCfg.xrpl.secret;
         fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
 

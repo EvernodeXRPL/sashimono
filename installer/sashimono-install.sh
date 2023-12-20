@@ -178,8 +178,8 @@ chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 # Backup the ssl cert files if exists
 tmp=$(mktemp -d)
 [ "$UPGRADE" != "0" ] && cp $SASHIMONO_DATA/contract_template/cfg/{tlskey.pem,tlscert.pem} "$tmp"/
-rm -r "$SASHIMONO_DATA"/{contract_template,evernode-license.pdf} >/dev/null 2>&1
-cp -r "$script_dir"/{contract_template,evernode-license.pdf} $SASHIMONO_DATA
+rm -r "$SASHIMONO_DATA"/{contract_template,beta-licence.txt} >/dev/null 2>&1
+cp -r "$script_dir"/{contract_template,beta-licence.txt} $SASHIMONO_DATA
 [ "$UPGRADE" != "0" ] && cp "$tmp"/{tlskey.pem,tlscert.pem} $SASHIMONO_DATA/contract_template/cfg/
 rm -r "$tmp"
 

@@ -1322,7 +1322,7 @@ function reg_info() {
     local mb_user_runtime_dir="/run/user/$mb_user_id"
     local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
     echo "Sashimono agent status: $sashimono_agent_status"
-    echo "Sashimono mb xrpl status: $sashimono_mb_xrpl_status"
+    echo "Sashimono message board status: $sashimono_mb_xrpl_status"
     echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
 }
 

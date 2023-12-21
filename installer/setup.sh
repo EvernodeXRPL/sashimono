@@ -258,6 +258,12 @@ function check_prereq() {
         echo "qrencode command not found. Installing.."
         apt-get install -y qrencode >/dev/null
     fi
+
+    # Check jq command is installed.
+    if ! command -v jq &>/dev/null; then
+        echo "jq command not found. Installing.."
+        apt-get install -y jq >/dev/null
+    fi
 }
 
 function check_sys_req() {

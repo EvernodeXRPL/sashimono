@@ -238,7 +238,7 @@ function check_prereq() {
 
     if ! command -v node &>/dev/null; then
         echo "Installing nodejs..."
-        ! install_nodejs_utility >/dev/null || exit 1
+        ! install_nodejs_utility >/dev/null && exit 1
     else
         version=$(node -v | cut -d '.' -f1)
         version=${version:1}

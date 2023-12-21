@@ -1837,7 +1837,6 @@ elif [ "$mode" == "list" ]; then
     sashi list
 
 elif [ "$mode" == "update" ]; then
-    check_prereq # Check for pre requisites
     update_evernode
 
 elif [ "$mode" == "log" ]; then

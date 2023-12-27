@@ -227,7 +227,7 @@ function install_nodejs_utility() {
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
 
-    NODE_MAJOR=16
+    NODE_MAJOR=20
     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
     apt-get update
     apt-get -y install nodejs
@@ -242,8 +242,8 @@ function check_prereq() {
     else
         version=$(node -v | cut -d '.' -f1)
         version=${version:1}
-        if [[ $version -lt 16 ]]; then
-            echo "$evernode requires NodeJs 16.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 16.x."
+        if [[ $version -lt 20 ]]; then
+            echo "$evernode requires NodeJs 20.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 20.x."
             exit 1
         fi
     fi

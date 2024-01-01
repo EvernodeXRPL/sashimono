@@ -130,14 +130,13 @@ namespace msg
         std::optional<size_t> max_file_count;      // Max no. of log files to keep.
     };
 
-    struct hpsh_config
+    struct debug_shell_config
     {
         std::optional<bool> enabled;
-        std::optional<std::string> run_as;
-        std::set<std::string> users; // List of users who are allowed to perform hpsh (list of binary public keys).
+        std::set<std::string> users; // List of users who are allowed to perform debug_shell (list of binary public keys).
     };
 
-    // Keep numerical config valus as optional so when updating the config if the value is empty
+    // Keep numerical config values as optional so when updating the config if the value is empty
     // We do nothing otherwise we take the value and update the config.
     struct config_struct
     {
@@ -147,10 +146,8 @@ namespace msg
         user_config user;
         hpfs_config hpfs;
         log_config log;
-        hpsh_config hpsh;
-    };
-
-    
+        debug_shell_config debug_shell;
+    };    
 
     struct initiate_msg
     {
@@ -224,7 +221,7 @@ namespace msg
     constexpr const char *FLD_CONTRACT = "contract";
     constexpr const char *FLD_NODE = "node";
     constexpr const char *FLD_HPFS = "hpfs";
-    constexpr const char *FLD_HPSH = "hpsh";
+    constexpr const char *FLD_DEBUG_SHELL = "debug_shell";
     constexpr const char *FLD_USERS = "users";
     constexpr const char *FLD_CONFIG = "config";
     constexpr const char *FLD_ROLE = "role";

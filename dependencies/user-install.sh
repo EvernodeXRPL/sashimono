@@ -16,13 +16,13 @@ docker_image=${10}
 docker_registry=${11}
 outbound_ipv6=${12}
 outbound_net_interface=${13}
-hpsh_uid=${14}
-hpsh_gid=${15}
+debug_shell_uid=${14}
+debug_shell_gid=${15}
 
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
     [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] ||
     [ -z "$docker_image" ] || [ -z "$docker_registry" ] || [ -z "$outbound_ipv6" ] || [ -z "$outbound_net_interface" ] ||
-    [ -z "$hpsh_uid" ] || [ -z "$hpsh_gid" ]; then
+    [ -z "$debug_shell_uid" ] || [ -z "$debug_shell_gid" ]; then
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
 
@@ -30,7 +30,7 @@ prefix="sashi"
 suffix=$(date +%s%N) # Epoch nanoseconds
 user="$prefix$suffix"
 contract_user="$user-secuser"
-hpsh_user="$user-secuserhpsh"
+debug_shell_user="$user-secuser-debug-shell"
 group="sashiuser"
 cgroupsuffix="-cg"
 user_dir=/home/$user
@@ -87,18 +87,18 @@ loginctl enable-linger $user # Enable lingering to support rootless dockerd serv
 chmod o-rwx "$user_dir"
 echo "Created '$user' user."
 
-# Creating a secondary user for the contract and hpsh.
+# Creating a secondary user for the contract and debug_shell.
 # This is the respective host user for the child user of the sashimono user inside docker container.
 # Taking the uid and gid offsets.
 uoffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subuid | cut -d: -f2)
 [ -z $uoffset ] && rollback "SUBUID_ERR"
 contract_host_uid=$(expr $uoffset + $contract_uid - 1)
-hpsh_host_uid=$(expr $uoffset + $hpsh_uid - 1)
+debug_shell_host_uid=$(expr $uoffset + $debug_shell_uid - 1)
 
 # If secondary user gid is not 0, get the calculated host gid and create the secondary user group
 # and create user inside both secondary user group and sashimono user group.
 # Otherwise get sashimono user's gid and create secondary user inside that group.
-# Even though there's this "if not 0" condition, contract_gid and hpsh_gid will always be 0 since we are setting hp config's gid to 0 in instance creation.
+# Even though there's this "if not 0" condition, contract_gid and debug_shell_gid will always be 0 since we are setting hp config's gid to 0 in instance creation.
 
 # Take the gid offset.
 goffset=$(grep "^$user:[0-9]\+:[0-9]\+$" /etc/subgid | cut -d: -f2)
@@ -116,18 +116,18 @@ fi
 usermod --lock "$contract_user"
 echo "Created '$contract_user' contract user."
 
-# Do hpsh user creation same as above.
-if [ ! $hpsh_gid -eq 0 ]; then
-    hpsh_host_gid=$(expr $goffset + $hpsh_gid - 1)
-    groupadd -g "$hpsh_host_gid" "$hpsh_user"
-    useradd --shell /usr/sbin/nologin -M -g "$hpsh_host_gid" -G "$user" -u "$hpsh_host_uid" "$hpsh_user"
+# Do debug_shell user creation same as above.
+if [ ! $debug_shell_gid -eq 0 ]; then
+    debug_shell_host_gid=$(expr $goffset + $debug_shell_gid - 1)
+    groupadd -g "$debug_shell_host_gid" "$debug_shell_user"
+    useradd --shell /usr/sbin/nologin -M -g "$debug_shell_host_gid" -G "$user" -u "$debug_shell_host_uid" "$debug_shell_user"
 else
-    hpsh_host_gid=$(id -g "$user")
-    useradd --shell /usr/sbin/nologin -M -g "$hpsh_host_gid" -u "$hpsh_host_uid" "$hpsh_user"
+    debug_shell_host_gid=$(id -g "$user")
+    useradd --shell /usr/sbin/nologin -M -g "$debug_shell_host_gid" -u "$debug_shell_host_uid" "$debug_shell_user"
 fi
 
-usermod --lock "$hpsh_user"
-echo "Created '$hpsh_user' hpsh user."
+usermod --lock "$debug_shell_user"
+echo "Created '$debug_shell_user' debug_shell user."
 
 user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"

@@ -871,7 +871,7 @@ namespace hp
         }
 
         // Debug shell
-        if (!config.debug_shell.enabled.has_value())
+        if (config.debug_shell.enabled.has_value())
             d["debug_shell"]["enabled"] = config.debug_shell.enabled.value();
         if (!config.debug_shell.users.empty())
         {

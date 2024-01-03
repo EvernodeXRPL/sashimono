@@ -27,6 +27,9 @@ namespace hp
     conf::ugid contract_ugid;
     constexpr int CONTRACT_USER_ID = 10000;
     constexpr int CONTRACT_GROUP_ID = 0;
+    conf::ugid debug_shell_ugid;
+    constexpr int DEBUG_SHELL_USER_ID = 10001;
+    constexpr int DEBUG_SHELL_GROUP_ID = 0;
 
     // We instruct the demon to restart the container automatically once the container exits except manually stopping.
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
@@ -95,8 +98,9 @@ namespace hp
         instance_resources.swap_kbytes = instance_resources.mem_kbytes + (conf::cfg.system.max_swap_kbytes / conf::cfg.system.max_instance_count);
         instance_resources.storage_kbytes = conf::cfg.system.max_storage_kbytes / conf::cfg.system.max_instance_count;
         // Set run as group id 0 (sashimono user group id, root user inside docker container).
-        // Because contract user is in sashimono user's group, so the contract user will get the group permissions.
+        // Because secondary users is in sashimono user's group, so the secondary users will get the group permissions.
         contract_ugid = {CONTRACT_USER_ID, CONTRACT_GROUP_ID};
+        debug_shell_ugid = {DEBUG_SHELL_USER_ID, DEBUG_SHELL_GROUP_ID};
 
         return 0;
     }
@@ -569,6 +573,7 @@ namespace hp
         d["mesh"]["port"] = assigned_ports.peer_port;
         d["user"]["port"] = assigned_ports.user_port;
         d["hpfs"]["external"] = true;
+        d["debug_shell"]["run_as"] = debug_shell_ugid.to_string();
 
         if (util::write_json_file(config_fd, d) == -1)
         {
@@ -862,6 +867,17 @@ namespace hp
                 d["hpfs"]["log"]["log_level"] = config.hpfs.log.log_level;
         }
 
+        // Debug shell
+        if (config.debug_shell.enabled.has_value())
+            d["debug_shell"]["enabled"] = config.debug_shell.enabled.value();
+        if (!config.debug_shell.users.empty())
+        {
+            jsoncons::ojson users(jsoncons::json_array_arg);
+            for (auto &pubkey : config.debug_shell.users)
+                users.push_back(util::to_hex(pubkey));
+            d["debug_shell"]["users"] = users;
+        }
+
         // Log
         {
             if (!config.log.log_level.empty())
@@ -911,7 +927,9 @@ namespace hp
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,
-            outbound_net_interface};
+            outbound_net_interface,
+            std::to_string(debug_shell_ugid.uid),
+            std::to_string(debug_shell_ugid.gid)};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

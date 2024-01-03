@@ -21,6 +21,7 @@ else
 fi
 
 contract_user="$user-secuser"
+debug_shell_user="$user-secuser-debug-shell"
 cgroupsuffix="-cg"
 user_dir=/home/$user
 user_id=$(id -u "$user")
@@ -103,6 +104,9 @@ fi
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"
+
+echo "Deleting debug_shell user '$debug_shell_user'"
+userdel "$debug_shell_user"
 
 if [ -f $cleanup_script ]; then
     echo "Executing cleanup script..."

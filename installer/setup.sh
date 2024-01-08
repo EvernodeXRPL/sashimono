@@ -1612,16 +1612,20 @@ function delete_instance()
 {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
+    # Restart the message board to update the instance count
+    local mb_user_id=$(id -u "$MB_XRPL_USER")
+    local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+    echomult "Stopping the message board..."
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+
     instance_name=$1
     echo "Deleting instance $instance_name"
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
         echo "There was an error in deleting the instance." && exit 1
 
-    # Restart the message board to update the instance count
-    local mb_user_id=$(id -u "$MB_XRPL_USER")
-    local mb_user_runtime_dir="/run/user/$mb_user_id"
-
-    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
+    echomult "Starting the message board..."
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
 
     echo "Instance deletion completed."
 }

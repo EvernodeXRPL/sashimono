@@ -95,7 +95,7 @@ class MessageBoard {
         this.db.open();
         // Create lease table if not exist.
         await this.createLeaseTableIfNotExists();
-        await this.createUtilDataTableIfNotExists();
+        await this.createUtilDataTableIfNotExists(hostInfo.registrationLedger);
 
         this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
@@ -657,12 +657,20 @@ class MessageBoard {
 
                                 for (const tx of transactions) {
                                     // Skip, if this transaction was previously considered.
-                                    const acquireRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_SUCCESS);
-                                    if (acquireRef === trx.hash)
+                                    const acquireSucRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_SUCCESS);
+                                    if (acquireSucRef === trx.hash)
                                         continue loop1;
 
-                                    const extendRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_SUCCESS);
-                                    if (extendRef === trx.hash)
+                                    const acquireErrRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_ERROR);
+                                    if (acquireErrRef === trx.hash)
+                                        continue loop1;
+
+                                    const extendSucRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_SUCCESS);
+                                    if (extendSucRef === trx.hash)
+                                        continue loop1;
+
+                                    const extendErrRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_ERROR);
+                                    if (extendErrRef === trx.hash)
                                         continue loop1;
 
                                     const refundRef = this.#getTrxHookParams(tx, evernode.EventTypes.REFUND);
@@ -687,7 +695,7 @@ class MessageBoard {
 
                                 if (!lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
                                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
@@ -708,7 +716,7 @@ class MessageBoard {
 
                                 if (lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
                                         await this.#queueAction(async () => {
                                             // The refund for the extension, if tenant still own the URIToken.
@@ -997,19 +1005,19 @@ class MessageBoard {
         ]);
     }
 
-    async createUtilDataTableIfNotExists() {
+    async createUtilDataTableIfNotExists(registrationLedger) {
         // Create table if not exists.
         await this.db.createTableIfNotExists(this.utilTable, [
             { name: 'name', type: DataTypes.TEXT, notNull: true },
             { name: 'value', type: DataTypes.INTEGER, notNull: true }
         ]);
-        await this.createLastWatchedLedgerEntryIfNotExists();
+        await this.createLastWatchedLedgerEntryIfNotExists(registrationLedger);
     }
 
-    async createLastWatchedLedgerEntryIfNotExists() {
+    async createLastWatchedLedgerEntryIfNotExists(registrationLedger) {
         const ret = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
         if (ret.length === 0) {
-            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: -1 });
+            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: registrationLedger });
         }
     }
 

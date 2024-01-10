@@ -1632,9 +1632,7 @@ function delete_instance()
     echomult "Starting the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
 
-    [ $has_error == 1 ] && echo "Instance deletion failed." && exit 1
-
-    echo "Instance deletion completed."
+    [ $has_error == 0 ] && echo "Instance deletion completed."
 }
 
 # Begin setup execution flow --------------------

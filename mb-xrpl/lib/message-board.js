@@ -91,13 +91,13 @@ class MessageBoard {
 
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatIndex ? await this.hostClient.getMoment(hostInfo.lastHeartbeatIndex) : 0;
+        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         this.db.open();
         // Create lease table if not exist.
         await this.createLeaseTableIfNotExists();
-        await this.createUtilDataTableIfNotExists(hostInfo.registrationLedger);
+        await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
@@ -1005,19 +1005,19 @@ class MessageBoard {
         ]);
     }
 
-    async createUtilDataTableIfNotExists(registrationLedger) {
+    async createUtilDataTableIfNotExists() {
         // Create table if not exists.
         await this.db.createTableIfNotExists(this.utilTable, [
             { name: 'name', type: DataTypes.TEXT, notNull: true },
             { name: 'value', type: DataTypes.INTEGER, notNull: true }
         ]);
-        await this.createLastWatchedLedgerEntryIfNotExists(registrationLedger);
+        await this.createLastWatchedLedgerEntryIfNotExists();
     }
 
-    async createLastWatchedLedgerEntryIfNotExists(registrationLedger) {
+    async createLastWatchedLedgerEntryIfNotExists() {
         const ret = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
         if (ret.length === 0) {
-            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: registrationLedger });
+            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: this.lastValidatedLedgerIndex });
         }
     }
 

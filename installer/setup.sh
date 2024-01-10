@@ -233,8 +233,12 @@ function install_nodejs_utility() {
     apt-get -y install nodejs
 }
 
-function check_prereq() {
-    echomult "\nChecking initial level pre-requisites..."
+function check_common_prereq() {
+    # Check jq command is installed.
+    if ! command -v jq &>/dev/null; then
+        echo "jq command not found. Installing.."
+        apt-get install -y jq >/dev/null
+    fi
 
     if ! command -v node &>/dev/null; then
         echo "Installing nodejs..."
@@ -247,6 +251,12 @@ function check_prereq() {
             exit 1
         fi
     fi
+}
+
+function check_prereq() {
+    echomult "\nChecking initial level pre-requisites..."
+
+    check_common_prereq
 
     # Check bc command is installed.
     if ! command -v bc &>/dev/null; then
@@ -264,12 +274,6 @@ function check_prereq() {
     if ! command -v qrencode &>/dev/null; then
         echo "qrencode command not found. Installing.."
         apt-get install -y qrencode >/dev/null
-    fi
-
-    # Check jq command is installed.
-    if ! command -v jq &>/dev/null; then
-        echo "jq command not found. Installing.."
-        apt-get install -y jq >/dev/null
     fi
 }
 
@@ -1768,6 +1772,8 @@ elif [ "$mode" == "transfer" ]; then
             transferee_address=${5}         # Address of the transferee.
             rippled_server=${6}             # Rippled server URL
         fi
+
+        check_common_prereq
 
         set_environment_configs
 

@@ -1623,13 +1623,16 @@ function delete_instance()
     echomult "Stopping the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
 
+    local has_error=0
     instance_name=$1
     echo "Deleting instance $instance_name"
     ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
-        echo "There was an error in deleting the instance." && exit 1
+        echo "There was an error in deleting the instance." && has_error=1
 
     echomult "Starting the message board..."
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+
+    [ $has_error == 1 ] && echo "Instance deletion failed." && exit 1
 
     echo "Instance deletion completed."
 }

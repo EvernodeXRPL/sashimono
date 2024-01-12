@@ -233,8 +233,12 @@ function install_nodejs_utility() {
     apt-get -y install nodejs
 }
 
-function check_prereq() {
-    echomult "\nChecking initial level pre-requisites..."
+function check_common_prereq() {
+    # Check jq command is installed.
+    if ! command -v jq &>/dev/null; then
+        echo "jq command not found. Installing.."
+        apt-get install -y jq >/dev/null
+    fi
 
     if ! command -v node &>/dev/null; then
         echo "Installing nodejs..."
@@ -247,6 +251,12 @@ function check_prereq() {
             exit 1
         fi
     fi
+}
+
+function check_prereq() {
+    echomult "\nChecking initial level prerequisites..."
+
+    check_common_prereq
 
     # Check bc command is installed.
     if ! command -v bc &>/dev/null; then
@@ -264,12 +274,6 @@ function check_prereq() {
     if ! command -v qrencode &>/dev/null; then
         echo "qrencode command not found. Installing.."
         apt-get install -y qrencode >/dev/null
-    fi
-
-    # Check jq command is installed.
-    if ! command -v jq &>/dev/null; then
-        echo "jq command not found. Installing.."
-        apt-get install -y jq >/dev/null
     fi
 }
 
@@ -1612,18 +1616,23 @@ function delete_instance()
 {
     [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
-    instance_name=$1
-    echo "Deleting instance $instance_name"
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
-        echo "There was an error in deleting the instance." && exit 1
-
     # Restart the message board to update the instance count
     local mb_user_id=$(id -u "$MB_XRPL_USER")
     local mb_user_runtime_dir="/run/user/$mb_user_id"
 
-    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user restart $MB_XRPL_SERVICE
+    echomult "Stopping the message board..."
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
 
-    echo "Instance deletion completed."
+    local has_error=0
+    instance_name=$1
+    echo "Deleting instance $instance_name"
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN delete $instance_name &&
+        echo "There was an error in deleting the instance." && has_error=1
+
+    echomult "Starting the message board..."
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+
+    [ $has_error == 0 ] && echo "Instance deletion completed."
 }
 
 # Begin setup execution flow --------------------
@@ -1764,6 +1773,8 @@ elif [ "$mode" == "transfer" ]; then
             transferee_address=${5}         # Address of the transferee.
             rippled_server=${6}             # Rippled server URL
         fi
+
+        check_common_prereq
 
         set_environment_configs
 

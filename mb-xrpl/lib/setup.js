@@ -283,7 +283,7 @@ class Setup {
             .map(o => { return { uriTokenId: o.index, ownerAddress: xrplAcc.address }; });
 
         // Get sold URITokens.
-        // We check for db existance since db is created by message board (not setup).
+        // We check for db existence since db is created by message board (not setup).
         const dbPath = appenv.DB_PATH;
         if (fs.existsSync(dbPath)) {
             // This local initialization can be changed according to the DB access requirement.
@@ -293,7 +293,7 @@ class Setup {
             db.open();
 
             try {
-                // We check for table existance since table is created by message board (not setup).
+                // We check for table existence since table is created by message board (not setup).
                 if (db.isTableExists(leaseTable)) {
                     uriTokens.push(...(await db.getValues(leaseTable)).filter(i => (i.status === "Acquired" || i.status === "Extended"))
                         .map(o => { return { uriTokenId: o.container_name, ownerAddress: o.tenant_xrp_address }; }))

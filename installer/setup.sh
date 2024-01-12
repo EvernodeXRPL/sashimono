@@ -254,7 +254,7 @@ function check_common_prereq() {
 }
 
 function check_prereq() {
-    echomult "\nChecking initial level pre-requisites..."
+    echomult "\nChecking initial level prerequisites..."
 
     check_common_prereq
 

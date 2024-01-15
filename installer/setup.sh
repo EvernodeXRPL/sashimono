@@ -932,7 +932,7 @@ function set_host_xrpl_account() {
             confirm "\nDo you want to re-check the account condition?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        declare -Ar AccCondtionArry=( [0]="RC-FRESH" [1]="RC-PREPARED" )
+        declare -Ar AccCondtionArry=( [0]="RC-NON-ACTIVE" [1]="RC-ACTIVE" )
 
         if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
 
@@ -944,17 +944,17 @@ function set_host_xrpl_account() {
                 && break
                 confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
             done
+            account_condition=${AccCondtionArry[1]}
+        fi
 
-            echomult "\nPreparing account with EVR trust-line..."
+        if [ "$account_condition" == "${AccCondtionArry[1]}" ]; then
+
+            echomult "\nPreparing host account..."
             while true ; do
                 wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
                 confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
             done
 
-            account_condition=${AccCondtionArry[1]}
-        fi
-
-        if [ "$account_condition" == "${AccCondtionArry[1]}" ]; then
             echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
             \nYou can scan the provided QR code in your wallet app to send funds:"
 

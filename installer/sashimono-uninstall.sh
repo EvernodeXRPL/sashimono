@@ -7,6 +7,7 @@ export TRANSFER=${TRANSFER:-0}
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
+error=$2
 
 function confirm() {
     echo -en $1" [Y/n] "
@@ -165,7 +166,7 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         # Message board service is created at the end of the installation. So, if this exists previous installation is a successfull one.
         # If not force or quiet mode and deregistration failed and if the previous installation a successful one,
         # Exit the uninstallation, So user can try uninstall again with deregistration.
-        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
+        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister $error &&
             [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
             ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
             echo "Continuing uninstallation..."

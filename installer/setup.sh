@@ -925,51 +925,36 @@ function set_host_xrpl_account() {
         \n2. At least $reg_fee EVR to cover Evernode registration fee.
         \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
-       generate_qrcode "$xrpl_address"
+        generate_qrcode "$xrpl_address"
 
         account_condition='-'
 
         echomult "\nChecking the account condition..."
+        echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+
+        required_balance=$min_xah_requirement
         while true ; do
-            account_condition=$(exec_jshelper check-acc-condition $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address) \
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
             && break
-            confirm "\nDo you want to re-check the account condition?\nPressing 'n' would terminate the installation." || exit 1
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        declare -Ar AccCondtionArry=( [0]="RC-NON-ACTIVE" [1]="RC-ACTIVE" )
 
-        if [ "$account_condition" == "${AccCondtionArry[0]}" ]; then
+        echomult "\nPreparing host account..."
+        while true ; do
+            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
+            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
+        done
 
-            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+        echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds:"
 
-            required_balance=$min_xah_requirement
-            while true ; do
-                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." \
-                && break
-                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-            done
-            account_condition=${AccCondtionArry[1]}
-        fi
-
-        if [ "$account_condition" == "${AccCondtionArry[1]}" ]; then
-
-            echomult "\nPreparing host account..."
-            while true ; do
-                wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
-                confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
-            done
-
-            echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
-            \nYou can scan the provided QR code in your wallet app to send funds:"
-
-            required_balance=$reg_fee
-            while true ; do
-                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
-                && break
-                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-            done
-        fi
-
+        required_balance=$reg_fee
+        while true ; do
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." \
+            && break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
 
     elif [ "$account_validate_criteria" == "transfer" ] || [ "$account_validate_criteria" == "re-register" ]; then
 

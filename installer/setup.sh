@@ -20,9 +20,9 @@ max_ipv6_prefix_len=112
 evernode_alias=/usr/bin/evernode
 log_dir=/tmp/evernode
 
-repo_owner="EvernodeXRPL"
-repo_name="evernode-resources"
-desired_branch="main"
+repo_owner="kithminisg"
+repo_name="simulink"
+desired_branch="test"
 
 latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
 latest_version_data=$(curl -s "$latest_version_endpoint")
@@ -876,7 +876,11 @@ function set_host_xrpl_account() {
     # Create MB_XRPL_USER as we require that user for secret key ownership management.
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         echomult "Creating Message-board User..."
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
+
+        # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation eventhoughthe user is removed.
+        chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
     fi
 
     if [ "$account_validate_criteria" == "register" ]; then

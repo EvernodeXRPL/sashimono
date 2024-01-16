@@ -272,19 +272,14 @@ const funcs = {
         try {
             // In order to handle the account not found issue via catch block.
             await hostClient.connect();
-            const trustline = await hostClient.xrplAcc.getTrustLines(evernode.EvernodeConstants.EVR, hostClient.config.evrIssuerAddress);
-            if (trustline.length > 0) {
-                await terminateConnections();
-                return { success: true, result: 'RC-PREPARED' }
-            } else {
-                await terminateConnections();
-                return { success: true, result: 'RC-FRESH' };
-            }
+            await terminateConnections();
+            return { success: true, result: 'RC-ACTIVE' }
+
         } catch (err) {
             await terminateConnections();
 
             if ((err.data?.error === 'actNotFound'))
-                return { success: true, result: "RC-FRESH" };
+                return { success: true, result: "RC-NON-ACTIVE" };
             return { success: false, result: "Error occurred in account condition check." };
         }
     },

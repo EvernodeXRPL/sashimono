@@ -120,6 +120,14 @@ class MessageBoard {
                 Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
         });
 
+        // Update host additional information if necessary.
+        if (sashiConfig?.hp?.host_address) {
+            await this.#queueAction(async () => {
+                // Prepare the host account if it has not been prepared properly.
+                await this.hostClient.prepareAccount(sashiConfig.hp.host_address);
+            });
+        }
+
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
             this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');

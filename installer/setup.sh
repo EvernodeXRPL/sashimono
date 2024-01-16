@@ -788,15 +788,15 @@ function set_transferee_address() {
 
         local address=''
         while true ; do
-            read -ep "Specify the XRPL account address of the transferee: " address </dev/tty
-            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
+            read -ep "Specify the Xahau account address of the transferee: " address </dev/tty
+            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid Xahau account address." || break
 
         done
 
         transferee_address=$address
     fi
 
-    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
+    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid Xahau account address." && exit 1
 }
 
 # Function to generate QR code in the terminal

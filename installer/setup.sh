@@ -788,15 +788,15 @@ function set_transferee_address() {
 
         local address=''
         while true ; do
-            read -ep "Specify the XRPL account address of the transferee: " address </dev/tty
-            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." || break
+            read -ep "Specify the Xahau account address of the transferee: " address </dev/tty
+            ! [[ $address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid Xahau account address." || break
 
         done
 
         transferee_address=$address
     fi
 
-    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid XRPL account address." && exit 1
+    ! [[ $transferee_address =~ ^r[a-zA-Z0-9]{24,34}$ ]] && echo "Invalid Xahau account address." && exit 1
 }
 
 # Function to generate QR code in the terminal
@@ -876,7 +876,11 @@ function set_host_xrpl_account() {
     # Create MB_XRPL_USER as we require that user for secret key ownership management.
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         echomult "Creating Message-board User..."
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
+
+        # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation eventhoughthe user is removed.
+        chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
     fi
 
     if [ "$account_validate_criteria" == "register" ]; then

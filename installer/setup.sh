@@ -964,7 +964,7 @@ function set_host_xrpl_account() {
 
         while true ; do
             read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
-            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid XRPL account address." && continue
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
 
             echo "Checking account $xrpl_address..."
             ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue

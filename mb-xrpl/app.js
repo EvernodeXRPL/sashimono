@@ -37,8 +37,8 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'transfer') {
                 (process.argv[3]) ? await new Setup().transfer(process.argv[3]) : await new Setup().transfer();
             }
-            else if (process.argv.length === 3 && process.argv[2] === 'deregister') {
-                await new Setup().deregister();
+            else if (process.argv.length >= 3 && process.argv[2] === 'deregister') {
+                await new Setup().deregister(process.argv[3]);
             }
             else if (process.argv.length === 3 && process.argv[2] === 'reginfo') {
                 await new Setup().regInfo(false);

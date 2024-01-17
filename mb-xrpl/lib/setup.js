@@ -164,7 +164,7 @@ class Setup {
         await hostClient.disconnect();
     }
 
-    async deregister() {
+    async deregister(error = null) {
         console.log("Deregistering host...");
         const acc = this.#getConfig().xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
@@ -178,7 +178,7 @@ class Setup {
         });
 
         await this.burnMintedURITokens(hostClient.xrplAcc);
-        await hostClient.deregister();
+        await hostClient.deregister(error);
         await hostClient.disconnect();
     }
 

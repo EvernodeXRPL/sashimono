@@ -879,7 +879,7 @@ function set_host_xrpl_account() {
         useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
 
         # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation eventhoughthe user is removed.
+        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
         chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
     fi
 

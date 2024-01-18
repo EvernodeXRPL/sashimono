@@ -386,22 +386,24 @@ if [ "$NO_MB" == "" ]; then
     # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
     echo "Installed Evernode Xahau message board."
 
-    echo "Registering host on Evernode..."
-    # Register the host on Evernode.
-    if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-        stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-        set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
-        # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
-        # Add -p to the progress logs so they would be printed overwriting the same line.
-        echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count \
-            $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-            $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description |
-            stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
-            echo "REG_FAILURE" && rollback
-        set +o pipefail
+    if [ "$UPGRADE" == "0" ]; then
+        echo "Registering host on Evernode..."
+        # Register the host on Evernode.
+        if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
+            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+            set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
+            # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
+            # Add -p to the progress logs so they would be printed overwriting the same line.
+            echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count \
+                $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
+                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description |
+                stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
+                echo "REG_FAILURE" && rollback
+            set +o pipefail
+        fi
+        echo "Registered host on Evernode."
     fi
-    echo "Registered host on Evernode."
 fi
 
 # If there's no pending reboot, start the sashimono and message board services now. Otherwise

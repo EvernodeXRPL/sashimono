@@ -36,7 +36,7 @@ function stage() {
 function rollback() {
     [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
     echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh -f INST_ERR
+    "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
     echo "Rolled back the installation."
     exit 1
 }

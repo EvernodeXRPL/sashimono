@@ -209,7 +209,7 @@ class Setup {
                     throw 'Host is not registered';
                 }
                 console.log(`EVR balance: ${evrBalance}`);
-                console.log(`Host status: ${hostInfo.active ? 'Active' : 'inactive'}`);
+                console.log(`Host status: ${hostInfo.active ? 'active' : 'inactive'}`);
 
                 await hostClient.disconnect();
             }

@@ -1285,6 +1285,8 @@ function reg_info() {
     # Remove first line and print.
     echo -e "\n${reg_info/$address_line/""}"
 
+    echo -e "NOTE: The host is marked as active after sending the first heartbeat.\n"
+
     local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
     local mb_user_id=$(id -u "$MB_XRPL_USER")
     local mb_user_runtime_dir="/run/user/$mb_user_id"

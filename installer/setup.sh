@@ -878,9 +878,6 @@ function set_host_xrpl_account() {
         echomult "Creating Message-board User..."
         useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
 
-        # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-        chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
     fi
 
     if [ "$account_validate_criteria" == "register" ]; then
@@ -1284,6 +1281,8 @@ function reg_info() {
 
     # Remove first line and print.
     echo -e "\n${reg_info/$address_line/""}"
+
+    echo -e "NOTE: The host is marked as active after sending the first heartbeat.\n"
 
     local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
     local mb_user_id=$(id -u "$MB_XRPL_USER")

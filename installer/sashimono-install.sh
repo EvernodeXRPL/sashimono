@@ -347,6 +347,10 @@ if [ "$NO_MB" == "" ]; then
     mb_user_id=$(id -u "$MB_XRPL_USER")
     mb_user_runtime_dir="/run/user/$mb_user_id"
 
+    # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+    # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $mb_user_dir
+
     # Setup env variable for the message board user.
     echo "
     export XDG_RUNTIME_DIR=$mb_user_runtime_dir" >>"$mb_user_dir"/.bashrc

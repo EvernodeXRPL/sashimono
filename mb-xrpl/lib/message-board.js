@@ -27,6 +27,8 @@ class MessageBoard {
         processing: false,
         queue: []
     };
+    #useTxnFeeCeiling = false;
+    #hearbeatRetryDelay = 30000; // 5 mins
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
@@ -170,6 +172,16 @@ class MessageBoard {
 
     }
 
+    #prepareHostClientFunctionOptions() {
+        let options = {}
+        if (this.#useTxnFeeCeiling && this.cfg.xrpl.txnFeeCeiling > 0) {
+            options.transactionOptions = { fee: this.cfg.xrpl.txnFeeCeiling }
+        }
+        options.transactionOptions = { maxLedgerIndex: this.xrplApi.ledger_index }
+
+        return options;
+    }
+
     // Try to acquire the lease update lock.
     async #acquireConcurrencyQueue() {
         await new Promise(async resolve => {
@@ -188,12 +200,14 @@ class MessageBoard {
         this.#concurrencyQueue.processing = false;
     }
 
-    async #queueAction(action) {
+    async #queueAction(action, maxAttempts = 5, delay = 0) {
         await this.#acquireConcurrencyQueue();
 
         this.#concurrencyQueue.queue.push({
             callback: action,
-            attempts: 0
+            attempts: 0,
+            maxAttempts: maxAttempts,
+            delay: delay
         });
 
         await this.#releaseConcurrencyQueue();
@@ -206,11 +220,18 @@ class MessageBoard {
         for (let action of this.#concurrencyQueue.queue) {
             try {
                 await action.callback();
+                this.#useTxnFeeCeiling = false;
             }
             catch (e) {
-                if (action.attempts < 5) {
+                this.#useTxnFeeCeiling = true;
+                if (action.attempts < action.maxAttempts) {
                     action.attempts++;
-                    toKeep.push(action);
+                    if (action.delay > 0) {
+                        setTimeout(async () => {
+                            toKeep.push(action);
+                        }, action.delay);
+                    } else
+                        toKeep.push(action);
                 }
                 else {
                     console.error(e);
@@ -286,6 +307,12 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
+        const momentSize = this.hostClient.config.momentSize;
+        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
+        const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
+        const currentMomentDuration = currentTimestamp - currentMomentStartIdx;
+        const maxRetries = (currentMomentDuration > Math.floor(momentSize * 0.75) && currentMomentDuration < momentSize) ? Math.floor((currentMomentDuration - 1200) / 300) : Math.floor((currentMomentDuration - 300) / 300);
+
         await this.#queueAction(async () => {
             let ongoingHeartbeat = false;
             const currentMoment = await this.hostClient.getMoment();
@@ -318,7 +345,7 @@ class MessageBoard {
                     if (voteArr && voteArr.length) {
                         for (const vote of voteArr) {
                             try {
-                                await this.hostClient.heartbeat(vote);
+                                await this.hostClient.heartbeat(vote, this.#prepareHostClientFunctionOptions());
                                 this.lastHeartbeatMoment = await this.hostClient.getMoment();
                                 heartbeatSent = true;
                             }
@@ -330,6 +357,7 @@ class MessageBoard {
                                 }
                                 else {
                                     console.error("Heartbeat tx with vote error", e);
+                                    throw e;
                                 }
                             }
                         }
@@ -341,20 +369,22 @@ class MessageBoard {
                     return;
 
                 try {
-                    await this.hostClient.heartbeat();
+                    await this.hostClient.heartbeat({}, this.#prepareHostClientFunctionOptions());
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
                 }
                 catch (err) {
                     if (err.code === 'tecHOOK_REJECTED')
                         console.log("Heartbeat rejected by the hook.");
-                    else
+                    else {
                         console.log("Heartbeat tx error", err);
+                        throw err;
+                    }
                 }
                 finally {
                     ongoingHeartbeat = false;
                 }
             }
-        });
+        }, maxRetries, this.#hearbeatRetryDelay);
     }
 
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
@@ -468,7 +498,10 @@ class MessageBoard {
 
     async #startHeartBeatScheduler() {
         const momentSize = this.hostClient.config.momentSize;
-        const halfMomentSize = momentSize / 2; // Getting half of moment size
+        const halfMomentSize = momentSize / 2; // Getting 25% of moment size
+        const acceptanceLimit = Math.floor(momentSize * 0.75); // Getting 25% of moment size
+        const momentReserve = Math.floor(momentSize * 0.25); // Getting 25% of moment size
+
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
 
         const scheduler = async () => {
@@ -486,17 +519,18 @@ class MessageBoard {
 
         // Schedule the next heartbeat based on last heartbeat occurrence.
         // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
-        // If schedule the next heartbeat based on its last heartbeat.
-        // If it is not further checks whether it is about to send the heartbeat at the second half of a moment or not.
-        // If the current timestamp lies in the second half of the moment, schedule the next heartbeat withing the next moment (in the its first half).
-        // If it is not schedule it right now.
+        // If it's true, then schedule the next heartbeat based on its last heartbeat.
+        // If not, further check whether it is about to send a heartbeat at the second half of a moment or not.
+        // If the current timestamp lies in the second half of the moment, then schedule the next heartbeat withing the next moment (in its first half).
+        // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
-            : (currentMomentDuration > halfMomentSize && currentMomentDuration < momentSize) ? halfMomentSize : 0;
+            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? Math.floor(Math.random(acceptanceLimit, momentReserve)) : 0;
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
-
+        console.log("Duration", currentMomentDuration)
+        console.log("HB Start time schedule:", schedule);
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

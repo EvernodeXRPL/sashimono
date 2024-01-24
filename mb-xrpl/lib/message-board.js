@@ -128,6 +128,11 @@ class MessageBoard {
             });
         }
 
+        this.xrplApi.on(evernode.XrplApiEvents.DISCONNECTED, async (e) => {
+            console.log(`Exiting due to server disconnect (code ${e})...`);
+            process.exit(1);
+        });
+
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
             this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');

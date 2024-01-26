@@ -22,26 +22,9 @@ async function setEvernodeDefaults(network, governorAddress, rippledServer) {
         });
 }
 
+const MAX_TX_RETRY_ATTEMPTS = 10;
+
 class Setup {
-
-    #httpPost(url) {
-        return new Promise((resolve, reject) => {
-            const req = https.request(url, { method: 'POST' }, (resp) => {
-                let data = '';
-                resp.on('data', (chunk) => data += chunk);
-                resp.on('end', () => {
-                    if (resp.statusCode == 200)
-                        resolve(data);
-                    else
-                        reject(data);
-                });
-            })
-
-            req.on("error", reject);
-            req.on('timeout', () => reject('Request timed out.'))
-            req.end()
-        })
-    }
 
     #getConfig(readSecret = true) {
         return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
@@ -92,7 +75,7 @@ class Setup {
                 let attempts = 0;
                 while (attempts >= 0) {
                     try {
-                        await hostClient.prepareAccount(domain);
+                        await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                         break;
                     }
                     catch (err) {
@@ -140,12 +123,12 @@ class Setup {
         while (attempts >= 0) {
             try {
                 await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress);
+                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
 
                 // Create lease offers.
                 console.log("Creating lease offers for instance slots...");
                 for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null);
+                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                     console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
                 }
 
@@ -178,8 +161,8 @@ class Setup {
             xrplApi: hostClient.xrplApi
         });
 
-        await this.burnMintedURITokens(hostClient.xrplAcc);
-        await hostClient.deregister(error);
+        await this.burnMintedURITokens(hostClient, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+        await hostClient.deregister(error, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
     }
 
@@ -273,15 +256,15 @@ class Setup {
         });
 
         const hostInfo = await hostClient.getHostInfo();
-        await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress);
+        await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
     }
 
     // Burn the host minted URITokens at the de-registration.
-    async burnMintedURITokens(xrplAcc) {
+    async burnMintedURITokens(hostClient, options = {}) {
         // Get unsold URITokens.
-        const uriTokens = (await xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
-            .map(o => { return { uriTokenId: o.index, ownerAddress: xrplAcc.address }; });
+        const uriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+            .map(o => { return { uriTokenId: o.index, ownerAddress: hostClient.xrplAcc.address }; });
 
         // Get sold URITokens.
         // We check for db existence since db is created by message board (not setup).
@@ -307,8 +290,8 @@ class Setup {
 
 
         for (const uriToken of uriTokens) {
-            const sold = uriToken.ownerAddress !== xrplAcc.address;
-            await xrplAcc.burnURIToken(uriToken.uriTokenId);
+            const sold = uriToken.ownerAddress !== hostClient.xrplAcc.address;
+            await hostClient.expireLease(uriToken.uriTokenId, options);
             console.log(`Burnt ${sold ? 'sold' : 'unsold'} hosting URIToken (${uriToken.uriTokenId}) of ${uriToken.ownerAddress + (sold ? ' tenant' : '')} account`);
         }
     }
@@ -327,8 +310,8 @@ class Setup {
             xrplApi: hostClient.xrplApi
         });
 
-        await hostClient.transfer(transfereeAddress);
-        await this.burnMintedURITokens(hostClient.xrplAcc);
+        await hostClient.transfer(transfereeAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+        await this.burnMintedURITokens(hostClient.xrplAcc, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
     }
 
@@ -478,7 +461,7 @@ class Setup {
 
         for (const uriToken of uriTokensToBurn) {
             try {
-                await hostClient.expireLease(uriToken.uriTokenId);
+                await hostClient.expireLease(uriToken.uriTokenId, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
             }
             catch (e) {
                 console.error(e);
@@ -495,7 +478,7 @@ class Setup {
                 await hostClient.offerLease(idx,
                     leaseAmount ? leaseAmount : acc.leaseAmount,
                     appenv.TOS_HASH,
-                    (existingCfg?.networking?.ipv6?.subnet) ? UtilHelper.generateIPV6Address(existingCfg.networking.ipv6.subnet, idx) : null);
+                    (existingCfg?.networking?.ipv6?.subnet) ? UtilHelper.generateIPV6Address(existingCfg.networking.ipv6.subnet, idx) : null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
             }
             catch (e) {
                 console.error(e);
@@ -552,9 +535,9 @@ class Setup {
                     console.log(`Expiring the lease...`);
 
                     // Burn the URITokens and recreate the offer.
-                    await hostClient.expireLease(containerName, lease.tenant_xrp_address).catch(console.error);
+                    await hostClient.expireLease(containerName, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } }).catch(console.error);
 
-                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.outboundIP?.address).catch(console.error);
+                    await hostClient.offerLease(uriInfo.leaseIndex, acc.leaseAmount, appenv.TOS_HASH, uriInfo?.outboundIP?.address, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } }).catch(console.error);
 
                     // Refund EVRs to the tenant.
                     const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
@@ -562,7 +545,7 @@ class Setup {
                     const remainingMoments = lease.life_moments - spentMoments;
                     if (remainingMoments > 0) {
                         console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, (uriInfo.leaseAmount * remainingMoments).toString());
+                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, (uriInfo.leaseAmount * remainingMoments).toString(), { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                     }
                 }
 

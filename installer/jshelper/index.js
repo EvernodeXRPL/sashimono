@@ -9,6 +9,8 @@ const http = require('http');
 const crypto = require('crypto');
 const { appenv } = require("../../mb-xrpl/lib/appenv");
 
+const MAX_TX_RETRY_ATTEMPTS = 10;
+
 let NETWORK = appenv.NETWORK;
 
 function checkParams(args, count) {
@@ -178,7 +180,7 @@ const funcs = {
 
         await hostClient.connect();
 
-        await hostClient.transfer(transfereeAddress || accountAddress);
+        await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
 
         await hostClient.disconnect();
         await xrplApi.disconnect();
@@ -406,7 +408,7 @@ const funcs = {
             let attempts = 0;
             while (attempts >= 0) {
                 try {
-                    await hostClient.prepareAccount(domain);
+                    await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
                     break;
                 }
                 catch (err) {

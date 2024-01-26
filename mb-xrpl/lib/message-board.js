@@ -231,7 +231,7 @@ class MessageBoard {
             catch (e) {
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
-                    if (this.cfg.xrpl.affordableExtraFee > 0 && (typeof e === 'string' && e.includes('tefMAX_LEDGER'))) {
+                    if (this.cfg.xrpl.affordableExtraFee > 0 && e.status == 'TOOK_LONG') {
                         this.#applyFeeUpliftment = true;
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
                     }

@@ -27,8 +27,9 @@ class MessageBoard {
         processing: false,
         queue: []
     };
-    #useTxnFeeCeiling = false;
+    #applyFeeUpliftment = false;
     #hearbeatRetryDelay = 30000; // 5 mins
+    #feeUpliftment = 0;
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
@@ -179,10 +180,9 @@ class MessageBoard {
 
     #prepareHostClientFunctionOptions() {
         let options = {}
-        if (this.#useTxnFeeCeiling && this.cfg.xrpl.txnFeeCeiling > 0) {
-            options.transactionOptions = { fee: this.cfg.xrpl.txnFeeCeiling }
+        if (this.#applyFeeUpliftment) {
+            options.transactionOptions = { feeUplift: this.#feeUpliftment }
         }
-        options.transactionOptions = { maxLedgerIndex: this.xrplApi.ledger_index }
 
         return options;
     }
@@ -225,12 +225,16 @@ class MessageBoard {
         for (let action of this.#concurrencyQueue.queue) {
             try {
                 await action.callback();
-                this.#useTxnFeeCeiling = false;
+                this.#applyFeeUpliftment = false;
+                this.#feeUpliftment = 0;
             }
             catch (e) {
-                this.#useTxnFeeCeiling = true;
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
+                    if (this.cfg.xrpl.affordableExtraFee > 0 && (typeof e === 'string' && e.includes('tefMAX_LEDGER'))) {
+                        this.#applyFeeUpliftment = true;
+                        this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
+                    }
                     if (action.delay > 0) {
                         setTimeout(async () => {
                             toKeep.push(action);
@@ -316,8 +320,10 @@ class MessageBoard {
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
         const currentMomentDuration = currentTimestamp - currentMomentStartIdx;
-        const maxRetries = (currentMomentDuration > Math.floor(momentSize * 0.75) && currentMomentDuration < momentSize) ? Math.floor((currentMomentDuration - 1200) / 300) : Math.floor((currentMomentDuration - 300) / 300);
-
+        // Drop heartbeat re-trying in last quarter.
+        const maxRetries = (currentMomentDuration >= Math.floor(momentSize * 0.75) && currentMomentDuration < momentSize) ?
+            0 :
+            Math.floor((momentSize - currentMomentDuration - 300) / 300);
         await this.#queueAction(async () => {
             let ongoingHeartbeat = false;
             const currentMoment = await this.hostClient.getMoment();
@@ -525,8 +531,8 @@ class MessageBoard {
         // Schedule the next heartbeat based on last heartbeat occurrence.
         // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
         // If it's true, then schedule the next heartbeat based on its last heartbeat.
-        // If not, further check whether it is about to send a heartbeat at the second half of a moment or not.
-        // If the current timestamp lies in the second half of the moment, then schedule the next heartbeat withing the next moment (in its first half).
+        // If not, further check whether it is about to send a heartbeat at the which state of a moment.
+        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat withing the next moment.
         // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
@@ -534,8 +540,6 @@ class MessageBoard {
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
-        console.log("Duration", currentMomentDuration)
-        console.log("HB Start time schedule:", schedule);
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

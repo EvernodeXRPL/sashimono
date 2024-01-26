@@ -23,8 +23,9 @@ async function main() {
                 const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
                 const ipv6NetInterface = (process.argv[10] === '-') ? null : process.argv[10];
                 const network = process.argv.length > 11 ? process.argv[11] : appenv.NETWORK;
+                const affordableExtraFee = process.argv.length > 12 ? process.argv[12] : 0;
                 const setup = new Setup();
-                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network);
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, affordableExtraFee);
 
                 if (appenv.IS_DEV_MODE) {
                     await setup.prepareHostAccount(domain);

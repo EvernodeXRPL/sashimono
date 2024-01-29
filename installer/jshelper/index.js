@@ -61,6 +61,34 @@ const funcs = {
             return { success: false, result: "Account not found." };
 
         await hostClient.connect();
+
+        if (validateFor === "register" || validateFor === "re-register") {
+            // Check whether is there any missed NFT sell offers
+            try {
+                const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress, null);
+                const regUriToken = await hostClient.getRegistrationUriToken();
+
+                if (!regUriToken) {
+                    const regInfo = await hostClient.getHostInfo(accountAddress);
+
+                    if (regInfo) {
+                        const sellOffer = (await registryAcc.getURITokens()).find(o => o.index == regInfo.uriTokenId && o.Amount);
+
+                        if (sellOffer) {
+                            await hostClient.disconnect();
+                            await xrplApi.disconnect();
+                            return { success: true };
+                        }
+                    }
+                }
+
+            } catch (e) {
+                await hostClient.disconnect();
+                await xrplApi.disconnect();
+                return { success: false, result: 'Error occured in missed sell offers check.' };
+            }
+        }
+
         const registered = await hostClient.isRegistered();
         // For register validation the host should not be registered in evernode.
         // For other validations host should be registered in evernode.

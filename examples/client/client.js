@@ -57,7 +57,7 @@ async function main() {
     hpc.on(HotPocket.events.contractOutput, (r) => {
 
         r.outputs.forEach(output => {
-            // If bson.deserialize error occured it'll be caught by this try catch.
+            // If bson.deserialize error occurred it'll be caught by this try catch.
             try
             {
                 const result = bson.deserialize(output);

@@ -214,7 +214,7 @@ class Setup {
                 await hostClient.disconnect();
             }
             catch {
-                throw 'Error occured when retrieving account info.';
+                throw 'Error occurred when retrieving account info.';
             }
         }
     }

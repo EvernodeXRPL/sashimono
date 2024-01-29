@@ -85,7 +85,7 @@ const funcs = {
             } catch (e) {
                 await hostClient.disconnect();
                 await xrplApi.disconnect();
-                return { success: false, result: 'Error occured in missed sell offers check.' };
+                return { success: false, result: 'Error occurred in missed sell offers check.' };
             }
         }
 

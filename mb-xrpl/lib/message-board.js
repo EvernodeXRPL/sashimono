@@ -509,8 +509,8 @@ class MessageBoard {
 
     async #startHeartBeatScheduler() {
         const momentSize = this.hostClient.config.momentSize;
-        const halfMomentSize = momentSize / 2; // Getting 25% of moment size
-        const acceptanceLimit = Math.floor(momentSize * 0.75); // Getting 25% of moment size
+        const halfMomentSize = momentSize / 2; // Getting 50% of moment size
+        const acceptanceLimit = Math.floor(momentSize * 0.75); // Getting 75% of moment size
         const momentReserve = Math.floor(momentSize * 0.25); // Getting 25% of moment size
 
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
@@ -532,7 +532,7 @@ class MessageBoard {
         // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
         // If it's true, then schedule the next heartbeat based on its last heartbeat.
         // If not, further check whether it is about to send a heartbeat at the which state of a moment.
-        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat withing the next moment.
+        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat withing the next moment in a random slot.
         // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)

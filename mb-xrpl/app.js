@@ -25,7 +25,7 @@ async function main() {
                 const network = process.argv.length > 11 ? process.argv[11] : appenv.NETWORK;
                 const affordableExtraFee = process.argv.length > 12 ? process.argv[12] : 0;
                 const setup = new Setup();
-                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, affordableExtraFee);
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee));
 
                 if (appenv.IS_DEV_MODE) {
                     await setup.prepareHostAccount(domain);
@@ -50,12 +50,13 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
-            else if ((process.argv.length === 8) && process.argv[2] === 'reconfig') {
+            else if ((process.argv.length === 9) && process.argv[2] === 'reconfig') {
                 if (process.argv[5] == '-') process.argv[5] = null;
                 if (process.argv[6] == '-') process.argv[6] = null;
                 if (process.argv[7] == '-') process.argv[7] = null;
+                if (process.argv[8] == '-') process.argv[8] = null;
 
-                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7]);
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8]);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);

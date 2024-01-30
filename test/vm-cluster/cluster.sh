@@ -208,7 +208,7 @@ if [ $mode == "reconfig" ]; then
         fi
 
         if ! sshskp $sshuser@$hostaddr $command ; then
-            printf "$PRINTFORMAT" "$nodeno" "Error occured reconfiguring sashimono."
+            printf "$PRINTFORMAT" "$nodeno" "Error occurred reconfiguring sashimono."
         else
             # Remove host info if reinstall.
             if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
@@ -402,7 +402,7 @@ if [ $mode == "docker-pull" ]; then
 
         command="$contractpath && $user && $dpull"
         if ! sshskp $sshuser@$hostaddr $command 1>/dev/null; then
-            printf "$PRINTFORMAT" "$nodeno" "Error occured pulling $image."
+            printf "$PRINTFORMAT" "$nodeno" "Error occurred pulling $image."
         else
             printf "$PRINTFORMAT" "$nodeno" "Successfully pulled $image."
         fi

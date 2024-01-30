@@ -198,7 +198,7 @@ class Setup {
                 await hostClient.disconnect();
             }
             catch {
-                throw 'Error occured when retrieving account info.';
+                throw 'Error occurred when retrieving account info.';
             }
         }
     }
@@ -316,7 +316,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -327,16 +327,21 @@ class Setup {
             throw 'Provided Rippled Server is invalid';
         else if (totalInstanceCount && isNaN(totalInstanceCount))
             throw 'Maximum instance count should be a number';
+        else if (affordableExtraFee && isNaN(affordableExtraFee))
+            throw 'Affordable txn fee should be a number';
 
         const leaseAmountParsed = leaseAmount ? parseFloat(leaseAmount) : 0;
         const totalInstanceCountParsed = totalInstanceCount ? parseInt(totalInstanceCount) : 0;
+        const affordableExtraFeeParsed = affordableExtraFee ? parseInt(affordableExtraFee) : 0;
+
 
         // Return if not changed.
         if (!totalInstanceCount &&
             (!leaseAmount || cfg.xrpl.leaseAmount == leaseAmount) &&
             (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
             (!ipv6Subnet) &&
-            (!ipv6NetInterface))
+            (!ipv6NetInterface) &&
+            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee))
             return;
 
         await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
@@ -345,6 +350,8 @@ class Setup {
             cfg.xrpl.leaseAmount = leaseAmountParsed;
         if (rippledServer)
             cfg.xrpl.rippledServer = rippledServer;
+        if (affordableExtraFeeParsed)
+            cfg.xrpl.affordableExtraFee = affordableExtraFeeParsed;
         this.#saveConfig(cfg);
     }
 

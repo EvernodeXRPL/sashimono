@@ -536,7 +536,7 @@ class MessageBoard {
         // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
-            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? Math.floor(Math.random(acceptanceLimit, momentReserve)) : 0;
+            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve : 0;
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);

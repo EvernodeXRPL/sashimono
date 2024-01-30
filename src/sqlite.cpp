@@ -91,7 +91,7 @@ namespace sqlite
         char *err_msg;
         if (sqlite3_exec(db, sql.data(), callback, (callback != NULL ? (void *)callback_first_arg : NULL), &err_msg) != SQLITE_OK)
         {
-            LOG_ERROR << "SQL error occured: " << err_msg;
+            LOG_ERROR << "SQL error occurred: " << err_msg;
             sqlite3_free(err_msg);
             return -1;
         }

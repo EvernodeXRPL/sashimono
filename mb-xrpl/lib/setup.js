@@ -94,6 +94,90 @@ class Setup {
 
     }
 
+    async checkRegistration() {
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        await hostClient.xrplApi.connect();
+        if (!await hostClient.xrplAcc.exists()) {
+            throw "ACC_NOT_FOUND";
+        }
+
+        await hostClient.connect();
+
+        try {
+            // Check whether host has a registration token.
+            const regUriToken = await hostClient.getRegistrationUriToken();
+            if (regUriToken) {
+                const registered = await hostClient.isRegistered();
+                if (registered) {
+                    console.log("REGISTERED");
+                    await hostClient.disconnect();
+                    return true;
+                }
+                else {
+                    throw "INVALID_REG";
+                }
+            }
+
+            const regInfo = await hostClient.getHostInfo();
+            if (regInfo) {
+                const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
+                const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
+                if (sellOffer)
+                    throw "PENDING_SELL_OFFER";
+            }
+
+            // Check whether pending transfer exists.
+            const transferPending = await hostClient.isTransferee();
+            if (transferPending)
+                throw "PENDING_TRANSFER";
+
+            throw "NOT_REGISTERED"
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+    }
+
+    async checkBalance() {
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            const isAReReg = await hostClient.isTransferee();
+            const evrBalance = await hostClient.getEVRBalance();
+            if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
+                throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+            else if (isAReReg && evrBalance < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS))
+                throw `ERROR: EVR balance in the account is insufficient for re-registration.`;
+            await hostClient.disconnect();
+            return true;
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+    }
+
     async register(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         console.log("Registering host...");
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
@@ -109,35 +193,16 @@ class Setup {
             xrplApi: hostClient.xrplApi
         });
 
-        const isAReReg = await hostClient.isTransferee();
-        const evrBalance = await hostClient.getEVRBalance();
-        if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
-            throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
-        else if (isAReReg && evrBalance < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS))
-            throw `ERROR: EVR balance in the account is insufficient for re-registration.`;
+        try {
+            await hostClient.register(countryCode, cpuMicroSec,
+                Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
 
-        // Sometimes we may get 'tecPATH_DRY' error from rippled when some servers in the server cluster
-        // haven't still updated the ledger. In such cases, we retry several times before giving up.
-        let attempts = 0;
-        while (attempts >= 0) {
-            try {
-                await hostClient.register(countryCode, cpuMicroSec,
-                    Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-
-                break;
-            }
-            catch (err) {
-                if (err.code === 'tecPATH_DRY' && ++attempts <= 5) {
-                    console.log("tecPATH_DRY - retrying...")
-                    // Wait and retry.
-                    await new Promise(resolve => setTimeout(resolve, 3000));
-                    continue;
-                }
-                throw err;
-            }
+            await hostClient.disconnect();
         }
-
-        await hostClient.disconnect();
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
     }
 
     async mintLeases(totalInstanceCount) {
@@ -275,7 +340,6 @@ class Setup {
             await hostClient.disconnect();
             throw e;
         }
-
     }
 
     async deregister(error = null) {
@@ -291,9 +355,14 @@ class Setup {
             xrplApi: hostClient.xrplApi
         });
 
-        await this.burnMintedURITokens(hostClient, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-        await hostClient.deregister(error, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-        await hostClient.disconnect();
+        try {
+            await hostClient.deregister(error, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await hostClient.disconnect();
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
     }
 
     async regInfo(isBasic) {

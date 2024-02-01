@@ -71,9 +71,13 @@ const funcs = {
             if (regUriToken)
                 result = { success: true, result: "HAS_REG_TOKEN" };
 
-            const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
-            if (sellOffer)
-                result = { success: true, result: "HAS_SELL_OFFER" };
+            const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
+            const regInfo = await hostClient.getHostInfo();
+            if (regInfo) {
+                const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
+                if (sellOffer)
+                    result = { success: true, result: "HAS_SELL_OFFER" };
+            }
 
             const registered = await hostClient.isRegistered();
             if (registered)

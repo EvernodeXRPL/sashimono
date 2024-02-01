@@ -31,6 +31,12 @@ async function main() {
                     await setup.prepareHostAccount(domain);
                 }
             }
+            else if (process.argv.length >= 2 && process.argv[2] === 'check-reg') {
+                await new Setup().checkRegistration();
+            }
+            else if (process.argv.length >= 2 && process.argv[2] === 'check-balance') {
+                await new Setup().checkBalance();
+            }
             else if (process.argv.length >= 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12], process.argv[13]);

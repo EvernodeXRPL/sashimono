@@ -1,5 +1,4 @@
 
-const https = require('https');
 const { appenv } = require('./appenv');
 const evernode = require('evernode-js-client');
 const fs = require('fs');
@@ -125,13 +124,6 @@ class Setup {
                 await hostClient.register(countryCode, cpuMicroSec,
                     Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
 
-                // Create lease offers.
-                console.log("Creating lease offers for instance slots...");
-                for (let i = 0; i < totalInstanceCount; i++) {
-                    await hostClient.offerLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-                    console.log(`Created lease offer ${i + 1} of ${totalInstanceCount}.`);
-                }
-
                 break;
             }
             catch (err) {
@@ -146,6 +138,144 @@ class Setup {
         }
 
         await hostClient.disconnect();
+    }
+
+    async mintLeases(totalInstanceCount) {
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            const leases = await hostClient.getLeases();
+
+            // Terminate if existing leases are inconsistent with current.
+            let lastIndex = 0;
+            if (leases.length) {
+                for (const l of leases) {
+                    if (l.Amount && l.Amount.value !== acc.leaseAmount) {
+                        throw 'LEASE_ERR: Lease amount is inconsistent with existing.';
+                    }
+                    const tokenInfo = evernode.UtilHelpers.decodeLeaseTokenUri(l.URI);
+                    if (tokenInfo.leaseAmount !== acc.leaseAmount) {
+                        throw 'LEASE_ERR: Lease amount is inconsistent with existing.';
+                    }
+                    const leaseIndex = tokenInfo.leaseIndex;
+                    const outboundIP = tokenInfo.outboundIP;
+
+                    if ((outboundIP && !config?.networking?.ipv6?.subnet) || (!outboundIP && config?.networking?.ipv6?.subnet)) {
+                        throw 'LEASE_ERR: Outbound IP is inconsistent with existing.';
+                    }
+                    else if (outboundIP && config?.networking?.ipv6?.subnet) {
+                        if (!UtilHelper.isSameIPV6Subnet(outboundIP, config?.networking?.ipv6?.subnet)) {
+                            throw 'LEASE_ERR: Outbound IP is inconsistent with existing.';
+                        }
+                    }
+
+                    if (leaseIndex > lastIndex) {
+                        lastIndex = leaseIndex;
+                    }
+                }
+            }
+
+            if (totalInstanceCount >= leases.length) {
+                // Create leases.
+                console.log("Minting leases for instance slots...");
+                for (let i = (leases.length > 0 ? (lastIndex + 1) : 0); i < totalInstanceCount; i++) {
+                    await hostClient.mintLease(i, acc.leaseAmount, appenv.TOS_HASH, config?.networking?.ipv6?.subnet ? UtilHelper.generateIPV6Address(config.networking.ipv6.subnet, i) : null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+                    console.log(`Minted lease ${i + 1} of ${totalInstanceCount}.`);
+                }
+            }
+            else {
+                // Burn leases.
+                console.log("Burning previous leases...");
+                for (let i = totalInstanceCount; i < leases.length; i++) {
+                    await hostClient.expireLease(leases[i].index, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+                    console.log(`Burned lease ${i + 1} of ${leases.length}.`);
+                }
+            }
+            await hostClient.disconnect();
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+    }
+
+    async offerLeases() {
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            const unoffered = await hostClient.getUnofferedLeases();
+
+            if (unoffered.length > 0) {
+                // Create lease offers.
+                console.log("Creating lease offers for instance slots...");
+                let i = 0;
+                for (let t of unoffered) {
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+                    if (uriInfo.leaseAmount == acc.leaseAmount) {
+                        await hostClient.offerMintedLease(t.index, acc.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+                        console.log(`Created lease offer ${i + 1} of ${unoffered.length}.`);
+                    }
+                    else {
+                        throw 'LEASE_ERR: Lease amounts are inconsistent.';
+                    }
+                    i++;
+                }
+            }
+            else {
+                throw 'LEASE_ERR: No unoffered leases.';
+            }
+
+            await hostClient.disconnect();
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+
+    }
+
+    async burnLeases() {
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            await this.burnMintedURITokens(hostClient, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await hostClient.disconnect();
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+
     }
 
     async deregister(error = null) {

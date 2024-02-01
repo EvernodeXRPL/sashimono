@@ -37,87 +37,64 @@ const funcs = {
     },
 
     'validate-account': async (args) => {
-        checkParams(args, 3);
-        const rippledUrl = args[0];
-        const governorAddress = args[1];
-        const accountAddress = args[2];
-        const validateFor = args[3] || "register";
+        let result = { success: false, result: 'Unknown error.' };
+        let hostClient, xrplApi;
+        try {
+            checkParams(args, 3);
+            const rippledUrl = args[0];
+            const governorAddress = args[1];
+            const accountAddress = args[2];
 
-        await evernode.Defaults.useNetwork(NETWORK);
+            await evernode.Defaults.useNetwork(NETWORK);
 
-        evernode.Defaults.set({
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress
-        });
+            evernode.Defaults.set({
+                rippledServer: rippledUrl,
+                governorAddress: governorAddress
+            });
 
-        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
+            xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+            await xrplApi.connect();
 
-        evernode.Defaults.set({
-            xrplApi: xrplApi
-        });
+            evernode.Defaults.set({
+                xrplApi: xrplApi
+            });
 
-        const hostClient = new evernode.HostClient(accountAddress, null);
+            hostClient = new evernode.HostClient(accountAddress, null);
 
-        if (!await hostClient.xrplAcc.exists())
-            return { success: false, result: "Account not found." };
+            if (!await hostClient.xrplAcc.exists())
+                result = { success: false, result: "Account not found." };
 
-        await hostClient.connect();
+            await hostClient.connect();
 
-        if (validateFor === "register" || validateFor === "re-register") {
-            // Check whether is there any missed NFT sell offers
-            try {
-                const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress, null);
-                const regUriToken = await hostClient.getRegistrationUriToken();
+            // Check whether host has a registration token.
+            const regUriToken = await hostClient.getRegistrationUriToken();
+            if (regUriToken)
+                result = { success: true, result: "HAS_REG_TOKEN" };
 
-                if (!regUriToken) {
-                    const regInfo = await hostClient.getHostInfo(accountAddress);
+            const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
+            if (sellOffer)
+                result = { success: true, result: "HAS_SELL_OFFER" };
 
-                    if (regInfo) {
-                        const sellOffer = (await registryAcc.getURITokens()).find(o => o.index == regInfo.uriTokenId && o.Amount);
-
-                        if (sellOffer) {
-                            await hostClient.disconnect();
-                            await xrplApi.disconnect();
-                            return { success: true };
-                        }
-                    }
-                }
-
-            } catch (e) {
-                await hostClient.disconnect();
-                await xrplApi.disconnect();
-                return { success: false, result: 'Error occurred in missed sell offers check.' };
-            }
-        }
-
-        const registered = await hostClient.isRegistered();
-        // For register validation the host should not be registered in evernode.
-        // For other validations host should be registered in evernode.
-        if (validateFor === "register") {
+            const registered = await hostClient.isRegistered();
             if (registered)
-                return { success: false, result: "Host is already registered." };
-        }
-        else if (!registered)
-            return { success: false, result: "Host is not registered." };
+                result = { success: true, result: "REGISTERED" };
 
-        // Check whether pending transfer exists.
-        const isTransferPending = await hostClient.isTransferee();
-
-        // For register validation check the available balance enough for transfer and non transfer registrations.
-        // For other validations there should not be a pending transfer for the host.
-        if (validateFor === "register") {
-            const minEverBalance = isTransferPending ? 1 : hostClient.config.hostRegFee;
+            // Check whether pending transfer exists.
+            const transferPending = await hostClient.isTransferee();
+            const minEverBalance = transferPending ? 1 : hostClient.config.hostRegFee;
             const currentBalance = await hostClient.getEVRBalance();
             if (currentBalance < minEverBalance)
-                return { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
+                result = { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
+        } catch (e) {
+            result = { success: false, result: e };
+        } finally {
+            if (hostClient)
+                await hostClient.disconnect();
+            if (xrplApi)
+                await xrplApi.disconnect();
         }
-        else if (isTransferPending)
-            return { success: false, result: "There's a pending transfer for this host." };
 
-        await hostClient.disconnect();
-        await xrplApi.disconnect();
-        return { success: true };
+        return result;
     },
 
     'validate-keys': async (args) => {

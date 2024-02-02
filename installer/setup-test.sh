@@ -18,7 +18,7 @@
     export MIN_OPERATIONAL_DURATON=3
 
     mb_cli_exit_err="MB_CLI_EXITED"
-    choice_result=""
+    multi_choice_result=""
 
     public_config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
 
@@ -93,19 +93,19 @@
 
     function confirm() {
         local prompt=$1
-        local defaultChoice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
+        local default_choice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
 
-        local choiceDisplay="[Y/n]"
-        if [ "$defaultChoice" == "n" ]; then
-            choiceDisplay="[y/N]"
+        local choice_display="[Y/n]"
+        if [ "$default_choice" == "n" ]; then
+            choice_display="[y/N]"
         fi
 
-        echo -en "$prompt $choiceDisplay "
+        echo -en "$prompt $choice_display "
         local yn=""
         read yn </dev/tty
 
         # Default choice is 'y'
-        [ -z $yn ] && yn="$defaultChoice"
+        [ -z $yn ] && yn="$default_choice"
         while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
             read -ep "'y' or 'n' expected: " yn </dev/tty
         done
@@ -114,24 +114,39 @@
         [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
     }
 
-    function choice() {
+    function multi_choice() {
         local prompt=$1
-
-        local choiceDisplay=${2:-y/n}
-
-        echo -en "$prompt [$choiceDisplay]? "
-        read choice_result </dev/tty
+        local choice_display=${2:-y/n}
 
         IFS='/'
-        read -ra ADDR <<<"$choiceDisplay"
+        read -ra ADDR <<<"$choice_display"
 
-        while ! [[ "${ADDR[@]}" =~ $choice_result ]]; do
-            read -ep "[$choiceDisplay] expected: " choice_result </dev/tty
+        local default_choice=${3:-1} #Default choice is set to first.
+
+        # Fallback to 1 if invalid.
+        ([[ ! $default_choice =~ ^[0-9]+$ ]] || [[ $default_choice -lt 0 ]] || [[ $default_choice -gt ${#ADDR[@]} ]]) && default_choice=1
+
+        echo -en "$prompt?\n"
+        local i=1
+        for choice in "${ADDR[@]}"; do
+            [[ $default_choice -eq $i ]] && echo "($i) ${choice^^}" || echo "($i) $choice"
+            i=$((i + 1))
         done
+
+        local choice=""
+        read choice </dev/tty
+
+        [ -z $choice ] && choice="$default_choice"
+        while ! ([[ $choice =~ ^[0-9]+$ ]] && [[ $choice -gt 0 ]] && [[ $choice -lt $i ]]); do
+            read -ep "[1-$i] expected: " choice </dev/tty
+            [ -z $choice ] && choice="$default_choice"
+        done
+
+        multi_choice_result="${ADDR[$((choice - 1))]}"
     }
 
-    function choice_output() {
-        echo $choice_result
+    function multi_choice_output() {
+        echo $multi_choice_result
     }
 
     function exec_jshelper() {
@@ -279,10 +294,10 @@
     function burn_leases() {
         local res=$(exec_mb burn-leases)
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-            choice "An error occured while burning! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
+            multi_choice "An error occured while burning! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
                 burn_leases "$@" && return 0
-            elif [ "$input" == "rollback" ]; then
+            elif [ "$input" == "Rollback" ]; then
                 rollback
             else
                 abort
@@ -303,10 +318,10 @@
                     abort
                 fi
             else
-                choice "An error occured while minting! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-                if [ "$input" == "retry" ]; then
+                multi_choice "An error occured while minting! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+                if [ "$input" == "Retry" ]; then
                     mint_leases "$@" && return 0
-                elif [ "$input" == "rollback" ]; then
+                elif [ "$input" == "Rollback" ]; then
                     rollback
                 else
                     abort
@@ -321,10 +336,10 @@
         local res=$(exec_mb deregister $1)
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
-            choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
+            multi_choice "An error occured while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
                 deregister "$@" && return 0
-            elif [ "$input" == "rollback" ]; then
+            elif [ "$input" == "Rollback" ]; then
                 rollback
             else
                 abort
@@ -338,10 +353,10 @@
         local res=$(exec_mb register $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model $cpu_count $cpu_speed $email_address $description)
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
-            choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
+            multi_choice "An error occured while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
                 register "$@" && return 0
-            elif [ "$input" == "rollback" ]; then
+            elif [ "$input" == "Rollback" ]; then
                 rollback
             else
                 abort
@@ -355,10 +370,10 @@
         local res=$(exec_mb prepare $inetaddr)
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
-            choice "An error occured while preparing the account! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
+            multi_choice "An error occured while preparing the account! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
                 register "$@" && return 0
-            elif [ "$input" == "rollback" ]; then
+            elif [ "$input" == "Rollback" ]; then
                 rollback
             else
                 abort
@@ -373,10 +388,10 @@
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "ERROR"* ]]; then
-                choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
-                if [ "$input" == "retry" ]; then
+                multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+                if [ "$input" == "Retry" ]; then
                     check_balance "$@" && return 0
-                elif [ "$input" == "rollback" ]; then
+                elif [ "$input" == "Rollback" ]; then
                     rollback
                 else
                     abort
@@ -391,10 +406,10 @@
     function wait_for_funds() {
         local res=$(exec_mb wait-for-funds "$@")
         if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-            choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
+            multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
                 wait_for_funds "$@" && return 0
-            elif [ "$input" == "rollback" ]; then
+            elif [ "$input" == "Rollback" ]; then
                 rollback
             else
                 abort

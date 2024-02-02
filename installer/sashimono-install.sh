@@ -24,6 +24,7 @@ tls_cabundle_file=${17}
 description=${18}
 ipv6_subnet=${19}
 ipv6_net_interface=${20}
+extra_txn_fee=${21}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
@@ -262,7 +263,7 @@ if [ "$NO_MB" == "" ]; then
             stage "Configuring host Xahau account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "XRPLACC_FAILURE" && rollback
             doreg=1
         fi
 

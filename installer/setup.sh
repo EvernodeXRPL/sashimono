@@ -737,6 +737,21 @@ function set_lease_amount() {
     lease_amount=$amount
 }
 
+function set_extra_fee() {
+    local fee=0
+    if confirm "Do you want to set an extra transaction fee to consider in case of network congestion?" "n" ; then
+        while true ; do
+        read -ep "Specify the affordable extra transaction fee (in XAH Drops): " fee </dev/tty
+            ! validate_positive_decimal $fee && echo "Extra fee amount should be a numerical value greater than zero." || break
+        done
+
+        echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
+
+    else
+        extra_txn_fee=$fee
+    fi
+}
+
 function set_email_address() {
 
     local emailAddress=""
@@ -1121,7 +1136,7 @@ function install_evernode() {
     # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
     ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
                             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
-                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface 2>&1 \
+                            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 \
                             | tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" \
                             | while read line ; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6} ; done \
                             && remove_evernode_alias && install_failure
@@ -1364,7 +1379,7 @@ function reconfig_sashi() {
 function reconfig_mb() {
     echomult "Configuaring message board...\n"
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface &&
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee &&
         echo "There was an error in updating message board configuration." && return 1
     return 0
 }
@@ -1381,6 +1396,7 @@ function config() {
     rippled_server='-'
     ipv6_subnet='-'
     ipv6_net_interface='-'
+    extra_txn_fee='-'
 
     local saconfig="$SASHIMONO_DATA/sa.cfg"
     local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
@@ -1391,6 +1407,7 @@ function config() {
     local mbconfig="$MB_XRPL_DATA/mb-xrpl.cfg"
     local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
     local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
+    local cfg_extra_txn_fee=$(jq '.xrpl.affordableExtraFee' $mbconfig)
 
     local cfg_ipv6_subnet=$(jq -r '.networking.ipv6.subnet' $mbconfig)
     local cfg_ipv6_net_interface=$(jq -r '.networking.ipv6.interface' $mbconfig)
@@ -1563,8 +1580,23 @@ function config() {
             echomult "Invalid arguments.\n  Usage: evernode config instance [ipv6]\n" && exit 1
         fi
 
+    elif [ "$sub_mode" == "extrafee" ] ; then
+    
+        local fee=${2}    # Affordable extra transaction fee to consider in txn failures.
+        [ -z $fee ] && echomult "Your affordable extra transaction fee: $cfg_extra_txn_fee XAH Drops.\n" && exit 0
+
+        ! validate_positive_decimal $fee &&
+            echomult "Invalid fee amount.\n   Usage: evernode config extrafee | evernode config extrafee <fee amount in XAH Drops>\n" &&
+            exit 1
+        extra_txn_fee=$fee
+        [[ $cfg_extra_txn_fee == $extra_txn_fee ]] && echomult "Affordable extra transaction fee is already configured!\n" && exit 0
+
+        echomult "Using affordable extra transaction fee $extra_txn_fee XAH Drops."
+
+        update_mb=1
+
     else
-        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email|instance] [arguments]\n" && exit 1
+        echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email|instance|extrafee] [arguments]\n" && exit 1
     fi
 
     local mb_user_id=$(id -u "$MB_XRPL_USER")
@@ -1684,6 +1716,8 @@ if [ "$mode" == "install" ]; then
     if [ "$NO_MB" == "" ]; then
         set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+
+        set_extra_fee
 
         # TODO - CHECKPOINT - 02
         set_host_xrpl_account $operation

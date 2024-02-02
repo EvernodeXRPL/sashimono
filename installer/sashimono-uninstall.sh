@@ -134,7 +134,7 @@ if [ -f $SASHIMONO_BIN/docker-registry-uninstall.sh ]; then
 fi
 
 # Delete binaries except message board and sashimnono uninstall script.
-# We keep uninstall script so user can uninstall again if error occured at later steps.
+# We keep uninstall script so user can uninstall again if error occurred at later steps.
 # We'll remove these after deregistration.
 echo "Deleting binaries..."
 find $SASHIMONO_BIN -mindepth 1 ! \( -regex "^$MB_XRPL_BIN\(/.*\)?" -o -path $SASHIMONO_BIN/sashimono-uninstall.sh \) -delete

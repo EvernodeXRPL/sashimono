@@ -5,20 +5,91 @@
 
 # surrounding braces  are needed make the whole script to be buffered on client before execution.
 {
+    export SASHIMONO_DATA="/home/chalith/Workspace/HotpocketDev/sashimono"
+    export SASHIMONO_CONFIG="$SASHIMONO_DATA/sa.cfg"
+    export MB_XRPL_DATA="$SASHIMONO_DATA/mb-xrpl"
+    export MB_XRPL_CONFIG="$MB_XRPL_DATA/mb-xrpl.cfg"
+    export PUBLIC_CONFIG="$MB_XRPL_DATA/configuration.json"
+    export NODEJS_BIN="/usr/bin/node"
+    export SETUP_HELPER="/home/chalith/Workspace/HotpocketDev/sashimono/installer"
+    export JS_HELPER="$SETUP_HELPER/jshelper/index.js"
+    export MIN_OPERATIONAL_COST_PER_MONTH=5
+    # 3 Month minimum operational duration is considered.
+    export MIN_OPERATIONAL_DURATON=3
+
+    public_config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
+
     country_code="AU"
-    cpu_micro_sec=1
-    ram_kb=1000000
-    swap_kb=1000000
-    disk_kb=1000000
-    total_instance_count=10
+    cpu_micro_sec=""
+    ram_kb=""
+    swap_kb=""
+    disk_kb=""
+    total_instance_count=""
     cpu_model="test"
     cpu_count=4
     cpu_speed=5
     email_address="test@gmail.com"
     description="test"
 
+    # We execute some commands as unprivileged user for better security.
+    # (we execute as the user who launched this script as sudo)
+    noroot_user=${SUDO_USER:-$(whoami)}
+
+    inetaddr=""
+    xrpl_address=""
+    xrpl_secret_path=""
+    xrpl_secret=""
+    rippled_server=""
+
     mb_error="Evernode Xahau message board exiting with error."
     choice_result=""
+
+    export NETWORK="${NETWORK:-mainnet}"
+
+    function rollback() {
+        echo "Rollbacking the instalation.."
+        burn_leases
+        deregister
+        exit 1
+    }
+
+    function abort() {
+        echo "Aborting the instalation.."
+        exit 0
+    }
+
+    function spin() {
+        while [ 1 ]; do
+            for i in ${spinner[@]}; do
+                echo -ne "\r$i"
+                sleep 0.2
+            done
+        done
+    }
+
+    function wait_call() {
+        local command_to_execute="$1"
+        local output_template="$2"
+
+        echomult "\nWaiting for the process to complete..."
+        spin &
+        local spin_pid=$!
+
+        $command_to_execute
+        return_code=$?
+
+        kill $spin_pid
+        wait $spin_pid
+        echo -ne "\r"
+
+        return $return_code
+    }
+
+    # Helper to print multi line text.
+    # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
+    function echomult() {
+        echo -e $1
+    }
 
     function confirm() {
         local prompt=$1
@@ -63,20 +134,145 @@
         echo $choice_result
     }
 
-    function rollback() {
-        echo "Rollbacking the instalation.."
-        burn_leases
-        deregister
-        exit 0
+    function exec_jshelper() {
+        # Create fifo file to read response data from the helper script.
+        local resp_file=$SETUP_HELPER/helper_fifo
+        [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
+
+        # Execute js helper asynchronously while collecting response to fifo file.
+        sudo -u $noroot_user RESPFILE=$resp_file $NODEJS_BIN $JS_HELPER "$@" "network:$NETWORK" &
+        local pid=$!
+        local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+
+        # Wait for js helper to exit and reflect the error exit code in this function return.
+        wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+        rm $resp_file && return 1
     }
 
-    function abort() {
-        echo "Aborting the instalation.."
-        exit 0
+    # Function to generate QR code in the terminal
+    function generate_qrcode() {
+        if [ -z "$1" ]; then
+            echo "Argument error > Usage: generate_qrcode <string>"
+            return 1
+        fi
+        local input_string="$1"
+        qrencode -s 1 -l L -t UTF8 "$input_string"
+    }
+
+    function read_configs() {
+        local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
+        if [ ! -z $override_network ]; then
+            NETWORK="$override_network"
+            set_environment_configs || return 1
+        fi
+
+        local override_rippled_server=$(jq -r ".xrpl.rippledServer | select( . != null )" "$MB_XRPL_CONFIG")
+        [ ! -z $override_rippled_server ] && rippled_server="$override_rippled_server"
+
+        xrpl_address=$(jq -r ".xrpl.address | select( . != null )" "$MB_XRPL_CONFIG")
+        xrpl_secret_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
+        xrpl_secret=$(jq -r ".xrpl.secret | select( . != null )" "$xrpl_secret_path")
+
+        inetaddr=$(jq -r ".hp.host_address | select( . != null )" "$SASHIMONO_CONFIG")
+        cpu_micro_sec=$(jq -r ".system.max_cpu_us | select( . != null )" "$SASHIMONO_CONFIG")
+        ram_kb=$(jq -r ".system.max_mem_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+        swap_kb=$(jq -r ".system.max_swap_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+        disk_kb=$(jq -r ".system.max_storage_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+        total_instance_count=$(jq -r ".system.max_instance_count | select( . != null )" "$SASHIMONO_CONFIG")
+    }
+
+    function download_public_config() {
+        echomult "\nDownloading Environment configuration...\n"
+        sudo -u $noroot_user curl $public_config_url --output $PUBLIC_CONFIG
+
+        # Network config selection.
+
+        echomult "\nChecking Evernode $NETWORK environment details..."
+
+        if ! jq -e ".${NETWORK}" "$PUBLIC_CONFIG" >/dev/null 2>&1; then
+            echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
+        fi
+    }
+
+    function set_environment_configs() {
+        export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $PUBLIC_CONFIG)}
+        rippled_server=$(jq -r ".$NETWORK.rippledServer" $PUBLIC_CONFIG)
+    }
+
+    function generate_and_save_keyfile() {
+
+        account_json=$(exec_jshelper generate-account) || {
+            echo "Error occurred in account setting up."
+            exit 1
+        }
+        xrpl_address=$(jq -r '.address' <<<"$account_json")
+        xrpl_secret=$(jq -r '.secret' <<<"$account_json")
+
+        if [ "$#" -ne 1 ]; then
+            echomult "Error: Please provide the full path of the secret file."
+            return 1
+        fi
+
+        key_file_path="$1"
+
+        key_dir=$(dirname "$key_file_path")
+        if [ ! -d "$key_dir" ]; then
+            mkdir -p "$key_dir"
+        fi
+
+        if [ "$key_file_path" == "$default_key_filepath" ]; then
+            parent_directory=$(dirname "$key_file_path")
+            chmod -R 500 "$parent_directory" &&
+                chown -R $MB_XRPL_USER: "$parent_directory" || {
+                echomult "Error occurred in permission and ownership assignment of key file directory."
+                exit 1
+            }
+        fi
+
+        if [ -e "$key_file_path" ]; then
+            if confirm "The file '$key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
+                echomult "Continuing with the existing key file."
+                existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
+                if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
+                    account_json=$(exec_jshelper generate-account $existing_secret) || {
+                        echomult "Error occurred when existing account retrieval."
+                        exit 1
+                    }
+                    xrpl_address=$(jq -r '.address' <<<"$account_json")
+                    xrpl_secret=$(jq -r '.secret' <<<"$account_json")
+
+                    chmod 400 "$key_file_path" &&
+                        chown $MB_XRPL_USER: $key_file_path || {
+                        echomult "Error occurred in permission and ownership assignment of key file."
+                        exit 1
+                    }
+                    echomult "Retrived account details via secret.\n"
+                    return 0
+                else
+                    echomult "Error: Existing secret file does not have the expected format."
+                    exit 1
+                fi
+            else
+                exit 1
+            fi
+        else
+
+            echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
+                chmod 400 "$key_file_path" &&
+                chown $MB_XRPL_USER: $key_file_path &&
+                echomult "Key file saved successfully at $key_file_path" || {
+                echomult "Error occurred in permission and ownership assignment of key file."
+                exit 1
+            }
+
+            return 0
+        fi
+
+        exit 1
     }
 
     function exec_mb() {
-        local res=$(MB_DATA_DIR="/home/chalith/Workspace/HotpocketDev/sashimono/mb-xrpl" node "/home/chalith/Workspace/HotpocketDev/sashimono/mb-xrpl/app.js" "$@" | tee /dev/fd/2)
+        local res=$(MB_DATA_DIR="$MB_XRPL_DATA" node "/home/chalith/Workspace/HotpocketDev/sashimono/mb-xrpl/app.js" "$@" | tee /dev/fd/2)
         echo $res
     }
 
@@ -85,7 +281,7 @@
         if [[ "$res" == *"$mb_error"* ]]; then
             choice "An error occured while burning! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
-                burn_leases && return 0
+                burn_leases "$@" && return 0
             elif [ "$input" == "rollback" ]; then
                 rollback
             else
@@ -102,14 +298,14 @@
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "LEASE_ERR"* ]]; then
                 if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
-                    burn_leases && mint_leases && return 0
+                    burn_leases && mint_leases "$@" && return 0
                 else
                     abort
                 fi
             else
                 choice "An error occured while minting! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
                 if [ "$input" == "retry" ]; then
-                    mint_leases && return 0
+                    mint_leases "$@" && return 0
                 elif [ "$input" == "rollback" ]; then
                     rollback
                 else
@@ -127,7 +323,7 @@
             res=$(echo "$res" | tail -n 2 | head -n 1)
             choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
-                deregister $1 && return 0
+                deregister "$@" && return 0
             elif [ "$input" == "rollback" ]; then
                 rollback
             else
@@ -144,7 +340,24 @@
             res=$(echo "$res" | tail -n 2 | head -n 1)
             choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
-                register && return 0
+                register "$@" && return 0
+            elif [ "$input" == "rollback" ]; then
+                rollback
+            else
+                abort
+            fi
+            return 1
+        fi
+        return 0
+    }
+
+    function prepare() {
+        local res=$(exec_mb prepare $inetaddr)
+        if [[ "$res" == *"$mb_error"* ]]; then
+            res=$(echo "$res" | tail -n 2 | head -n 1)
+            choice "An error occured while preparing the account! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
+            if [ "$input" == "retry" ]; then
+                register "$@" && return 0
             elif [ "$input" == "rollback" ]; then
                 rollback
             else
@@ -160,14 +373,31 @@
         if [[ "$res" == *"$mb_error"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "ERROR"* ]]; then
-                choice "Balance check failed! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
+                choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
                 if [ "$input" == "retry" ]; then
-                    check_balance && return 0
+                    check_balance "$@" && return 0
                 elif [ "$input" == "rollback" ]; then
                     rollback
                 else
                     abort
                 fi
+            fi
+            return 1
+        fi
+
+        return 0
+    }
+
+    function wait_for_funds() {
+        local res=$(exec_mb wait-for-funds "$@")
+        if [[ "$res" == *"$mb_error"* ]]; then
+            choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
+            if [ "$input" == "retry" ]; then
+                wait_for_funds "$@" && return 0
+            elif [ "$input" == "rollback" ]; then
+                rollback
+            else
+                abort
             fi
             return 1
         fi
@@ -200,6 +430,61 @@
         fi
         return 1
     }
+
+    function xah_balance_check_and_wait {
+        ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
+
+        # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
+        # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
+        local inc_reserves_count=$((1 + 1 + $total_instance_count))
+        local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
+
+        local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATON + $min_reserve_requirement" | bc)
+        echo $min_exr_requirement
+
+        echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
+        \nThe secret key of the account is located at $key_file_path.
+        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
+        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
+        \n2. At least $reg_fee EVR to cover Evernode registration fee.
+        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+        generate_qrcode "$xrpl_address"
+
+        echomult "\nChecking the account condition..."
+        echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+
+        wait_call "wait_for_funds NATIVE $min_xah_requirement" || return 1
+    }
+
+    function evr_balance_check_and_wait {
+        ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
+
+        local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address)
+
+        echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds:"
+
+        wait_call "wait_for_funds ISSUED $min_evr_requirement" || return 1
+    }
+
+    download_public_config && set_environment_configs || rollback
+
+    # If file not exist.
+    if [ ! -f $MB_XRPL_CONFIG ]; then
+        # Ask consent to generate new account or use and existing.
+        generate_and_save_keyfile || abort
+    fi
+
+    # Override rippled server.
+    read_configs || abort
+
+    xah_balance_check_and_wait || abort
+
+    prepare || abort
+
+    evr_balance_check_and_wait || abort
 
     check_and_register || abort
 

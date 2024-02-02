@@ -57,41 +57,80 @@ class Setup {
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         // Prepare host account.
-        {
-            const hostClient = new evernode.HostClient(acc.address, acc.secret);
-            await hostClient.connect();
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
 
-            // Update the Defaults with "xrplApi" of the client.
-            evernode.Defaults.set({
-                xrplApi: hostClient.xrplApi
-            });
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
 
+        try {
             console.log(`Preparing host account:${acc.address} (domain:${domain} registry:${hostClient.config.registryAddress})`);
+            await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await hostClient.disconnect();
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+    }
 
-            // Sometimes we may get 'account not found' error from rippled when some servers in the cluster
-            // haven't still updated the ledger. In such cases, we retry several times before giving up.
-            {
-                let attempts = 0;
-                while (attempts >= 0) {
-                    try {
-                        await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-                        break;
-                    }
-                    catch (err) {
-                        if (err.data?.error === 'actNotFound' && ++attempts <= 5) {
-                            console.log("actNotFound - retrying...")
-                            // Wait and retry.
-                            await new Promise(resolve => setTimeout(resolve, 3000));
+    async waitForFunds(currencyType, expectedBalance, waitPeriod = 120) {
+
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        // Prepare host account.
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            let attempts = 0;
+            let balance = 0;
+            while (attempts >= 0) {
+                try {
+                    // In order to handle the account not found issue via catch block.
+                    await hostClient.connect();
+
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    if (currencyType === 'NATIVE')
+                        balance = Number((await hostClient.xrplAcc.getInfo()).Balance) / 1000000;
+                    else
+                        balance = Number(await hostClient.getEVRBalance());
+
+                    if (balance < expectedBalance) {
+                        if (++attempts <= waitPeriod)
                             continue;
-                        }
-                        throw err;
+
+                        await hostClient.disconnect();
+                        throw "Funds not received within timeout.";
                     }
+
+                    break;
+                } catch (err) {
+                    if (err.data?.error === 'actNotFound' && ++attempts <= waitPeriod) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
+                    }
+                    await hostClient.disconnect();
+                    throw (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check.";
                 }
             }
 
+            console.log(`${balance} ${currencyType == 'NATIVE' ? 'XAH' : 'EVR'} balance is there in your host account.`);
             await hostClient.disconnect();
         }
-
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
     }
 
     async checkRegistration() {

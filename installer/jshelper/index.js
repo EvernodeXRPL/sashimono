@@ -36,71 +36,6 @@ const funcs = {
         return { success: true };
     },
 
-    'validate-account': async (args) => {
-        let result = { success: false, result: 'Unknown error.' };
-        let hostClient, xrplApi;
-        try {
-            checkParams(args, 3);
-            const rippledUrl = args[0];
-            const governorAddress = args[1];
-            const accountAddress = args[2];
-
-            await evernode.Defaults.useNetwork(NETWORK);
-
-            evernode.Defaults.set({
-                rippledServer: rippledUrl,
-                governorAddress: governorAddress
-            });
-
-            xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-            await xrplApi.connect();
-
-            evernode.Defaults.set({
-                xrplApi: xrplApi
-            });
-
-            hostClient = new evernode.HostClient(accountAddress, null);
-
-            if (!await hostClient.xrplAcc.exists())
-                result = { success: false, result: "Account not found." };
-
-            await hostClient.connect();
-
-            // Check whether host has a registration token.
-            const regUriToken = await hostClient.getRegistrationUriToken();
-            if (regUriToken)
-                result = { success: true, result: "HAS_REG_TOKEN" };
-
-            const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
-            const regInfo = await hostClient.getHostInfo();
-            if (regInfo) {
-                const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
-                if (sellOffer)
-                    result = { success: true, result: "HAS_SELL_OFFER" };
-            }
-
-            const registered = await hostClient.isRegistered();
-            if (registered)
-                result = { success: true, result: "REGISTERED" };
-
-            // Check whether pending transfer exists.
-            const transferPending = await hostClient.isTransferee();
-            const minEverBalance = transferPending ? 1 : hostClient.config.hostRegFee;
-            const currentBalance = await hostClient.getEVRBalance();
-            if (currentBalance < minEverBalance)
-                result = { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
-        } catch (e) {
-            result = { success: false, result: e };
-        } finally {
-            if (hostClient)
-                await hostClient.disconnect();
-            if (xrplApi)
-                await xrplApi.disconnect();
-        }
-
-        return result;
-    },
-
     'validate-keys': async (args) => {
         checkParams(args, 3);
         const rippledUrl = args[0];
@@ -252,47 +187,6 @@ const funcs = {
         }
 
         return { success: false };
-    },
-
-    'check-acc-condition': async (args) => {
-        checkParams(args, 3);
-        const rippledUrl = args[0];
-        const governorAddress = args[1];
-        const accountAddress = args[2];
-
-        await evernode.Defaults.useNetwork(NETWORK);
-
-        evernode.Defaults.set({
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress
-        });
-
-        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
-
-        evernode.Defaults.set({
-            xrplApi: xrplApi
-        });
-
-        const hostClient = new evernode.HostClient(accountAddress, null);
-        const terminateConnections = async () => {
-            await hostClient.disconnect();
-            await xrplApi.disconnect();
-        }
-
-        try {
-            // In order to handle the account not found issue via catch block.
-            await hostClient.connect();
-            await terminateConnections();
-            return { success: true, result: 'RC-ACTIVE' }
-
-        } catch (err) {
-            await terminateConnections();
-
-            if ((err.data?.error === 'actNotFound'))
-                return { success: true, result: "RC-NON-ACTIVE" };
-            return { success: false, result: "Error occurred in account condition check." };
-        }
     },
 
     'check-balance': async (args) => {
@@ -527,10 +421,10 @@ const funcs = {
             rippledServer: rippledUrl
         });
 
-        try {
-            const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-            await xrplApi.connect();
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
 
+        try {
             evernode.Defaults.set({
                 xrplApi: xrplApi
             });
@@ -551,10 +445,67 @@ const funcs = {
 
 
         } catch {
+            await xrplApi.disconnect();
             return { success: false, result: "Error occurred in websocket connection." };
         }
-    }
+    },
 
+    'compute-evr-requirement': async (args) => {
+        checkParams(args, 3);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+
+        await evernode.Defaults.useNetwork(NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        const hostClient = new evernode.HostClient(accountAddress, null);
+        await hostClient.connect();
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        try {
+            // Check whether host has a registration token.
+            const regUriToken = await hostClient.getRegistrationUriToken();
+            if (regUriToken) {
+                return { success: true, result: `0` };
+            }
+
+            const regInfo = await hostClient.getHostInfo();
+            if (regInfo) {
+                const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
+                const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
+                if (sellOffer) {
+                    return { success: true, result: '0.00000001' };
+                }
+            }
+
+            const isAReReg = await hostClient.isTransferee();
+            if (isAReReg) {
+                return { success: true, result: '0.00000001' };
+            }
+
+            await terminateConnections();
+            return { success: true, result: `${hostClient.config.hostRegFee}` };
+        } catch {
+            await terminateConnections();
+            return { success: false, result: "Error occurred in balance check." };
+        }
+    },
 }
 
 function handleResponse(resp) {
@@ -601,4 +552,4 @@ async function app() {
         process.exit(1);
     }
 }
-app();
+app().catch(console.error);

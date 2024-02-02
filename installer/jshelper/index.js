@@ -490,7 +490,7 @@ const funcs = {
                 const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
                 const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
                 if (sellOffer) {
-                    return { success: true, result: '0.00000001' };
+                    return { success: true, result: '0' };
                 }
             }
 

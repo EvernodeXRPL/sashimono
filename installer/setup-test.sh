@@ -17,6 +17,9 @@
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATON=3
 
+    mb_cli_exit_err="MB_CLI_EXITED"
+    choice_result=""
+
     public_config_url="https://raw.githubusercontent.com/EvernodeXRPL/evernode-resources/main/definitions/definitions.json"
 
     country_code="AU"
@@ -40,9 +43,6 @@
     xrpl_secret_path=""
     xrpl_secret=""
     rippled_server=""
-
-    mb_error="Evernode Xahau message board exiting with error."
-    choice_result=""
 
     export NETWORK="${NETWORK:-mainnet}"
 
@@ -272,13 +272,13 @@
     }
 
     function exec_mb() {
-        local res=$(MB_DATA_DIR="$MB_XRPL_DATA" node "/home/chalith/Workspace/HotpocketDev/sashimono/mb-xrpl/app.js" "$@" | tee /dev/fd/2)
+        local res=$(MB_DATA_DIR="$MB_XRPL_DATA" node "/home/chalith/Workspace/HotpocketDev/sashimono/mb-xrpl/app.js" "$@" | tee >(grep -v "$mb_cli_exit_err" >/dev/fd/2))
         echo $res
     }
 
     function burn_leases() {
         local res=$(exec_mb burn-leases)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             choice "An error occured while burning! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
                 burn_leases "$@" && return 0
@@ -294,7 +294,7 @@
 
     function mint_leases() {
         local res=$(exec_mb mint-leases $total_instance_count)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "LEASE_ERR"* ]]; then
                 if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
@@ -319,7 +319,7 @@
 
     function deregister() {
         local res=$(exec_mb deregister $1)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
@@ -336,7 +336,7 @@
 
     function register() {
         local res=$(exec_mb register $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model $cpu_count $cpu_speed $email_address $description)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             choice "An error occured while registering! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
@@ -353,7 +353,7 @@
 
     function prepare() {
         local res=$(exec_mb prepare $inetaddr)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             choice "An error occured while preparing the account! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
@@ -370,7 +370,7 @@
 
     function check_balance() {
         local res=$(exec_mb check-balance)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "ERROR"* ]]; then
                 choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
@@ -390,7 +390,7 @@
 
     function wait_for_funds() {
         local res=$(exec_mb wait-for-funds "$@")
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             choice "Do you want to re-check the balance?" "retry/abort/rollback" && local input=$(choice_output)
             if [ "$input" == "retry" ]; then
                 wait_for_funds "$@" && return 0
@@ -407,7 +407,7 @@
 
     function check_and_register() {
         local res=$(exec_mb check-reg)
-        if [[ "$res" == *"$mb_error"* ]]; then
+        if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
             res=$(echo "$res" | tail -n 2 | head -n 1)
             if [[ "$res" == "ACC_NOT_FOUND"* ]]; then
                 echo "Account not found, Please check your account and try again." && abort
@@ -440,7 +440,6 @@
         local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
 
         local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATON + $min_reserve_requirement" | bc)
-        echo $min_exr_requirement
 
         echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
@@ -462,6 +461,8 @@
         ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
 
         local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address)
+
+        [ $min_evr_requirement -eq 0 ] && return 0
 
         echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
         \nYou can scan the provided QR code in your wallet app to send funds:"

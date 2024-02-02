@@ -424,11 +424,11 @@ const funcs = {
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+        
         try {
-            evernode.Defaults.set({
-                xrplApi: xrplApi
-            });
-
             const serverInfo = await xrplApi.getServerInfo();
             if (serverInfo?.info?.validated_ledger) {
                 const reserves = serverInfo.info.validated_ledger

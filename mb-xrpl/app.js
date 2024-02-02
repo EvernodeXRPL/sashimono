@@ -11,8 +11,8 @@ async function main() {
         console.log(appenv.MB_VERSION);
     }
 
-    try {
-        if (process.argv.length >= 3) {
+    if (process.argv.length >= 3) {
+        try {
             if (process.argv.length >= 9 && process.argv[2] === 'new') {
                 const accountAddress = process.argv[3];
                 const accountSecretPath = process.argv[4];
@@ -38,7 +38,7 @@ async function main() {
                 await new Setup().checkBalance();
             }
             else if (process.argv.length >= 4 && process.argv[2] === 'wait-for-funds') {
-                await new Setup().waitForFunds(process.argv[3],  parseInt(process.argv[4]));
+                await new Setup().waitForFunds(process.argv[3], parseInt(process.argv[4]));
             }
             else if (process.argv.length >= 3 && process.argv[2] === 'prepare') {
                 await new Setup().prepareHostAccount(process.argv[3]);
@@ -114,7 +114,15 @@ async function main() {
                 throw "Invalid args.";
             }
         }
-        else {
+        catch (err) {
+            // If error is a RippledError show internal error message, Otherwise show err.
+            console.log(err?.data?.error_message || err);
+            console.log("MB_CLI_EXITED");
+            process.exit(1);
+        }
+    }
+    else {
+        try {
             // Logs are formatted with the timestamp and a log file will be created inside log directory.
             logger.init(appenv.LOG_PATH, appenv.FILE_LOG_ENABLED);
 
@@ -125,13 +133,12 @@ async function main() {
             const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH);
             await mb.init();
         }
-
-    }
-    catch (err) {
-        // If error is a RippledError show internal error message, Otherwise show err.
-        console.log(err?.data?.error_message || err);
-        console.log("Evernode Xahau message board exiting with error.");
-        process.exit(1);
+        catch (err) {
+            // If error is a RippledError show internal error message, Otherwise show err.
+            console.log(err?.data?.error_message || err);
+            console.log("Evernode Xahau message board exiting with error.");
+            process.exit(1);
+        }
     }
 }
 

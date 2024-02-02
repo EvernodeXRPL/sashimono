@@ -110,7 +110,7 @@ class Setup {
                             continue;
 
                         await hostClient.disconnect();
-                        throw "Funds not received within timeout.";
+                        throw "NOT_ENOUGH_FUNDS";
                     }
 
                     break;
@@ -120,7 +120,7 @@ class Setup {
                         continue;
                     }
                     await hostClient.disconnect();
-                    throw (err.data?.error === 'actNotFound') ? "Funds not received within timeout." : "Error occurred in account balance check.";
+                    throw (err.data?.error === 'actNotFound' || err === 'NOT_ENOUGH_FUNDS') ? "Funds not received within timeout." : "Error occurred in account balance check.";
                 }
             }
 

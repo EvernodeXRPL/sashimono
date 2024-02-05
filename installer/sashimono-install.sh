@@ -69,7 +69,7 @@ function spin() {
 # Helper to print multi line text.
 # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
 function echomult() {
-    echo -e $1
+    echo -e $1 | awk '{print "[INFO] " $0}'
 }
 
 function rollback() {
@@ -89,7 +89,11 @@ function abort() {
 }
 
 function stage() {
-    echo "STAGE" "$1" # This is picked up by the setup console output filter.
+    echo "[STAGE]" "$1" # This is picked up by the setup console output filter.
+}
+
+function info() {
+    echo "[INFO]" "$1" # This is picked up by the setup console output filter.
 }
 
 function multi_choice() {
@@ -104,10 +108,10 @@ function multi_choice() {
     # Fallback to 1 if invalid.
     ([[ ! $default_choice =~ ^[0-9]+$ ]] || [[ $default_choice -lt 0 ]] || [[ $default_choice -gt ${#ADDR[@]} ]]) && default_choice=1
 
-    echo -en "$prompt?\n"
+    info $(echo -en "$prompt?\n")
     local i=1
     for choice in "${ADDR[@]}"; do
-        [[ $default_choice -eq $i ]] && echo "($i) ${choice^^}" || echo "($i) $choice"
+        [[ $default_choice -eq $i ]] && info "($i) ${choice^^}" || info "($i) $choice"
         i=$((i + 1))
     done
 

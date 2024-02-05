@@ -1130,7 +1130,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         if [ "$upgrade" == "0" ]; then
             echo "Installing other prerequisites..."
             ! ./prereq.sh $cgrulesengd_service 2>&1 |
-                tee -a $logfile | stdbuf --output=L grep "STAGE" | cut -d ' ' -f 2- && install_failure
+                tee -a >(stdbuf --output=L awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E 'STAGE' |
+                while read -r line; do
+                    cleaned_line=$(echo "$line" | sed -E 's/STAGE//g' | awk '{sub(/^[ \t]+/, ""); print}')
+                    [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line}" || echo "${cleaned_line}"
+                done && install_failure
         fi
 
         # Create evernode cli alias at the begining.
@@ -1151,8 +1155,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 |
-            tee -a $logfile &&
-            remove_evernode_alias && install_failure
+            tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
+            while read -r line; do
+                cleaned_line=$(echo "$line" | sed -E 's/\[STAGE\]|\[INFO\]//g' | awk '{sub(/^[ \t]+/, ""); print}')
+                [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line}" || echo "${cleaned_line}"
+            done && remove_evernode_alias && install_failure
 
         # Enable the Evernode Auto Updater Service.
         if [ "$enable_auto_update" = true ]; then
@@ -1196,8 +1203,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             [ "$upgrade" == "0" ] && echo "Uninstalling..." || echo "Uninstalling for upgrade..."
             ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
 
-            # Remove the Evernode Auto Updater Service.
-            [ "$upgrade" == "0" ] && systemctl list-unit-files | grep -q $EVERNODE_AUTO_UPDATE_SERVICE.service && remove_evernode_auto_updater
         else
             echo "Intiating Transfer..."
             echo "Uninstalling for transfer..."

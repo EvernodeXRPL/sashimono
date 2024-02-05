@@ -127,22 +127,6 @@ function multi_choice_output() {
     echo $multi_choice_result
 }
 
-function wait_for_funds() {
-    if ! res=$(exec_mb wait-for-funds $1 $2); then
-        multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
-        if [ "$input" == "Retry" ]; then
-            wait_for_funds "$@" && return 0
-        elif [ "$input" == "Rollback" ]; then
-            rollback
-        else
-            abort
-        fi
-        return 1
-    fi
-
-    return 0
-}
-
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.
     local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
@@ -283,23 +267,6 @@ function burn_leases() {
         return 1
     fi
     return 0
-}
-
-function exec_jshelper() {
-
-    # Create fifo file to read response data from the helper script.
-    local resp_file=$SASHIMONO_BIN/evernode-setup-helpers/helper_fifo
-    [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
-
-    # Execute js helper asynchronously while collecting response to fifo file.
-    # echo "sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin $@ network:$NETWORK"
-    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
-    local pid=$!
-    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
-
-    # Wait for js helper to exit and reflect the error exit code in this function return.
-    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
-    rm $resp_file && return 1
 }
 
 function mint_leases() {
@@ -447,60 +414,6 @@ function generate_qrcode() {
     qrencode -s 1 -l L -t UTF8 "$input_string"
 }
 
-function xah_balance_check_and_wait {
-    ([ -z $rippled_server ] || [ -z $xrpl_account_address ] || [ -z $xrpl_account_secret_path ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
-
-    # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
-    # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
-    local inc_reserves_count=$((1 + 1 + $total_instance_count))
-    local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
-
-    local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + $min_reserve_requirement" | bc)
-
-    echomult "Your host account with the address $xrpl_account_address will be on Xahau $NETWORK.
-        \nThe secret key of the account is located at $xrpl_account_secret_path.
-        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
-        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
-        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
-        \n2. At least $reg_fee EVR to cover Evernode registration fee.
-        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
-    generate_qrcode "$xrpl_account_address"
-
-    echomult "\nChecking the account condition..."
-    echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
-
-    wait_call "wait_for_funds NATIVE $min_xah_requirement" || return 1
-}
-
-function evr_balance_check_and_wait {
-    ([ -z $rippled_server ] || [ -z $xrpl_account_address ] || [ -z $xrpl_account_secret_path ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
-
-    local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address)
-
-    [ $min_evr_requirement -eq 0 ] && return 0
-
-    echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
-        \nYou can scan the provided QR code in your wallet app to send funds:"
-
-    wait_call "wait_for_funds ISSUED $min_evr_requirement" || return 1
-}
-
-function prepare() {
-    if ! res=$(exec_mb prepare $inetaddr); then
-        multi_choice "An error occurred while preparing the account! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
-        if [ "$input" == "Retry" ]; then
-            register "$@" && return 0
-        elif [ "$input" == "Rollback" ]; then
-            rollback
-        else
-            abort
-        fi
-        return 1
-    fi
-    return 0
-}
-
 function upgrade() {
     local res=$(exec_mb upgrade)
     if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
@@ -591,56 +504,45 @@ fi
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
-# Register host only if NO_MB environment is not set.
-if [ "$NO_MB" == "" ]; then
-    # Configure message board users and register host.
-    echo "Configuaring host setup on Evernode..."
+# Configure message board users and register host.
+echo "Configuaring host setup on Evernode..."
 
-    cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-    # Create MB_XRPL_USER if does not exists.
-    if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-        useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+# Create MB_XRPL_USER if does not exists.
+if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+    useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
 
-        # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-        chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+    # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+    # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
 
-        local secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
-        chown "$MB_XRPL_USER": $secret_path
-    fi
+    local secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
+    chown "$MB_XRPL_USER": $secret_path
+fi
 
-    # Assign message board user priviledges.
-    if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
-        usermod --lock $MB_XRPL_USER
-        usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
-        loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
-    fi
+# Assign message board user priviledges.
+if ! id -nG "$MB_XRPL_USER" | grep -qw "$SASHIADMIN_GROUP"; then
+    usermod --lock $MB_XRPL_USER
+    usermod -a -G $SASHIADMIN_GROUP $MB_XRPL_USER
+    loginctl enable-linger $MB_XRPL_USER # Enable lingering to support service installation.
+fi
 
-    # First create the folder from root and then transfer ownership to the user
-    # since the folder is created in /etc/sashimono directory.
-    ! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
-    # Change ownership to message board user.
-    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
+# First create the folder from root and then transfer ownership to the user
+# since the folder is created in /etc/sashimono directory.
+! mkdir -p $MB_XRPL_DATA && echo "Could not create '$MB_XRPL_DATA'. Make sure you are running as sudo." && exit 1
+# Change ownership to message board user.
+chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
-    # Register if not upgrade mode.
-    if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
-        # Setup and register the account.
-        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
-            stage "Configuring host Xahau account"
-            echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
+# Register if not upgrade mode.
+if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
+    # Setup and register the account.
+    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
+        stage "Configuring host Xahau account"
+        echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && rollback
-            doreg=1
-        fi
-    fi
-
-    if [ "$UPGRADE" == "0" ]; then
-        xah_balance_check_and_wait || abort
-
-        prepare || abort
-
-        evr_balance_check_and_wait || abort
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && rollback
+        doreg=1
     fi
 fi
 
@@ -684,7 +586,7 @@ elif [ ! -f "$SASHIMONO_CONFIG" ]; then
         $total_instance_count $cpu_micro_sec $ramKB $swapKB $diskKB && abort
 fi
 
-if [[ "$NO_MB" == "" && -f "$MB_XRPL_CONFIG" ]]; then
+if [[ -f "$MB_XRPL_CONFIG" ]]; then
     upgrade || abort
 fi
 
@@ -713,36 +615,34 @@ systemctl enable $SASHIMONO_SERVICE
 # the bottom of this script.
 # Both of these services needed to be restarted if sa.cfg max instance resources are manually changed.
 
-# Install Xahau message board only of NO_MB environment is not set.
-if [ "$NO_MB" == "" ]; then
-    # Install Xahau message board systemd service.
-    echo "Installing Evernode Xahau message board..."
+# Install Xahau message board systemd service.
+echo "Installing Evernode Xahau message board..."
 
-    mb_user_dir=/home/"$MB_XRPL_USER"
-    mb_user_id=$(id -u "$MB_XRPL_USER")
-    mb_user_runtime_dir="/run/user/$mb_user_id"
+mb_user_dir=/home/"$MB_XRPL_USER"
+mb_user_id=$(id -u "$MB_XRPL_USER")
+mb_user_runtime_dir="/run/user/$mb_user_id"
 
-    # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-    # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $mb_user_dir
+# Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+# NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $mb_user_dir
 
-    # Setup env variable for the message board user.
-    echo "
+# Setup env variable for the message board user.
+echo "
     export XDG_RUNTIME_DIR=$mb_user_runtime_dir" >>"$mb_user_dir"/.bashrc
-    echo "Updated mb user .bashrc."
+echo "Updated mb user .bashrc."
 
-    user_systemd=""
-    for ((i = 0; i < 30; i++)); do
-        sleep 0.1
-        user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
-        [ "$user_systemd" == "running" ] && break
-    done
-    [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && abort
+user_systemd=""
+for ((i = 0; i < 30; i++)); do
+    sleep 0.1
+    user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
+    [ "$user_systemd" == "running" ] && break
+done
+[ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && abort
 
-    stage "Configuring Xahau message board service"
-    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && abort
-    # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-    echo "[Unit]
+stage "Configuring Xahau message board service"
+! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && abort
+# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
+echo "[Unit]
     Description=Running and monitoring evernode Xahau transactions.
     After=network.target
     StartLimitIntervalSec=0
@@ -756,23 +656,22 @@ if [ "$NO_MB" == "" ]; then
     [Install]
     WantedBy=default.target" | sudo -u $MB_XRPL_USER tee "$mb_user_dir"/.config/systemd/user/$MB_XRPL_SERVICE.service >/dev/null
 
-    # This service needs to be restarted whenever mb-xrpl.cfg or secret.cfg is changed.
-    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
-    # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
-    echo "Installed Evernode Xahau message board."
+# This service needs to be restarted whenever mb-xrpl.cfg or secret.cfg is changed.
+sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user enable $MB_XRPL_SERVICE
+# We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
+echo "Installed Evernode Xahau message board."
 
-    if [ "$UPGRADE" == "0" ]; then
-        echo "Registering host on Evernode..."
-        # Register the host on Evernode.
-        if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-            stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-            echo "Executing register with params: $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count \
+if [ "$UPGRADE" == "0" ]; then
+    echo "Registering host on Evernode..."
+    # Register the host on Evernode.
+    if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
+        stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+        echo "Executing register with params: $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count \
                 $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
-            check_and_register || abort
-            mint_leases || abort
-        fi
-        echo "Registered host on Evernode."
+        check_and_register || abort
+        mint_leases || abort
     fi
+    echo "Registered host on Evernode."
 fi
 
 # If there's no pending reboot, start the sashimono and message board services now. Otherwise
@@ -781,9 +680,7 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
     echo "Starting the sashimono and message board services."
     systemctl start $SASHIMONO_SERVICE
 
-    if [ "$NO_MB" == "" ]; then
-        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
-    fi
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
 fi
 
 echo "Sashimono installed successfully."

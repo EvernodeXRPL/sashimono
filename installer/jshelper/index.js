@@ -281,9 +281,8 @@ const funcs = {
         const accountAddress = args[2];
         const accountSecret = args[3];
         // Optional
-        const domain = args[4] ? args[4] : "";
-
-        const WAIT_PERIOD = 120; // seconds
+        const domain = (args[4] && args[4] !== '-') ? args[4] : "";
+        const affordableExtraFee = (args[5] && args[5] !== '-') ? parseFloat(args[5]) : 0;;
 
         await evernode.Defaults.useNetwork(NETWORK);
 
@@ -307,29 +306,15 @@ const funcs = {
             await xrplApi.disconnect();
         }
 
-        {
-            let attempts = 0;
-            while (attempts >= 0) {
-                try {
-                    await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
-                    break;
-                }
-                catch (err) {
-                    if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
-                        // Wait and retry.
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        continue;
-                    }
-
-                    await terminateConnections();
-                    return { success: false, result: "Error occurred in account preparation." };
-                }
-            }
+        try {
+            await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await terminateConnections();
+            return { success: true };
         }
-
-        await terminateConnections();
-        return { success: true };
-
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
     },
 
     // Starts an HTTP server on port 80 and check whether that's reachable via
@@ -427,7 +412,7 @@ const funcs = {
         evernode.Defaults.set({
             xrplApi: xrplApi
         });
-        
+
         try {
             const serverInfo = await xrplApi.getServerInfo();
             if (serverInfo?.info?.validated_ledger) {
@@ -446,7 +431,7 @@ const funcs = {
 
         } catch {
             await xrplApi.disconnect();
-            return { success: false, result: "Error occurred in websocket connection." };
+            return { success: false, result: "Error occurred in XAH requirement calculation." };
         }
     },
 
@@ -471,7 +456,6 @@ const funcs = {
         });
 
         const hostClient = new evernode.HostClient(accountAddress, null);
-        await hostClient.connect();
 
         const terminateConnections = async () => {
             await hostClient.disconnect();
@@ -479,6 +463,19 @@ const funcs = {
         }
 
         try {
+            try {
+                await hostClient.connect();
+            }
+            catch (err) {
+                await xrplApi.disconnect();
+                if (err.data?.error === 'actNotFound') {
+                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
+                    await governorClient.connect();
+                    return { success: true, result: `${governorClient.config.hostRegFee}` };
+                }
+                return { success: false, result: "Error occurred in websocket connection." };
+            }
+
             // Check whether host has a registration token.
             const regUriToken = await hostClient.getRegistrationUriToken();
             if (regUriToken) {
@@ -503,7 +500,7 @@ const funcs = {
             return { success: true, result: `${hostClient.config.hostRegFee}` };
         } catch {
             await terminateConnections();
-            return { success: false, result: "Error occurred in balance check." };
+            return { success: false, result: "Error occurred in EVR requirement calculation." };
         }
     },
 }

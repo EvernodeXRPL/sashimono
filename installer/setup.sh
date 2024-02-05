@@ -41,7 +41,6 @@
     jshelper_url="$resource_storage/setup-jshelper.tar.gz"
 
     installer_version_timestamp_file="installer.version.timestamp"
-    default_rippled_server="wss://xahau.network"
     setup_helper_dir="/tmp/evernode-setup-helpers"
     nodejs_util_bin="/usr/bin/node"
     jshelper_bin="$setup_helper_dir/jshelper/index.js"
@@ -108,7 +107,7 @@
             choiceDisplay="[y/N]"
         fi
 
-        echo -en $prompt $choiceDisplay
+        echo -en "$prompt $choiceDisplay "
         local yn=""
         read yn </dev/tty
 
@@ -157,7 +156,7 @@
     # Removing bin dir is the last stage of un-installation.
     # So if the service does not exists but the bin dir exists, Previous installation or un-installation is failed partially.
     installed=false
-    [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] && installed=true
+    command -v evernode &>/dev/null && installed=true
 
     if $installed; then
         [ "$1" == "install" ] &&
@@ -319,9 +318,8 @@
         fi
     }
 
-    function set_environment_configs() {
-
-        sudo -u $noroot_user mkdir -p $setup_helper_dir
+    function download_public_config() {
+        [ ! -z $1 ] && config_path="$1"
         echomult "\nDownloading Environment configuration...\n"
         sudo -u $noroot_user curl $config_url --output $config_json_path
 
@@ -332,10 +330,11 @@
         if ! jq -e ".${NETWORK}" "$config_json_path" >/dev/null 2>&1; then
             echomult "Sorry the specified environment has not been configured yet..\n" && exit 1
         fi
+    }
 
+    function set_environment_configs() {
         export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
-        default_rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
-
+        rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
     }
 
     function init_setup_helpers() {
@@ -364,7 +363,7 @@
         [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
         # Execute js helper asynchronously while collecting response to fifo file.
-        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
+        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" &
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
@@ -767,9 +766,7 @@
     }
 
     function set_rippled_server() {
-        ([ -z $rippled_server ] || [ "$rippled_server" == "default" ]) && rippled_server=$default_rippled_server
-
-        if confirm "Do you want to connect to the default rippled server ($default_rippled_server)?"; then
+        if confirm "Do you want to connect to the default rippled server ($rippled_server)?"; then
             ! validate_rippled_url $rippled_server && exit 1
         else
             local new_url=""
@@ -865,6 +862,7 @@
                         echomult "Error occurred in permission and ownership assignment of key file."
                         exit 1
                     }
+
                     echomult "Retrived account details via secret.\n"
                     return 0
                 else
@@ -1018,15 +1016,63 @@
                         exit 1
                     }
 
-                    xrpl_account_secret=$xrpl_secret
-
                     break
                 done
             fi
         fi
+    }
 
-        xrpl_account_address=$xrpl_address
-        xrpl_account_secret_path=$key_file_path
+    function prepare_host() {
+        ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
+
+        local inc_reserves_count=$((1 + 1 + $alloc_instcount))
+        local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) || {
+            echo "Error occurred in min XAH calculation."
+            exit 1
+        }
+
+        local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + $min_reserve_requirement" | bc)
+
+        local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address) || {
+            echo "Error occurred in min EVR calculation."
+            exit 1
+        }
+
+        echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
+        \nThe secret key of the account is located at $key_file_path.
+        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
+        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
+        \n2. At least $min_evr_requirement EVR to cover Evernode registration.
+        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+        generate_qrcode "$xrpl_address"
+
+        echomult "\nChecking the account condition..."
+        echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+
+        required_balance=$min_xah_requirement
+        while true; do
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "[OUTPUT] XAH balance is there in your host account." &&
+                break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
+
+        echomult "\nPreparing host account..."
+        while true; do
+            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr $extra_txn_fee" "Account preparation is successfull." && break
+            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
+        done
+
+        echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds:"
+
+        required_balance=$min_evr_requirement
+        while true; do
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "[OUTPUT] EVR balance is there in your host account." &&
+                break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
     }
 
     function install_failure() {
@@ -1153,7 +1199,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
         ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
-            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
+            $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_address $key_file_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 |
             tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
             while read -r line; do
@@ -1162,10 +1208,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             done && remove_evernode_alias && install_failure
 
         # Enable the Evernode Auto Updater Service.
-        if [ "$enable_auto_update" = true ]; then
-            stage "Configuring auto updater service"
-            enable_evernode_auto_updater
-        fi
+        # if [ "$enable_auto_update" = true ]; then
+        #     stage "Configuring auto updater service"
+        #     enable_evernode_auto_updater
+        # fi
 
         set +o pipefail
 
@@ -1315,7 +1361,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Remove first line and print.
         echo -e "\n${reg_info/$address_line/""}"
 
-        echo -e "NOTE: The host is marked as active after sending the first heartbeat.\n"
+        echo -e "NOTE: If the Host status is shown as inactive it will be marked as active after sending the next heartbeat.\n"
 
         local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
         local mb_user_id=$(id -u "$MB_XRPL_USER")
@@ -1693,9 +1739,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         printf "\n\n***********************************************************************************************************************\n"
         ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-        set_environment_configs
-
         init_setup_helpers
+
+        download_public_config && set_environment_configs
 
         # Check if message board config and sa.cfg exists.
         # This means installation has passed through configuration.
@@ -1735,6 +1781,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # TODO - CHECKPOINT - 02
         set_host_xrpl_account $operation
         echo -e "\nAccount setup is complete."
+
+        ! prepare_host && echo "Error while preparing the host." && exit 1
 
         $interactive && ! confirm "\n\nSetup will now begin the installation. Continue?" && exit 1
 
@@ -1794,17 +1842,17 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         else
             if ! $interactive; then
-                xrpl_account_address=${3}      # XRPL account address.
-                xrpl_account_secret=$(<"${4}") # XRPL account secret based on the provided path.
-                transferee_address=${5}        # Address of the transferee.
-                rippled_server=${6}            # Rippled server URL
+                xrpl_address=${3}       # XRPL account address.
+                xrpl_secret=$(<"${4}")  # XRPL account secret based on the provided path.
+                transferee_address=${5} # Address of the transferee.
+                rippled_server=${6}     # Rippled server URL
             fi
 
             check_common_prereq
 
-            set_environment_configs
-
             init_setup_helpers
+
+            download_public_config && set_environment_configs
 
             # Set rippled server based on the user input.
             set_rippled_server
@@ -1816,15 +1864,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             # Set transferee based on the user input.
             set_transferee_address
 
-            $interactive && ! confirm "\nThis will deregister $xrpl_account_address from $evernode
+            $interactive && ! confirm "\nThis will deregister $xrpl_address from $evernode
             while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
 
-            config_json_path="/tmp/evernode-setup-helpers/configuration.json"
-            export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
-
             # Execute transfer from js helper.
-            exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address $xrpl_account_secret $transferee_address
+            exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $transferee_address
 
             rm -r $setup_helper_dir >/dev/null 2>&1
         fi

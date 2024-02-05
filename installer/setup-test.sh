@@ -15,7 +15,7 @@
     export JS_HELPER="$SETUP_HELPER/jshelper/index.js"
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
-    export MIN_OPERATIONAL_DURATON=3
+    export MIN_OPERATIONAL_DURATION=3
 
     mb_cli_exit_err="MB_CLI_EXITED"
     mb_cli_out_prefix="CLI_OUT"
@@ -381,21 +381,6 @@
         return 0
     }
 
-    function prepare() {
-        if ! res=$(exec_mb prepare $inetaddr); then
-            multi_choice "An error occurred while preparing the account! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
-            if [ "$input" == "Retry" ]; then
-                register "$@" && return 0
-            elif [ "$input" == "Rollback" ]; then
-                rollback
-            else
-                abort
-            fi
-            return 1
-        fi
-        return 0
-    }
-
     function check_balance() {
         if ! res=$(exec_mb check-balance); then
             multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
@@ -412,20 +397,51 @@
         return 0
     }
 
-    function wait_for_funds() {
-        if ! res=$(exec_mb wait-for-funds $1 $2); then
-            multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
-            if [ "$input" == "Retry" ]; then
-                wait_for_funds "$@" && return 0
-            elif [ "$input" == "Rollback" ]; then
-                rollback
-            else
-                abort
-            fi
-            return 1
-        fi
+    function prepare_host() {
+        ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $xrpl_secret_path ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
 
-        return 0
+        local inc_reserves_count=$((1 + 1 + $total_instance_count))
+        local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
+
+        local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + $min_reserve_requirement" | bc)
+
+        local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address)
+
+        echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
+        \nThe secret key of the account is located at $xrpl_secret_path.
+        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
+        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
+        \n2. At least $min_evr_requirement EVR to cover Evernode registration.
+        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+        generate_qrcode "$xrpl_address"
+
+        echomult "\nChecking the account condition..."
+        echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+
+        required_balance=$min_xah_requirement
+        while true; do
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "[OUTPUT] XAH balance is there in your host account." &&
+                break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
+
+        echomult "\nPreparing host account..."
+        while true; do
+            wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
+            confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
+        done
+
+        echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds:"
+
+        required_balance=$min_evr_requirement
+        while true; do
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "[OUTPUT] EVR balance is there in your host account." &&
+                break
+            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+        done
     }
 
     function check_and_register() {
@@ -529,11 +545,7 @@
     # Override rippled server.
     read_configs || abort
 
-    xah_balance_check_and_wait || abort
-
-    prepare || abort
-
-    evr_balance_check_and_wait || abort
+    prepare_host || abort
 
     check_and_register || abort
 

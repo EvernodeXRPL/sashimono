@@ -422,7 +422,7 @@
 
         required_balance=$min_xah_requirement
         while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." &&
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "[OUTPUT] XAH balance is there in your host account." &&
                 break
             confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
@@ -438,7 +438,7 @@
 
         required_balance=$min_evr_requirement
         while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." &&
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "[OUTPUT] EVR balance is there in your host account." &&
                 break
             confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done

@@ -107,7 +107,7 @@
             choiceDisplay="[y/N]"
         fi
 
-        echo -en $prompt $choiceDisplay
+        echo -en "$prompt $choiceDisplay "
         local yn=""
         read yn </dev/tty
 
@@ -156,7 +156,7 @@
     # Removing bin dir is the last stage of un-installation.
     # So if the service does not exists but the bin dir exists, Previous installation or un-installation is failed partially.
     installed=false
-    [ -f /etc/systemd/system/$SASHIMONO_SERVICE.service ] && [ -d $SASHIMONO_BIN ] && installed=true
+    command -v evernode &>/dev/null && installed=true
 
     if $installed; then
         [ "$1" == "install" ] &&
@@ -1053,7 +1053,7 @@
 
         required_balance=$min_xah_requirement
         while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." &&
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "[OUTPUT] XAH balance is there in your host account." &&
                 break
             confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
@@ -1069,7 +1069,7 @@
 
         required_balance=$min_evr_requirement
         while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." &&
+            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "[OUTPUT] EVR balance is there in your host account." &&
                 break
             confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
         done
@@ -1201,10 +1201,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             remove_evernode_alias && install_failure
 
         # Enable the Evernode Auto Updater Service.
-        if [ "$enable_auto_update" = true ]; then
-            stage "Configuring auto updater service"
-            enable_evernode_auto_updater
-        fi
+        # if [ "$enable_auto_update" = true ]; then
+        #     stage "Configuring auto updater service"
+        #     enable_evernode_auto_updater
+        # fi
 
         set +o pipefail
 
@@ -1243,7 +1243,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             ! UPGRADE=$upgrade TRANSFER=0 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
 
             # Remove the Evernode Auto Updater Service.
-            [ "$upgrade" == "0" ] && systemctl list-unit-files | grep -q $EVERNODE_AUTO_UPDATE_SERVICE.service && remove_evernode_auto_updater
+            # [ "$upgrade" == "0" ] && systemctl list-unit-files | grep -q $EVERNODE_AUTO_UPDATE_SERVICE.service && remove_evernode_auto_updater
         else
             echo "Intiating Transfer..."
             echo "Uninstalling for transfer..."

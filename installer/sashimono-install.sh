@@ -10,9 +10,9 @@ init_user_port=${3}
 country_code=${4}
 total_instance_count=${5}
 cpu_micro_sec=${6}
-ramKB=${7}
-swapKB=${8}
-diskKB=${9}
+ram_kb=${7}
+swap_kb=${8}
+disk_kb=${9}
 lease_amount=${10}
 rippled_server=${11}
 xrpl_account_address=${12}
@@ -195,7 +195,7 @@ function setup_tls_certs() {
 
     if [ "$tls_key_file" == "letsencrypt" ]; then
 
-        ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && rollback
+        ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && abort
         cp /etc/letsencrypt/live/$inetaddr/privkey.pem $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
         cp /etc/letsencrypt/live/$inetaddr/fullchain.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
@@ -308,7 +308,7 @@ function deregister() {
 }
 
 function register() {
-    if ! res=$(exec_mb register $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model $cpu_count $cpu_speed $email_address $description); then
+    if ! res=$(exec_mb register $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description); then
         multi_choice "An error occurred while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             register "$@" && return 0
@@ -541,7 +541,7 @@ if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
         stage "Configuring host Xahau account"
         echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && rollback
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && abort
         doreg=1
     fi
 fi
@@ -583,7 +583,7 @@ if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && abort
 elif [ ! -f "$SASHIMONO_CONFIG" ]; then
     ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT \
-        $total_instance_count $cpu_micro_sec $ramKB $swapKB $diskKB && abort
+        $total_instance_count $cpu_micro_sec $ram_kb $swap_kb $disk_kb && abort
 fi
 
 if [[ -f "$MB_XRPL_CONFIG" ]]; then
@@ -666,7 +666,7 @@ if [ "$UPGRADE" == "0" ]; then
     # Register the host on Evernode.
     if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
         stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-        echo "Executing register with params: $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count \
+        echo "Executing register with params: $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count \
                 $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
         check_and_register || abort
         mint_leases || abort

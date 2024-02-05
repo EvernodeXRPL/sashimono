@@ -1361,7 +1361,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Remove first line and print.
         echo -e "\n${reg_info/$address_line/""}"
 
-        echo -e "NOTE: The host is marked as active after sending the first heartbeat.\n"
+        echo -e "NOTE: If the Host status is shown as inactive it will be marked as active after sending the next heartbeat.\n"
 
         local sashimono_agent_status=$(systemctl is-active sashimono-agent.service)
         local mb_user_id=$(id -u "$MB_XRPL_USER")

@@ -7,9 +7,9 @@
 inetaddr=${1}
 init_peer_port=${2}
 init_user_port=${3}
-countrycode=${4}
-inst_count=${5}
-cpuMicroSec=${6}
+country_code=${4}
+total_instance_count=${5}
+cpu_micro_sec=${6}
 ramKB=${7}
 swapKB=${8}
 diskKB=${9}
@@ -30,16 +30,117 @@ script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 setup_helper_dir="/tmp/evernode-setup-helpers"
 
-function stage() {
-    echo "STAGE $1" # This is picked up by the setup console output filter.
+nodejs_util_bin="/usr/bin/node"
+jshelper_bin="$setup_helper_dir/jshelper/index.js"
+
+mb_cli_exit_err="MB_CLI_EXITED"
+multi_choice_result=""
+
+noroot_user=${SUDO_USER:-$(whoami)}
+
+function wait_call() {
+    local command_to_execute="$1"
+    local output_template="$2"
+
+    echomult "\nWaiting for the process to complete..."
+    spin &
+    local spin_pid=$!
+
+    $command_to_execute
+    return_code=$?
+
+    kill $spin_pid
+    wait $spin_pid
+    echo -ne "\r"
+
+    return $return_code
+}
+
+function spin() {
+    while [ 1 ]; do
+        for i in ${spinner[@]}; do
+            echo -ne "\r$i"
+            sleep 0.2
+        done
+    done
+}
+
+# Helper to print multi line text.
+# (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
+function echomult() {
+    echo -e $1
 }
 
 function rollback() {
-    [ "$UPGRADE" == "1" ] && echo "Evernode update failed. You can try again later. If the problem persists, please uninstall and re-install Evernode." && exit 1
-    echo "Rolling back sashimono installation."
-    "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
-    echo "Rolled back the installation."
+    echo "Rolling back the installation..."
+    if [ "$UPGRADE" == "0" ]; then
+        burn_leases
+        deregister
+        "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
+    fi
+
     exit 1
+}
+
+function abort() {
+    echo "Aborting the installation.."
+    exit 1
+}
+
+function stage() {
+    echo "STAGE" "$1" # This is picked up by the setup console output filter.
+}
+
+function multi_choice() {
+    local prompt=$1
+    local choice_display=${2:-y/n}
+
+    IFS='/'
+    read -ra ADDR <<<"$choice_display"
+
+    local default_choice=${3:-1} #Default choice is set to first.
+
+    # Fallback to 1 if invalid.
+    ([[ ! $default_choice =~ ^[0-9]+$ ]] || [[ $default_choice -lt 0 ]] || [[ $default_choice -gt ${#ADDR[@]} ]]) && default_choice=1
+
+    echo -en "$prompt?\n"
+    local i=1
+    for choice in "${ADDR[@]}"; do
+        [[ $default_choice -eq $i ]] && echo "($i) ${choice^^}" || echo "($i) $choice"
+        i=$((i + 1))
+    done
+
+    local choice=""
+    read choice </dev/tty
+
+    [ -z $choice ] && choice="$default_choice"
+    while ! ([[ $choice =~ ^[0-9]+$ ]] && [[ $choice -gt 0 ]] && [[ $choice -lt $i ]]); do
+        read -ep "[1-$i] expected: " choice </dev/tty
+        [ -z $choice ] && choice="$default_choice"
+    done
+
+    multi_choice_result="${ADDR[$((choice - 1))]}"
+}
+
+function multi_choice_output() {
+    echo $multi_choice_result
+}
+
+function wait_for_funds() {
+    local res=$(exec_mb wait-for-funds "$@")
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            wait_for_funds "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+
+    return 0
 }
 
 function cgrulesengd_servicename() {
@@ -118,12 +219,12 @@ function setup_tls_certs() {
         # If user has not provided certs we generate self-signed ones.
         stage "Generating self-signed certificates"
         ! openssl req -newkey rsa:2048 -new -nodes -x509 -days 365 -keyout $SASHIMONO_DATA/contract_template/cfg/tlskey.pem \
-            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$countrycode/CN=$inetaddr" &&
-            echo "Error when generating self-signed certificate." && rollback
+            -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$country_code/CN=$inetaddr" &&
+            echo "Error when generating self-signed certificate." && abort
 
     elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ]; then
 
-        stage "Transfering certificate files"
+        stage "Transferring certificate files"
 
         cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
         cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
@@ -132,14 +233,14 @@ function setup_tls_certs() {
             cat $tls_cabundle_file >>$SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     else
-        echo "Error when setting up SSL certificate." && rollback
+        echo "Error when setting up SSL certificate." && abort
     fi
 }
 
-function check_dependencies(){
+function check_dependencies() {
     local setup_slirp4netns=0
 
-    if command -v slirp4netns &> /dev/null; then
+    if command -v slirp4netns &>/dev/null; then
         installed_version=$(slirp4netns --version | awk 'NR==1 {print $3}')
         if [ "$installed_version" != "$desired_slirp4netns_version" ]; then
             apt-get -y remove slirp4netns >/dev/null
@@ -149,13 +250,241 @@ function check_dependencies(){
         setup_slirp4netns=1
     fi
 
-    if [ $setup_slirp4netns -gt 0 ] ; then
+    if [ $setup_slirp4netns -gt 0 ]; then
         # Setting up slirp4netns from github (ubuntu package is outdated. We need newer binary for ipv6 outbound address support)
         stage "Setting up slirp4netns"
         curl -o /tmp/slirp4netns --fail -sL https://github.com/rootless-containers/slirp4netns/releases/download/v$desired_slirp4netns_version/slirp4netns-$(uname -m)
         chmod +x /tmp/slirp4netns
         mv /tmp/slirp4netns /usr/bin/
     fi
+}
+
+function exec_mb() {
+    local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee /dev/fd/2)
+    echo $res
+}
+
+function burn_leases() {
+    local res=$(exec_mb burn-leases)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        multi_choice "An error occurred while burning! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            burn_leases "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function exec_jshelper() {
+
+    # Create fifo file to read response data from the helper script.
+    local resp_file=$SASHIMONO_BIN/evernode-setup-helpers/helper_fifo
+    [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
+
+    # Execute js helper asynchronously while collecting response to fifo file.
+    # echo "sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin $@ network:$NETWORK"
+    sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
+    local pid=$!
+    local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
+
+    # Wait for js helper to exit and reflect the error exit code in this function return.
+    wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
+    rm $resp_file && return 1
+}
+
+function mint_leases() {
+    local res=$(exec_mb mint-leases $total_instance_count)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        if [[ "$res" == "LEASE_ERR"* ]]; then
+            if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
+                burn_leases && mint_leases "$@" && return 0
+            else
+                abort
+            fi
+        else
+            multi_choice "An error occurred while minting! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+            if [ "$input" == "Retry" ]; then
+                mint_leases "$@" && return 0
+            elif [ "$input" == "Rollback" ]; then
+                rollback
+            else
+                abort
+            fi
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function deregister() {
+    local res=$(exec_mb deregister $1)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        multi_choice "An error occurred while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            deregister "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function register() {
+    echo "Registration calling"
+
+    local res=$(exec_mb register $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        multi_choice "An error occurred while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            register "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function check_balance() {
+    local res=$(exec_mb check-balance)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        if [[ "$res" == "ERROR"* ]]; then
+            multi_choice "Balance check failed! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
+            if [ "$input" == "retry" ]; then
+                check_balance && return 0
+            elif [ "$input" == "rollback" ]; then
+                rollback
+            else
+                abort
+            fi
+        fi
+        return 1
+    fi
+
+    return 0
+}
+
+function check_and_register() {
+    local res=$(exec_mb check-reg)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        if [[ "$res" == "ACC_NOT_FOUND"* ]]; then
+            echo "Account not found, Please check your account and try again." && abort
+        elif [[ "$res" == "INVALID_REG"* ]]; then
+            echo "Invalid registration please transfer and try again" && abort
+        elif [[ "$res" == "PENDING_SELL_OFFER"* ]]; then
+            register && return 0
+        elif [[ "$res" == "PENDING_TRANSFER"* ]] || [[ "$res" == "NOT_REGISTERED"* ]]; then
+            check_balance && register && return 0
+        fi
+        return 1
+    fi
+
+    res=$(echo "$res" | tail -n 2 | head -n 1)
+    if [[ "$res" == "REGISTERED" ]]; then
+        echo "This host is registered"
+        return 0
+    else
+        echo "Invalid registration please transfer and try again" && abort
+    fi
+    return 1
+}
+
+# Function to generate QR code in the terminal
+function generate_qrcode() {
+    if [ -z "$1" ]; then
+        echo "Argument error > Usage: generate_qrcode <string>"
+        return 1
+    fi
+    local input_string="$1"
+    qrencode -s 1 -l L -t UTF8 "$input_string"
+}
+
+function xah_balance_check_and_wait {
+    ([ -z $rippled_server ] || [ -z $xrpl_account_address ] || [ -z $xrpl_account_secret_path ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
+
+    # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
+    # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
+    local inc_reserves_count=$((1 + 1 + $total_instance_count))
+    local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count)
+
+    local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + $min_reserve_requirement" | bc)
+
+    echomult "Your host account with the address $xrpl_account_address will be on Xahau $NETWORK.
+        \nThe secret key of the account is located at $xrpl_account_secret_path.
+        \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
+        \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
+        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
+        \n2. At least $reg_fee EVR to cover Evernode registration fee.
+        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+    generate_qrcode "$xrpl_account_address"
+
+    echomult "\nChecking the account condition..."
+    echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+
+    wait_call "wait_for_funds NATIVE $min_xah_requirement" || return 1
+}
+
+function evr_balance_check_and_wait {
+    ([ -z $rippled_server ] || [ -z $xrpl_account_address ] || [ -z $xrpl_account_secret_path ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
+
+    local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_account_address)
+
+    [ $min_evr_requirement -eq 0 ] && return 0
+
+    echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds:"
+
+    wait_call "wait_for_funds ISSUED $min_evr_requirement" || return 1
+}
+
+function prepare() {
+    local res=$(exec_mb prepare $inetaddr)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        multi_choice "An error occurred while preparing the account! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            prepare "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function upgrade() {
+    local res=$(exec_mb upgrade)
+    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+        res=$(echo "$res" | tail -n 2 | head -n 1)
+        multi_choice "An error occurred while upgrading! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            upgrade "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
 }
 
 # Check cgroup rule config exists.
@@ -171,9 +500,9 @@ cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
 chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
 # Setting up Sashimono admin group.
-! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && rollback
+! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && abort
 
-! set_cpu_info && echo "Fetching CPU info failed" && rollback
+! set_cpu_info && echo "Fetching CPU info failed" && abort
 
 # Copy contract template and licence file (delete existing)
 # Backup the ssl cert files if exists
@@ -198,7 +527,7 @@ chmod -R +x $SASHIMONO_BIN
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
-cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers
+cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers && setup_helper_dir=$SASHIMONO_BIN/evernode-setup-helpers
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
@@ -216,14 +545,14 @@ mkdir -p $DOCKER_BIN
 "$script_dir"/docker-install.sh $DOCKER_BIN
 
 # Check whether docker installation dir is still empty.
-[ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && rollback
+[ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && abort
 
 # Install private docker registry.
 if [ "$DOCKER_REGISTRY_PORT" != "0" ]; then
     stage "Installing private docker registry"
     # TODO: secure registry configuration
     "$script_dir"/docker-registry-install.sh
-    [ "$?" == "1" ] && echo "Private docker registry installation failed." && rollback
+    [ "$?" == "1" ] && echo "Private docker registry installation failed." && abort
 else
     echo "Private docker registry installation skipped"
 fi
@@ -241,6 +570,13 @@ if [ "$NO_MB" == "" ]; then
     # Create MB_XRPL_USER if does not exists.
     if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
+
+        # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+        # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+        chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+
+        local secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
+        chown "$MB_XRPL_USER": $secret_path
     fi
 
     # Assign message board user priviledges.
@@ -257,32 +593,39 @@ if [ "$NO_MB" == "" ]; then
     chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
     # Register if not upgrade mode.
-    if [ "$UPGRADE" == "0" ]; then
+    if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
         # Setup and register the account.
         if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
             stage "Configuring host Xahau account"
             echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "XRPLACC_FAILURE" && rollback
+            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && rollback
             doreg=1
         fi
+    fi
 
+    if [ "$UPGRADE" == "0" ]; then
+        xah_balance_check_and_wait || abort
+
+        prepare || abort
+
+        evr_balance_check_and_wait || abort
     fi
 fi
 
 stage "Configuring Sashimono services"
 
 cgrulesengd_service=$(cgrulesengd_servicename)
-[ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && rollback
+[ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && abort
 
 # Setting up cgroup rules with sashiusers group (if not already setup).
 echo "Creating cgroup rules..."
-! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && rollback
+! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && abort
 if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf; then
-    ! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && rollback
+    ! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && abort
     # Restart the service to apply the cgrules config.
     echo "Restarting the '$cgrulesengd_service' service."
-    systemctl restart $cgrulesengd_service || rollback
+    systemctl restart $cgrulesengd_service || abort
 fi
 
 # Install Sashimono Agent cgcreate service.
@@ -304,14 +647,14 @@ echo "Configuring sashimono agent service..."
 # Create sashimono agent config (if not exists).
 if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
-    ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && rollback
-else
+    ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && abort
+elif [ ! -f "$SASHIMONO_CONFIG" ]; then
     ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT \
-        $inst_count $cpuMicroSec $ramKB $swapKB $diskKB && rollback
+        $total_instance_count $cpu_micro_sec $ramKB $swapKB $diskKB && abort
 fi
 
-if [[ "$NO_MB" == "" && -f $MB_XRPL_DATA/mb-xrpl.cfg ]]; then
-    ! sudo -u "$MB_XRPL_USER" MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" upgrade && rollback
+if [[ "$NO_MB" == "" && -f "$MB_XRPL_CONFIG" ]]; then
+    upgrade || abort
 fi
 
 # Install Sashimono Agent systemd service.
@@ -363,10 +706,10 @@ if [ "$NO_MB" == "" ]; then
         user_systemd=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
         [ "$user_systemd" == "running" ] && break
     done
-    [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && rollback
+    [ "$user_systemd" != "running" ] && echo "NO_MB_USER_SYSTEMD" && abort
 
     stage "Configuring Xahau message board service"
-    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && rollback
+    ! (sudo -u $MB_XRPL_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && abort
     # StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
     echo "[Unit]
     Description=Running and monitoring evernode Xahau transactions.
@@ -392,16 +735,10 @@ if [ "$NO_MB" == "" ]; then
         # Register the host on Evernode.
         if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
             stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-            set -o pipefail # We need register operation exit code to detect failures (ignore the sed pipe exit code).
-            # Append STAGE prefix to the lease offer creation logs, So they would get fetched from setup as stage logs.
-            # Add -p to the progress logs so they would be printed overwriting the same line.
-            echo "Executing register with params: $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count \
+            echo "Executing register with params: $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count \
                 $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
-            ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN register \
-                $countrycode $cpuMicroSec $ramKB $swapKB $diskKB $inst_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description |
-                stdbuf --output=L sed -E '/^Creating lease offer/s/^/STAGE /;/^Created lease offer/s/^/STAGE -p /' &&
-                echo "REG_FAILURE" && rollback
-            set +o pipefail
+            check_and_register || abort
+            mint_leases || abort
         fi
         echo "Registered host on Evernode."
     fi

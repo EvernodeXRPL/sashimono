@@ -47,12 +47,17 @@
     jshelper_bin="$setup_helper_dir/jshelper/index.js"
     config_json_path="$setup_helper_dir/configuration.json"
     operation="register"
-    min_operational_cost_per_month=5
-    # 3 Month initial operational duration is considered.
-    initial_operational_duration=3
+
     spinner=('|' '/' '-' '\')
+
     xrpl_address="-"
     xrpl_secret="-"
+    countrycode="-"
+    email_address="-"
+    tls_key_file="self"
+    tls_cert_file="self"
+    tls_cabundle_file="self"
+    description="-"
 
     # export vars used by Sashimono installer.
     export USER_BIN=/usr/bin
@@ -60,6 +65,7 @@
     export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
     export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
     export SASHIMONO_DATA=/etc/sashimono
+    export SASHIMONO_CONFIG="$SASHIMONO_DATA/sa.cfg"
     export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
     export MB_XRPL_CONFIG="$MB_XRPL_DATA/mb-xrpl.cfg"
     export SASHIMONO_SERVICE="sashimono-agent"
@@ -70,8 +76,11 @@
     export SASHIUSER_PREFIX="sashi"
     export MB_XRPL_USER="sashimbxrpl"
     export CG_SUFFIX="-cg"
+    export MIN_OPERATIONAL_COST_PER_MONTH=5
+    # 3 Month minimum operational duration is considered.
+    export MIN_OPERATIONAL_DURATION=3
 
-    export NETWORK="${NETWORK:-mainnet}"
+    export NETWORK="${NETWORK:-devnet}"
 
     # Private docker registry (not used for now)
     export DOCKER_REGISTRY_USER="sashidockerreg"
@@ -155,7 +164,7 @@
             echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." &&
             exit 1
 
-        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "auto-update" ] && [ "$1" != "regkey" ] &&
+        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] &&
             echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
@@ -169,7 +178,6 @@
                 \ndelete - Remove an instance from the system and recreate the lease
                 \nuninstall - Uninstall and deregister from $evernode
                 \ngovernance - Governance candidate management
-                \nauto-update - Evernode Auto Updater management
                 \nregkey - Regular key management" &&
             exit 1
     elif [ -d $SASHIMONO_BIN ]; then
@@ -773,15 +781,6 @@
         fi
     }
 
-    function set_auto_update() {
-        enable_auto_update=false
-        if $interactive; then
-            if confirm "\nDo you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." "n"; then
-                enable_auto_update=true
-            fi
-        fi
-    }
-
     function set_regular_key() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
@@ -891,23 +890,76 @@
         exit 1
     }
 
-    function set_host_xrpl_account() {
-        local secret_key=""
+    function read_configs() {
         if [ -f "$MB_XRPL_CONFIG" ]; then
-            xrpl_address=$(cat "$MB_XRPL_CONFIG" | jq -r '.xrpl.address')
-            key_file_path=$(cat "$MB_XRPL_CONFIG" | jq -r '.xrpl.secretPath')
-
-            if [ -f $key_file_path ]; then
-                secret_key=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
+            echo "Reading configuration from existing Message Board configuration file..."
+            local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
+            if [ ! -z $override_network ]; then
+                NETWORK="$override_network"
+                set_environment_configs || return 1
             fi
+
+            local override_rippled_server=$(jq -r ".xrpl.rippledServer | select( . != null )" "$MB_XRPL_CONFIG")
+            [ ! -z $override_rippled_server ] && rippled_server="$override_rippled_server"
+
+            xrpl_address=$(jq -r ".xrpl.address | select( . != null )" "$MB_XRPL_CONFIG")
+            key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
+            if [ -n "$key_file_path" ] && [ -e "$key_file_path" ]; then
+                xrpl_secret=$(jq -r ".xrpl.secret | select( . != null )" "$key_file_path")
+
+                ! validate_rippled_url "$rippled_server" && exit 1
+
+                xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
+
+                ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && exit 1
+
+                echo "Checking configured account keys..."
+                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && echo "Invalid account secret." && exit 1
+            else
+                echo "Cannot resume the installation due to secret path issue." && exit 1
+            fi
+
+            lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
+            extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
+
+            ipv6_subnet=$(jq -r ".networking.ipv6.subnet | select( . != null )" "$MB_XRPL_CONFIG")
+            [ -z "$ipv6_subnet" ] && ipv6_subnet="-"
+            ipv6_net_interface=$(jq -r ".networking.ipv6.interface | select( . != null )" "$MB_XRPL_CONFIG")
+            [ -z "$ipv6_net_interface" ] && ipv6_net_interface="-"
         fi
 
-        if [ ! -z $secret_key ]; then
-            local operation="register"
-            ! confirm "\nAre you performing a fresh Evernode installation?
-            \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
+        if [ -f "$SASHIMONO_CONFIG" ]; then
+            echo "Reading configuration from existing Sashimono Agent configuration file..."
+            inetaddr=$(jq -r ".hp.host_address | select( . != null )" "$SASHIMONO_CONFIG")
+            init_peer_port=$(jq ".hp.init_peer_port | select( . != null )" "$SASHIMONO_CONFIG")
+            init_user_port=$(jq ".hp.init_user_port | select( . != null )" "$SASHIMONO_CONFIG")
+            alloc_cpu=$(jq -r ".system.max_cpu_us | select( . != null )" "$SASHIMONO_CONFIG")
+            alloc_ramKB=$(jq -r ".system.max_mem_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+            alloc_swapKB=$(jq -r ".system.max_swap_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+            alloc_diskKB=$(jq -r ".system.max_storage_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
+            alloc_instcount=$(jq -r ".system.max_instance_count | select( . != null )" "$SASHIMONO_CONFIG")
+        fi
+    }
 
-            if [ $operation == "register" ]; then
+    function set_host_xrpl_account() {
+
+        [ ! -z $1 ] && operation=$1
+        # Create MB_XRPL_USER as we require that user for secret key ownership management.
+        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+            echomult "Creating Message-board User..."
+            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
+
+            # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+            # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+        fi
+
+        if [ "$xrpl_secret" == "-" ]; then
+
+            ! confirm "\nAre you performing a fresh Evernode installation?
+                 \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
+
+            if [ "$operation" == "register" ]; then
                 confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
 
                 if [ "$key_file_path" != "$default_key_filepath" ]; then
@@ -927,36 +979,17 @@
                     done
                 fi
 
-                # min_xah_requirement => reserve_base_xrp + reserve_inc_xrp * n
-                # reserve_inc_xrp * n => trustline reserve + reg_token_reserve + (reserve_inc_xrp * instance_count)
-                local inc_reserves_count=$((1 + 1 + $alloc_instcount))
-                min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) || {
-                    echomult "Error occuured in checking XAH requirement."
-                    exit 1
-                }
-
-                min_xah_requirement=$(echo "$min_operational_cost_per_month*$initial_operational_duration + $min_reserve_requirement" | bc)
-
                 generate_and_save_keyfile "$key_file_path"
 
-                local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
-
-                echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
-                    \nThe secret key of the account is located at $key_file_path.
-                    \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
-                    \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
-
-                    \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-                    \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
-                    \n2. At least $reg_fee EVR to cover Evernode registration fee.
-                    \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
             else
                 while true; do
                     read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
                     ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
 
                     echo "Checking account $xrpl_address..."
-                    ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $account_validate_criteria && xrpl_address="" && continue
+
+                    # TODO : This has been removed. Need to revist due to that.
+                    ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address && xrpl_address="" && continue
 
                     read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
                     ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
@@ -990,63 +1023,6 @@
                     break
                 done
             fi
-        fi
-
-        generate_qrcode "$xrpl_address"
-
-        # Check account registration status
-        local registration_status=""
-        if [ $registration_status == "REGISTERED" ]; then
-            exit 0
-        elif [ $registration_status == "HAS_REG_TOKEN" || $registration_status == "HAS_SELL_OFFER" ]; then
-            exit 0
-        fi
-
-
-
-
-
-        local account_validate_criteria="register"
-        local required_balance=0
-        [ ! -z $1 ] && account_validate_criteria=$1
-
-        local reg_fee=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS hostRegFee)
-
-        # Create MB_XRPL_USER as we require that user for secret key ownership management.
-        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-            echomult "Creating Message-board User..."
-            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
-
-        fi
-
-        if [ "$account_validate_criteria" == "register" ]; then
-            account_condition='-'
-
-            echomult "\nChecking the account condition..."
-            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
-
-            required_balance=$min_xah_requirement
-            while true; do
-                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "Thank you. [OUTPUT] XAH balance is there in your host account." &&
-                    break
-                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-            done
-
-            echomult "\nPreparing host account..."
-            while true; do
-                wait_call "exec_jshelper prepare-host $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $inetaddr" "Account preparation is successfull." && break
-                confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
-            done
-
-            echomult "\n\nIn order to register in Evernode you need to have $reg_fee EVR balance in your host account. Please deposit the required registration fee in EVRs.
-        \nYou can scan the provided QR code in your wallet app to send funds:"
-
-            required_balance=$reg_fee
-            while true; do
-                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "Thank you. [OUTPUT] EVR balance is there in your host account." &&
-                    break
-                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-            done
         fi
 
         xrpl_account_address=$xrpl_address
@@ -1175,8 +1151,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_account_address $xrpl_account_secret_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 |
-            tee -a $logfile | stdbuf --output=L grep "STAGE\|ERROR" |
-            while read line; do [[ $line =~ ^STAGE[[:space:]]-p(.*)$ ]] && echo -e \\e[1A\\e[K"${line:9}" || echo ${line:6}; done &&
+            tee -a $logfile &&
             remove_evernode_alias && install_failure
 
         # Enable the Evernode Auto Updater Service.
@@ -1694,64 +1669,63 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     if [ "$mode" == "install" ]; then
 
-        # Check if message board config exists.
-        # This means installation has passed through configuration.
-        if [ ! -f "$MB_XRPL_DATA/mb-xrpl.cfg" ]; then
-
-            ! confirm "This will install Sashimono, Evernode's contract instance management software,
+        ! confirm "This will install Sashimono, Evernode's contract instance management software,
             and register your system as an $evernode host.
             \nMake sure your system does not currently contain any other workloads important
             to you since we will be making modifications to your system configuration.
             \n\nContinue?" && exit 1
 
-            check_sys_req
-            check_prereq
+        check_sys_req
+        check_prereq
 
-            # Display licence file and ask for concent.
-            printf "\n***********************************************************************************************************************\n\n"
-            echomult "EVERNODE SOFTWARE LICENCE AGREEMENT"
-            echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENCE.
+        # Display licence file and ask for concent.
+        printf "\n***********************************************************************************************************************\n\n"
+        echomult "EVERNODE SOFTWARE LICENCE AGREEMENT"
+        echomult "\nBy using this EVERNODE CLI Tool, you agree to be bound by the terms and conditions of the EVERNODE SOFTWARE LICENCE.
     \nFor full details, please refer to the licence document available at:
     \n$licence_url"
 
-            printf "\n\n***********************************************************************************************************************\n"
-            ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
+        printf "\n\n***********************************************************************************************************************\n"
+        ! confirm "\nDo you accept the terms of the licence agreement?" && exit 1
 
-            set_environment_configs
+        set_environment_configs
 
-            init_setup_helpers
+        init_setup_helpers
 
-            set_rippled_server
-            echo -e "Using Rippled server '$rippled_server'.\n"
+        # Check if message board config and sa.cfg exists.
+        # This means installation has passed through configuration.
 
-            set_email_address
-            echo -e "Using the contact email address '$email_address'.\n"
+        read_configs
 
-            # TODO - CHECKPOINT - 01
-            set_inet_addr
-            echo -e "Using '$inetaddr' as host internet address.\n"
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_rippled_server
+        echo -e "Using Rippled server '$rippled_server'.\n"
 
-            set_country_code
-            echo -e "Using '$countrycode' as country code.\n"
+        set_email_address
+        echo -e "Using the contact email address '$email_address'.\n"
 
-            set_ipv6_subnet
-            [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
+        # TODO - CHECKPOINT - 01
+        [ ! -f "$SASHIMONO_CONFIG" ] && set_inet_addr
+        echo -e "Using '$inetaddr' as host internet address.\n"
 
-            set_cgrules_svc
-            echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
+        set_country_code
+        echo -e "Using '$countrycode' as country code.\n"
 
-            set_instance_alloc
-            echo -e "Using allocation $(GB $alloc_ramKB) memory, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, distributed among $alloc_instcount contract instances.\n"
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_ipv6_subnet
+        [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
 
-            set_init_ports
-            echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
+        set_cgrules_svc
+        echo -e "Using '$cgrulesengd_service' as cgroups rules engine service.\n"
 
-            set_lease_amount
-            echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+        [ ! -f "$SASHIMONO_CONFIG" ] && set_instance_alloc
+        echo -e "Using allocation $(GB $alloc_ramKB) memory, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, distributed among $alloc_instcount contract instances.\n"
 
-            set_extra_fee
+        [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
+        echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
 
-        fi
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_lease_amount
+        echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
+
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_extra_fee
 
         # TODO - CHECKPOINT - 02
         set_host_xrpl_account $operation
@@ -1778,7 +1752,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Check contract condtion.
         check_exisiting_contracts 0
 
-        #Perform Evernode uninstall
+        # Perform Evernode uninstall
         uninstall_evernode 0
         echo "Uninstallation complete!"
 
@@ -1886,18 +1860,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             \nreport [dudHostAddress] - Report a dud host.
             \nhelp - Print help." && exit 0
         ! MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN ${*:1} && exit 1
-
-    elif [ "$mode" == "auto-update" ]; then
-        if [ "$2" == "enable" ]; then
-            confirm "Are you sure you want to subscribe for auto-updates?\nNOTE: The auto-update service is offered subject to the terms set out in the Evernode Software Licence." && enable_evernode_auto_updater && exit 0
-        elif [ "$2" == "disable" ]; then
-            remove_evernode_auto_updater && exit 0
-        else
-            echomult "$evernode auto update
-            \nSupported commands:
-            \nenable - Enable $evernode auto updater service.
-            \ndisable - Disable $evernode auto updater service." && exit 1
-        fi
 
     elif [ "$mode" == "regkey" ]; then
         if [ "$2" == "set" ]; then

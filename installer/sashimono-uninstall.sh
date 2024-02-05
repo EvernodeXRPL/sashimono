@@ -161,19 +161,6 @@ fi
 # If the deregistration came from rollback, stop doing the deregistration
 if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
-    if { [ -z "$dereg_reason" ] || [ "$dereg_reason" != "ROLLBACK" ]; } && [ "$UPGRADE" == "0" ] && [ "$TRANSFER" == "0" ] && grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-        # Deregister evernode message board host registration.
-        echo "Attempting Evernode host deregistration..."
-        # Message board service is created at the end of the installation. So, if this exists previous installation is a successfull one.
-        # If not force or quiet mode and deregistration failed and if the previous installation a successful one,
-        # Exit the uninstallation, So user can try uninstall again with deregistration.
-        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister $dereg_reason &&
-            [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
-            ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
-            echo "Continuing uninstallation..."
-        fi
-    fi
-
     echo "Deleting message board user..."
     # Killall command is not found in every linux systems, therefore pkill command is used.
     # A small timeout(0.5 second) is applied before deleting the user because it takes some time to kill all the processes

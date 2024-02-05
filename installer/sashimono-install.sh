@@ -34,6 +34,7 @@ nodejs_util_bin="/usr/bin/node"
 jshelper_bin="$setup_helper_dir/jshelper/index.js"
 
 mb_cli_exit_err="MB_CLI_EXITED"
+mb_cli_out_prefix="CLI_OUT"
 multi_choice_result=""
 
 noroot_user=${SUDO_USER:-$(whoami)}
@@ -75,7 +76,7 @@ function rollback() {
     echo "Rolling back the installation..."
     if [ "$UPGRADE" == "0" ]; then
         burn_leases
-        deregister
+        check_and_deregister
         "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
     fi
 
@@ -127,8 +128,7 @@ function multi_choice_output() {
 }
 
 function wait_for_funds() {
-    local res=$(exec_mb wait-for-funds "$@")
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+    if ! res=$(exec_mb wait-for-funds $1 $2); then
         multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             wait_for_funds "$@" && return 0
@@ -261,12 +261,17 @@ function check_dependencies() {
 
 function exec_mb() {
     local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee /dev/fd/2)
-    echo $res
+
+    local return_code=0
+    [[ "$res" == *"$mb_cli_exit_err"* ]] && return_code=1
+
+    res=$(echo "$res" | sed -n -e "/^$mb_cli_out_prefix: /p")
+    echo "${res#"$mb_cli_out_prefix: "}"
+    return $return_code
 }
 
 function burn_leases() {
-    local res=$(exec_mb burn-leases)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
+    if ! res=$(exec_mb burn-leases); then
         multi_choice "An error occurred while burning! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             burn_leases "$@" && return 0
@@ -298,10 +303,8 @@ function exec_jshelper() {
 }
 
 function mint_leases() {
-    local res=$(exec_mb mint-leases $total_instance_count)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
-        if [[ "$res" == "LEASE_ERR"* ]]; then
+    if ! res=$(exec_mb mint-leases $total_instance_count); then
+        if [[ "$res" == "LEASE_ERR" ]]; then
             if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
                 burn_leases && mint_leases "$@" && return 0
             else
@@ -323,9 +326,7 @@ function mint_leases() {
 }
 
 function deregister() {
-    local res=$(exec_mb deregister $1)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
+    if ! res=$(exec_mb deregister $1); then
         multi_choice "An error occurred while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             deregister "$@" && return 0
@@ -340,11 +341,7 @@ function deregister() {
 }
 
 function register() {
-    echo "Registration calling"
-
-    local res=$(exec_mb register $country_code $cpu_micro_sec $ramKB $swapKB $diskKB $total_instance_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
+    if ! res=$(exec_mb register $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model $cpu_count $cpu_speed $email_address $description); then
         multi_choice "An error occurred while registering! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             register "$@" && return 0
@@ -358,19 +355,30 @@ function register() {
     return 0
 }
 
+function accept_reg_token() {
+    if ! res=$(exec_mb accept-reg-token); then
+        multi_choice "An error occurred while accepting the reg token! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            accept_reg_token "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
 function check_balance() {
-    local res=$(exec_mb check-balance)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
-        if [[ "$res" == "ERROR"* ]]; then
-            multi_choice "Balance check failed! What do you want to do" "retry/abort/rollback" && local input=$(choice_output)
-            if [ "$input" == "retry" ]; then
-                check_balance && return 0
-            elif [ "$input" == "rollback" ]; then
-                rollback
-            else
-                abort
-            fi
+    if ! res=$(exec_mb check-balance); then
+        multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            check_balance "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
         fi
         return 1
     fi
@@ -379,28 +387,53 @@ function check_balance() {
 }
 
 function check_and_register() {
-    local res=$(exec_mb check-reg)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
-        if [[ "$res" == "ACC_NOT_FOUND"* ]]; then
+    if ! res=$(exec_mb check-reg); then
+        if [[ "$res" == "ACC_NOT_FOUND" ]]; then
             echo "Account not found, Please check your account and try again." && abort
-        elif [[ "$res" == "INVALID_REG"* ]]; then
+            return 1
+        elif [[ "$res" == "INVALID_REG" ]]; then
             echo "Invalid registration please transfer and try again" && abort
-        elif [[ "$res" == "PENDING_SELL_OFFER"* ]]; then
+            return 1
+        elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
             register && return 0
-        elif [[ "$res" == "PENDING_TRANSFER"* ]] || [[ "$res" == "NOT_REGISTERED"* ]]; then
+            return 1
+        elif [[ "$res" == "PENDING_TRANSFER" ]] || [[ "$res" == "NOT_REGISTERED" ]]; then
             check_balance && register && return 0
+            return 1
         fi
-        return 1
-    fi
-
-    res=$(echo "$res" | tail -n 2 | head -n 1)
-    if [[ "$res" == "REGISTERED" ]]; then
+    elif [[ "$res" == "REGISTERED" ]]; then
         echo "This host is registered"
         return 0
-    else
-        echo "Invalid registration please transfer and try again" && abort
     fi
+
+    echo "Invalid registration please transfer and try again" && abort
+    return 1
+}
+
+function check_and_deregister() {
+    if ! res=$(exec_mb check-reg); then
+        if [[ "$res" == "NOT_REGISTERED" ]]; then
+            echo "This host is de-registered"
+            return 0
+        elif [[ "$res" == "ACC_NOT_FOUND" ]]; then
+            echo "Account not found, Please check your account and try again." && abort
+            return 1
+        elif [[ "$res" == "INVALID_REG" ]]; then
+            echo "Invalid registration please transfer and try again" && abort
+            return 1
+        elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
+            accept_reg_token && deregister && return 0
+            return 1
+        elif [[ "$res" == "PENDING_TRANSFER" ]]; then
+            echo "There a pending transfer, Please re-install and try again." && abort
+            return 1
+        fi
+    elif [[ "$res" == "REGISTERED" ]]; then
+        deregister
+        return 0
+    fi
+
+    echo "Invalid registration please transfer and try again" && abort
     return 1
 }
 
@@ -454,12 +487,10 @@ function evr_balance_check_and_wait {
 }
 
 function prepare() {
-    local res=$(exec_mb prepare $inetaddr)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
+    if ! res=$(exec_mb prepare $inetaddr); then
         multi_choice "An error occurred while preparing the account! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
-            prepare "$@" && return 0
+            register "$@" && return 0
         elif [ "$input" == "Rollback" ]; then
             rollback
         else

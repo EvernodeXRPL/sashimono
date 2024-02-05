@@ -43,6 +43,9 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'prepare') {
                 await new Setup().prepareHostAccount(process.argv[3]);
             }
+            else if (process.argv.length >= 2 && process.argv[2] === 'accept-reg-token') {
+                await new Setup().acceptRegToken();
+            }
             else if (process.argv.length >= 13 && process.argv[2] === 'register') {
                 await new Setup().register(process.argv[3], parseInt(process.argv[4]), parseInt(process.argv[5]),
                     parseInt(process.argv[6]), parseInt(process.argv[7]), parseInt(process.argv[8]), process.argv[9], parseInt(process.argv[10]), parseInt(process.argv[11]), process.argv[12], process.argv[13]);

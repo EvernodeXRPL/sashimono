@@ -147,7 +147,7 @@ class Setup {
 
         await hostClient.xrplApi.connect();
         if (!await hostClient.xrplAcc.exists()) {
-            throw "ACC_NOT_FOUND";
+            throw "CLI_OUT: ACC_NOT_FOUND";
         }
 
         await hostClient.connect();
@@ -158,12 +158,12 @@ class Setup {
             if (regUriToken) {
                 const registered = await hostClient.isRegistered();
                 if (registered) {
-                    console.log("REGISTERED");
+                    console.log("CLI_OUT: REGISTERED");
                     await hostClient.disconnect();
                     return true;
                 }
                 else {
-                    throw "INVALID_REG";
+                    throw "CLI_OUT: INVALID_REG";
                 }
             }
 
@@ -172,15 +172,15 @@ class Setup {
                 const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
                 const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
                 if (sellOffer)
-                    throw "PENDING_SELL_OFFER";
+                    throw "CLI_OUT: PENDING_SELL_OFFER";
             }
 
             // Check whether pending transfer exists.
             const transferPending = await hostClient.isTransferee();
             if (transferPending)
-                throw "PENDING_TRANSFER";
+                throw "CLI_OUT: PENDING_TRANSFER";
 
-            throw "NOT_REGISTERED"
+            throw "CLI_OUT: NOT_REGISTERED"
         }
         catch (e) {
             await hostClient.disconnect();
@@ -205,11 +205,36 @@ class Setup {
             const isAReReg = await hostClient.isTransferee();
             const evrBalance = await hostClient.getEVRBalance();
             if (!isAReReg && hostClient.config.hostRegFee > evrBalance)
-                throw `ERROR: EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
+                throw `EVR balance in the account is less than the registration fee (${hostClient.config.hostRegFee}EVRs).`;
             else if (isAReReg && evrBalance < parseFloat(evernode.EvernodeConstants.NOW_IN_EVRS))
-                throw `ERROR: EVR balance in the account is insufficient for re-registration.`;
+                throw `EVR balance in the account is insufficient for re-registration.`;
             await hostClient.disconnect();
             return true;
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+    }
+
+    async acceptRegToken() {
+        console.log("Accepting registration token...");
+        const config = this.#getConfig();
+        const acc = config.xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+
+        const hostClient = new evernode.HostClient(acc.address, acc.secret);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            var res = await hostClient.acceptRegToken({ retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await hostClient.disconnect();
+            return res;
         }
         catch (e) {
             await hostClient.disconnect();
@@ -265,21 +290,25 @@ class Setup {
             if (leases.length) {
                 for (const l of leases) {
                     if (l.Amount && l.Amount.value !== acc.leaseAmount) {
-                        throw 'LEASE_ERR: Lease amount is inconsistent with existing.';
+                        console.error('Lease amount is inconsistent with existing.');
+                        throw 'CLI_OUT: LEASE_ERR';
                     }
                     const tokenInfo = evernode.UtilHelpers.decodeLeaseTokenUri(l.URI);
                     if (tokenInfo.leaseAmount !== acc.leaseAmount) {
-                        throw 'LEASE_ERR: Lease amount is inconsistent with existing.';
+                        console.error('Lease amount is inconsistent with existing.');
+                        throw 'CLI_OUT: LEASE_ERR';
                     }
                     const leaseIndex = tokenInfo.leaseIndex;
                     const outboundIP = tokenInfo.outboundIP;
 
                     if ((outboundIP && !config?.networking?.ipv6?.subnet) || (!outboundIP && config?.networking?.ipv6?.subnet)) {
-                        throw 'LEASE_ERR: Outbound IP is inconsistent with existing.';
+                        console.error('Outbound IP is inconsistent with existing.');
+                        throw 'CLI_OUT: LEASE_ERR';
                     }
                     else if (outboundIP && config?.networking?.ipv6?.subnet) {
                         if (!UtilHelper.isSameIPV6Subnet(outboundIP, config?.networking?.ipv6?.subnet)) {
-                            throw 'LEASE_ERR: Outbound IP is inconsistent with existing.';
+                            console.error('Outbound IP is inconsistent with existing.');
+                            throw 'CLI_OUT: LEASE_ERR';
                         }
                     }
 
@@ -340,13 +369,15 @@ class Setup {
                         console.log(`Created lease offer ${i + 1} of ${unoffered.length}.`);
                     }
                     else {
-                        throw 'LEASE_ERR: Lease amounts are inconsistent.';
+                        console.error('Lease amounts are inconsistent.');
+                        throw 'CLI_OUT: LEASE_ERR';
                     }
                     i++;
                 }
             }
             else {
-                throw 'LEASE_ERR: No unoffered leases.';
+                console.error('No unoffered leases.');
+                throw 'CLI_OUT: LEASE_ERR';
             }
 
             await hostClient.disconnect();

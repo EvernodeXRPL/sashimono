@@ -75,8 +75,6 @@ function echomult() {
 function rollback() {
     echo "Rolling back the installation..."
     if [ "$UPGRADE" == "0" ]; then
-        burn_leases
-        check_and_deregister
         "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
     fi
 
@@ -94,6 +92,29 @@ function stage() {
 
 function info() {
     echo "[INFO]" "$1" # This is picked up by the setup console output filter.
+}
+
+function confirm() {
+    local prompt=$1
+    local defaultChoice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
+
+    local choiceDisplay="[Y/n]"
+    if [ "$defaultChoice" == "n" ]; then
+        choiceDisplay="[y/N]"
+    fi
+
+    echo -en "$prompt $choiceDisplay "
+    local yn=""
+    read yn </dev/tty
+
+    # Default choice is 'y'
+    [ -z $yn ] && yn="$defaultChoice"
+    while ! [[ $yn =~ ^[Yy|Nn]$ ]]; do
+        read -ep "'y' or 'n' expected: " yn </dev/tty
+    done
+
+    echo ""                                     # Insert new line after answering.
+    [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
 function multi_choice() {
@@ -326,21 +347,6 @@ function register() {
     return 0
 }
 
-function accept_reg_token() {
-    if ! res=$(exec_mb accept-reg-token); then
-        multi_choice "An error occurred while accepting the reg token! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
-        if [ "$input" == "Retry" ]; then
-            accept_reg_token "$@" && return 0
-        elif [ "$input" == "Rollback" ]; then
-            rollback
-        else
-            abort
-        fi
-        return 1
-    fi
-    return 0
-}
-
 function check_balance() {
     if ! res=$(exec_mb check-balance); then
         multi_choice "Do you want to re-check the balance" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
@@ -374,33 +380,6 @@ function check_and_register() {
         fi
     elif [[ "$res" == "REGISTERED" ]]; then
         echo "This host is registered"
-        return 0
-    fi
-
-    echo "Invalid registration please transfer and try again" && abort
-    return 1
-}
-
-function check_and_deregister() {
-    if ! res=$(exec_mb check-reg); then
-        if [[ "$res" == "NOT_REGISTERED" ]]; then
-            echo "This host is de-registered"
-            return 0
-        elif [[ "$res" == "ACC_NOT_FOUND" ]]; then
-            echo "Account not found, Please check your account and try again." && abort
-            return 1
-        elif [[ "$res" == "INVALID_REG" ]]; then
-            echo "Invalid registration please transfer and try again" && abort
-            return 1
-        elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
-            accept_reg_token && deregister && return 0
-            return 1
-        elif [[ "$res" == "PENDING_TRANSFER" ]]; then
-            echo "There a pending transfer, Please re-install and try again." && abort
-            return 1
-        fi
-    elif [[ "$res" == "REGISTERED" ]]; then
-        deregister
         return 0
     fi
 

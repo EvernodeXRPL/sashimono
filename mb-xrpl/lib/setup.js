@@ -154,8 +154,10 @@ class Setup {
 
         try {
             const regInfo = await hostClient.getHostInfo();
+            // Check whether pending transfer exists.
+            const transferPending = await hostClient.isTransferee();
 
-            if (regInfo && countryCode != null) {
+            if (!transferPending && regInfo && countryCode != null) {
                 // Check wether the registration params are matching with existing.
                 const cpuModelFormatted = cpuModel.replaceAll('_', ' ').substring(0, 40);
                 const descriptionFormatted = description.replaceAll('_', ' ');
@@ -189,17 +191,13 @@ class Setup {
                     throw "CLI_OUT: INVALID_REG";
                 }
             }
-
-            if (regInfo) {
+            else if (regInfo) {
                 const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
                 const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
                 if (sellOffer)
                     throw "CLI_OUT: PENDING_SELL_OFFER";
             }
-
-            // Check whether pending transfer exists.
-            const transferPending = await hostClient.isTransferee();
-            if (transferPending)
+            else if (transferPending)
                 throw "CLI_OUT: PENDING_TRANSFER";
 
             throw "CLI_OUT: NOT_REGISTERED"

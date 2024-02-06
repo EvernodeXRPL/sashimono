@@ -102,7 +102,14 @@ async function main() {
         node index.js - Run message board.
         node index.js version - Print version.
         node index.js new [address] [secretPath] [governorAddress] [domain or ip] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network] - Create new config files.
+        node index.js check-reg - Check registration.
+        node index.js check-balance - Check EVR balance.
+        node index.js wait-for-funds [currencyType] [expectedBalance] - Wait until the funds are received.
+        node index.js accept-reg-token - Accept registration token if there're any.
         node index.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [cpuModelName] [cpuCount] [cpuMhz] [emailAddress] [description] [network] - Register the host on Evernode.
+        node index.js mint-leases [instanceCount] - Mint leases for the instances.
+        node index.js offer-leases - Offer all minted leases.
+        node index.js burn-leases - Burn all minted leases.
         node index.js transfer [transfereeAddress] - Initiate a transfer.
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.

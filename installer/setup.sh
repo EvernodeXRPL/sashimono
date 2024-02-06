@@ -179,23 +179,6 @@
                 \ngovernance - Governance candidate management
                 \nregkey - Regular key management" &&
             exit 1
-    elif [ -d $SASHIMONO_BIN ]; then
-        [ "$1" != "install" ] && [ "$1" != "uninstall" ] &&
-            echomult "$evernode host management tool
-                \nYour system has a previous failed partial $evernode installation.
-                \nYou can repair previous $evernode installation by installing again.
-                \nSupported commands:
-                \nuninstall - Uninstall previous $evernode installation" &&
-            exit 1
-
-        # If partially installed and interactive mode, Allow user to repair.
-        [ "$2" != "-q" ] && [ "$1" == "install" ] &&
-            ! confirm "$evernode host management tool
-                \nYour system has a previous failed partial $evernode installation.
-                \nYou can run:
-                \nuninstall - Uninstall previous $evernode installation.
-                \n\nDo you want to repair previous $evernode installation?" &&
-            exit 1
     else
         [ "$1" != "install" ] && [ "$1" != "transfer" ] &&
             echomult "$evernode host management tool
@@ -748,10 +731,9 @@
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
-
-        else
-            extra_txn_fee=$fee
         fi
+
+        extra_txn_fee=$fee
     }
 
     function set_email_address() {
@@ -1038,25 +1020,34 @@
             exit 1
         }
 
-        echomult "Your host account with the address $xrpl_address will be on Xahau $NETWORK.
+        local need_xah=$(echo "$min_xah_requirement > 0" | bc -l)
+        local need_evr=$(echo "$min_evr_requirement > 0" | bc -l)
+
+        local message="Your host account with the address $xrpl_address will be on Xahau $NETWORK.
         \nThe secret key of the account is located at $key_file_path.
         \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
         \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
-        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation.
-        \n1. At least $min_xah_requirement XAH to cover regular transaction fees for the first three months.
-        \n2. At least $min_evr_requirement EVR to cover Evernode registration.
-        \n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+        \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
+
+        [ "$need_xah" -eq 1 ] && message="$message\n(*) At least $min_xah_requirement XAH to cover regular transaction fees for the first three months."
+        [ "$need_evr" -eq 1 ] && message="$message\n(*) At least $min_evr_requirement EVR to cover Evernode registration."
+
+        message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
+
+        echomult "$message"
+
         generate_qrcode "$xrpl_address"
 
-        echomult "\nChecking the account condition..."
-        echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
+        if [ "$need_xah" -eq 1 ]; then
+            echomult "\nChecking the account condition..."
+            echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
 
-        required_balance=$min_xah_requirement
-        while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $required_balance" "[OUTPUT] XAH balance is there in your host account." &&
-                break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-        done
+            while true; do
+                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address NATIVE $min_xah_requirement" "[OUTPUT] XAH balance is there in your host account." &&
+                    break
+                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+            done
+        fi
 
         echomult "\nPreparing host account..."
         while true; do
@@ -1064,15 +1055,16 @@
             confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        if [ "$need_evr" -eq 1 ]; then
+            echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
         \nYou can scan the provided QR code in your wallet app to send funds:"
 
-        required_balance=$min_evr_requirement
-        while true; do
-            wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $required_balance" "[OUTPUT] EVR balance is there in your host account." &&
-                break
-            confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
-        done
+            while true; do
+                wait_call "exec_jshelper check-balance $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address ISSUED $min_evr_requirement" "[OUTPUT] EVR balance is there in your host account." &&
+                    break
+                confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
+            done
+        fi
     }
 
     function install_failure() {
@@ -1183,10 +1175,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 done && install_failure
         fi
 
-        # Create evernode cli alias at the begining.
-        # So, if the installation attempt failed user can uninstall the failed installation using evernode commands.
-        ! create_evernode_alias && install_failure
-
         # Currently the domain address saved only in account_info and an empty value in Hook states.
         # Set description to empty value ('_' will be treated as empty)
         description="_"
@@ -1205,13 +1193,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             while read -r line; do
                 cleaned_line=$(echo "$line" | sed -E 's/\[STAGE\]|\[INFO\]//g' | awk '{sub(/^[ \t]+/, ""); print}')
                 [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line}" || echo "${cleaned_line}"
-            done && remove_evernode_alias && install_failure
+            done && install_failure
 
         # Enable the Evernode Auto Updater Service.
         # if [ "$enable_auto_update" = true ]; then
         #     stage "Configuring auto updater service"
         #     enable_evernode_auto_updater
         # fi
+
+        ! create_evernode_alias && install_failure
 
         set +o pipefail
 
@@ -1274,7 +1264,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Alias for setup.sh is created during 'install_evernode' too.
         # If only the setup.sh is updated but not the installer, then the alias should be created again.
         if [ "$latest_installer_script_version" != "$current_installer_script_version" ]; then
-            uninstall_evernode 1
             install_evernode 1
         fi
 

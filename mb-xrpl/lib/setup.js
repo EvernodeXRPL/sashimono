@@ -33,7 +33,7 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH);
     }
 
-    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0) {
+    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0, emailAddress = null) {
         const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
@@ -44,6 +44,9 @@ class Setup {
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount,
                 affordableExtraFee: affordableExtraFee
+            },
+            host: {
+                emailAddress: emailAddress
             }
         };
 

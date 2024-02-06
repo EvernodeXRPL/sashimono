@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    echo -en "$prompt $choiceDisplay "
+    echo -en $prompt "$choiceDisplay "
     local yn=""
     read yn </dev/tty
 
@@ -524,7 +524,7 @@ if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
         stage "Configuring host Xahau account"
         echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && abort
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $email_address $extra_txn_fee $ipv6_subnet $ipv6_net_interface $NETWORK && echo "CONFIG_SAVING_FAILURE" && abort
         doreg=1
     fi
 fi

@@ -107,7 +107,7 @@
             choiceDisplay="[y/N]"
         fi
 
-        echo -en "$prompt $choiceDisplay "
+        echo -en $prompt "$choiceDisplay "
         local yn=""
         read yn </dev/tty
 
@@ -901,6 +901,7 @@
 
             lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
             extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
+            email_address=$(jq ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
 
             ipv6_subnet=$(jq -r ".networking.ipv6.subnet | select( . != null )" "$MB_XRPL_CONFIG")
             [ -z "$ipv6_subnet" ] && ipv6_subnet="-"
@@ -1740,7 +1741,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ ! -f "$MB_XRPL_CONFIG" ] && set_rippled_server
         echo -e "Using Rippled server '$rippled_server'.\n"
 
-        set_email_address
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_email_address
         echo -e "Using the contact email address '$email_address'.\n"
 
         # TODO - CHECKPOINT - 01

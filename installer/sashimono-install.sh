@@ -492,7 +492,7 @@ echo "Configuaring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 
-# Create MB_XRPL_USER if does not exists.
+# Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER
 

@@ -731,10 +731,9 @@
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
-
-        else
-            extra_txn_fee=$fee
         fi
+
+        extra_txn_fee=$fee
     }
 
     function set_email_address() {

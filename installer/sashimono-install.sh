@@ -73,7 +73,7 @@ function echomult() {
 }
 
 function rollback() {
-    echo "Rolling back the installation..."
+    info "Rolling back the installation..."
     if [ "$UPGRADE" == "0" ]; then
         "$script_dir"/sashimono-uninstall.sh -f ROLLBACK
     fi
@@ -82,7 +82,7 @@ function rollback() {
 }
 
 function abort() {
-    echo "Aborting the installation.."
+    info "Aborting the installation.."
     exit 1
 }
 
@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    echo -en "$prompt $choiceDisplay "
+    info $(echo -en "$prompt $choiceDisplay ")
     local yn=""
     read yn </dev/tty
 
@@ -113,7 +113,7 @@ function confirm() {
         read -ep "'y' or 'n' expected: " yn </dev/tty
     done
 
-    echo ""                                     # Insert new line after answering.
+    info $(echo "")                             # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
@@ -364,12 +364,12 @@ function check_balance() {
 }
 
 function check_and_register() {
-    if ! res=$(exec_mb check-reg); then
+    if ! res=$(exec_mb check-reg $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count $cpu_model_name $cpu_count $cpu_mhz $email_address $description); then
         if [[ "$res" == "ACC_NOT_FOUND" ]]; then
-            echo "Account not found, Please check your account and try again." && abort
+            info "Account not found, Please check your account and try again." && abort
             return 1
         elif [[ "$res" == "INVALID_REG" ]]; then
-            echo "Invalid registration please transfer and try again" && abort
+            info "Invalid registration please transfer and try again" && abort
             return 1
         elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
             register && return 0
@@ -383,7 +383,7 @@ function check_and_register() {
         return 0
     fi
 
-    echo "Invalid registration please transfer and try again" && abort
+    info "Invalid registration please transfer and try again" && abort
     return 1
 }
 
@@ -518,15 +518,12 @@ fi
 chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $MB_XRPL_DATA
 
 # Register if not upgrade mode.
-if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
+if [[ "$UPGRADE" == "0" ]] && [ ! -f "$MB_XRPL_CONFIG" ]; then
     # Setup and register the account.
-    if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo basic >/dev/null 2>&1; then
-        stage "Configuring host Xahau account"
-        echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
+    stage "Configuring host Xahau account"
+    echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && abort
-        doreg=1
-    fi
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && abort
 fi
 
 stage "Configuring Sashimono services"
@@ -645,15 +642,11 @@ sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user 
 echo "Installed Evernode Xahau message board."
 
 if [ "$UPGRADE" == "0" ]; then
-    echo "Registering host on Evernode..."
-    # Register the host on Evernode.
-    if [ ! -z $doreg ] || ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo >/dev/null 2>&1; then
-        stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
-        echo "Executing register with params: $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count \
+    stage "Registering host on Evernode registry $EVERNODE_REGISTRY_ADDRESS"
+    echo "Executing register with params: $country_code $cpu_micro_sec $ram_kb $swap_kb $disk_kb $total_instance_count \
                 $cpu_model_name $cpu_count $cpu_mhz $email_address $description"
-        check_and_register || abort
-        mint_leases || abort
-    fi
+    check_and_register || abort
+    mint_leases || abort
     echo "Registered host on Evernode."
 fi
 

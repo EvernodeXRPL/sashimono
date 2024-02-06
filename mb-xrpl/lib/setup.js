@@ -133,7 +133,7 @@ class Setup {
         }
     }
 
-    async checkRegistration() {
+    async checkRegistration(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
         const config = this.#getConfig();
         const acc = config.xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
@@ -153,6 +153,29 @@ class Setup {
         await hostClient.connect();
 
         try {
+            const regInfo = await hostClient.getHostInfo();
+
+            if (regInfo) {
+                // Check wether the registration params are matching with existing.
+                const cpuModelFormatted = cpuModel.replaceAll('_', ' ').substring(0, 40);
+                const descriptionFormatted = description.replaceAll('_', ' ');
+                const emailFormatted = emailAddress.substring(0, 40);
+                const ramMb = Math.floor((ramKb + swapKb) / 1000);
+                const diskMb = Math.floor(diskKb / 1000);
+                if (!(regInfo.countryCode === countryCode &&
+                    regInfo.maxInstances === totalInstanceCount &&
+                    regInfo.cpuModelName === cpuModelFormatted &&
+                    regInfo.cpuMHz === cpuSpeed &&
+                    regInfo.cpuCount === cpuCount &&
+                    regInfo.cpuMicrosec === cpuMicroSec &&
+                    regInfo.email === emailFormatted &&
+                    regInfo.description === descriptionFormatted &&
+                    regInfo.ramMb === ramMb &&
+                    regInfo.diskMb === diskMb)) {
+                    throw "CLI_OUT: INVALID_REG";
+                }
+            }
+
             // Check whether host has a registration token.
             const regUriToken = await hostClient.getRegistrationUriToken();
             if (regUriToken) {
@@ -167,7 +190,6 @@ class Setup {
                 }
             }
 
-            const regInfo = await hostClient.getHostInfo();
             if (regInfo) {
                 const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
                 const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);

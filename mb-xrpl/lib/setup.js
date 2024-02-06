@@ -133,7 +133,7 @@ class Setup {
         }
     }
 
-    async checkRegistration(countryCode, cpuMicroSec, ramKb, swapKb, diskKb, totalInstanceCount, cpuModel, cpuCount, cpuSpeed, emailAddress, description) {
+    async checkRegistration(countryCode = null, cpuMicroSec = null, ramKb = null, swapKb = null, diskKb = null, totalInstanceCount = null, cpuModel = null, cpuCount = null, cpuSpeed = null, emailAddress = null, description = null) {
         const config = this.#getConfig();
         const acc = config.xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
@@ -155,7 +155,7 @@ class Setup {
         try {
             const regInfo = await hostClient.getHostInfo();
 
-            if (regInfo) {
+            if (regInfo && countryCode != null) {
                 // Check wether the registration params are matching with existing.
                 const cpuModelFormatted = cpuModel.replaceAll('_', ' ').substring(0, 40);
                 const descriptionFormatted = description.replaceAll('_', ' ');

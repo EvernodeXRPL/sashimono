@@ -95,7 +95,7 @@ function info() {
 }
 
 function confirm() {
-    local prompt=$1
+    local prompt="$1"
     local defaultChoice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
 
     local choiceDisplay="[Y/n]"
@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    info $(echo -en "$prompt $choiceDisplay ")
+    info "$prompt $choiceDisplay "
     local yn=""
     read yn </dev/tty
 
@@ -113,12 +113,12 @@ function confirm() {
         read -ep "'y' or 'n' expected: " yn </dev/tty
     done
 
-    info $(echo "")                             # Insert new line after answering.
+    info ""                                     # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
 function multi_choice() {
-    local prompt=$1
+    local prompt="$1"
     local choice_display=${2:-y/n}
 
     IFS='/'

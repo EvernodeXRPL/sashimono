@@ -28,7 +28,8 @@ class MessageBoard {
         queue: []
     };
     #applyFeeUpliftment = false;
-    #hearbeatRetryDelay = 30000; // 5 mins
+    #heartbeatRetryDelay = 30000; // 5 mins
+    #heartbeatRetryCount = 3;
     #feeUpliftment = 0;
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
@@ -316,14 +317,6 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
-        const momentSize = this.hostClient.config.momentSize;
-        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
-        const currentMomentStartIdx = await this.hostClient.getMomentStartIndex();
-        const currentMomentDuration = currentTimestamp - currentMomentStartIdx;
-        // Drop heartbeat re-trying in last quarter.
-        const maxRetries = (currentMomentDuration >= Math.floor(momentSize * 0.75) && currentMomentDuration < momentSize) ?
-            0 :
-            Math.floor((momentSize - currentMomentDuration - 300) / 300);
         await this.#queueAction(async () => {
             let ongoingHeartbeat = false;
             const currentMoment = await this.hostClient.getMoment();
@@ -396,7 +389,7 @@ class MessageBoard {
                     ongoingHeartbeat = false;
                 }
             }
-        }, maxRetries, this.#hearbeatRetryDelay);
+        }, this.#heartbeatRetryCount, this.#heartbeatRetryDelay);
     }
 
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
@@ -540,7 +533,9 @@ class MessageBoard {
             : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve : 0;
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+        const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+        console.log(`Heartbeat Scheduler scheduled to start in ${startTimeout} milliseconds.`);
+
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);

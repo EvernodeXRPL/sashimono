@@ -384,12 +384,13 @@ class MessageBoard {
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
                 }
                 catch (err) {
-                    if (err.code === 'tecHOOK_REJECTED')
+                    if (err.code === 'tecHOOK_REJECTED') {
                         console.log("Heartbeat rejected by the hook.");
+                    }
                     else {
                         console.log("Heartbeat tx error", err);
-                        throw err;
                     }
+                    throw err;
                 }
                 finally {
                     ongoingHeartbeat = false;

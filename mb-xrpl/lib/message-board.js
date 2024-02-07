@@ -28,7 +28,7 @@ class MessageBoard {
         queue: []
     };
     #applyFeeUpliftment = false;
-    #heartbeatRetryDelay = 30000; // 5 mins
+    #heartbeatRetryDelay = 300000; // 5 mins
     #heartbeatRetryCount = 3;
     #feeUpliftment = 0;
 
@@ -237,9 +237,15 @@ class MessageBoard {
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
                     }
                     if (action.delay > 0) {
-                        setTimeout(async () => {
-                            toKeep.push(action);
-                        }, action.delay);
+                        new Promise((resolve) => {
+                            const checkFlagInterval = setInterval(() => {
+                                if (!this.#concurrencyQueue.processing) {
+                                    this.#concurrencyQueue.queue.push(action);
+                                    clearInterval(checkFlagInterval);
+                                    resolve();
+                                }
+                            }, action.delay);
+                        });
                     } else
                         toKeep.push(action);
                 }
@@ -530,7 +536,7 @@ class MessageBoard {
         // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
-            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve : 0;
+            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? (Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve) : 0;
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : ((schedule) * 1000);

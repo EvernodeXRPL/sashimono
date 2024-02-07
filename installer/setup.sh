@@ -163,21 +163,22 @@
             echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." &&
             exit 1
 
-        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] &&
+        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] && [ "$1" != "offerlease" ] &&
             echomult "$evernode host management tool
                 \nYour host is registered on $evernode.
                 \nSupported commands:
-                \nstatus - View $evernode registration info
-                \nlist - View contract instances running on this system
+                \nstatus - View $evernode registration info.
+                \nlist - View contract instances running on this system.
                 \nlog - Generate evernode log file.
                 \napplyssl - Apply new SSL certificates for contracts.
                 \nconfig - View and update host configuration.
-                \nupdate - Check and install $evernode software updates
-                \ntransfer - Initiate an $evernode transfer for your machine
-                \ndelete - Remove an instance from the system and recreate the lease
-                \nuninstall - Uninstall and deregister from $evernode
-                \ngovernance - Governance candidate management
-                \nregkey - Regular key management" &&
+                \nupdate - Check and install $evernode software updates.
+                \ntransfer - Initiate an $evernode transfer for your machine.
+                \ndelete - Remove an instance from the system and recreate the lease.
+                \nuninstall - Uninstall and deregister from $evernode.
+                \ngovernance - Governance candidate management.
+                \nregkey - Regular key management.
+                \nofferlease - Create Lease offers for the instances." &&
             exit 1
     else
         [ "$1" != "install" ] && [ "$1" != "transfer" ] &&
@@ -1706,6 +1707,25 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ $has_error == 0 ] && echo "Instance deletion completed."
     }
 
+    function offerlease() {
+        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+        local mb_user_id=$(id -u "$MB_XRPL_USER")
+        local mb_user_runtime_dir="/run/user/$mb_user_id"
+
+        echomult "Stopping the message board..."
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+
+        local has_error=0
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN offer-leases &&
+            echo "There was an error in creating lease offers." && has_error=1
+
+        echomult "Starting the message board..."
+        sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user start $MB_XRPL_SERVICE
+
+        [ $has_error == 0 ] && echo "Lease offer creation for minted lease tokens was completed."
+    }
+
     # Begin setup execution flow --------------------
 
     if [ "$mode" == "install" ]; then
@@ -1919,6 +1939,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             \nset [regularKey] - Assign or update the regular key.
             \ndelete - Delete the regular key" && exit 1
         fi
+
+    elif [ "$mode" == "offerlease" ]; then
+        offerlease
     fi
 
     [ "$mode" != "uninstall" ] && check_installer_pending_finish

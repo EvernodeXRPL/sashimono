@@ -366,7 +366,7 @@ class Setup {
                 console.log("Creating lease offers for instance slots...");
                 let i = 0;
                 for (let t of unoffered) {
-                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
                     if (uriInfo.leaseAmount == acc.leaseAmount) {
                         await hostClient.offerMintedLease(t.index, acc.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                         console.log(`Created lease offer ${i + 1} of ${unoffered.length}.`);

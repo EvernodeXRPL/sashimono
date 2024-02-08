@@ -117,12 +117,23 @@ class MessageBoard {
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
 
-        await this.#queueAction(async () => {
-            // Update the registry with the active instance count.
-            await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
-                sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
-                Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
-        });
+        // Update only if changed.
+        const ramMb = Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000);
+        const diskMb = Math.floor(sashiConfig.system.max_storage_kbytes / 1000);
+        const cpuMicroSec = sashiConfig.system.max_cpu_us;
+        const totalInstanceCount = sashiConfig.system.max_instance_count;
+        const version = this.cfg.version;
+        if (!(hostInfo.maxInstances === totalInstanceCount &&
+            hostInfo.activeInstances === this.activeInstanceCount &&
+            hostInfo.version === version &&
+            hostInfo.cpuMicrosec === cpuMicroSec &&
+            hostInfo.ramMb === ramMb &&
+            hostInfo.diskMb === diskMb)) {
+            await this.#queueAction(async () => {
+                // Update the registry with the active instance count.
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb);
+            });
+        }
 
         // Update host additional information if necessary.
         if (sashiConfig?.hp?.host_address) {

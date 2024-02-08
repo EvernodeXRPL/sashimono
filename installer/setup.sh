@@ -461,7 +461,7 @@
     }
 
     function validate_rippled_url() {
-        ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
+        ! [[ $1 =~ ^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
 
         echo "Checking server $1..."
         ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1

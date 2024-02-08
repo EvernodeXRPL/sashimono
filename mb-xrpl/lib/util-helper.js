@@ -19,19 +19,18 @@ class UtilHelper {
         return null;
     }
 
-    static isSameIPV6Subnet(address1, address2) {
-        const [ip1, ip1PrefixLen] = address1.split('/');
-        const [ip2, ip2PrefixLen] = address2.split('/');
-
-        if (!(ip1 && ip2 && ip1PrefixLen && ip2PrefixLen && !isNaN(ip1PrefixLen) && !isNaN(ip2PrefixLen)))
-            return false;
+    static isInIPV6Subnet(subnet, ip) {
+        const [ip1, ip1PrefixLen] = subnet.split('/');
 
         try {
-            // This will return the normalized abbreviated subnet CIDR notation.
-            const ip1Cidr = ip6addr.createCIDR(ip1, parseInt(ip1PrefixLen));
-            const ip2Cidr = ip6addr.createCIDR(ip2, parseInt(ip2PrefixLen));
-            
-            return (ip1Cidr === ip2Cidr)
+            const subnetCidr = ip6addr.createCIDR(ip1, parseInt(ip1PrefixLen));
+            const ipCidr = ip6addr.createCIDR(ip, parseInt(ip1PrefixLen));
+
+            if (subnetCidr.first().compare(ipCidr.first()) <= 0 &&
+                subnetCidr.last().compare(ipCidr.last()) >= 0) {
+                return true;
+            }
+            return false;
         }
         catch {
             // Silent catch so that we don't log exceptions to console.

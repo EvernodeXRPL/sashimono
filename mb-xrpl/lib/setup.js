@@ -329,7 +329,7 @@ class Setup {
                         throw 'CLI_OUT: LEASE_IP_ERR';
                     }
                     else if (outboundIP && config?.networking?.ipv6?.subnet) {
-                        if (!UtilHelper.isSameIPV6Subnet(outboundIP, config?.networking?.ipv6?.subnet)) {
+                        if (!UtilHelper.isInIPV6Subnet(config?.networking?.ipv6?.subnet, outboundIP.address)) {
                             console.error('Outbound IP is inconsistent with existing.');
                             throw 'CLI_OUT: LEASE_IP_ERR';
                         }

@@ -269,7 +269,7 @@ function check_dependencies() {
 }
 
 function exec_mb() {
-    local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee /dev/fd/2)
+    local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee >(stdbuf --output=L sed -E '/^Minted lease/s/^/[STAGE] -p /;/^Burnt unsold hosting URIToken/s/^/[STAGE] -p /' >/dev/fd/2))
 
     local return_code=0
     [[ "$res" == *"$mb_cli_exit_err"* ]] && return_code=1

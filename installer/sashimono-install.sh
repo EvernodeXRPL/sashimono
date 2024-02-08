@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    info $prompt "$choiceDisplay "
+    info "$prompt $choiceDisplay "
     local yn=""
     read yn </dev/tty
 

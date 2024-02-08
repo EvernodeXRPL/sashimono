@@ -314,24 +314,24 @@ class Setup {
                 for (const l of leases) {
                     if (l.Amount && l.Amount.value !== acc.leaseAmount) {
                         console.error('Lease amount is inconsistent with existing.');
-                        throw 'CLI_OUT: LEASE_ERR';
+                        throw 'CLI_OUT: LEASE_AMT_ERR';
                     }
                     const tokenInfo = evernode.UtilHelpers.decodeLeaseTokenUri(l.URI);
                     if (tokenInfo.leaseAmount !== acc.leaseAmount) {
                         console.error('Lease amount is inconsistent with existing.');
-                        throw 'CLI_OUT: LEASE_ERR';
+                        throw 'CLI_OUT: LEASE_AMT_ERR';
                     }
                     const leaseIndex = tokenInfo.leaseIndex;
                     const outboundIP = tokenInfo.outboundIP;
 
                     if ((outboundIP && !config?.networking?.ipv6?.subnet) || (!outboundIP && config?.networking?.ipv6?.subnet)) {
                         console.error('Outbound IP is inconsistent with existing.');
-                        throw 'CLI_OUT: LEASE_ERR';
+                        throw 'CLI_OUT: LEASE_IP_ERR';
                     }
                     else if (outboundIP && config?.networking?.ipv6?.subnet) {
                         if (!UtilHelper.isSameIPV6Subnet(outboundIP, config?.networking?.ipv6?.subnet)) {
                             console.error('Outbound IP is inconsistent with existing.');
-                            throw 'CLI_OUT: LEASE_ERR';
+                            throw 'CLI_OUT: LEASE_IP_ERR';
                         }
                     }
 
@@ -393,14 +393,14 @@ class Setup {
                     }
                     else {
                         console.error('Lease amounts are inconsistent.');
-                        throw 'CLI_OUT: LEASE_ERR';
+                        throw 'CLI_OUT: LEASE_AMT_ERR';
                     }
                     i++;
                 }
             }
             else {
                 console.error('No unoffered leases.');
-                throw 'CLI_OUT: LEASE_ERR';
+                throw 'CLI_OUT: LEASE_OFFER_ERR';
             }
 
             await hostClient.disconnect();

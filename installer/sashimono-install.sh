@@ -280,6 +280,7 @@ function exec_mb() {
 }
 
 function burn_leases() {
+    stage "Burning lease tokens..."
     if ! res=$(exec_mb burn-leases); then
         multi_choice "An error occurred while burning! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
@@ -295,9 +296,12 @@ function burn_leases() {
 }
 
 function mint_leases() {
+    stage "Minting lease tokens..."
     if ! res=$(exec_mb mint-leases $total_instance_count); then
-        if [[ "$res" == "LEASE_ERR" ]]; then
-            if confirm "Do you want to burn minted tokens? (N will abort the installation)" "n"; then
+        if [[ "$res" == "LEASE_AMT_ERR" ]] || [[ "$res" == "LEASE_IP_ERR" ]]; then
+            local err_msg="EVR valuations"
+            [[ "$res" == "LEASE_IP_ERR" ]] && err_msg="outbound IPs"
+            if confirm "Existing lease $err_msg are inconsistent with the configuration! Do you want to burn minted tokens? (N will abort the installation)" "n"; then
                 burn_leases && mint_leases "$@" && return 0
             else
                 abort

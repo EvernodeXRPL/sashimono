@@ -95,7 +95,7 @@ function info() {
 }
 
 function confirm() {
-    local prompt=$1
+    local prompt="$1"
     local defaultChoice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
 
     local choiceDisplay="[Y/n]"
@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    echo -en $prompt "$choiceDisplay "
+    info $prompt "$choiceDisplay "
     local yn=""
     read yn </dev/tty
 
@@ -113,7 +113,7 @@ function confirm() {
         read -ep "'y' or 'n' expected: " yn </dev/tty
     done
 
-    echo ""                                     # Insert new line after answering.
+    info ""                                     # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
@@ -297,7 +297,7 @@ function burn_leases() {
 function mint_leases() {
     if ! res=$(exec_mb mint-leases $total_instance_count); then
         if [[ "$res" == "LEASE_ERR" ]]; then
-            if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
+            if confirm "Do you want to burn minted tokens? (N will abort the installation)" "n"; then
                 burn_leases && mint_leases "$@" && return 0
             else
                 abort

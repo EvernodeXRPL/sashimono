@@ -421,6 +421,13 @@ function upgrade() {
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
+# Stop services before start upgrade.
+if [[ "$UPGRADE" == "1" ]]; then
+    systemctl stop $SASHIMONO_SERVICE
+    systemctl stop $CGCREATE_SERVICE
+    sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
+fi
+
 # Create bin and data directories if not exist.
 mkdir -p $SASHIMONO_BIN
 mkdir -p $SASHIMONO_DATA

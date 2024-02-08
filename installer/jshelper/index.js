@@ -326,6 +326,13 @@ const funcs = {
         const urlPath = "/" + crypto.randomBytes(16).toString('hex');
         const responseString = crypto.randomBytes(16).toString('hex');
 
+        // Bare IP validation.
+        const ipv4Regex = /(([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])/;
+        const ipv6Regex = /((([0-9a-fA-F]){1,4})\:){7}([0-9a-fA-F]){1,4}/;
+
+        if (ipv4Regex.test(domain) || ipv6Regex.test(domain))
+            return { success: false, result: "bare_ip_address" };
+
         const server = http.createServer((req, res) => {
             if (req.url === urlPath) {
                 res.writeHead(200, { "Content-Type": "text/plain" });

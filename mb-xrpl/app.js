@@ -13,19 +13,20 @@ async function main() {
 
     if (process.argv.length >= 3) {
         try {
-            if (process.argv.length >= 9 && process.argv[2] === 'new') {
+            if (process.argv.length >= 11 && process.argv[2] === 'new') {
                 const accountAddress = process.argv[3];
                 const accountSecretPath = process.argv[4];
                 const governorAddress = process.argv[5];
                 const domain = process.argv[6];
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
-                const ipv6Subnet = (process.argv[9] === '-') ? null : process.argv[9];
-                const ipv6NetInterface = (process.argv[10] === '-') ? null : process.argv[10];
-                const network = process.argv.length > 11 ? process.argv[11] : appenv.NETWORK;
-                const affordableExtraFee = process.argv.length > 12 ? process.argv[12] : 0;
+                const emailAddress = process.argv[9];
+                const affordableExtraFee =process.argv[10];
+                const ipv6Subnet = (process.argv[11] === '-') ? null : process.argv[11];
+                const ipv6NetInterface = (process.argv[12] === '-') ? null : process.argv[12];
+                const network = process.argv.length > 13 ? process.argv[13] : appenv.NETWORK;
                 const setup = new Setup();
-                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee));
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee), emailAddress);
 
                 if (appenv.IS_DEV_MODE) {
                     await setup.prepareHostAccount(domain);

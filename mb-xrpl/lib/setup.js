@@ -33,7 +33,7 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH);
     }
 
-    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0) {
+    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0, emailAddress = null) {
         const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
@@ -44,6 +44,9 @@ class Setup {
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount,
                 affordableExtraFee: affordableExtraFee
+            },
+            host: {
+                emailAddress: emailAddress
             }
         };
 
@@ -383,7 +386,7 @@ class Setup {
                 console.log("Creating lease offers for instance slots...");
                 let i = 0;
                 for (let t of unoffered) {
-                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
                     if (uriInfo.leaseAmount == acc.leaseAmount) {
                         await hostClient.offerMintedLease(t.index, acc.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                         console.log(`Created lease offer ${i + 1} of ${unoffered.length}.`);

@@ -118,7 +118,7 @@ function confirm() {
 }
 
 function multi_choice() {
-    local prompt="$1"
+    local prompt=$1
     local choice_display=${2:-y/n}
 
     IFS='/'

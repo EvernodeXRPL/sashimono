@@ -95,7 +95,7 @@ function info() {
 }
 
 function confirm() {
-    local prompt=$1
+    local prompt="$1"
     local defaultChoice=${2:-y} #Default choice is set to 'y' if $2 parameter is not provided.
 
     local choiceDisplay="[Y/n]"
@@ -103,7 +103,7 @@ function confirm() {
         choiceDisplay="[y/N]"
     fi
 
-    echo -en "$prompt $choiceDisplay "
+    info $prompt "$choiceDisplay "
     local yn=""
     read yn </dev/tty
 
@@ -113,7 +113,7 @@ function confirm() {
         read -ep "'y' or 'n' expected: " yn </dev/tty
     done
 
-    echo ""                                     # Insert new line after answering.
+    info ""                                     # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
 }
 
@@ -297,7 +297,7 @@ function burn_leases() {
 function mint_leases() {
     if ! res=$(exec_mb mint-leases $total_instance_count); then
         if [[ "$res" == "LEASE_ERR" ]]; then
-            if confirm "Do you want to burn minted tokens. (N will abort the installation)" "n"; then
+            if confirm "Do you want to burn minted tokens? (N will abort the installation)" "n"; then
                 burn_leases && mint_leases "$@" && return 0
             else
                 abort
@@ -524,7 +524,7 @@ if [[ "$UPGRADE" == "0" && ! -f "$MB_XRPL_CONFIG" ]]; then
         stage "Configuring host Xahau account"
         echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $ipv6_subnet $ipv6_net_interface $NETWORK $extra_txn_fee && echo "CONFIG_SAVING_FAILURE" && abort
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $email_address $extra_txn_fee $ipv6_subnet $ipv6_net_interface $NETWORK && echo "CONFIG_SAVING_FAILURE" && abort
         doreg=1
     fi
 fi

@@ -136,7 +136,7 @@ class Setup {
         }
     }
 
-    async checkRegistration() {
+    async checkRegistration(countryCode = null, cpuMicroSec = null, ramKb = null, swapKb = null, diskKb = null, totalInstanceCount = null, cpuModel = null, cpuCount = null, cpuSpeed = null, emailAddress = null, description = null) {
         const config = this.#getConfig();
         const acc = config.xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
@@ -156,6 +156,31 @@ class Setup {
         await hostClient.connect();
 
         try {
+            const regInfo = await hostClient.getHostInfo();
+            // Check whether pending transfer exists.
+            const transferPending = await hostClient.isTransferee();
+
+            if (!transferPending && regInfo && countryCode != null) {
+                // Check wether the registration params are matching with existing.
+                const cpuModelFormatted = cpuModel.replaceAll('_', ' ').substring(0, 40);
+                const descriptionFormatted = description.replaceAll('_', ' ');
+                const emailFormatted = emailAddress.substring(0, 40);
+                const ramMb = Math.floor((ramKb + swapKb) / 1000);
+                const diskMb = Math.floor(diskKb / 1000);
+                if (!(regInfo.countryCode === countryCode &&
+                    regInfo.maxInstances === totalInstanceCount &&
+                    regInfo.cpuModelName === cpuModelFormatted &&
+                    regInfo.cpuMHz === cpuSpeed &&
+                    regInfo.cpuCount === cpuCount &&
+                    regInfo.cpuMicrosec === cpuMicroSec &&
+                    regInfo.email === emailFormatted &&
+                    regInfo.description === descriptionFormatted &&
+                    regInfo.ramMb === ramMb &&
+                    regInfo.diskMb === diskMb)) {
+                    throw "CLI_OUT: INVALID_REG";
+                }
+            }
+
             // Check whether host has a registration token.
             const regUriToken = await hostClient.getRegistrationUriToken();
             if (regUriToken) {
@@ -169,18 +194,13 @@ class Setup {
                     throw "CLI_OUT: INVALID_REG";
                 }
             }
-
-            const regInfo = await hostClient.getHostInfo();
-            if (regInfo) {
+            else if (regInfo) {
                 const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
                 const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
                 if (sellOffer)
                     throw "CLI_OUT: PENDING_SELL_OFFER";
             }
-
-            // Check whether pending transfer exists.
-            const transferPending = await hostClient.isTransferee();
-            if (transferPending)
+            else if (transferPending)
                 throw "CLI_OUT: PENDING_TRANSFER";
 
             throw "CLI_OUT: NOT_REGISTERED"

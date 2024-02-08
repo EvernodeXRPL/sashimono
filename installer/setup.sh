@@ -462,7 +462,7 @@
     }
 
     function validate_rippled_url() {
-        ! [[ $1 =~ ^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://'" && return 1
+        ! [[ $1 =~ ^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' or 'ws://'" && return 1
 
         echo "Checking server $1..."
         ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1
@@ -798,7 +798,7 @@
         qrencode -s 1 -l L -t UTF8 "$input_string"
     }
 
-    function generate_and_save_keyfile() {
+    function generate_keys() {
 
         account_json=$(exec_jshelper generate-account) || {
             echo "Error occurred in account setting up."
@@ -806,69 +806,6 @@
         }
         xrpl_address=$(jq -r '.address' <<<"$account_json")
         xrpl_secret=$(jq -r '.secret' <<<"$account_json")
-
-        if [ "$#" -ne 1 ]; then
-            echomult "Error: Please provide the full path of the secret file."
-            return 1
-        fi
-
-        key_file_path="$1"
-
-        key_dir=$(dirname "$key_file_path")
-        if [ ! -d "$key_dir" ]; then
-            mkdir -p "$key_dir"
-        fi
-
-        if [ "$key_file_path" == "$default_key_filepath" ]; then
-            parent_directory=$(dirname "$key_file_path")
-            chmod -R 500 "$parent_directory" &&
-                chown -R $MB_XRPL_USER: "$parent_directory" || {
-                echomult "Error occurred in permission and ownership assignment of key file directory."
-                exit 1
-            }
-        fi
-
-        if [ -e "$key_file_path" ]; then
-            if confirm "The file '$key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
-                echomult "Continuing with the existing key file."
-                existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
-                if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                    account_json=$(exec_jshelper generate-account $existing_secret) || {
-                        echomult "Error occurred when existing account retrieval."
-                        exit 1
-                    }
-                    xrpl_address=$(jq -r '.address' <<<"$account_json")
-                    xrpl_secret=$(jq -r '.secret' <<<"$account_json")
-
-                    chmod 400 "$key_file_path" &&
-                        chown $MB_XRPL_USER: $key_file_path || {
-                        echomult "Error occurred in permission and ownership assignment of key file."
-                        exit 1
-                    }
-
-                    echomult "Retrived account details via secret.\n"
-                    return 0
-                else
-                    echomult "Error: Existing secret file does not have the expected format."
-                    exit 1
-                fi
-            else
-                exit 1
-            fi
-        else
-
-            echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
-                chmod 400 "$key_file_path" &&
-                chown $MB_XRPL_USER: $key_file_path &&
-                echomult "Key file saved successfully at $key_file_path" || {
-                echomult "Error occurred in permission and ownership assignment of key file."
-                exit 1
-            }
-
-            return 0
-        fi
-
-        exit 1
     }
 
     function read_configs() {
@@ -937,45 +874,11 @@
         fi
 
         if [ "$xrpl_secret" == "-" ]; then
+            confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
 
-            ! confirm "\nAre you performing a fresh Evernode installation?
-                 \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
-
-            if [ "$operation" == "register" ]; then
-                confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
-
-                if [ "$key_file_path" != "$default_key_filepath" ]; then
-                    while true; do
-                        read -ep "Specify the preferred key file path: " key_file_path </dev/tty
-                        parent_directory=$(dirname "$key_file_path")
-
-                        canonicalized_directory=$(realpath "$parent_directory")
-                        root_directory="/root"
-                        canonicalized_root=$(realpath "$root_directory")
-
-                        if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
-                            echo "Key should not be located in /root directory." && continue
-                        fi
-
-                        ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
-                    done
-                fi
-
-                generate_and_save_keyfile "$key_file_path"
-
-            else
+            if [ "$key_file_path" != "$default_key_filepath" ]; then
                 while true; do
-                    read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
-                    ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
-
-                    echo "Checking account $xrpl_address..."
-
-                    # TODO : This has been removed. Need to revist due to that.
-                    ! exec_jshelper validate-account $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address && xrpl_address="" && continue
-
-                    read -ep "Specify the path of the Host Account secret: " key_file_path </dev/tty
-                    ! [ -f "$key_file_path" ] && echo "Invalid Path." && continue
-
+                    read -ep "Specify the preferred key file path: " key_file_path </dev/tty
                     parent_directory=$(dirname "$key_file_path")
 
                     canonicalized_directory=$(realpath "$parent_directory")
@@ -986,22 +889,79 @@
                         echo "Key should not be located in /root directory." && continue
                     fi
 
-                    xrpl_secret=$(cat $key_file_path | jq -r '.xrpl.secret')
-
-                    ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
-
-                    echo "Checking account keys..."
-                    ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
-
-                    # Modifying key file ownership to MB_XRPL_USER.
-                    chown $MB_XRPL_USER: $key_file_path &&
-                        chmod 400 $key_file_path || {
-                        echomult "Error occurred in permission and ownership assignment of key file."
-                        exit 1
-                    }
-
-                    break
+                    ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
                 done
+            fi
+
+            key_dir=$(dirname "$key_file_path")
+            if [ ! -d "$key_dir" ]; then
+                mkdir -p "$key_dir"
+            fi
+
+            if [ "$key_file_path" == "$default_key_filepath" ]; then
+                parent_directory=$(dirname "$key_file_path")
+                chmod -R 500 "$parent_directory" &&
+                    chown -R $MB_XRPL_USER: "$parent_directory" || {
+                    echomult "Error occurred in permission and ownership assignment of key file directory."
+                    exit 1
+                }
+            fi
+
+            if [ -e "$key_file_path" ]; then
+                if confirm "The file '$key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
+                    echomult "Continuing with the existing key file."
+                    existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
+                    if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
+                        account_json=$(exec_jshelper generate-account $existing_secret) || {
+                            echomult "Error occurred when existing account retrieval."
+                            exit 1
+                        }
+                        xrpl_address=$(jq -r '.address' <<<"$account_json")
+                        xrpl_secret=$(jq -r '.secret' <<<"$account_json")
+
+                        chmod 400 "$key_file_path" &&
+                            chown $MB_XRPL_USER: $key_file_path || {
+                            echomult "Error occurred in permission and ownership assignment of key file."
+                            exit 1
+                        }
+
+                        echomult "Retrived account details via secret.\n"
+                        return 0
+                    else
+                        echomult "Error: Existing secret file does not have the expected format."
+                        exit 1
+                    fi
+                else
+                    exit 1
+                fi
+            else
+                ! confirm "\nAre you performing a fresh Evernode installation?
+                 \nNOTE: Pressing 'n' implies that you are in the process of transferring from a previous installation in $NETWORK." && operation="re-register"
+
+                if [ "$operation" == "register" ]; then
+                    generate_keys
+                else
+                    while true; do
+                        read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
+                        ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
+
+                        read -ep "Specify the Xahau account secret: " xrpl_secret </dev/tty
+                        ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
+
+                        echo "Checking account keys..."
+                        ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+                        break
+                    done
+                fi
+
+                echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
+                    chmod 400 "$key_file_path" &&
+                    chown $MB_XRPL_USER: $key_file_path &&
+                    echomult "Key file saved successfully at $key_file_path" || {
+                    echomult "Error occurred in permission and ownership assignment of key file."
+                    exit 1
+                }
             fi
         fi
     }
@@ -1805,6 +1765,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
 
+        installed=true
+
     elif [ "$mode" == "uninstall" ]; then
 
         echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
@@ -1944,7 +1906,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         offerlease
     fi
 
-    [ "$mode" != "uninstall" ] && check_installer_pending_finish
+    $installed && check_installer_pending_finish
 
     exit 0
 

@@ -486,7 +486,6 @@ class Setup {
                     await hostClient.disconnect();
                     throw 'Host is not registered';
                 }
-                console.log(`Version: ${hostInfo.version}`);
                 console.log(`EVR balance: ${evrBalance}`);
                 console.log(`Host status: ${hostInfo.active ? 'active' : 'inactive'}`);
 

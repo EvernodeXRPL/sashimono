@@ -839,7 +839,7 @@
             key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
             lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
             extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
-            email_address=$(jq ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
+            email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
 
             # Validating important configurations.
             ([ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $lease_amount ] || [ -z $extra_txn_fee ] || [ -z $email_address ]) && echo "Configuration file format has been altered." && exit 1

@@ -19,6 +19,7 @@
     max_ipv6_prefix_len=112
     evernode_alias=/usr/bin/evernode
     log_dir=/tmp/evernode
+    root_user="root"
 
     repo_owner="EvernodeXRPL"
     repo_name="evernode-resources"
@@ -456,6 +457,11 @@
 
     }
 
+    function validate_positive_integer() {
+        ! [[ $1 =~ ^[1-9][0-9]*$ ]] && return 1
+        return 0
+    }
+
     function validate_positive_decimal() {
         ! [[ $1 =~ ^(0*[1-9][0-9]*(\.[0-9]+)?|0+\.[0-9]*[1-9][0-9]*)$ ]] && return 1
         return 0
@@ -728,7 +734,7 @@
         if confirm "Do you want to set an extra transaction fee to consider in case of network congestion?" "n"; then
             while true; do
                 read -ep "Specify the affordable extra transaction fee (in XAH Drops): " fee </dev/tty
-                ! validate_positive_decimal $fee && echo "Extra fee amount should be a numerical value greater than zero." || break
+                ! validate_positive_integer $fee && echo "Extra fee amount should be a numerical value greater than zero." || break
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
@@ -810,7 +816,16 @@
 
     function read_configs() {
         if [ -f "$MB_XRPL_CONFIG" ]; then
-            echo "Reading configuration from existing Message Board configuration file..."
+            echomult "\nReading configuration from existing Message Board configuration file..."
+
+            local owner=$(stat -c "%U" "$MB_XRPL_CONFIG")
+            local group=$(stat -c "%G" "$MB_XRPL_CONFIG")
+            local access=$(stat -c "%a" "$MB_XRPL_CONFIG")
+
+            ([ "$owner" != "$MB_XRPL_USER" ] || [ "$group" != "$MB_XRPL_USER" ] || [ "$access" != "644" ]) &&
+                echomult "\nConfiguration file permissions have been altered." &&
+                exit 1
+
             local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
             if [ ! -z $override_network ]; then
                 NETWORK="$override_network"
@@ -822,6 +837,12 @@
 
             xrpl_address=$(jq -r ".xrpl.address | select( . != null )" "$MB_XRPL_CONFIG")
             key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
+            lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
+            extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
+            email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
+
+            # Validating important configurations.
+            ([ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $lease_amount ] || [ -z $extra_txn_fee ] || [ -z $email_address ]) && echo "Configuration file format has been altered." && exit 1
             if [ -n "$key_file_path" ] && [ -e "$key_file_path" ]; then
                 xrpl_secret=$(jq -r ".xrpl.secret | select( . != null )" "$key_file_path")
 
@@ -837,9 +858,11 @@
                 echo "Cannot resume the installation due to secret path issue." && exit 1
             fi
 
-            lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
-            extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
-            email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
+            ! validate_positive_decimal $lease_amount && echo "Lease amount should be a numerical value greater than zero." && exit 1
+
+            ! validate_positive_integer $extra_txn_fee && echo "Extra fee amount should be a numerical value greater than zero." && exit 1
+
+            ! validate_email_address $email_address && exit 1
 
             ipv6_subnet=$(jq -r ".networking.ipv6.subnet | select( . != null )" "$MB_XRPL_CONFIG")
             [ -z "$ipv6_subnet" ] && ipv6_subnet="-"
@@ -848,7 +871,17 @@
         fi
 
         if [ -f "$SASHIMONO_CONFIG" ]; then
-            echo "Reading configuration from existing Sashimono Agent configuration file..."
+            echomult "\nReading configuration from existing Sashimono Agent configuration file..."
+
+            # Get the owner and group of the sa config file.
+            local owner=$(stat -c "%U" "$SASHIMONO_CONFIG")
+            local group=$(stat -c "%G" "$SASHIMONO_CONFIG")
+            local access=$(stat -c "%a" "$SASHIMONO_CONFIG")
+
+            ([ "$owner" != "$root_user" ] || [ "$group" != "$root_user" ] || [ "$access" != "644" ]) &&
+                echomult "\nConfiguration file permissions have been altered." &&
+                exit 1
+
             inetaddr=$(jq -r ".hp.host_address | select( . != null )" "$SASHIMONO_CONFIG")
             init_peer_port=$(jq ".hp.init_peer_port | select( . != null )" "$SASHIMONO_CONFIG")
             init_user_port=$(jq ".hp.init_user_port | select( . != null )" "$SASHIMONO_CONFIG")
@@ -857,6 +890,9 @@
             alloc_swapKB=$(jq -r ".system.max_swap_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
             alloc_diskKB=$(jq -r ".system.max_storage_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
             alloc_instcount=$(jq -r ".system.max_instance_count | select( . != null )" "$SASHIMONO_CONFIG")
+
+            # Validating important configurations.
+            ([ -z $inetaddr ] || [ -z $init_peer_port ] || [ -z $init_user_port ] || [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ]) && echo "Configuration file format has been altered." && exit 1
         fi
     }
 

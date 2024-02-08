@@ -839,7 +839,7 @@
 
             lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
             extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
-            email_address=$(jq ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
+            email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
 
             ipv6_subnet=$(jq -r ".networking.ipv6.subnet | select( . != null )" "$MB_XRPL_CONFIG")
             [ -z "$ipv6_subnet" ] && ipv6_subnet="-"

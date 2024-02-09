@@ -479,11 +479,12 @@ class Setup {
                 });
 
                 const [evrBalance, hostInfo, totalLeases, offeredLeases, unofferedLeases] = await Promise.all(
-                    [hostClient.getEVRBalance(),
-                    hostClient.getRegistration(),
-                    hostClient.getLeases(),
-                    hostClient.getLeaseOffers(),
-                    hostClient.getUnofferedLeases()
+                    [
+                        hostClient.getEVRBalance(),
+                        hostClient.getRegistration(),
+                        hostClient.getLeases(),
+                        hostClient.getLeaseOffers(),
+                        hostClient.getUnofferedLeases()
                     ]);
 
                 if (hostInfo) {
@@ -494,11 +495,12 @@ class Setup {
                     throw 'Host is not registered';
                 }
                 console.log(`EVR balance: ${evrBalance}`);
-                if (totalLeases.length > 0) {
-                    console.log(`Available Lease offers: ${offeredLeases.length} out of ${totalLeases.length}`);
-                    console.log(`Pending Lease offers: ${unofferedLeases.length} out of ${totalLeases.length}`);
-                    if (unofferedLeases.length)
+                if (hostInfo.maxInstances > 0) {
+                    console.log(`Available Lease offers: ${offeredLeases.length} out of ${hostInfo.maxInstances}`);
+                    if (unofferedLeases.length > 0) {
+                        console.log(`Lease offers to be created: ${unofferedLeases.length} out of ${totalLeases.length}`);
                         console.log('NOTE: Please use `evernode offerlease` command to create leases for the instances.')
+                    }
                 }
                 console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);
 

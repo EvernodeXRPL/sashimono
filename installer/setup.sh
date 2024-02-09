@@ -1475,6 +1475,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local cfg_lease_amount=$(jq '.xrpl.leaseAmount' $mbconfig)
         local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
         local cfg_extra_txn_fee=$(jq '.xrpl.affordableExtraFee' $mbconfig)
+        [[ "$cfg_extra_txn_fee" == "null" ]] && cfg_extra_txn_fee=0
 
         local cfg_ipv6_subnet=$(jq -r '.networking.ipv6.subnet' $mbconfig)
         local cfg_ipv6_net_interface=$(jq -r '.networking.ipv6.interface' $mbconfig)

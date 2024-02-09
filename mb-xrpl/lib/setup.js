@@ -557,7 +557,7 @@ class Setup {
     // Burn the host minted URITokens at the de-registration.
     async burnMintedURITokens(hostClient, options = {}) {
         // Get unsold URITokens.
-        const uriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+        const uriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => n.Issuer == hostClient.xrplAcc.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
             .map(o => { return { uriTokenId: o.index, ownerAddress: hostClient.xrplAcc.address }; });
 
         // Get sold URITokens.
@@ -605,7 +605,7 @@ class Setup {
         });
 
         await hostClient.transfer(transfereeAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
-        await this.burnMintedURITokens(hostClient.xrplAcc, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+        await this.burnMintedURITokens(hostClient, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
     }
 
@@ -685,7 +685,7 @@ class Setup {
         await initClients(acc.rippledServer);
 
         // Get unsold URI Tokens.
-        const unsoldUriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+        const unsoldUriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => n.Issuer == hostClient.xrplAcc.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
             .map(n => { return { uriTokenId: n.index, leaseIndex: evernode.UtilHelpers.decodeLeaseTokenUri(n.URI).leaseIndex }; });
         const unsoldCount = unsoldUriTokens.length;
 

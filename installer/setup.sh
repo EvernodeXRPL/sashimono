@@ -46,7 +46,6 @@
     nodejs_util_bin="/usr/bin/node"
     jshelper_bin="$setup_helper_dir/jshelper/index.js"
     config_json_path="$setup_helper_dir/configuration.json"
-    operation="register"
 
     spinner=('|' '/' '-' '\')
 
@@ -164,9 +163,13 @@
             echo "$evernode is already installed on your host. Use the 'evernode' command to manage your host." &&
             exit 1
 
+        [ "$1" == "deregister" ] &&
+            echo "$evernode is already installed on your host. You cannot deregister without uninstalling. Use the 'evernode' command to manage your host." &&
+            exit 1
+
         [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] && [ "$1" != "offerlease" ] &&
             echomult "$evernode host management tool
-                \nYour host is registered on $evernode.
+                \nYour have $evernode installed on your machine.
                 \nSupported commands:
                 \nstatus - View $evernode registration info.
                 \nlist - View contract instances running on this system.
@@ -182,17 +185,18 @@
                 \nofferlease - Create Lease offers for the instances." &&
             exit 1
     else
-        [ "$1" != "install" ] && [ "$1" != "transfer" ] &&
+        [ "$1" != "install" ] && [ "$1" != "transfer" ] && [ "$1" != "deregister" ] &&
             echomult "$evernode host management tool
-                \nYour system is not registered on $evernode.
+                \nYour have not installed $evernode on your machine.
                 \nSupported commands:
-                \ninstall - Install Sashimono and register on $evernode
-                \ntransfer - Initiate an $evernode transfer for your machine" &&
+                \ninstall - Install Sashimono and register on $evernode.
+                \ntransfer - Initiate an $evernode transfer for your machine.
+                \nderegister - Deregister your account from $evernode." &&
             exit 1
     fi
     mode=$1
 
-    if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ]; then
+    if [ "$mode" == "install" ] || [ "$mode" == "uninstall" ] || [ "$mode" == "update" ] || [ "$mode" == "log" ] || [ "$mode" == "transfer" ] || [ "$mode" == "deregister" ]; then
         [ -n "$2" ] && [ "$2" != "-q" ] && [ "$2" != "-i" ] && echo "Second arg must be -q (Quiet) or -i (Interactive)" && exit 1
         [ "$2" == "-q" ] && interactive=false || interactive=true
         [ "$mode" == "transfer" ] && transfer=true || transfer=false
@@ -734,7 +738,7 @@
         if confirm "Do you want to set an extra transaction fee to consider in case of network congestion?" "n"; then
             while true; do
                 read -ep "Specify the affordable extra transaction fee (in XAH Drops): " fee </dev/tty
-                ! validate_positive_integer $fee && echo "Extra fee amount should be a numerical value greater than zero." || break
+                ! ([[ $fee -eq 0 ]] || validate_positive_integer $fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." || break
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
@@ -860,7 +864,7 @@
 
             ! validate_positive_decimal $lease_amount && echo "Lease amount should be a numerical value greater than zero." && exit 1
 
-            ! validate_positive_integer $extra_txn_fee && echo "Extra fee amount should be a numerical value greater than zero." && exit 1
+            ! ([[ $extra_txn_fee -eq 0 ]] || validate_positive_integer $extra_txn_fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." && exit 1
 
             ! validate_email_address $email_address && exit 1
 
@@ -896,9 +900,32 @@
         fi
     }
 
+    function collect_host_xrpl_account_inputs() {
+        while true; do
+            read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
+            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
+
+            read -ep "Specify the Xahau account secret: " xrpl_secret </dev/tty
+            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
+
+            echo "Checking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+
+            break
+        done
+    }
+
     function set_host_xrpl_account() {
 
-        [ ! -z $1 ] && operation=$1
+        [ ! -z $1 ] && operation=$1 || operation="register"
+
+        # Take only user input if this is for transfer or deregister
+        if [[ "$xrpl_secret" == "-" ]] && ([[ "$operation" == "transfer" ]] || [[ "$operation" == "deregister" ]]); then
+            collect_host_xrpl_account_inputs
+
+            return 0
+        fi
+
         # Create MB_XRPL_USER as we require that user for secret key ownership management.
         if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
             echomult "Creating Message-board User..."
@@ -977,18 +1004,7 @@
                 if [ "$operation" == "register" ]; then
                     generate_keys
                 else
-                    while true; do
-                        read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
-                        ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
-
-                        read -ep "Specify the Xahau account secret: " xrpl_secret </dev/tty
-                        ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
-
-                        echo "Checking account keys..."
-                        ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
-
-                        break
-                    done
+                    collect_host_xrpl_account_inputs
                 fi
 
                 echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
@@ -1027,8 +1043,8 @@
         \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
 
-        [ "$need_xah" -eq 1 ] && message="$message\n(*) At least $min_xah_requirement XAH to cover regular transaction fees for the first three months."
-        [ "$need_evr" -eq 1 ] && message="$message\n(*) At least $min_evr_requirement EVR to cover Evernode registration."
+        [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_xah_requirement XAH to cover regular transaction fees for the first three months."
+        [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_evr_requirement EVR to cover Evernode registration."
 
         message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -1036,7 +1052,7 @@
 
         generate_qrcode "$xrpl_address"
 
-        if [ "$need_xah" -eq 1 ]; then
+        if [[ "$need_xah" -eq 1 ]]; then
             echomult "\nChecking the account condition..."
             echomult "To set up your host account, ensure a deposit of $min_xah_requirement XAH to cover the regular transaction fees for the first three months."
 
@@ -1053,7 +1069,7 @@
             confirm "\nDo you want to re-try account preparation?\nPressing 'n' would terminate the installation." || exit 1
         done
 
-        if [ "$need_evr" -eq 1 ]; then
+        if [[ "$need_evr" -eq 1 ]]; then
             echomult "\n\nIn order to register in Evernode you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
         \nYou can scan the provided QR code in your wallet app to send funds:"
 
@@ -1184,7 +1200,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address OPERATION=$operation ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_address $key_file_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 |
             tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
@@ -1785,7 +1801,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ ! -f "$MB_XRPL_CONFIG" ] && set_extra_fee
 
         # TODO - CHECKPOINT - 02
-        set_host_xrpl_account $operation
+        set_host_xrpl_account "register"
         echo -e "\nAccount setup is complete."
 
         ! prepare_host && echo "Error while preparing the host." && exit 1
@@ -1877,12 +1893,49 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
 
             # Execute transfer from js helper.
-            exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $transferee_address
+            has_error=false
+            ! exec_jshelper transfer $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret $transferee_address && has_error=true
 
             rm -r $setup_helper_dir >/dev/null 2>&1
+
+            $has_error && echo "Error occured in transfer process. Check the error and try again." && exit 1
         fi
 
         echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
+
+    elif [ "$mode" == "deregister" ]; then
+        if ! $interactive; then
+            xrpl_address=${3}      # XRPL account address.
+            xrpl_secret=$(<"${4}") # XRPL account secret based on the provided path.
+            rippled_server=${5}    # Rippled server URL
+        fi
+
+        check_common_prereq
+
+        init_setup_helpers
+
+        download_public_config && set_environment_configs
+
+        # Set rippled server based on the user input.
+        set_rippled_server
+        echo -e "Using Rippled server '$rippled_server'.\n"
+
+        # Set host account based on the user input.
+        set_host_xrpl_account "deregister"
+
+        $interactive && ! confirm "\nThis will deregister $xrpl_address from $evernode.
+            \n  Note: If there are partial registrations, This process will first complete the registration and then it will be deregistered.
+            \n\nAre you sure you want to deregister from $evernode?" && exit 1
+
+        # Execute deregister from js helper.
+        has_error=false
+        ! exec_jshelper deregister $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address $xrpl_secret && has_error=true
+
+        rm -r $setup_helper_dir >/dev/null 2>&1
+
+        $has_error && echo "Error occured in deregister process. Check the error and try again." && exit 1
+
+        echo "Deregister process was sucessfull."
 
     elif [ "$mode" == "status" ]; then
         reg_info

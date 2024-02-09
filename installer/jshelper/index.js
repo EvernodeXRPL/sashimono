@@ -132,6 +132,55 @@ const funcs = {
         return { success: true };
     },
 
+    'deregister': async (args) => {
+        checkParams(args, 4);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const accountSecret = args[3];
+
+        await evernode.Defaults.useNetwork(NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret);
+
+        if (!await hostClient.xrplAcc.exists())
+            return { success: false, result: "Account not found." };
+
+        await hostClient.connect();
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        try {
+            // Accept if there's available reg token offers.
+            await hostClient.acceptRegToken({ retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            // Deregister host.
+            await hostClient.deregister(null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            await terminateConnections();
+            return { success: true };
+        }
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
+    },
+
     'ip6-getsubnet': async (args) => {
         checkParams(args, 1);
 

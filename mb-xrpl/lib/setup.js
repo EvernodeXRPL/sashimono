@@ -610,7 +610,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee, emailAddress) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -635,7 +635,8 @@ class Setup {
             (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
             (!ipv6Subnet) &&
             (!ipv6NetInterface) &&
-            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee))
+            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee) &&
+            (!emailAddress || cfg.host.emailAddress == emailAddress))
             return;
 
         await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
@@ -646,6 +647,8 @@ class Setup {
             cfg.xrpl.rippledServer = rippledServer;
         if (affordableExtraFeeParsed)
             cfg.xrpl.affordableExtraFee = affordableExtraFeeParsed;
+        if (emailAddress)
+            cfg.host.emailAddress = emailAddress;
         this.#saveConfig(cfg);
     }
 

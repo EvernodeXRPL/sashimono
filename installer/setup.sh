@@ -1356,7 +1356,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ "$error" == "ERROR" ] && echo "${reg_info/ERROR/""}" && exit 1
 
         # Get raddress from first line.
-        local address_line=$(echo "$reg_info" | head -1)
+        local address_line=$(echo "$reg_info" | head -2 | tail -1)
         local host_address=$(echo "$address_line" | awk -F : ' { print $2 } ')
         echo -e "\n$address_line\n"
         generate_qrcode "$host_address"

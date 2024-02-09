@@ -471,7 +471,7 @@
         ! [[ $1 =~ ^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' or 'ws://'" && return 1
 
         echo "Checking server $1..."
-        ! exec_jshelper validate-server $1 && echo "Could not communicate with the rippled server." && return 1
+        ! exec_jshelper validate-server $1 && echo "Could not communicate with the xahaud server." && return 1
         return 0
     }
 
@@ -755,12 +755,12 @@
     }
 
     function set_rippled_server() {
-        if confirm "Do you want to connect to the default rippled server ($rippled_server)?"; then
+        if confirm "Do you want to connect to the default xahaud server ($rippled_server)?"; then
             ! validate_rippled_url $rippled_server && exit 1
         else
             local new_url=""
             while true; do
-                read -ep "Specify the Rippled server URL: " new_url </dev/tty
+                read -ep "Specify the Xahaud server URL: " new_url </dev/tty
                 ! validate_rippled_url $new_url || break
             done
             rippled_server=$new_url
@@ -1529,18 +1529,18 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             update_mb=1
 
-        elif [ "$sub_mode" == "rippled" ]; then
+        elif [ "$sub_mode" == "xahaud" ]; then
 
             local server=${2} # Rippled server URL
-            [ -z $server ] && echomult "Your current rippled server is: $cfg_rippled_server\n" && exit 0
+            [ -z $server ] && echomult "Your current xahaud server is: $cfg_rippled_server\n" && exit 0
 
             ! validate_rippled_url $server &&
-                echomult "\nUsage: evernode config rippled | evernode config rippled <rippled server>\n" &&
+                echomult "\nUsage: evernode config xahaud | evernode config xahaud <xahaud server>\n" &&
                 exit 1
             rippled_server=$server
-            [[ $cfg_rippled_server == $rippled_server ]] && echomult "Rippled server is already configured!\n" && exit 0
+            [[ $cfg_rippled_server == $rippled_server ]] && echomult "Xahaud server is already configured!\n" && exit 0
 
-            echomult "Using the rippled address '$rippled_server'."
+            echomult "Using the xahaud address '$rippled_server'."
 
             update_mb=1
 
@@ -1645,7 +1645,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             update_mb=1
 
         else
-            echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|rippled|email|instance|extrafee] [arguments]\n" && exit 1
+            echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|xahaud|email|instance|extrafee] [arguments]\n" && exit 1
         fi
 
         local mb_user_id=$(id -u "$MB_XRPL_USER")
@@ -1755,7 +1755,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         read_configs
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_rippled_server
-        echo -e "Using Rippled server '$rippled_server'.\n"
+        echo -e "Using Xahaud server '$rippled_server'.\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_email_address
         echo -e "Using the contact email address '$email_address'.\n"
@@ -1862,9 +1862,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             download_public_config && set_environment_configs
 
-            # Set rippled server based on the user input.
+            # Set xahaud server based on the user input.
             set_rippled_server
-            echo -e "Using Rippled server '$rippled_server'.\n"
+            echo -e "Using Xahaud server '$rippled_server'.\n"
 
             # Set host account based on the user input.
             set_host_xrpl_account "transfer"

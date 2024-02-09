@@ -478,7 +478,14 @@ class Setup {
                     xrplApi: hostClient.xrplApi
                 });
 
-                const [evrBalance, hostInfo] = await Promise.all([hostClient.getEVRBalance(), hostClient.getRegistration()]);
+                const [evrBalance, hostInfo, totalLeases, offeredLeases, unofferedLeases] = await Promise.all(
+                    [hostClient.getEVRBalance(),
+                    hostClient.getRegistration(),
+                    hostClient.getLeases(),
+                    hostClient.getLeaseOffers(),
+                    hostClient.getUnofferedLeases()
+                    ]);
+
                 if (hostInfo) {
                     console.log(`Registration URIToken: ${hostInfo.uriTokenId}`);
                 }
@@ -487,7 +494,13 @@ class Setup {
                     throw 'Host is not registered';
                 }
                 console.log(`EVR balance: ${evrBalance}`);
-                console.log(`Host status: ${hostInfo.active ? 'active' : 'inactive'}`);
+                if (totalLeases.length > 0) {
+                    console.log(`Available Lease offers: ${offeredLeases.length} out of ${totalLeases.length}`);
+                    console.log(`Pending Lease offers: ${unofferedLeases.length} out of ${totalLeases.length}`);
+                    if (unofferedLeases.length)
+                        console.log('NOTE: Please use `evernode offerlease` command to create leases for the instances.')
+                }
+                console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);
 
                 await hostClient.disconnect();
             }
@@ -538,7 +551,8 @@ class Setup {
     async update(emailAddress) {
 
         console.log("Updating host...");
-        const acc = this.#getConfig().xrpl;
+        const cfg = this.#getConfig();
+        const acc = cfg.xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -552,6 +566,11 @@ class Setup {
         const hostInfo = await hostClient.getHostInfo();
         await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
+
+        if (emailAddress) {
+            cfg.host.emailAddress = emailAddress
+            this.#saveConfig(cfg);
+        }
     }
 
     // Burn the host minted URITokens at the de-registration.
@@ -610,7 +629,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee, emailAddress) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -635,8 +654,7 @@ class Setup {
             (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
             (!ipv6Subnet) &&
             (!ipv6NetInterface) &&
-            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee) &&
-            (!emailAddress || cfg.host.emailAddress == emailAddress))
+            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee))
             return;
 
         await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
@@ -647,8 +665,7 @@ class Setup {
             cfg.xrpl.rippledServer = rippledServer;
         if (affordableExtraFeeParsed)
             cfg.xrpl.affordableExtraFee = affordableExtraFeeParsed;
-        if (emailAddress)
-            cfg.host.emailAddress = emailAddress;
+
         this.#saveConfig(cfg);
     }
 

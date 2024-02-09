@@ -81,14 +81,13 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
-            else if ((process.argv.length === 10) && process.argv[2] === 'reconfig') {
+            else if ((process.argv.length === 9) && process.argv[2] === 'reconfig') {
                 if (process.argv[5] == '-') process.argv[5] = null;
                 if (process.argv[6] == '-') process.argv[6] = null;
                 if (process.argv[7] == '-') process.argv[7] = null;
                 if (process.argv[8] == '-') process.argv[8] = null;
-                if (process.argv[9] == '-') process.argv[9] = null;
 
-                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8], process.argv[9]);
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8]);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);

@@ -1430,7 +1430,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     function reconfig_mb() {
         echomult "Configuaring message board...\n"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee $email_address &&
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee &&
             echo "There was an error in updating message board configuration." && return 1
         return 0
     }
@@ -1448,7 +1448,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ipv6_subnet='-'
         ipv6_net_interface='-'
         extra_txn_fee='-'
-        email_address='-'
 
         local saconfig="$SASHIMONO_DATA/sa.cfg"
         local max_instance_count=$(jq '.system.max_instance_count' $saconfig)

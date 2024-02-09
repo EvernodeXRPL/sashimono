@@ -6,7 +6,7 @@
 namespace version
 {
     // Sashimono agent version. Written to new configs.
-    constexpr const char *AGENT_VERSION = "0.8.1";
+    constexpr const char *AGENT_VERSION = "0.8.2";
 
     // Minimum compatible config version (this will be used to validate configs).
     constexpr const char *MIN_CONFIG_VERSION = "0.5.0";

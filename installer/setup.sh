@@ -738,7 +738,7 @@
         if confirm "Do you want to set an extra transaction fee to consider in case of network congestion?" "n"; then
             while true; do
                 read -ep "Specify the affordable extra transaction fee (in XAH Drops): " fee </dev/tty
-                ! ([[ $fee -eq 0 ]] || validate_positive_integer $fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." || break
+                ! ([[ $fee =~ ^[0-9]+$ ]] && [[ $fee -ge 0 ]]) && echo "Extra fee amount should be an integer value greater than or equal zero." || break
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
@@ -864,7 +864,7 @@
 
             ! validate_positive_decimal $lease_amount && echo "Lease amount should be a numerical value greater than zero." && exit 1
 
-            ! ([[ $extra_txn_fee -eq 0 ]] || validate_positive_integer $extra_txn_fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." && exit 1
+            ! ([[ $extra_txn_fee =~ ^[0-9]+$ ]] && [[ $extra_txn_fee -ge 0 ]]) && echo "Extra fee amount should be an integer value greater than or equal zero." && exit 1
 
             ! validate_email_address $email_address && exit 1
 
@@ -1651,7 +1651,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             local fee=${2} # Affordable extra transaction fee to consider in txn failures.
             [ -z $fee ] && echomult "Your affordable extra transaction fee: $cfg_extra_txn_fee XAH Drops.\n" && exit 0
 
-            ! validate_positive_decimal $fee &&
+            ! ([[ $fee =~ ^[0-9]+$ ]] && [[ $fee -ge 0 ]])  &&
                 echomult "Invalid fee amount.\n   Usage: evernode config extrafee | evernode config extrafee <fee amount in XAH Drops>\n" &&
                 exit 1
             extra_txn_fee=$fee

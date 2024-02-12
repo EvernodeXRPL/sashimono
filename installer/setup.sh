@@ -1484,8 +1484,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     function reconfig_mb() {
         echomult "Configuaring message board...\n"
 
-        echo "node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers"
-
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers &&
             echo "There was an error in updating message board configuration." && return 1
         return 0

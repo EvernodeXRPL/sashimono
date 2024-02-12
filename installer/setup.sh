@@ -785,7 +785,7 @@
     }
 
     function set_fallback_rippled_servers() {
-        if ([[ "$fallback_rippled_servers" != "-" ]] && ! confirm "Do you want to set ("$fallback_rippled_servers") the default fallback rippled servers ?") || ! confirm "Do you want continue without fallback rippled servers ?"; then
+        if ([[ "$fallback_rippled_servers" != "-" ]] && ! confirm "Do you want to set ("$fallback_rippled_servers") the default fallback rippled servers ?") || ! confirm "Do you want to specify fallback rippled servers?" "n"; then
             local new_urls=""
             while true; do
                 read -p "Specify the comma-separated list of fallback server URLs: " new_urls </dev/tty
@@ -1834,7 +1834,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "Using Xahaud server '$rippled_server'.\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_fallback_rippled_servers
-        echo -e "Using fallback Xahaud servers '$fallback_rippled_servers'.\n"
+        [[ "$fallback_rippled_servers" != "-" ]] && echo -e "Using fallback Xahaud servers '$fallback_rippled_servers'.\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_email_address
         echo -e "Using the contact email address '$email_address'.\n"

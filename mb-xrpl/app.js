@@ -24,8 +24,8 @@ async function main() {
                 const affordableExtraFee = process.argv[10];
                 const ipv6Subnet = (process.argv[11] === '-') ? null : process.argv[11];
                 const ipv6NetInterface = (process.argv[12] === '-') ? null : process.argv[12];
-                const network = process.argv.length > 13 ? process.argv[13] : appenv.NETWORK;
-                const fallbackRippledServers = (process.argv[13] === '-') ? null : process.argv[13].split(',');
+                const network = (process.argv[13] === '-') ? appenv.NETWORK : process.argv[13];
+                const fallbackRippledServers = (process.argv[14] === '-') ? null : process.argv[14].split(',');
                 const setup = new Setup();
                 setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee), emailAddress, fallbackRippledServers);
 

@@ -12,6 +12,7 @@ const { appenv } = require("../../mb-xrpl/lib/appenv");
 const MAX_TX_RETRY_ATTEMPTS = 10;
 
 let NETWORK = appenv.NETWORK;
+let FALLBACK_SERVERS = null;
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -31,8 +32,15 @@ const funcs = {
             rippledServer: rippledUrl
         });
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
-        await xrplApi.disconnect();
+
+        try {
+            await xrplApi.connect();
+            await xrplApi.disconnect();
+        }
+        catch (e) {
+            return { success: false };
+        }
+
         return { success: true };
     },
 
@@ -47,6 +55,12 @@ const funcs = {
         evernode.Defaults.set({
             rippledServer: rippledUrl
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -77,6 +91,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -109,6 +129,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -145,6 +171,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -255,6 +287,12 @@ const funcs = {
             governorAddress: governorAddress
         });
 
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
+
         try {
             const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
             await xrplApi.connect();
@@ -339,6 +377,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -462,6 +506,12 @@ const funcs = {
             rippledServer: rippledUrl
         });
 
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
+
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
@@ -503,6 +553,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -583,6 +639,15 @@ async function app() {
             if (sp.length > 1 && sp[1]) {
                 NETWORK = sp[1];
                 process.argv.splice(networkIdx, 1);
+            }
+        }
+
+        const fallbackServersIdx = process.argv.findIndex(a => a.startsWith('fallback-servers:'));
+        if (fallbackServersIdx >= 0) {
+            const sp = process.argv[fallbackServersIdx].split(':');
+            if (sp.length > 1 && sp[1]) {
+                FALLBACK_SERVERS = sp[1].split(',');
+                process.argv.splice(fallbackServersIdx, 1);
             }
         }
 

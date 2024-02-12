@@ -7,7 +7,7 @@ const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 const { UtilHelper } = require('./util-helper');
 
-async function setEvernodeDefaults(network, governorAddress, rippledServer) {
+async function setEvernodeDefaults(network, governorAddress, rippledServer, fallbackRippledServers) {
     await evernode.Defaults.useNetwork(network || appenv.NETWORK);
 
     if (governorAddress)
@@ -18,6 +18,11 @@ async function setEvernodeDefaults(network, governorAddress, rippledServer) {
     if (rippledServer)
         evernode.Defaults.set({
             rippledServer: rippledServer
+        });
+
+    if (fallbackRippledServers && fallbackRippledServers.length)
+        evernode.Defaults.set({
+            fallbackRippledServers: fallbackRippledServers
         });
 }
 
@@ -33,7 +38,7 @@ class Setup {
         ConfigHelper.writeConfig(cfg, appenv.CONFIG_PATH);
     }
 
-    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0, emailAddress = null) {
+    newConfig(address = "", secretPath = "", governorAddress = "", leaseAmount = 0, rippledServer = null, ipv6Subnet = null, ipv6NetInterface = null, network = "", affordableExtraFee = 0, emailAddress = null, fallbackRippledServers = null) {
         const baseConfig = {
             version: appenv.MB_VERSION,
             xrpl: {
@@ -43,7 +48,8 @@ class Setup {
                 governorAddress: governorAddress,
                 rippledServer: rippledServer || appenv.DEFAULT_RIPPLED_SERVER,
                 leaseAmount: leaseAmount,
-                affordableExtraFee: affordableExtraFee
+                affordableExtraFee: affordableExtraFee,
+                fallbackRippledServers: fallbackRippledServers ?? []
             },
             host: {
                 emailAddress: emailAddress
@@ -57,7 +63,7 @@ class Setup {
 
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         // Prepare host account.
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -83,7 +89,7 @@ class Setup {
 
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         // Prepare host account.
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
@@ -139,7 +145,7 @@ class Setup {
     async checkRegistration(countryCode = null, cpuMicroSec = null, ramKb = null, swapKb = null, diskKb = null, totalInstanceCount = null, cpuModel = null, cpuCount = null, cpuSpeed = null, emailAddress = null, description = null) {
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
 
@@ -214,7 +220,7 @@ class Setup {
     async checkBalance() {
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -244,7 +250,7 @@ class Setup {
         console.log("Accepting registration token...");
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -270,7 +276,7 @@ class Setup {
         let cpuModelFormatted = cpuModel.replaceAll('_', ' ');
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -295,7 +301,7 @@ class Setup {
     async mintLeases(totalInstanceCount) {
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -368,7 +374,7 @@ class Setup {
     async offerLeases() {
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -415,7 +421,7 @@ class Setup {
     async burnLeases() {
         const config = this.#getConfig();
         const acc = config.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -438,7 +444,7 @@ class Setup {
     async deregister(error = null) {
         console.log("Deregistering host...");
         const acc = this.#getConfig().xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -466,7 +472,7 @@ class Setup {
         console.log(`Governor address: ${acc?.governorAddress}`);
 
         if (!isBasic) {
-            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
             try {
                 const hostClient = new evernode.HostClient(acc.address);
@@ -506,7 +512,7 @@ class Setup {
 
                 await hostClient.disconnect();
             }
-            catch {
+            catch(e) {
                 throw 'Error occurred when retrieving account info.';
             }
         }
@@ -532,7 +538,7 @@ class Setup {
     async hostInfo() {
 
         const acc = this.#getConfig(false).xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address);
         await hostClient.connect();
@@ -555,7 +561,7 @@ class Setup {
         console.log("Updating host...");
         const cfg = this.#getConfig();
         const acc = cfg.xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -616,7 +622,7 @@ class Setup {
     async transfer(transfereeAddress) {
         console.log("Transferring host...");
         const acc = this.#getConfig().xrpl;
-        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
         await hostClient.connect();
@@ -631,7 +637,7 @@ class Setup {
     }
 
     // Change the message board configurations.
-    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee) {
+    async changeConfig(leaseAmount, rippledServer, totalInstanceCount, ipv6Subnet, ipv6NetInterface, affordableExtraFee, fallbackRippledServers) {
 
         // Update the configuration.
         const cfg = this.#getConfig();
@@ -639,11 +645,18 @@ class Setup {
         if (leaseAmount && isNaN(leaseAmount))
             throw 'Lease amount should be a number';
         else if (rippledServer && !rippledServer.match(/^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$/g))
-            throw 'Provided Rippled Server is invalid';
+            throw 'Provided Xahaud Server is invalid';
         else if (totalInstanceCount && isNaN(totalInstanceCount))
             throw 'Maximum instance count should be a number';
         else if (affordableExtraFee && isNaN(affordableExtraFee))
             throw 'Affordable txn fee should be a number';
+
+        if (fallbackRippledServers) {
+            for (const url of fallbackRippledServers) {
+                if (!url.match(/^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$/g))
+                    throw 'Provided fallback Xahaud Server is invalid';
+            }
+        }
 
         const leaseAmountParsed = leaseAmount ? parseFloat(leaseAmount) : 0;
         const totalInstanceCountParsed = totalInstanceCount ? parseInt(totalInstanceCount) : 0;
@@ -667,6 +680,8 @@ class Setup {
             cfg.xrpl.rippledServer = rippledServer;
         if (affordableExtraFeeParsed)
             cfg.xrpl.affordableExtraFee = affordableExtraFeeParsed;
+        if (fallbackRippledServers)
+            cfg.xrpl.fallbackRippledServers = fallbackRippledServers;
 
         this.#saveConfig(cfg);
     }
@@ -689,7 +704,7 @@ class Setup {
         let hostClient;
 
         async function initClients(rippledServer) {
-            await setEvernodeDefaults(acc.network, acc.governorAddress, rippledServer);
+            await setEvernodeDefaults(acc.network, acc.governorAddress, rippledServer, acc.fallbackRippledServers);
             xrplApi = new evernode.XrplApi();
             hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
             await xrplApi.connect();
@@ -836,9 +851,9 @@ class Setup {
                 lease = lease[0];
 
                 const acc = this.#getConfig().xrpl;
-                await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+                await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
-                xrplApi = new evernode.XrplApi(acc.rippledServer);
+                xrplApi = new evernode.XrplApi();
                 await xrplApi.connect();
 
                 evernode.Defaults.set({
@@ -892,7 +907,7 @@ class Setup {
     async setRegularKey(regularKey) {
         {
             const acc = this.#getConfig().xrpl;
-            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
+            await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
             if (regularKey) {
                 console.log(`Setting Regular Key...`);
@@ -902,12 +917,14 @@ class Setup {
             }
 
             try {
-                await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer);
-
-                const xrplApi = new evernode.XrplApi(acc.rippledServer, { autoReconnect: false });
+                const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
                 await xrplApi.connect();
 
-                const xrplAcc = new evernode.XrplAccount(acc.address, acc.secret, { xrplApi: xrplApi });
+                evernode.Defaults.set({
+                    xrplApi: xrplApi
+                });
+
+                const xrplAcc = new evernode.XrplAccount(acc.address, acc.secret);
 
                 await xrplAcc.setRegularKey(regularKey);
 

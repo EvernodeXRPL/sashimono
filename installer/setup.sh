@@ -785,7 +785,7 @@
     }
 
     function set_fallback_rippled_servers() {
-        if ([[ "$fallback_rippled_servers" != "-" ]] && ! confirm "Do you want to set ("$fallback_rippled_servers") the default fallback rippled servers ?") || ! confirm "Do you want to specify fallback rippled servers?" "n"; then
+        if ([[ "$fallback_rippled_servers" != "-" ]] && ! confirm "Do you want to set ("$fallback_rippled_servers") the default fallback rippled servers ?") || confirm "Do you want to specify fallback rippled servers?" "n"; then
             local new_urls=""
             while true; do
                 read -p "Specify the comma-separated list of fallback server URLs: " new_urls </dev/tty

@@ -370,7 +370,7 @@ function check_and_register() {
             info "Account not found, Please check your account and try again." && abort
             return 1
         elif [[ "$res" == "INVALID_REG" ]]; then
-            info "Invalid registration please transfer and try again" && abort
+            info "Invalid registration please transfer or deregister and try again" && abort
             return 1
         elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
             register && return 0
@@ -384,7 +384,7 @@ function check_and_register() {
         return 0
     fi
 
-    info "Invalid registration please transfer and try again" && abort
+    info "Invalid registration please transfer or deregister and try again" && abort
     return 1
 }
 

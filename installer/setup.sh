@@ -1234,7 +1234,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo "Installing Sashimono..."
 
         init_setup_helpers
-        registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress)
+        registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) || {
+            echo "Error occurred getting registry address."
+            exit 1
+        }
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
@@ -1876,7 +1879,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         rm -r $setup_helper_dir >/dev/null 2>&1
 
         echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
+            \n\nNOTE: Installation will only mint the leases. Please use 'evernode offerlease' command to create offers for the lease instances."
 
         installed=true
 
@@ -1951,6 +1955,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             $interactive && ! confirm "\nThis will deregister $xrpl_address from $evernode
             while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
+            \n  Note: If there are partial registrations, This process will first complete the registration and then it will be deregistered.
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
 
             # Execute transfer from js helper.

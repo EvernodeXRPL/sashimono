@@ -150,12 +150,25 @@ const funcs = {
 
         await hostClient.connect();
 
-        await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
 
-        await hostClient.disconnect();
-        await xrplApi.disconnect();
+        try {
+            // Accept if there's available reg token offers.
+            await hostClient.acceptRegToken({ retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
 
-        return { success: true };
+            // Transfer host.
+            await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            await terminateConnections();
+            return { success: true };
+        }
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
     },
 
     'deregister': async (args) => {

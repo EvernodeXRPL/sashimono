@@ -505,7 +505,8 @@ class Setup {
                     console.log(`Available Lease offers: ${offeredLeases.length} out of ${hostInfo.maxInstances}`);
                     if (unofferedLeases.length > 0) {
                         console.log(`Lease offers to be created: ${unofferedLeases.length} out of ${totalLeases.length}`);
-                        console.log('NOTE: Please use `evernode offerlease` command to create leases for the instances.')
+                        console.log('NOTE: Please use `evernode offerlease` command to create offers for the minted lease tokens.');
+                        console.log('The host becomes eligible to send heartbeats after generating offers for minted lease tokens.');
                     }
                 }
                 console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);

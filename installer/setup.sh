@@ -1609,7 +1609,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             local servers=${2} # Rippled server URL
             if [[ -z $servers ]]; then
-                [[ "$cfg_fb_rippled_servers" != "null" ]] && echomult "Your current fallback xahaud servers are: $cfg_fb_rippled_servers\n"
+                [[ ! -z "$cfg_fb_rippled_servers" ]] && echomult "Your current fallback xahaud servers are: $cfg_fb_rippled_servers\n" ||
+                    echomult "You have not specified any fallback xahaud servers.\n"
                 exit 0
             fi
 
@@ -1617,7 +1618,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             [[ $cfg_fb_rippled_servers == $fallback_rippled_servers ]] && echomult "Xahaud server is already configured!\n" && exit 0
 
-            echomult "Using the xahaud address '$rippled_server'."
+            echomult "Using the fallback xahaud addresses '$fallback_rippled_servers'."
 
             update_mb=1
 

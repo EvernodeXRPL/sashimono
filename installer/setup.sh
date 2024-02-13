@@ -17,6 +17,7 @@
     instances_per_core=3
     max_non_ipv6_instances=5
     max_ipv6_prefix_len=112
+    min_ipv6_prefix_len=64
     evernode_alias=/usr/bin/evernode
     log_dir=/tmp/evernode
     root_user="root"
@@ -610,6 +611,7 @@
         while true; do
             local subnet_input
             read -ep "Please specify the IPv6 subnet CIDR assigned to this host: " subnet_input </dev/tty
+            [ -z "$subnet_input" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
 
             # If the given IP is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
             local primary_subnet=$(exec_jshelper ip6-getsubnet $subnet_input)
@@ -618,20 +620,24 @@
             # For further validation, we check whether the subnet prefix is actually assigned to any network interfaces of the host.
             local subnet_prefix="$(cut -d'/' -f1 <<<$primary_subnet | sed 's/::*$//g')"
             local prefix_len="$(cut -d'/' -f2 <<<$primary_subnet)"
-            local net_interfaces=$(ip -6 -br addr | grep $subnet_prefix)
+            local net_interfaces=$(ip -6 -br addr show scope global | grep "$subnet_prefix")
             local interface_count=$(echo "$net_interfaces" | wc -l)
 
+            [ "$prefix_len" -lt $min_ipv6_prefix_len ] && echo "Minimum allowed prefix length for $evernode is $min_ipv6_prefix_len." && continue
             [ "$prefix_len" -gt $max_ipv6_prefix_len ] && echo "Maximum allowed prefix length for $evernode is $max_ipv6_prefix_len." && continue
             [ -z "$net_interfaces" ] && echo "Could not find a network interface with the specified ipv6 subnet." && continue
             [ "$interface_count" -gt 1 ] && echo "Found more than 1 network interface with the specified ipv6 subnet." && echo "$net_interfaces" && continue
 
+            primary_subnet=$(echo "$net_interfaces" | awk '{ print $3 }')
             ipv6_subnet=$primary_subnet
             ipv6_net_interface=$(echo "$net_interfaces" | awk '{ print $1 }')
 
-            if ! confirm "\nDo you want to allocate the entire address range of the subnet $primary_subnet to $evernode?"; then
+            echomult "\nSubnet CIDR identified: $primary_subnet"
+            if ! confirm "Do you want to allocate the entire address range of the subnet $primary_subnet to $evernode?"; then
 
                 while true; do
                     read -ep "Please specify the nested IPv6 subnet you want to allocate for $evernode (this must be a nested subnet within $primary_subnet subnet): " subnet_input </dev/tty
+                    [ -z "$subnet_input" ] && echo "Invalid ipv6 subnet specified. It must be a valid ipv6 nested subnet in the CIDR format of \"xxxx:xxxx:xxxx:xxxx::/NN\"." && continue
 
                     # If the given nested subnet is valid, this will return the normalized ipv6 subnet like "x:x:x:x::/NN"
                     local nested_subnet=$(exec_jshelper ip6-nested-subnet $primary_subnet $subnet_input)
@@ -738,7 +744,7 @@
         if confirm "Do you want to set an extra transaction fee to consider in case of network congestion?" "n"; then
             while true; do
                 read -ep "Specify the affordable extra transaction fee (in XAH Drops): " fee </dev/tty
-                ! ([[ $fee -eq 0 ]] || validate_positive_integer $fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." || break
+                ! ([[ $fee =~ ^[0-9]+$ ]] && [[ $fee -ge 0 ]]) && echo "Extra fee amount should be an integer value greater than or equal zero." || break
             done
 
             echo -e "Affordable extra transaction fee is set as $fee XAH Drops.\n"
@@ -902,7 +908,7 @@
 
             ! validate_positive_decimal $lease_amount && echo "Lease amount should be a numerical value greater than zero." && exit 1
 
-            ! ([[ $extra_txn_fee -eq 0 ]] || validate_positive_integer $extra_txn_fee) && echo "Extra fee amount should be a numerical value greater than or equal zero." && exit 1
+            ! ([[ $extra_txn_fee =~ ^[0-9]+$ ]] && [[ $extra_txn_fee -ge 0 ]]) && echo "Extra fee amount should be an integer value greater than or equal zero." && exit 1
 
             ! validate_email_address $email_address && exit 1
 
@@ -1710,7 +1716,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             local fee=${2} # Affordable extra transaction fee to consider in txn failures.
             [ -z $fee ] && echomult "Your affordable extra transaction fee: $cfg_extra_txn_fee XAH Drops.\n" && exit 0
 
-            ! validate_positive_decimal $fee &&
+            ! ([[ $fee =~ ^[0-9]+$ ]] && [[ $fee -ge 0 ]]) &&
                 echomult "Invalid fee amount.\n   Usage: evernode config extrafee | evernode config extrafee <fee amount in XAH Drops>\n" &&
                 exit 1
             extra_txn_fee=$fee

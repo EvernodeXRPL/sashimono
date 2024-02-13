@@ -149,6 +149,27 @@ function multi_choice_output() {
     echo $multi_choice_result
 }
 
+function call_third_party() {
+    local command=$1
+    local operation=$2
+    local max_retries=3
+    local retry_delay=5
+    local attempt=1
+    while [ $attempt -le $max_retries ]; do
+        echo "Attempting command (attempt $attempt/$max_retries)"
+        $command
+        if [ $? -eq 0 ]; then
+            return 0
+        else
+            echo "Command failed, retrying in $retry_delay seconds..."
+            sleep $retry_delay
+            ((attempt++))
+        fi
+    done
+    echo "Max retries reached, failed $operation"
+    return 1
+}
+
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.
     local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
@@ -170,17 +191,17 @@ function setup_certbot() {
     # Check weather there's an existing certbot installation
     if command -v certbot &>/dev/null; then
         # Get the current registration email if there's any.
-        local lenc_acc_email=$(certbot show_account 2>/dev/null | grep "Email contact:" | cut -d ':' -f2 | sed 's/ *//g')
+        local lenc_acc_email=$(call_third_party "certbot show_account" "get current certbot account" 2>/dev/null | grep "Email contact:" | cut -d ':' -f2 | sed 's/ *//g')
 
         # If there's an existing registration with a different email and it has certificates, complain and return.
         if [[ ! -z $lenc_acc_email ]] && [[ $lenc_acc_email != $email_address ]]; then
             # If there are certificates complain and return. Otherwise update email.
-            local count=$(certbot certificates 2>/dev/null | grep -c "Certificate Name")
+            local count=$(call_third_party "certbot certificates" "check letsencrypt certificates" 2>/dev/null | grep -c "Certificate Name")
             [ $count -gt 0 ] &&
                 echo "There's an existing letsencrypt registration with $lenc_acc_email, Please use the same email or update the letsencrypt email with certbot." &&
                 return 1
 
-            ! certbot -n update_account -m $email_address && ehco "Error when updating the existing letsencrypt account email." && return 1
+            ! call_third_party "certbot -n update_account -m $email_address" "update certbot account details" && echo "Error when updating the existing letsencrypt account email." && return 1
         fi
     else
         # Install certbot via snap (https://certbot.eff.org/instructions?ws=other&os=ubuntufocal)
@@ -196,7 +217,7 @@ function setup_certbot() {
     # Setup the certificates. If there're already certificates skip this.
     if [ ! -f /etc/letsencrypt/live/$inetaddr/privkey.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/fullchain.pem ]; then
         echo "Running certbot certonly"
-        certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+        call_third_party "certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone" "setup certificates" || return 1
     fi
 
     # We need to place our script in certbook deploy hooks dir.

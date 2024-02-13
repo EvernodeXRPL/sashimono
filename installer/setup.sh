@@ -332,6 +332,7 @@
         local jshelper_dir=$(dirname $jshelper_bin)
         rm -r $jshelper_dir >/dev/null 2>&1
         sudo -u $noroot_user mkdir -p $jshelper_dir
+        chmod -R 777 $(dirname $jshelper_dir)
 
         if [ ! -f "$jshelper_bin" ]; then
             pushd $jshelper_dir >/dev/null 2>&1
@@ -1492,8 +1493,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function config() {
-        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-
         alloc_instcount=0
         alloc_cpu=0
         alloc_ramKB=0
@@ -2020,6 +2019,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         apply_ssl $2 $3 $4
 
     elif [ "$mode" == "config" ]; then
+        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
         init_setup_helpers
         config $2 $3 $4 $5 $6
 

@@ -193,9 +193,11 @@ function setup_certbot() {
     # allow http (port 80) in firewall for certbot domain validation
     ufw allow http comment sashimono-certbot
 
-    # Setup the certificates
-    echo "Running certbot certonly"
-    certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+    # Setup the certificates. If there're already certificates skip this.
+    if [ ! -f /etc/letsencrypt/live/$inetaddr/privkey.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/fullchain.pem ]; then
+        echo "Running certbot certonly"
+        certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+    fi
 
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"

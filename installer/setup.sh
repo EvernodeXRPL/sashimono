@@ -488,16 +488,15 @@
     }
 
     function set_inet_addr() {
-
         # Skip system requirement check in non-production environments if $NO_DOMAIN=1.
         if [ "$NETWORK" == "mainnet" ] || [[ "$NETWORK" != "mainnet" && "$NO_DOMAIN" == "" ]]; then
-            echo ""
             while [ -z "$inetaddr" ]; do
                 read -ep "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
-                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+                validate_inet_addr && validate_inet_addr_domain && break
                 echo "Invalid or unreachable domain name."
             done
-        else
+            set_domain_certs && return 0
+        elif [ -z "$inetaddr" ]; then
             tls_key_file="self"
             tls_cert_file="self"
             tls_cabundle_file="self"
@@ -1842,7 +1841,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "Using the contact email address '$email_address'.\n"
 
         # TODO - CHECKPOINT - 01
-        [ ! -f "$SASHIMONO_CONFIG" ] && set_inet_addr
+        # Call set_inet_addr to setup tls certificates even if there's a exiting config.
+        set_inet_addr
         echo -e "Using '$inetaddr' as host internet address.\n"
 
         set_country_code

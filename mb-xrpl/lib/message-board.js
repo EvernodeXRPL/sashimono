@@ -68,6 +68,11 @@ class MessageBoard {
                 rippledServer: this.cfg.xrpl.rippledServer
             });
 
+        if (this.cfg.xrpl.fallbackRippledServers && this.cfg.xrpl.fallbackRippledServers.length)
+            evernode.Defaults.set({
+                fallbackRippledServers: this.cfg.xrpl.fallbackRippledServers
+            });
+
         this.xrplApi = new evernode.XrplApi();
         evernode.Defaults.set({
             xrplApi: this.xrplApi

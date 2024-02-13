@@ -25,13 +25,10 @@ description=${18}
 ipv6_subnet=${19}
 ipv6_net_interface=${20}
 extra_txn_fee=${21}
+fallback_rippled_servers=${22}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
-setup_helper_dir="/tmp/evernode-setup-helpers"
-
-nodejs_util_bin="/usr/bin/node"
-jshelper_bin="$setup_helper_dir/jshelper/index.js"
 
 mb_cli_exit_err="MB_CLI_EXITED"
 mb_cli_out_prefix="CLI_OUT"
@@ -196,9 +193,11 @@ function setup_certbot() {
     # allow http (port 80) in firewall for certbot domain validation
     ufw allow http comment sashimono-certbot
 
-    # Setup the certificates
-    echo "Running certbot certonly"
-    certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+    # Setup the certificates. If there're already certificates skip this.
+    if [ ! -f /etc/letsencrypt/live/$inetaddr/privkey.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/fullchain.pem ]; then
+        echo "Running certbot certonly"
+        certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone || return 1
+    fi
 
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
@@ -373,7 +372,7 @@ function check_and_register() {
             info "Account not found, Please check your account and try again." && abort
             return 1
         elif [[ "$res" == "INVALID_REG" ]]; then
-            info "Invalid registration please transfer and try again" && abort
+            info "Invalid registration please transfer or deregister and try again" && abort
             return 1
         elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
             register && return 0
@@ -387,7 +386,7 @@ function check_and_register() {
         return 0
     fi
 
-    info "Invalid registration please transfer and try again" && abort
+    info "Invalid registration please transfer or deregister and try again" && abort
     return 1
 }
 
@@ -464,9 +463,6 @@ chmod -R +x $SASHIMONO_BIN
 # Setup tls certs used for contract instance websockets.
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
-# Copy the temporary setup-helper directory content to SASHIMONO_BIN directory.
-cp -Rdp $setup_helper_dir $SASHIMONO_BIN/evernode-setup-helpers && setup_helper_dir=$SASHIMONO_BIN/evernode-setup-helpers
-
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig
 
@@ -534,7 +530,7 @@ if [[ "$UPGRADE" == "0" ]] && [ ! -f "$MB_XRPL_CONFIG" ]; then
     stage "Configuring host Xahau account"
     echo "Using registry: $EVERNODE_REGISTRY_ADDRESS"
 
-    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $email_address $extra_txn_fee $ipv6_subnet $ipv6_net_interface $NETWORK && echo "CONFIG_SAVING_FAILURE" && abort
+    ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN new $xrpl_account_address $xrpl_account_secret_path $EVERNODE_GOVERNOR_ADDRESS $inetaddr $lease_amount $rippled_server $email_address $extra_txn_fee $ipv6_subnet $ipv6_net_interface $NETWORK $fallback_rippled_servers && echo "CONFIG_SAVING_FAILURE" && abort
 fi
 
 stage "Configuring Sashimono services"

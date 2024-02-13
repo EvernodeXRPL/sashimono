@@ -13,7 +13,7 @@ async function main() {
 
     if (process.argv.length >= 3) {
         try {
-            if (process.argv.length >= 11 && process.argv[2] === 'new') {
+            if (process.argv.length >= 15 && process.argv[2] === 'new') {
                 const accountAddress = process.argv[3];
                 const accountSecretPath = process.argv[4];
                 const governorAddress = process.argv[5];
@@ -21,12 +21,13 @@ async function main() {
                 const leaseAmount = process.argv[7];
                 const rippledServer = process.argv[8];
                 const emailAddress = process.argv[9];
-                const affordableExtraFee =process.argv[10];
+                const affordableExtraFee = process.argv[10];
                 const ipv6Subnet = (process.argv[11] === '-') ? null : process.argv[11];
                 const ipv6NetInterface = (process.argv[12] === '-') ? null : process.argv[12];
-                const network = process.argv.length > 13 ? process.argv[13] : appenv.NETWORK;
+                const network = (process.argv[13] === '-') ? appenv.NETWORK : process.argv[13];
+                const fallbackRippledServers = (process.argv[14] === '-') ? null : process.argv[14].split(',');
                 const setup = new Setup();
-                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee), emailAddress);
+                setup.newConfig(accountAddress, accountSecretPath, governorAddress, parseFloat(leaseAmount), rippledServer, ipv6Subnet, ipv6NetInterface, network, parseInt(affordableExtraFee), emailAddress, fallbackRippledServers);
 
                 if (appenv.IS_DEV_MODE) {
                     await setup.prepareHostAccount(domain);
@@ -81,13 +82,14 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
-            else if ((process.argv.length === 9) && process.argv[2] === 'reconfig') {
+            else if ((process.argv.length === 10) && process.argv[2] === 'reconfig') {
                 if (process.argv[5] == '-') process.argv[5] = null;
                 if (process.argv[6] == '-') process.argv[6] = null;
                 if (process.argv[7] == '-') process.argv[7] = null;
                 if (process.argv[8] == '-') process.argv[8] = null;
+                if (process.argv[9] == '-') process.argv[9] = null;
 
-                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8]);
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8], process.argv[9].split(','));
             }
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);
@@ -121,7 +123,7 @@ async function main() {
         node index.js deregister - Deregister the host from Evernode.
         node index.js reginfo - Display Evernode registration info.
         node index.js upgrade [governorAddress] - Upgrade message board data.
-        node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] - Update message board configuration.
+        node index.js reconfig [leaseAmount] [totalInstanceCount] [rippledServer] [ipv6Subnet] [ipv6NetInterface] [affordableExtraFee] [fallbackRippledServers] - Update message board configuration.
         node index.js delete [containerName] - Delete an instance and recreate the lease offer
         node index.js governance [command] [args] - Governance handling.
         node index.js regkey [regularKey] - Regular key management.

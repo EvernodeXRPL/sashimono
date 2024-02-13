@@ -58,6 +58,7 @@
     tls_cert_file="self"
     tls_cabundle_file="self"
     description="-"
+    fallback_rippled_servers="-"
 
     # export vars used by Sashimono installer.
     export USER_BIN=/usr/bin
@@ -205,12 +206,6 @@
         (! $transfer || $installed || $regkey) && [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
     fi
 
-    # Change the relevant setup helper path based on Evernode installation condition and the command mode.
-    if $installed && [ "$mode" != "update" ]; then
-        setup_helper_dir="$SASHIMONO_BIN/evernode-setup-helpers"
-        jshelper_bin="$setup_helper_dir/jshelper/index.js"
-    fi
-
     # Format the given KB number into GB units.
     function GB() {
         echo "$(bc <<<"scale=2; $1 / 1000000") GB"
@@ -325,6 +320,10 @@
     function set_environment_configs() {
         export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
         rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
+        local config_fb_rippled_servers=$(jq -r ".$NETWORK.fallbackRippledServers" $config_json_path)
+        if [ "$config_fb_rippled_servers" != "null" ]; then
+            fallback_rippled_servers=$(echo "$config_fb_rippled_servers" | jq -r '. | join(",")')
+        fi
     }
 
     function init_setup_helpers() {
@@ -334,6 +333,7 @@
         local jshelper_dir=$(dirname $jshelper_bin)
         rm -r $jshelper_dir >/dev/null 2>&1
         sudo -u $noroot_user mkdir -p $jshelper_dir
+        chmod -R 777 $(dirname $jshelper_dir)
 
         if [ ! -f "$jshelper_bin" ]; then
             pushd $jshelper_dir >/dev/null 2>&1
@@ -353,13 +353,14 @@
         [ -p $resp_file ] || sudo -u $noroot_user mkfifo $resp_file
 
         # Execute js helper asynchronously while collecting response to fifo file.
-        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" &
+        [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
+        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" &
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
         # Wait for js helper to exit and reflect the error exit code in this function return.
         wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
-        rm $resp_file && return 1
+        rm -rf $resp_file && return 1
     }
 
     function exec_jshelper_root() {
@@ -369,13 +370,14 @@
         [ -p $resp_file ] || mkfifo $resp_file
 
         # Execute js helper asynchronously while collecting response to fifo file.
-        RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" >/dev/null 2>&1 &
+        [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
+        RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
         # Wait for js helper to exit and reflect the error exit code in this function return.
         wait $pid && [ $? -eq 0 ] && rm $resp_file && return 0
-        rm $resp_file && return 1
+        rm -rf $resp_file && return 1
     }
 
     function resolve_filepath() {
@@ -475,7 +477,6 @@
     function validate_rippled_url() {
         ! [[ $1 =~ ^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' or 'ws://'" && return 1
 
-        echo "Checking server $1..."
         ! exec_jshelper validate-server $1 && echo "Could not communicate with the xahaud server." && return 1
         return 0
     }
@@ -489,16 +490,15 @@
     }
 
     function set_inet_addr() {
-
         # Skip system requirement check in non-production environments if $NO_DOMAIN=1.
         if [ "$NETWORK" == "mainnet" ] || [[ "$NETWORK" != "mainnet" && "$NO_DOMAIN" == "" ]]; then
-            echo ""
             while [ -z "$inetaddr" ]; do
                 read -ep "Please specify the domain name that this host is reachable at: " inetaddr </dev/tty
-                validate_inet_addr && validate_inet_addr_domain && set_domain_certs && return 0
+                validate_inet_addr && validate_inet_addr_domain && break
                 echo "Invalid or unreachable domain name."
             done
-        else
+            set_domain_certs && return 0
+        elif [ -z "$inetaddr" ]; then
             tls_key_file="self"
             tls_cert_file="self"
             tls_cabundle_file="self"
@@ -777,6 +777,29 @@
         fi
     }
 
+    function validate_and_set_fallback_rippled_servers() {
+        IFS=',' read -ra fallback_servers <<<"$1"
+        unset IFS
+        for server in "${fallback_servers[@]}"; do
+            server=$(echo "$server" | sed -e 's/^[[:space:][:punct:]]*//' -e 's/[[:space:][:punct:]]*$//')
+            if ! validate_rippled_url "$server"; then
+                return 1
+            fi
+        done
+
+        fallback_rippled_servers="$1"
+    }
+
+    function set_fallback_rippled_servers() {
+        if ([[ "$fallback_rippled_servers" != "-" ]] && ! confirm "Do you want to set ("$fallback_rippled_servers") the default fallback rippled servers ?") || confirm "Do you want to specify fallback rippled servers?" "n"; then
+            local new_urls=""
+            while true; do
+                read -p "Specify the comma-separated list of fallback server URLs: " new_urls </dev/tty
+                ! validate_and_set_fallback_rippled_servers "$new_urls" || break
+            done
+        fi
+    }
+
     function set_regular_key() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
@@ -824,6 +847,19 @@
         xrpl_secret=$(jq -r '.secret' <<<"$account_json")
     }
 
+    read_fallback_rippled_servers_res="-"
+    function read_fallback_rippled_servers_from_config() {
+        local override_fallback_rippled_servers=$(jq -r ".xrpl.fallbackRippledServers" "$MB_XRPL_CONFIG")
+        if [ "$override_fallback_rippled_servers" != "null" ]; then
+            while IFS= read -r server; do
+                if ! validate_rippled_url "$server"; then
+                    return 1
+                fi
+            done < <(echo "$override_fallback_rippled_servers" | jq -r '.[]')
+            read_fallback_rippled_servers_res=$(echo "$override_fallback_rippled_servers" | jq -r '. | join(",")')
+        fi
+    }
+
     function read_configs() {
         if [ -f "$MB_XRPL_CONFIG" ]; then
             echomult "\nReading configuration from existing Message Board configuration file..."
@@ -839,11 +875,13 @@
             local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
             if [ ! -z $override_network ]; then
                 NETWORK="$override_network"
-                set_environment_configs || return 1
+                set_environment_configs || exit 1
             fi
 
             local override_rippled_server=$(jq -r ".xrpl.rippledServer | select( . != null )" "$MB_XRPL_CONFIG")
             [ ! -z $override_rippled_server ] && rippled_server="$override_rippled_server"
+            ! read_fallback_rippled_servers_from_config && exit 1
+            fallback_rippled_servers="$read_fallback_rippled_servers_res"
 
             xrpl_address=$(jq -r ".xrpl.address | select( . != null )" "$MB_XRPL_CONFIG")
             key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
@@ -1202,13 +1240,16 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo "Installing Sashimono..."
 
         init_setup_helpers
-        registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress)
+        registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) || {
+            echo "Error occurred getting registry address."
+            exit 1
+        }
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
         ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_address $key_file_path $email_address \
-            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee 2>&1 |
+            $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers 2>&1 |
             tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
             while read -r line; do
                 cleaned_line=$(echo "$line" | sed -E 's/\[STAGE\]|\[INFO\]//g' | awk '{sub(/^[ \t]+/, ""); print}')
@@ -1452,14 +1493,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     function reconfig_mb() {
         echomult "Configuaring message board...\n"
 
-        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee &&
+        ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers &&
             echo "There was an error in updating message board configuration." && return 1
         return 0
     }
 
     function config() {
-        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-
         alloc_instcount=0
         alloc_cpu=0
         alloc_ramKB=0
@@ -1470,6 +1509,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ipv6_subnet='-'
         ipv6_net_interface='-'
         extra_txn_fee='-'
+        fallback_rippled_servers='-'
 
         local saconfig="$SASHIMONO_DATA/sa.cfg"
         local max_instance_count=$(jq '.system.max_instance_count' $saconfig)
@@ -1482,6 +1522,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local cfg_rippled_server=$(jq -r '.xrpl.rippledServer' $mbconfig)
         local cfg_extra_txn_fee=$(jq '.xrpl.affordableExtraFee' $mbconfig)
         [[ "$cfg_extra_txn_fee" == "null" ]] && cfg_extra_txn_fee=0
+        ! read_fallback_rippled_servers_from_config && exit 1
+        local cfg_fb_rippled_servers="$read_fallback_rippled_servers_res"
 
         local cfg_ipv6_subnet=$(jq -r '.networking.ipv6.subnet' $mbconfig)
         local cfg_ipv6_net_interface=$(jq -r '.networking.ipv6.interface' $mbconfig)
@@ -1564,6 +1606,23 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             [[ $cfg_rippled_server == $rippled_server ]] && echomult "Xahaud server is already configured!\n" && exit 0
 
             echomult "Using the xahaud address '$rippled_server'."
+
+            update_mb=1
+
+        elif [ "$sub_mode" == "xahaud-fallback" ]; then
+
+            local servers=${2} # Rippled server URL
+            if [[ -z $servers ]]; then
+                [[ ! -z "$cfg_fb_rippled_servers" ]] && echomult "Your current fallback xahaud servers are: $cfg_fb_rippled_servers\n" ||
+                    echomult "You have not specified any fallback xahaud servers.\n"
+                exit 0
+            fi
+
+            ! validate_and_set_fallback_rippled_servers "$servers" && exit 1
+
+            [[ $cfg_fb_rippled_servers == $fallback_rippled_servers ]] && echomult "Xahaud server is already configured!\n" && exit 0
+
+            echomult "Using the fallback xahaud addresses '$fallback_rippled_servers'."
 
             update_mb=1
 
@@ -1668,7 +1727,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             update_mb=1
 
         else
-            echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|xahaud|email|instance|extrafee] [arguments]\n" && exit 1
+            echomult "Invalid arguments.\n  Usage: evernode config [resources|leaseamt|xahaud|xahaud-fallback|email|instance|extrafee] [arguments]\n" && exit 1
         fi
 
         local mb_user_id=$(id -u "$MB_XRPL_USER")
@@ -1780,11 +1839,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ ! -f "$MB_XRPL_CONFIG" ] && set_rippled_server
         echo -e "Using Xahaud server '$rippled_server'.\n"
 
+        [ ! -f "$MB_XRPL_CONFIG" ] && set_fallback_rippled_servers
+        [[ "$fallback_rippled_servers" != "-" ]] && echo -e "Using fallback Xahaud servers '$fallback_rippled_servers'.\n"
+
         [ ! -f "$MB_XRPL_CONFIG" ] && set_email_address
         echo -e "Using the contact email address '$email_address'.\n"
 
         # TODO - CHECKPOINT - 01
-        [ ! -f "$SASHIMONO_CONFIG" ] && set_inet_addr
+        # Call set_inet_addr to setup tls certificates even if there's a exiting config.
+        set_inet_addr
         echo -e "Using '$inetaddr' as host internet address.\n"
 
         set_country_code
@@ -1822,7 +1885,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         rm -r $setup_helper_dir >/dev/null 2>&1
 
         echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command."
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
+            \n\nNOTE: Installation will only mint the leases. Please use 'evernode offerlease' command to create offers for the lease instances."
 
         installed=true
 
@@ -1897,6 +1961,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             $interactive && ! confirm "\nThis will deregister $xrpl_address from $evernode
             while allowing you to transfer the registration to $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address").
+            \n  Note: If there are partial registrations, This process will first complete the registration and then it will be deregistered.
             \n\nAre you sure you want to transfer $evernode registration?" && exit 1
 
             # Execute transfer from js helper.
@@ -1960,6 +2025,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         apply_ssl $2 $3 $4
 
     elif [ "$mode" == "config" ]; then
+        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+
+        init_setup_helpers
         config $2 $3 $4 $5 $6
 
     elif [ "$mode" == "delete" ]; then

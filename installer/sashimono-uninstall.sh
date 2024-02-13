@@ -45,10 +45,10 @@ function multi_choice() {
     # Fallback to 1 if invalid.
     ([[ ! $default_choice =~ ^[0-9]+$ ]] || [[ $default_choice -lt 0 ]] || [[ $default_choice -gt ${#ADDR[@]} ]]) && default_choice=1
 
-    info $(echo -en "$prompt?\n")
+    echo -en "$prompt?\n"
     local i=1
     for choice in "${ADDR[@]}"; do
-        [[ $default_choice -eq $i ]] && info "($i) ${choice^^}" || info "($i) $choice"
+        [[ $default_choice -eq $i ]] && echo "($i) ${choice^^} " || echo "($i) $choice "
         i=$((i + 1))
     done
 

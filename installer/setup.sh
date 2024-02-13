@@ -35,6 +35,9 @@
     fi
 
     # Prepare resources URLs
+    issues_repo="evernode-host"
+    report_url="https://github.com/$repo_owner/$issues_repo/issues"
+
     resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
     licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
     config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
@@ -1126,7 +1129,9 @@
     }
 
     function install_failure() {
-        echo "There was an error during installation. Please provide the file $logfile to Evernode team. Thank you."
+        echomult "There was an error during installation.
+            \nPlease provide the file $logfile to the Evernode team by visiting this link: $report_url.
+            \nThank you."
         exit 1
     }
 

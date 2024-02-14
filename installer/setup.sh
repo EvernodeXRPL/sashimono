@@ -1261,11 +1261,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         echo "Installing Sashimono..."
 
-        while true; do
-            registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) && break
-            echo "Error occurred getting registry address."
-            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
-        done
+        # Read registry address on upgrade mode.
+        if [ "$upgrade" == "0" ]; then
+            while true; do
+                registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) && break
+                echo "Error occurred getting registry address."
+                confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+            done
+        fi
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
@@ -1332,6 +1335,33 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         remove_evernode_alias
     }
 
+    # This is added temporary to remove auto updater. This can later be removed.
+    function remove_evernode_auto_updater() {
+        local service_removed=false
+
+        # Remove Xahau message board service if exists.
+        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
+        if [ -f $service_path ]; then
+            echo "Removing Evernode auto update timer..."
+            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
+            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+            rm -f $service_path
+            local service_removed=true
+        fi
+
+        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
+        if [ -f $service_path ]; then
+            echo "Removing Evernode auto update service..."
+            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
+            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
+            rm -f $service_path
+            local service_removed=true
+        fi
+
+        # Reload the systemd daemon.
+        $service_removed && systemctl daemon-reload
+    }
+
     function update_evernode() {
         echo "Checking for updates..."
         local latest_installer_script_version=$(online_version_timestamp)
@@ -1347,6 +1377,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Alias for setup.sh is created during 'install_evernode' too.
         # If only the setup.sh is updated but not the installer, then the alias should be created again.
         if [ "$latest_installer_script_version" != "$current_installer_script_version" ]; then
+            # This is added temporary to remove auto updater. This can later be removed.
+            remove_evernode_auto_updater
             install_evernode 1
         fi
 
@@ -2042,8 +2074,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         sashi list
 
     elif [ "$mode" == "update" ]; then
-        init_setup_helpers
-        download_public_config && set_environment_configs
         update_evernode
 
     elif [ "$mode" == "log" ]; then

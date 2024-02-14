@@ -18,6 +18,10 @@
     max_non_ipv6_instances=5
     max_ipv6_prefix_len=112
     min_ipv6_prefix_len=64
+    max_lease_amt=2
+    min_disk_mb=1000
+    min_ram_mb=1000
+    min_swap_mb=0
     evernode_alias=/usr/bin/evernode
     log_dir=/tmp/evernode
     root_user="root"
@@ -707,17 +711,23 @@
 
         while true; do
             read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
-            ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." || break
+            ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." && continue
+            [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size shoule be "$min_ram_mb"MB." && continue
+            break
         done
 
         while true; do
             read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
-            ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." || break
+            ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." && continue
+            [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size shoule be "$min_swap_mb"MB." && continue
+            break
         done
 
         while true; do
             read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
-            ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." || break
+            ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." && continue
+            [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size shoule be "$min_disk_mb"MB." && continue
+            break
         done
 
         alloc_ramKB=$((ramMB * 1000))
@@ -736,7 +746,9 @@
         local amount=0
         while true; do
             read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
-            ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." || break
+            ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." && continue
+            [[ $amount -gt $max_lease_amt ]] && echo "Lease amount should be less than "$max_lease_amt"EVRs" && continue
+            break
         done
 
         lease_amount=$amount
@@ -841,11 +853,11 @@
     }
 
     function generate_keys() {
-
-        account_json=$(exec_jshelper generate-account) || {
+        while true; do
+            account_json=$(exec_jshelper generate-account) && break
             echo "Error occurred in account setting up."
-            exit 1
-        }
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+        done
         xrpl_address=$(jq -r '.address' <<<"$account_json")
         xrpl_secret=$(jq -r '.secret' <<<"$account_json")
     }
@@ -890,6 +902,7 @@
             key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
             lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
             extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
+            [ -z $extra_txn_fee ] && extra_txn_fee=0
             email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
 
             # Validating important configurations.
@@ -1022,10 +1035,12 @@
                     echomult "Continuing with the existing key file."
                     existing_secret=$(jq -r '.xrpl.secret' "$key_file_path" 2>/dev/null)
                     if [ "$existing_secret" != "null" ] && [ "$existing_secret" != "-" ]; then
-                        account_json=$(exec_jshelper generate-account $existing_secret) || {
-                            echomult "Error occurred when existing account retrieval."
-                            exit 1
-                        }
+                        while true; do
+                            account_json=$(exec_jshelper generate-account $existing_secret) && break
+                            echo "Error occurred when existing account retrieval."
+                            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+                        done
+
                         xrpl_address=$(jq -r '.address' <<<"$account_json")
                         xrpl_secret=$(jq -r '.secret' <<<"$account_json")
 
@@ -1069,17 +1084,19 @@
         ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
 
         local inc_reserves_count=$((1 + 1 + $alloc_instcount))
-        local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) || {
+        while true; do
+            local min_reserve_requirement=$(exec_jshelper compute-xah-requirement $rippled_server $inc_reserves_count) && break
             echo "Error occurred in min XAH calculation."
-            exit 1
-        }
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+        done
 
         local min_xah_requirement=$(echo "$MIN_OPERATIONAL_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + $min_reserve_requirement" | bc)
 
-        local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address) || {
+        while true; do
+            local min_evr_requirement=$(exec_jshelper compute-evr-requirement $rippled_server $EVERNODE_GOVERNOR_ADDRESS $xrpl_address) && break
             echo "Error occurred in min EVR calculation."
-            exit 1
-        }
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+        done
 
         local need_xah=$(echo "$min_xah_requirement > 0" | bc -l)
         local need_evr=$(echo "$min_evr_requirement > 0" | bc -l)
@@ -1245,10 +1262,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo "Installing Sashimono..."
 
         init_setup_helpers
-        registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) || {
+        while true; do
+            registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) && break
             echo "Error occurred getting registry address."
-            exit 1
-        }
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
+        done
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
@@ -1548,18 +1566,18 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             [ -z $ramMB ] && [ -z $swapMB ] && [ -z $diskMB ] && [ -z $instcount ] &&
                 echomult "Your current resource allocation is:
-            \n Memory: $(GB $max_mem_kbytes)
-            \n Swap: $(GB $max_swap_kbytes)
-            \n Disk space: $(GB $max_storage_kbytes)
-            \n Instance count: $max_instance_count\n" && exit 0
+                \n Memory: $(GB $max_mem_kbytes)
+                \n Swap: $(GB $max_swap_kbytes)
+                \n Disk space: $(GB $max_storage_kbytes)
+                \n Instance count: $max_instance_count\n" && exit 0
 
             local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
-            [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB &&
-                echomult "Invalid memory size.\n   $help_text" && exit 1
-            [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && ! validate_positive_decimal $swapMB &&
-                echomult "Invalid swap size.\n   $help_text" && exit 1
-            [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && ! validate_positive_decimal $diskMB &&
-                echomult "Invalid disk size.\n   $help_text" && exit 1
+            [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB && [[ $ramMB -lt $min_ram_mb ]] &&
+                echomult "Invalid memory size $([[ $min_ram_mb != 0 ]] && echo "(Minimum should be "$min_ram_mb"MB)" || echo "").\n   $help_text" && exit 1
+            [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && ! validate_positive_decimal $swapMB && [[ $swapMB -lt $min_swap_mb ]] &&
+                echomult "Invalid swap size $([[ $min_swap_mb != 0 ]] && echo "(Minimum should be "$min_swap_mb"MB)" || echo "").\n   $help_text" && exit 1
+            [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && ! validate_positive_decimal $diskMB && [[ $diskMB -lt $min_disk_mb ]] &&
+                echomult "Invalid disk size $([[ $min_disk_mb != 0 ]] && echo "(Minimum should be "$min_disk_mb"MB)" || echo "").\n   $help_text" && exit 1
             [ ! -z $instcount ] && [[ $instcount != 0 ]] && ! validate_positive_decimal $instcount &&
                 echomult "Invalid instance count.\n   $help_text" && exit 1
 
@@ -1591,6 +1609,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             ! validate_positive_decimal $amount &&
                 echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
+                exit 1
+            [[ $amount -gt $max_lease_amt ]] &&
+                echomult "Invalid lease amount.\n   Lease amount should be less than "$max_lease_amt"EVRs\n" &&
                 exit 1
             lease_amount=$amount
             [[ $cfg_lease_amount == $lease_amount ]] && echomult "Lease amount is already configured!\n" && exit 0
@@ -1923,7 +1944,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
                 echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
-            \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+                \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
 
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 
@@ -1979,7 +2000,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             $has_error && echo "Error occured in transfer process. Check the error and try again." && exit 1
         fi
 
-        echo "Transfer process was sucessfully initiated. You can now install and register $evernode using the account $transferee_address."
+        echo "Transfer process was successfully initiated. You can now install and register $evernode using the account $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address")."
 
     elif [ "$mode" == "deregister" ]; then
         if ! $interactive; then

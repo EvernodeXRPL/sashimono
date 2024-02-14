@@ -89,7 +89,7 @@ async function main() {
                 if (process.argv[8] == '-') process.argv[8] = null;
                 if (process.argv[9] == '-') process.argv[9] = null;
 
-                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8], process.argv[9].split(','));
+                await new Setup().changeConfig(process.argv[3], process.argv[5], process.argv[4], process.argv[6], process.argv[7], process.argv[8], process.argv[9] != null ? process.argv[9].split(',') : null);
             }
             else if (process.argv.length === 4 && process.argv[2] === 'delete') {
                 await new Setup().deleteInstance(process.argv[3]);

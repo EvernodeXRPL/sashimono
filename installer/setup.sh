@@ -361,7 +361,7 @@
 
         # Execute js helper asynchronously while collecting response to fifo file.
         [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
-        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" &
+        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 

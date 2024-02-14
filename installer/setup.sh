@@ -84,6 +84,7 @@
     export SASHIUSER_PREFIX="sashi"
     export MB_XRPL_USER="sashimbxrpl"
     export CG_SUFFIX="-cg"
+    export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATION=3
@@ -1165,7 +1166,6 @@
 
     function enable_evernode_auto_updater() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-        enable_auto_update=true
 
         # Create the service.
         echo "[Unit]
@@ -1210,22 +1210,30 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     function remove_evernode_auto_updater() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
-        enable_auto_update=false
 
-        echo "Removing Evernode auto update timer..."
-        systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-        systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-        service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-        rm -f $service_path
+        local service_removed=false
 
-        echo "Removing Evernode auto update service..."
-        systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-        systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-        service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-        rm -f $service_path
+        # Remove Xahau message board service if exists.
+        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
+        if [ -f $service_path ]; then
+            echo "Removing Evernode auto update timer..."
+            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
+            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
+            rm -f $service_path
+            local service_removed=true
+        fi
+
+        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
+        if [ -f $service_path ]; then
+            echo "Removing Evernode auto update service..."
+            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
+            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
+            rm -f $service_path
+            local service_removed=true
+        fi
 
         # Reload the systemd daemon.
-        systemctl daemon-reload
+        $service_removed && systemctl daemon-reload
     }
 
     function install_evernode() {
@@ -1281,12 +1289,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line:3}" || echo "${cleaned_line}"
             done && install_failure
 
-        # Enable the Evernode Auto Updater Service.
-        # if [ "$enable_auto_update" = true ]; then
-        #     stage "Configuring auto updater service"
-        #     enable_evernode_auto_updater
-        # fi
-
         ! create_evernode_alias && install_failure
 
         set +o pipefail
@@ -1333,33 +1335,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Remove the evernode alias at the end.
         # So, if the uninstallation failed user can try uninstall again with evernode commands.
         remove_evernode_alias
-    }
-
-    # This is added temporary to remove auto updater. This can later be removed.
-    function remove_evernode_auto_updater() {
-        local service_removed=false
-
-        # Remove Xahau message board service if exists.
-        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer"
-        if [ -f $service_path ]; then
-            echo "Removing Evernode auto update timer..."
-            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.timer
-            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.timer
-            rm -f $service_path
-            local service_removed=true
-        fi
-
-        local service_path="/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.service"
-        if [ -f $service_path ]; then
-            echo "Removing Evernode auto update service..."
-            systemctl stop $EVERNODE_AUTO_UPDATE_SERVICE.service
-            systemctl disable $EVERNODE_AUTO_UPDATE_SERVICE.service
-            rm -f $service_path
-            local service_removed=true
-        fi
-
-        # Reload the systemd daemon.
-        $service_removed && systemctl daemon-reload
     }
 
     function update_evernode() {

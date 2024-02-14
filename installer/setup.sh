@@ -747,7 +747,7 @@
         while true; do
             read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
             ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." && continue
-            [[ $amount -gt $max_lease_amt ]] && echo "Lease amount should be less than "$max_lease_amt"EVRs" && continue
+            [[ $amount -gt $max_lease_amt ]] && echo "Lease amount should be less than or equal "$max_lease_amt"EVRs" && continue
             break
         done
 
@@ -1611,7 +1611,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
                 exit 1
             [[ $amount -gt $max_lease_amt ]] &&
-                echomult "Invalid lease amount.\n   Lease amount should be less than "$max_lease_amt"EVRs\n" &&
+                echomult "Invalid lease amount.\n   Lease amount should be less than or equal "$max_lease_amt"EVRs\n" &&
                 exit 1
             lease_amount=$amount
             [[ $cfg_lease_amount == $lease_amount ]] && echomult "Lease amount is already configured!\n" && exit 0

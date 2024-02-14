@@ -327,8 +327,8 @@
     function set_environment_configs() {
         export EVERNODE_GOVERNOR_ADDRESS=${OVERRIDE_EVERNODE_GOVERNOR_ADDRESS:-$(jq -r ".$NETWORK.governorAddress" $config_json_path)}
         rippled_server=$(jq -r ".$NETWORK.rippledServer" $config_json_path)
-        local config_fb_rippled_servers=$(jq -r ".$NETWORK.fallbackRippledServers" $config_json_path)
-        if [ "$config_fb_rippled_servers" != "null" ]; then
+        local config_fb_rippled_servers=$(jq -r ".$NETWORK.fallbackRippledServers | select( . != null and . != [] )" $config_json_path)
+        if [ ! -z "$config_fb_rippled_servers" ]; then
             fallback_rippled_servers=$(echo "$config_fb_rippled_servers" | jq -r '. | join(",")')
         fi
     }
@@ -864,8 +864,8 @@
 
     read_fallback_rippled_servers_res="-"
     function read_fallback_rippled_servers_from_config() {
-        local override_fallback_rippled_servers=$(jq -r ".xrpl.fallbackRippledServers" "$MB_XRPL_CONFIG")
-        if [ "$override_fallback_rippled_servers" != "null" ]; then
+        local override_fallback_rippled_servers=$(jq -r ".xrpl.fallbackRippledServers | select( . != null and . != [] )" "$MB_XRPL_CONFIG")
+        if [ ! -z "$override_fallback_rippled_servers" ]; then
             while IFS= read -r server; do
                 if ! validate_rippled_url "$server"; then
                     return 1

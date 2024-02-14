@@ -20,7 +20,7 @@
     min_ipv6_prefix_len=64
     max_lease_amt=2
     min_disk_mb=1000
-    min_ram_mb=1000
+    min_ram_mb=500
     min_swap_mb=0
     evernode_alias=/usr/bin/evernode
     log_dir=/tmp/evernode

@@ -1261,7 +1261,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         echo "Installing Sashimono..."
 
-        init_setup_helpers
         while true; do
             registry_address=$(exec_jshelper access-evernode-cfg $rippled_server $EVERNODE_GOVERNOR_ADDRESS registryAddress) && break
             echo "Error occurred getting registry address."
@@ -2043,6 +2042,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         sashi list
 
     elif [ "$mode" == "update" ]; then
+        init_setup_helpers
+        download_public_config && set_environment_configs
         update_evernode
 
     elif [ "$mode" == "log" ]; then

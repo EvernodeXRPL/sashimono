@@ -497,6 +497,12 @@
         return 1
     }
 
+    function validate_lease_amount() {
+        local invalid=$(echo "$amount > $max_lease_amt" | bc -l)
+        [[ "$invalid" -eq 1 ]] && return 1
+        return 0
+    }
+
     function set_inet_addr() {
         # Skip system requirement check in non-production environments if $NO_DOMAIN=1.
         if [ "$NETWORK" == "mainnet" ] || [[ "$NETWORK" != "mainnet" && "$NO_DOMAIN" == "" ]]; then
@@ -713,21 +719,21 @@
         while true; do
             read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
             ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." && continue
-            [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size shoule be "$min_ram_mb"MB." && continue
+            [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size shoule be "$min_ram_mb" MB." && continue
             break
         done
 
         while true; do
             read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
             ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." && continue
-            [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size shoule be "$min_swap_mb"MB." && continue
+            [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size shoule be "$min_swap_mb" MB." && continue
             break
         done
 
         while true; do
             read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
             ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." && continue
-            [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size shoule be "$min_disk_mb"MB." && continue
+            [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size shoule be "$min_disk_mb" MB." && continue
             break
         done
 
@@ -748,7 +754,7 @@
         while true; do
             read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
             ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." && continue
-            [[ $amount -gt $max_lease_amt ]] && echo "Lease amount should be less than or equal "$max_lease_amt"EVRs" && continue
+            ! validate_lease_amount $amount && echo "Lease amount should be less than or equal "$max_lease_amt" EVRs" && continue
             break
         done
 
@@ -1578,12 +1584,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 \n Instance count: $max_instance_count\n" && exit 0
 
             local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
-            [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && ! validate_positive_decimal $ramMB && [[ $ramMB -lt $min_ram_mb ]] &&
-                echomult "Invalid memory size $([[ $min_ram_mb != 0 ]] && echo "(Minimum should be "$min_ram_mb"MB)" || echo "").\n   $help_text" && exit 1
-            [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && ! validate_positive_decimal $swapMB && [[ $swapMB -lt $min_swap_mb ]] &&
-                echomult "Invalid swap size $([[ $min_swap_mb != 0 ]] && echo "(Minimum should be "$min_swap_mb"MB)" || echo "").\n   $help_text" && exit 1
-            [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && ! validate_positive_decimal $diskMB && [[ $diskMB -lt $min_disk_mb ]] &&
-                echomult "Invalid disk size $([[ $min_disk_mb != 0 ]] && echo "(Minimum should be "$min_disk_mb"MB)" || echo "").\n   $help_text" && exit 1
+            [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && (! validate_positive_decimal $ramMB || [[ $ramMB -lt $min_ram_mb ]]) &&
+                echomult "Invalid memory size $([[ $min_ram_mb != 0 ]] && echo "(Minimum should be "$min_ram_mb" MB)" || echo "").\n   $help_text" && exit 1
+            [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && (! validate_positive_decimal $swapMB || [[ $swapMB -lt $min_swap_mb ]]) &&
+                echomult "Invalid swap size $([[ $min_swap_mb != 0 ]] && echo "(Minimum should be "$min_swap_mb" MB)" || echo "").\n   $help_text" && exit 1
+            [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && (! validate_positive_decimal $diskMB || [[ $diskMB -lt $min_disk_mb ]]) &&
+                echomult "Invalid disk size $([[ $min_disk_mb != 0 ]] && echo "(Minimum should be "$min_disk_mb" MB)" || echo "").\n   $help_text" && exit 1
             [ ! -z $instcount ] && [[ $instcount != 0 ]] && ! validate_positive_decimal $instcount &&
                 echomult "Invalid instance count.\n   $help_text" && exit 1
 
@@ -1616,8 +1622,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             ! validate_positive_decimal $amount &&
                 echomult "Invalid lease amount.\n   Usage: evernode config leaseamt | evernode config leaseamt <lease amount>\n" &&
                 exit 1
-            [[ $amount -gt $max_lease_amt ]] &&
-                echomult "Invalid lease amount.\n   Lease amount should be less than or equal "$max_lease_amt"EVRs\n" &&
+
+            ! validate_lease_amount $amount &&
+                echomult "Invalid lease amount.\n   Lease amount should be less than or equal "$max_lease_amt" EVRs\n" &&
                 exit 1
             lease_amount=$amount
             [[ $cfg_lease_amount == $lease_amount ]] && echomult "Lease amount is already configured!\n" && exit 0

@@ -164,7 +164,6 @@ async function main() {
 
 main().then(() => {
     console.log("MB_CLI_SUCCESS");
-    process.exit(0);
 }).catch((e) => {
     console.error(e);
     console.log("MB_CLI_EXITED");

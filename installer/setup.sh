@@ -418,6 +418,11 @@
             tls_cabundle_file="letsencrypt"
         else
 
+            # Unset variables before aks for user input.
+            tls_key_file=""
+            tls_cert_file=""
+            tls_cabundle_file=""
+
             echomult "You have opted out of automatic SSL setup. You need to have obtained SSL certificate files for '$inetaddr'
             from a trusted authority. Please specify the certificate files you have obtained below.\n"
 

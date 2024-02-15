@@ -1391,9 +1391,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echo ""
             echo "Message board log:"
             sudo -u sashimbxrpl bash -c journalctl --user -u sashimono-mb-xrpl | tail -n 200
-            echo ""
-            echo "Auto updater service log:"
-            journalctl -u evernode-auto-update | tail -n 200
         } >"$tempfile" 2>&1
         echo "Evernode log saved to $tempfile"
     }

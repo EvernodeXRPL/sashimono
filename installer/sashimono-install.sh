@@ -150,15 +150,17 @@ function multi_choice_output() {
 }
 
 function call_third_party() {
-    local command=$1
-    local operation=$2
+    local command="$1"
+    local operation="$2"
     local max_retries=3
     local retry_delay=5
     local attempt=1
+    local command_output=""
     while [ $attempt -le $max_retries ]; do
-        echo "Attempting command (attempt $attempt/$max_retries)"
-        $command
+        echo "Attempting command [$command] (attempt $attempt/$max_retries)"
+        command_output=$($command)
         if [ $? -eq 0 ]; then
+            echo -e "$command_output"
             return 0
         else
             echo "Command failed, retrying in $retry_delay seconds..."

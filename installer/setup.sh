@@ -998,16 +998,6 @@
             return 0
         fi
 
-        # Create MB_XRPL_USER as we require that user for secret key ownership management.
-        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-            echomult "Creating Message-board User..."
-            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
-
-            # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-            # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
-        fi
-
         if [ "$xrpl_secret" == "-" ]; then
             confirm "\nDo you want to use the default key file path ${default_key_filepath} to save the new account key?" && key_file_path=$default_key_filepath
 
@@ -1874,6 +1864,19 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         init_setup_helpers
 
         download_public_config && set_environment_configs
+
+        # Create MB_XRPL_USER as we require that user for secret key ownership management.
+        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+            echomult "Creating Message-board User..."
+            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
+
+            # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+            # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+
+            secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
+            chown "$MB_XRPL_USER": $secret_path
+        fi
 
         # Check if message board config and sa.cfg exists.
         # This means installation has passed through configuration.

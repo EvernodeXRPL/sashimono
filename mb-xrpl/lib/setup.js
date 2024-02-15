@@ -513,7 +513,7 @@ class Setup {
 
                 await hostClient.disconnect();
             }
-            catch(e) {
+            catch (e) {
                 throw 'Error occurred when retrieving account info.';
             }
         }
@@ -670,7 +670,7 @@ class Setup {
             (!rippledServer || cfg.xrpl.rippledServer == rippledServer) &&
             (!ipv6Subnet) &&
             (!ipv6NetInterface) &&
-            (!affordableExtraFee || cfg.xrpl.affordableExtraFee == affordableExtraFee))
+            (affordableExtraFee == null || cfg.xrpl.affordableExtraFee == affordableExtraFee))
             return;
 
         await this.recreateLeases(leaseAmountParsed, totalInstanceCountParsed, rippledServer, ipv6Subnet, ipv6NetInterface, cfg);
@@ -679,7 +679,7 @@ class Setup {
             cfg.xrpl.leaseAmount = leaseAmountParsed;
         if (rippledServer)
             cfg.xrpl.rippledServer = rippledServer;
-        if (affordableExtraFeeParsed)
+        if (affordableExtraFee != null)
             cfg.xrpl.affordableExtraFee = affordableExtraFeeParsed;
         if (fallbackRippledServers)
             cfg.xrpl.fallbackRippledServers = fallbackRippledServers;

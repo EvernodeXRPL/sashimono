@@ -30,7 +30,7 @@ fallback_rippled_servers=${22}
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
 
-mb_cli_exit_err="MB_CLI_EXITED"
+mb_cli_exit_success="MB_CLI_SUCCESS"
 mb_cli_out_prefix="CLI_OUT"
 multi_choice_result=""
 
@@ -138,7 +138,8 @@ function multi_choice() {
 
     [ -z $choice ] && choice="$default_choice"
     while ! ([[ $choice =~ ^[0-9]+$ ]] && [[ $choice -gt 0 ]] && [[ $choice -lt $i ]]); do
-        read -ep "[1-$i] expected: " choice </dev/tty
+        info $(echo -en "[1-$i] expected: ")
+        read choice </dev/tty
         [ -z $choice ] && choice="$default_choice"
     done
 
@@ -294,7 +295,7 @@ function exec_mb() {
     local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee >(stdbuf --output=L sed -E '/^Minted lease/s/^/[STAGE] -p /;/^Burnt unsold hosting URIToken/s/^/[STAGE] -p /' >/dev/fd/2))
 
     local return_code=0
-    [[ "$res" == *"$mb_cli_exit_err"* ]] && return_code=1
+    [[ "$res" != *"$mb_cli_exit_success"* ]] && return_code=1
 
     res=$(echo "$res" | sed -n -e "/^$mb_cli_out_prefix: /p")
     echo "${res#"$mb_cli_out_prefix: "}"
@@ -424,9 +425,7 @@ function generate_qrcode() {
 }
 
 function upgrade() {
-    local res=$(exec_mb upgrade)
-    if [[ "$res" == *"$mb_cli_exit_err"* ]]; then
-        res=$(echo "$res" | tail -n 2 | head -n 1)
+    if ! res=$(exec_mb upgrade); then
         multi_choice "An error occurred while upgrading! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
         if [ "$input" == "Retry" ]; then
             upgrade "$@" && return 0
@@ -437,6 +436,7 @@ function upgrade() {
         fi
         return 1
     fi
+
     return 0
 }
 
@@ -530,7 +530,7 @@ if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
     chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
 
-    local secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
+    secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
     chown "$MB_XRPL_USER": $secret_path
 fi
 

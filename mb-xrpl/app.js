@@ -156,9 +156,17 @@ async function main() {
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
             console.log("Evernode Xahau message board exiting with error.");
+            console.log("MB_CLI_EXITED");
             process.exit(1);
         }
     }
 }
 
-main().catch(console.error);
+main().then(() => {
+    console.log("MB_CLI_SUCCESS");
+    process.exit(0);
+}).catch((e) => {
+    console.error(e);
+    console.log("MB_CLI_EXITED");
+    process.exit(1);
+});

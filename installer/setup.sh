@@ -920,6 +920,9 @@
             # Validating important configurations.
             ([ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $lease_amount ] || [ -z $extra_txn_fee ] || [ -z $email_address ]) && echo "Configuration file format has been altered." && exit 1
             if [ -n "$key_file_path" ] && [ -e "$key_file_path" ]; then
+                # Change the ownership in case user is removed.
+                chown "$MB_XRPL_USER": $key_file_path
+
                 xrpl_secret=$(jq -r ".xrpl.secret | select( . != null )" "$key_file_path")
 
                 ! validate_rippled_url "$rippled_server" && exit 1
@@ -996,16 +999,6 @@
             collect_host_xrpl_account_inputs
 
             return 0
-        fi
-
-        # Create MB_XRPL_USER as we require that user for secret key ownership management.
-        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
-            echomult "Creating Message-board User..."
-            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
-
-            # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
-            # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
         fi
 
         if [ "$xrpl_secret" == "-" ]; then
@@ -1871,6 +1864,16 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         init_setup_helpers
 
         download_public_config && set_environment_configs
+
+        # Create MB_XRPL_USER as we require that user for secret key ownership management.
+        if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
+            echomult "Creating Message-board User..."
+            useradd --shell /usr/sbin/nologin -m $MB_XRPL_USER 2>/dev/null
+
+            # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
+            # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
+            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+        fi
 
         # Check if message board config and sa.cfg exists.
         # This means installation has passed through configuration.

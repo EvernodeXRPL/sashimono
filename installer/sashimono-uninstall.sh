@@ -4,7 +4,7 @@
 
 export TRANSFER=${TRANSFER:-0}
 
-mb_cli_exit_err="MB_CLI_EXITED"
+mb_cli_exit_success="MB_CLI_SUCCESS"
 mb_cli_out_prefix="CLI_OUT"
 multi_choice_result=""
 
@@ -72,7 +72,7 @@ function exec_mb() {
     local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee /dev/fd/2)
 
     local return_code=0
-    [[ "$res" == *"$mb_cli_exit_err"* ]] && return_code=1
+    [[ "$res" != *"$mb_cli_exit_success"* ]] && return_code=1
 
     res=$(echo "$res" | sed -n -e "/^$mb_cli_out_prefix: /p")
     echo "${res#"$mb_cli_out_prefix: "}"

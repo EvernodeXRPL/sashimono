@@ -692,4 +692,10 @@ async function app() {
         process.exit(1);
     }
 }
-app().catch(console.error);
+app().then(() => {
+    process.removeAllListeners('uncaughtException');
+}).catch((e) => {
+    if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error(e);
+    process.exit(1);
+});

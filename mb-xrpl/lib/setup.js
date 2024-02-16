@@ -809,6 +809,8 @@ class Setup {
 
         // If rippled server is changed, create new uriTokens from new server.
         if (rippledServer && rippledServer !== acc.rippledServer) {
+            // Deinit previous connections
+            await deinitClients();
             await initClients(rippledServer);
         }
 

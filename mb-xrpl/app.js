@@ -171,6 +171,7 @@ async function main() {
 }
 
 main().then(() => {
+    process.removeAllListeners('uncaughtException');
     console.log("MB_CLI_SUCCESS");
 }).catch((e) => {
     console.error(e);

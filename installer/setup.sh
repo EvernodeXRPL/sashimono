@@ -1434,7 +1434,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         generate_qrcode "$host_address"
 
         # Remove first line and print.
-        echo -e "\n${reg_info/$address_line/""}"
+        echo -e "\n${reg_info/$address_line/""}" | sed '/MB_CLI_SUCCESS/d'
 
         echo -e "NOTE: If the Host status is shown as inactive it will be marked as active after sending the next heartbeat.\n"
 

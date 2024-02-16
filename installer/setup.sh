@@ -490,7 +490,7 @@
     function validate_rippled_url() {
         ! [[ $1 =~ ^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$ ]] && echo "Rippled URL must be a valid URL that starts with 'wss://' or 'ws://'" && return 1
 
-        ! exec_jshelper validate-server $1 && echo "Could not communicate with the xahaud server." && return 1
+        ! exec_jshelper validate-server $1 && echo "Could not communicate with the xahaud server $1." && return 1
         return 0
     }
 
@@ -878,11 +878,6 @@
     function read_fallback_rippled_servers_from_config() {
         local override_fallback_rippled_servers=$(jq -r ".xrpl.fallbackRippledServers | select( . != null and . != [] )" "$MB_XRPL_CONFIG")
         if [ ! -z "$override_fallback_rippled_servers" ]; then
-            while IFS= read -r server; do
-                if ! validate_rippled_url "$server"; then
-                    return 1
-                fi
-            done < <(echo "$override_fallback_rippled_servers" | jq -r '.[]')
             read_fallback_rippled_servers_res=$(echo "$override_fallback_rippled_servers" | jq -r '. | join(",")')
         fi
     }

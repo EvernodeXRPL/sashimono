@@ -169,3 +169,10 @@ main().then(() => {
     console.log("MB_CLI_EXITED");
     process.exit(1);
 });
+
+process.on('uncaughtException', (err) => {
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    console.log("MB_CLI_EXITED");
+    process.exit(1);
+});

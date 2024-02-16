@@ -684,3 +684,11 @@ async function app() {
     }
 }
 app().catch(console.error);
+
+process.on('uncaughtException', (err) => {
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    process.exit(1);
+});

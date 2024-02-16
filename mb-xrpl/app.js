@@ -1,10 +1,4 @@
 const process = require('process');
-const logger = require('./lib/logger');
-const { appenv } = require('./lib/appenv');
-const { Setup } = require('./lib/setup');
-const { MessageBoard } = require('./lib/message-board');
-const { GovernanceManager } = require('./lib/governance-manager');
-
 // Uncaught Exception Handling.
 process.on('uncaughtException', (err) => {
     console.error('Unhandled exception occurred:', err?.message);
@@ -12,6 +6,12 @@ process.on('uncaughtException', (err) => {
     console.log("MB_CLI_EXITED");
     process.exit(1);
 });
+
+const logger = require('./lib/logger');
+const { appenv } = require('./lib/appenv');
+const { Setup } = require('./lib/setup');
+const { MessageBoard } = require('./lib/message-board');
+const { GovernanceManager } = require('./lib/governance-manager');
 
 async function main() {
 

@@ -1,7 +1,16 @@
 // This script helps the evernode setup with xrpl information validations.
 
-const evernode = require("evernode-js-client");
 const process = require("process");
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    process.exit(1);
+});
+
+const evernode = require("evernode-js-client");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
 const keypairs = require('ripple-keypairs');
@@ -13,15 +22,6 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 
 let NETWORK = appenv.NETWORK;
 let FALLBACK_SERVERS = null;
-
-// Uncaught Exception Handling.
-process.on('uncaughtException', (err) => {
-    if (process.env.RESPFILE)
-        fs.writeFileSync(process.env.RESPFILE, "-");
-    console.error('Unhandled exception occurred:', err?.message);
-    console.error('Stack trace:', err?.stack);
-    process.exit(1);
-});
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {

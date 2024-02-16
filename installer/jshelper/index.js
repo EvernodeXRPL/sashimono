@@ -14,6 +14,15 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 let NETWORK = appenv.NETWORK;
 let FALLBACK_SERVERS = null;
 
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    process.exit(1);
+});
+
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
         if (!args[i]) throw "Params not specified.";
@@ -684,11 +693,3 @@ async function app() {
     }
 }
 app().catch(console.error);
-
-process.on('uncaughtException', (err) => {
-    if (process.env.RESPFILE)
-        fs.writeFileSync(process.env.RESPFILE, "-");
-    console.error('Unhandled exception occurred:', err?.message);
-    console.error('Stack trace:', err?.stack);
-    process.exit(1);
-});

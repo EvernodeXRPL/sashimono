@@ -5,6 +5,14 @@ const { Setup } = require('./lib/setup');
 const { MessageBoard } = require('./lib/message-board');
 const { GovernanceManager } = require('./lib/governance-manager');
 
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    console.log("MB_CLI_EXITED");
+    process.exit(1);
+});
+
 async function main() {
 
     if (process.argv[2] === 'version') {
@@ -166,13 +174,6 @@ main().then(() => {
     console.log("MB_CLI_SUCCESS");
 }).catch((e) => {
     console.error(e);
-    console.log("MB_CLI_EXITED");
-    process.exit(1);
-});
-
-process.on('uncaughtException', (err) => {
-    console.error('Unhandled exception occurred:', err?.message);
-    console.error('Stack trace:', err?.stack);
     console.log("MB_CLI_EXITED");
     process.exit(1);
 });

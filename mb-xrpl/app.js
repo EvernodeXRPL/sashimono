@@ -1,4 +1,13 @@
 const process = require('process');
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    process.removeAllListeners('uncaughtException');
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    console.log("MB_CLI_EXITED");
+    process.exit(1);
+});
+
 const logger = require('./lib/logger');
 const { appenv } = require('./lib/appenv');
 const { Setup } = require('./lib/setup');
@@ -134,6 +143,7 @@ async function main() {
             }
         }
         catch (err) {
+            process.removeAllListeners('uncaughtException');
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
             console.log("MB_CLI_EXITED");
@@ -153,6 +163,7 @@ async function main() {
             await mb.init();
         }
         catch (err) {
+            process.removeAllListeners('uncaughtException');
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
             console.log("Evernode Xahau message board exiting with error.");
@@ -163,8 +174,10 @@ async function main() {
 }
 
 main().then(() => {
+    process.removeAllListeners('uncaughtException');
     console.log("MB_CLI_SUCCESS");
 }).catch((e) => {
+    process.removeAllListeners('uncaughtException');
     console.error(e);
     console.log("MB_CLI_EXITED");
     process.exit(1);

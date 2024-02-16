@@ -1,7 +1,17 @@
 // This script helps the evernode setup with xrpl information validations.
 
-const evernode = require("evernode-js-client");
 const process = require("process");
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    process.removeAllListeners('uncaughtException');
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    process.exit(1);
+});
+
+const evernode = require("evernode-js-client");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
 const keypairs = require('ripple-keypairs');
@@ -639,6 +649,9 @@ function handleResponse(resp) {
     if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, resp.result);
     else console.log(resp.result);
 
+    if (resp.success === false) {
+        process.removeAllListeners('uncaughtException');
+    }
     // Setup script uses the exit code of this script to evaluate the result.
     process.exit(resp.success === true ? 0 : 1);
 }
@@ -676,6 +689,7 @@ async function app() {
         handleResponse(resp);
     }
     catch (e) {
+        process.removeAllListeners('uncaughtException');
         // Write the placeholder char to response file if specified.
         // Otherwise the reader process (setup script) will get stuck.
         if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
@@ -683,4 +697,11 @@ async function app() {
         process.exit(1);
     }
 }
-app().catch(console.error);
+app().then(() => {
+    process.removeAllListeners('uncaughtException');
+}).catch((e) => {
+    process.removeAllListeners('uncaughtException');
+    if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error(e);
+    process.exit(1);
+});

@@ -134,17 +134,37 @@ class MessageBoard {
             hostInfo.cpuMicrosec === cpuMicroSec &&
             hostInfo.ramMb === ramMb &&
             hostInfo.diskMb === diskMb)) {
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Update the registry with the active instance count.
-                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb);
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb, null, null, { submissionRef: submissionRefs?.refs[0] });
             });
         }
 
         // Update host additional information if necessary.
         if (sashiConfig?.hp?.host_address) {
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Prepare the host account if it has not been prepared properly.
-                await this.hostClient.prepareAccount(sashiConfig.hp.host_address);
+                await this.hostClient.prepareAccount(sashiConfig.hp.host_address, { submissionRef: submissionRefs?.refs[0] });
             });
         }
 
@@ -162,11 +182,21 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
         const checkAndRequestRebate = async () => {
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send rebate request at startup if there's any pending rebates.
                 if (hostInfo?.registrationFee > hostRegFee) {
                     console.log(`Requesting rebate...`);
-                    await this.hostClient.requestRebate();
+                    await this.hostClient.requestRebate({ submissionRef: submissionRefs?.refs[0] });
                 }
             });
         }
@@ -227,6 +257,7 @@ class MessageBoard {
 
         this.#concurrencyQueue.queue.push({
             callback: action,
+            submissionRefs: {},
             attempts: 0,
             maxAttempts: maxAttempts,
             delay: delay
@@ -241,7 +272,7 @@ class MessageBoard {
         let toKeep = [];
         for (let action of this.#concurrencyQueue.queue) {
             try {
-                await action.callback();
+                await action.callback(action.submissionRefs);
                 this.#applyFeeUpliftment = false;
                 this.#feeUpliftment = 0;
             }
@@ -339,7 +370,18 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
-        await this.#queueAction(async () => {
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
+
             let ongoingHeartbeat = false;
             const currentMoment = await this.hostClient.getMoment();
 
@@ -371,7 +413,7 @@ class MessageBoard {
                     if (voteArr && voteArr.length) {
                         for (const vote of voteArr) {
                             try {
-                                await this.hostClient.heartbeat(vote, this.#prepareHostClientFunctionOptions());
+                                await this.hostClient.heartbeat(vote, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
                                 this.lastHeartbeatMoment = await this.hostClient.getMoment();
                                 heartbeatSent = true;
                             }
@@ -395,7 +437,7 @@ class MessageBoard {
                     return;
 
                 try {
-                    await this.hostClient.heartbeat({}, this.#prepareHostClientFunctionOptions());
+                    await this.hostClient.heartbeat({}, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
                 }
                 catch (err) {
@@ -439,8 +481,19 @@ class MessageBoard {
             // Remove from the queue
             this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
 
-            await this.#queueAction(async () => {
-                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+                // Update the registry with the active instance count.
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             });
             console.log(`Destroyed ${lease.containerName}`);
 
@@ -621,9 +674,19 @@ class MessageBoard {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                            await this.#queueAction(async () => {
+                            await this.#queueAction(async (submissionRefs) => {
+                                submissionRefs.refs ??= [{}];
+                                // Check again wether the transaction is validated before retry.
+                                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                if (txHash) {
+                                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                                        console.log('Transaction is validated and success, Retry skipped!')
+                                        return;
+                                    }
+                                }
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             });
                         }
 
@@ -668,11 +731,21 @@ class MessageBoard {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                        await this.#queueAction(async () => {
+                        await this.#queueAction(async (submissionRefs) => {
+                            submissionRefs.refs ??= [{}];
+                            // Check again wether the transaction is validated before retry.
+                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                            if (txHash) {
+                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                    console.log('Transaction is validated and success, Retry skipped!')
+                                    return;
+                                }
+                            }
                             // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                             if (lease.status === LeaseStatus.ACQUIRING) {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             }
                         });
                     }
@@ -683,11 +756,21 @@ class MessageBoard {
             }
         }
 
-        await this.#queueAction(async () => {
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
             // If active instance count is updated, Send the update registration transaction.
             if (this.activeInstanceCount !== activeInstanceCount) {
                 this.activeInstanceCount = activeInstanceCount;
-                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             }
         });
     }
@@ -770,9 +853,19 @@ class MessageBoard {
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
                                         await this.recreateLeaseOffer(eventInfo.data.uriTokenId, eventInfo.data.tenant, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                                        await this.#queueAction(async () => {
+                                        await this.#queueAction(async (submissionRefs) => {
+                                            submissionRefs.refs ??= [{}];
+                                            // Check again wether the transaction is validated before retry.
+                                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                            if (txHash) {
+                                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                    console.log('Transaction is validated and success, Retry skipped!')
+                                                    return;
+                                                }
+                                            }
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString());
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     }
                                 }
@@ -787,10 +880,20 @@ class MessageBoard {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
                                     const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
-                                        await this.#queueAction(async () => {
+                                        await this.#queueAction(async (submissionRefs) => {
+                                            submissionRefs.refs ??= [{}];
+                                            // Check again wether the transaction is validated before retry.
+                                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                            if (txHash) {
+                                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                    console.log('Transaction is validated and success, Retry skipped!')
+                                                    return;
+                                                }
+                                            }
                                             // The refund for the extension, if tenant still own the URIToken.
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString());
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString(), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     } else {
                                         console.log(`No such URIToken (${eventInfo.data.uriTokenId}) was found.`);
@@ -823,13 +926,40 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, outboundIP) {
-        await this.#queueAction(async () => {
-            // Burn the URIToken and recreate the offer.
-            await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}, {}];
+            // Check again wether the transaction is validated before retry.
+            const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            let retry = true;
+            if (txHash1) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash1);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!');
+                    retry = false;
+                }
+            }
+            if (retry) {
+                // Burn the URIToken and recreate the offer.
+                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
+            }
+
             // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
             await this.hostClient.refreshConfig();
-            const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-            await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP).catch(console.error);
+
+            // Check again wether the transaction is validated before retry.
+            const txHash2 = submissionRefs?.refs[1]?.submissionResult?.result?.tx_json?.hash;
+            retry = true;
+            if (txHash2) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash2);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    retry = false;
+                }
+            }
+            if (retry) {
+                const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] }).catch(console.error);
+            }
         });
     }
 
@@ -924,17 +1054,42 @@ class MessageBoard {
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
-                    await this.#queueAction(async () => {
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                    await this.#queueAction(async (submissionRefs) => {
+                        submissionRefs.refs ??= [{}, {}];
+                        // Check again wether the transaction is validated before retry.
+                        const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                        let retry = true;
+                        if (txHash1) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash1);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                retry = false;
+                            }
+                        }
+                        if (retry) {
+                            await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                        }
 
                         // Send the acquire response with created instance info.
                         // Modify Response.
-                        createRes.content.domain = createRes.content.ip;
-                        if (uriInfo.outboundIP)
-                            createRes.content.outbound_ip = uriInfo.outboundIP.address;
-                        delete createRes.content.ip;
-                        const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
-                        await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, options);
+                        // Check again wether the transaction is validated before retry.
+                        const txHash2 = submissionRefs?.refs[1]?.submissionResult?.result?.tx_json?.hash;
+                        retry = true;
+                        if (txHash2) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash2);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                retry = false;
+                            }
+                        }
+                        if (retry) {
+                            createRes.content.domain = createRes.content.ip;
+                            if (uriInfo.outboundIP)
+                                createRes.content.outbound_ip = uriInfo.outboundIP.address;
+                            delete createRes.content.ip;
+                            const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
+                            await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, { submissionRef: submissionRefs?.refs[1], ...options });
+                        }
                     });
                 }
             }
@@ -954,9 +1109,19 @@ class MessageBoard {
             if (leaseIndex >= 0)
                 await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, instanceOutboundIPAddress).catch(console.error);
 
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send error transaction with received leaseAmount.
-                await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
+                await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease', { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
             });
         }
         finally {
@@ -1034,17 +1199,37 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             const expiryMoment = await this.hostClient.getMoment(expiryTimeStamp)
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send the extend success response
-                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
+                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment, { submissionRef: submissionRefs?.refs[0] });
             });
 
         }
         catch (e) {
             console.error(e);
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send the extend error response
-                await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount);
+                await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount, { submissionRef: submissionRefs?.refs[0] });
             });
         } finally {
             this.db.close();

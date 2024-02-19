@@ -18,7 +18,7 @@
     max_non_ipv6_instances=5
     max_ipv6_prefix_len=112
     min_ipv6_prefix_len=64
-    max_lease_amt=2
+    min_lease_amt=0.000001
     min_disk_mb=1000
     min_ram_mb=500
     min_swap_mb=0
@@ -503,7 +503,7 @@
     }
 
     function validate_lease_amount() {
-        local invalid=$(echo "$amount > $max_lease_amt" | bc -l)
+        local invalid=$(echo "$amount < $min_lease_amt" | bc -l)
         [[ "$invalid" -eq 1 ]] && return 1
         return 0
     }
@@ -759,7 +759,7 @@
         while true; do
             read -ep "Specify the lease amount in EVRs for your contract instances (per moment charge per contract): " amount </dev/tty
             ! validate_positive_decimal $amount && echo "Lease amount should be a numerical value greater than zero." && continue
-            ! validate_lease_amount $amount && echo "Lease amount should be less than or equal "$max_lease_amt" EVRs" && continue
+            ! validate_lease_amount $amount && echo "Lease amount should be greater than or equal "$min_lease_amt" EVRs" && continue
             break
         done
 
@@ -908,6 +908,8 @@
             xrpl_address=$(jq -r ".xrpl.address | select( . != null )" "$MB_XRPL_CONFIG")
             key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
             lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
+            # Format lease amount since jq gives it in exponential format.
+            lease_amount=$(awk -v lease_amount="$lease_amount" 'BEGIN { printf("%f\n", lease_amount) }' </dev/null)
             extra_txn_fee=$(jq ".xrpl.affordableExtraFee | select( . != null )" "$MB_XRPL_CONFIG")
             [ -z $extra_txn_fee ] && extra_txn_fee=0
             email_address=$(jq -r ".host.emailAddress | select( . != null )" "$MB_XRPL_CONFIG")
@@ -1357,8 +1359,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         fi
 
         rm -r $setup_helper_dir >/dev/null 2>&1
-
-        echo "Upgrade complete."
     }
 
     function init_evernode_transfer() {
@@ -1614,7 +1614,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 exit 1
 
             ! validate_lease_amount $amount &&
-                echomult "Invalid lease amount.\n   Lease amount should be less than or equal "$max_lease_amt" EVRs\n" &&
+                echomult "Invalid lease amount.\n   Lease amount should be greater than or equal "$min_lease_amt" EVRs\n" &&
                 exit 1
             lease_amount=$amount
             [[ $cfg_lease_amount == $lease_amount ]] && echomult "Lease amount is already configured!\n" && exit 0
@@ -1647,7 +1647,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 exit 0
             fi
 
-            ! validate_and_set_fallback_rippled_servers "$servers" && exit 1
+            ! validate_and_set_fallback_rippled_servers "$servers" &&
+                echomult "\nUsage: evernode config xahaud-fallback | evernode config xahaud-fallback <fallback xahaud servers (comma seperated)>\n" &&
+                exit 1
 
             [[ $cfg_fb_rippled_servers == $fallback_rippled_servers ]] && echomult "Xahaud server is already configured!\n" && exit 0
 
@@ -2057,6 +2059,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     elif [ "$mode" == "update" ]; then
         update_evernode
+
+        echomult "Upgrade complete.!
+            \n\nNOTE: This update includes following commands for you to configure extra transaction fee and fallback xahaud servers.
+            \n evernode config extrafee <fee amount in XAH Drops> - Configure extra transaction fee.
+            \n evernode config extrafee <fee amount in XAH Drops> - Configure extra transaction fee."
 
     elif [ "$mode" == "log" ]; then
         create_log

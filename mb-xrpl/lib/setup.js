@@ -645,7 +645,7 @@ class Setup {
 
         if (leaseAmount && isNaN(leaseAmount))
             throw 'Lease amount should be a number';
-        else if (rippledServer && !rippledServer.match(/^(wss?:\/\/)([^\/|^:|^ ]{3,})(:([0-9]{1,5}))?$/g))
+        else if (rippledServer && !rippledServer.match(/^(wss?:\/\/)([^\/|^ ]{3,})(:([0-9]{1,5}))?$/g))
             throw 'Provided Xahaud Server is invalid';
         else if (totalInstanceCount && isNaN(totalInstanceCount))
             throw 'Maximum instance count should be a number';

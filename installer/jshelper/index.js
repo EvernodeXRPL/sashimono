@@ -4,12 +4,25 @@ const process = require("process");
 // Uncaught Exception Handling.
 process.on('uncaughtException', (err) => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
     if (process.env.RESPFILE)
         fs.writeFileSync(process.env.RESPFILE, "-");
     console.error('Unhandled exception occurred:', err?.message);
     console.error('Stack trace:', err?.stack);
     process.exit(1);
 });
+
+
+// Unhandled Rejection Handling.
+process.on('unhandledRejection', (reason, promise) => {
+    process.removeAllListeners('unhandledRejection');
+    process.removeAllListeners('uncaughtException');
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+});
+
 
 const evernode = require("evernode-js-client");
 const fs = require("fs");
@@ -690,6 +703,7 @@ async function app() {
     }
     catch (e) {
         process.removeAllListeners('uncaughtException');
+        process.removeAllListeners('unhandledRejection');
         // Write the placeholder char to response file if specified.
         // Otherwise the reader process (setup script) will get stuck.
         if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
@@ -699,8 +713,10 @@ async function app() {
 }
 app().then(() => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
 }).catch((e) => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
     if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
     console.error(e);
     process.exit(1);

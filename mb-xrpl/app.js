@@ -2,8 +2,18 @@ const process = require('process');
 // Uncaught Exception Handling.
 process.on('uncaughtException', (err) => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
     console.error('Unhandled exception occurred:', err?.message);
     console.error('Stack trace:', err?.stack);
+    console.log("MB_CLI_EXITED");
+    process.exit(1);
+});
+
+// Unhandled Rejection Handling.
+process.on('unhandledRejection', (reason, promise) => {
+    process.removeAllListeners('unhandledRejection');
+    process.removeAllListeners('uncaughtException');
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
     console.log("MB_CLI_EXITED");
     process.exit(1);
 });
@@ -144,6 +154,8 @@ async function main() {
         }
         catch (err) {
             process.removeAllListeners('uncaughtException');
+            process.removeAllListeners('unhandledRejection');
+
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
             console.log("MB_CLI_EXITED");
@@ -164,6 +176,8 @@ async function main() {
         }
         catch (err) {
             process.removeAllListeners('uncaughtException');
+            process.removeAllListeners('unhandledRejection');
+
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
             console.log("Evernode Xahau message board exiting with error.");
@@ -175,9 +189,13 @@ async function main() {
 
 main().then(() => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+
     console.log("MB_CLI_SUCCESS");
 }).catch((e) => {
     process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+
     console.error(e);
     console.log("MB_CLI_EXITED");
     process.exit(1);

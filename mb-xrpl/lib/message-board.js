@@ -127,13 +127,26 @@ class MessageBoard {
         const diskMb = Math.floor(sashiConfig.system.max_storage_kbytes / 1000);
         const cpuMicroSec = sashiConfig.system.max_cpu_us;
         const totalInstanceCount = sashiConfig.system.max_instance_count;
+        // Allows to update the lease price if the figure deviates from the figure in host registration entry AND
+        // * All the leases are acquired OR
+        // * The price of an unsold lease is equal to the value in the configuration.
+        const availableLeases = await this.hostClient.getLeases();
+        const allowLeaseAmountUpdate = ((hostInfo.leaseAmount !== this.cfg.xrpl.leaseAmount) &&
+            (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === this.cfg.xrpl.leaseAmount))
+        if ((hostInfo.leaseAmount !== this.cfg.xrpl.leaseAmount) && !allowLeaseAmountUpdate) {
+            console.log("Lease amount inconsistency was found with existing leases.");
+            console.log("Using previous lease amount: ", hostInfo.leaseAmount);
+            this.cfg.xrpl.leaseAmount = hostInfo.leaseAmount;
+        }
+
         const version = this.cfg.version;
         if (!(hostInfo.maxInstances === totalInstanceCount &&
             hostInfo.activeInstances === this.activeInstanceCount &&
             hostInfo.version === version &&
             hostInfo.cpuMicrosec === cpuMicroSec &&
             hostInfo.ramMb === ramMb &&
-            hostInfo.diskMb === diskMb)) {
+            hostInfo.diskMb === diskMb &&
+            !allowLeaseAmountUpdate)) {
             await this.#queueAction(async (submissionRefs) => {
                 submissionRefs.refs ??= [{}];
                 // Check again wether the transaction is validated before retry.
@@ -146,7 +159,7 @@ class MessageBoard {
                     }
                 }
                 // Update the registry with the active instance count.
-                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb, null, null, { submissionRef: submissionRefs?.refs[0] });
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb, null, null, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
             });
         }
 

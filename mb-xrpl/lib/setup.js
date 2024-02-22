@@ -288,7 +288,7 @@ class Setup {
 
         try {
             await hostClient.register(countryCode, cpuMicroSec,
-                Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+                Math.floor((ramKb + swapKb) / 1000), Math.floor(diskKb / 1000), totalInstanceCount, cpuModelFormatted.substring(0, 40), cpuCount, cpuSpeed, description.replaceAll('_', ' '), emailAddress, acc?.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
 
             await hostClient.disconnect();
         }
@@ -573,7 +573,14 @@ class Setup {
         });
 
         const hostInfo = await hostClient.getHostInfo();
-        await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+        const availableLeases = await hostClient.getLeases();
+        const allowLeaseAmountUpdate = ((hostInfo.leaseAmount !== cfg.xrpl.leaseAmount) &&
+            (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === acc.leaseAmount))
+        if (!allowLeaseAmountUpdate) {
+            acc.leaseAmount = hostInfo.leaseAmount;
+        }
+
+        await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, acc?.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
         await hostClient.disconnect();
 
         if (emailAddress) {

@@ -506,7 +506,7 @@ class MessageBoard {
                     }
                 }
                 // Update the registry with the active instance count.
-                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             });
             console.log(`Destroyed ${lease.containerName}`);
 
@@ -783,7 +783,7 @@ class MessageBoard {
             // If active instance count is updated, Send the update registration transaction.
             if (this.activeInstanceCount !== activeInstanceCount) {
                 this.activeInstanceCount = activeInstanceCount;
-                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             }
         });
     }
@@ -1080,7 +1080,7 @@ class MessageBoard {
                             }
                         }
                         if (retry) {
-                            await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                            await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
                         }
 
                         // Send the acquire response with created instance info.

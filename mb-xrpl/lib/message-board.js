@@ -131,12 +131,12 @@ class MessageBoard {
         // * All the leases are acquired OR
         // * The price of an unsold lease is equal to the value in the configuration.
         const availableLeases = await this.hostClient.getLeases();
-        const allowLeaseAmountUpdate = ((hostInfo.leaseAmount !== this.cfg.xrpl.leaseAmount) &&
+        const allowLeaseAmountUpdate = ((parseFloat(hostInfo.leaseAmount) !== this.cfg.xrpl.leaseAmount) &&
             (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === this.cfg.xrpl.leaseAmount))
-        if ((hostInfo.leaseAmount !== this.cfg.xrpl.leaseAmount) && !allowLeaseAmountUpdate) {
+        if ((parseFloat(hostInfo.leaseAmount) !== this.cfg.xrpl.leaseAmount) && !allowLeaseAmountUpdate) {
             console.log("Lease amount inconsistency was found with existing leases.");
             console.log("Using previous lease amount: ", hostInfo.leaseAmount);
-            this.cfg.xrpl.leaseAmount = hostInfo.leaseAmount;
+            this.cfg.xrpl.leaseAmount = parseFloat(hostInfo.leaseAmount);
         }
 
         const version = this.cfg.version;

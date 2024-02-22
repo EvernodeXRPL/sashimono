@@ -574,10 +574,10 @@ class Setup {
 
         const hostInfo = await hostClient.getHostInfo();
         const availableLeases = await hostClient.getLeases();
-        const allowLeaseAmountUpdate = ((hostInfo.leaseAmount !== cfg.xrpl.leaseAmount) &&
+        const allowLeaseAmountUpdate = ((parseFloat(hostInfo.leaseAmount) !== cfg.xrpl.leaseAmount) &&
             (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === acc.leaseAmount))
         if (!allowLeaseAmountUpdate) {
-            acc.leaseAmount = hostInfo.leaseAmount;
+            acc.leaseAmount = parseFloat(hostInfo.leaseAmount);
         }
 
         await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, acc?.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });

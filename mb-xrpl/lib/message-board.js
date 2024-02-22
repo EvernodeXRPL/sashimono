@@ -135,8 +135,9 @@ class MessageBoard {
             (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === this.cfg.xrpl.leaseAmount))
         if ((parseFloat(hostInfo.leaseAmount) !== this.cfg.xrpl.leaseAmount) && !allowLeaseAmountUpdate) {
             console.log("Lease amount inconsistency was found with existing leases.");
-            console.log("Using previous lease amount: ", hostInfo.leaseAmount);
+            console.log(`Using previous lease amount as ${hostInfo.leaseAmount} EVRs.`);
             this.cfg.xrpl.leaseAmount = parseFloat(hostInfo.leaseAmount);
+            this.persistConfig();
         }
 
         const version = this.cfg.version;

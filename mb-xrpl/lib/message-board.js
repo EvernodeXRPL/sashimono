@@ -229,7 +229,6 @@ class MessageBoard {
             if (hostRegFee != this.hostClient.config.hostRegFee) {
                 hostRegFee = this.hostClient.config.hostRegFee;
                 hostInfo = await this.hostClient.getRegistration();
-                //add a delay here since the event triggers at the same time for all hosts
                 const delay = Math.floor(Math.random() * this.#rebateMaxDelay);
                 console.log(`Rebate request scheduled to start in ${delay} milliseconds.`);
                 rebateRequestPending = true;

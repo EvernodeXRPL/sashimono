@@ -31,6 +31,7 @@ class MessageBoard {
     #heartbeatRetryDelay = 300000; // 5 mins
     #heartbeatRetryCount = 3;
     #feeUpliftment = 0;
+    #rebateMaxDelay = 60000; // 1 min
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
@@ -195,8 +196,10 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+        let hostRegFee = this.hostClient.config.hostRegFee;
         const checkAndRequestRebate = async () => {
             await this.#queueAction(async (submissionRefs) => {
+                console.log("Checking for rebates...");
                 submissionRefs.refs ??= [{}];
                 // Check again wether the transaction is validated before retry.
                 const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
@@ -207,24 +210,33 @@ class MessageBoard {
                         return;
                     }
                 }
-                // Send rebate request at startup if there's any pending rebates.
+                // Send rebate request at startup if there's any pending rebates..
                 if (hostInfo?.registrationFee > hostRegFee) {
-                    console.log(`Requesting rebate...`);
+                    console.log(`Requesting rebates ${hostInfo?.registrationFee - hostRegFee} EVRs...`);
                     await this.hostClient.requestRebate({ submissionRef: submissionRefs?.refs[0] });
                 }
             });
         }
 
-        let hostRegFee = this.hostClient.config.hostRegFee;
-        await checkAndRequestRebate();
+        if (hostInfo?.registrationFee > hostRegFee) {
+            await checkAndRequestRebate();
+        }
 
+        let rebateRequestPending = false;
         // Listen to the host registrations and send rebate requests if registration fee updated.
         this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
             await this.hostClient.refreshConfig();
             if (hostRegFee != this.hostClient.config.hostRegFee) {
                 hostRegFee = this.hostClient.config.hostRegFee;
                 hostInfo = await this.hostClient.getRegistration();
-                await checkAndRequestRebate();
+                //add a delay here since the event triggers at the same time for all hosts
+                const delay = Math.floor(Math.random() * this.#rebateMaxDelay);
+                console.log(`Rebate request scheduled to start in ${delay} milliseconds.`);
+                rebateRequestPending = true;
+                setTimeout(async () => {
+                    await checkAndRequestRebate().catch(console.error);
+                    rebateRequestPending = false;
+                }, delay);
             }
         });
 

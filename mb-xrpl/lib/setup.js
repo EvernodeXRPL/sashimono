@@ -735,7 +735,7 @@ class Setup {
         const unsoldCount = unsoldUriTokens.length;
 
         // Return if not changed.
-        if (!leaseAmount && !rippledServer && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount) && (!outboundSubnet || !outboundNetInterface)) {
+        if (!leaseAmount && (!totalInstanceCount || (soldCount + unsoldCount) == totalInstanceCount) && (!outboundSubnet || !outboundNetInterface)) {
             await deinitClients();
             return;
         }
@@ -767,7 +767,7 @@ class Setup {
         let uriTokensToBurn = [];
         let uriTokenIndexesToCreate = [];
         // If lease amount is changed we need to burn all the unsold uriTokens
-        if ((leaseAmount && acc.leaseAmount !== leaseAmount) || (rippledServer && acc.rippledServer !== rippledServer)) {
+        if (leaseAmount && acc.leaseAmount !== leaseAmount) {
             uriTokensToBurn = unsoldUriTokens;
 
             // If total instance count also changed decide the uriTokens that we need to create.

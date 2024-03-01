@@ -188,6 +188,12 @@ class MessageBoard {
             process.exit(1);
         });
 
+
+        this.xrplApi.on(evernode.XrplApiEvents.SERVER_DESYNCED, async (e) => {
+            console.log(`Exiting due to server desync condition...`);
+            process.exit(1);
+        });
+
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
             this.lastValidatedLedgerIndex = e.ledger_index;
             this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');
@@ -225,17 +231,22 @@ class MessageBoard {
         let rebateRequestPending = false;
         // Listen to the host registrations and send rebate requests if registration fee updated.
         this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
-            await this.hostClient.refreshConfig();
-            if (hostRegFee != this.hostClient.config.hostRegFee) {
-                hostRegFee = this.hostClient.config.hostRegFee;
-                hostInfo = await this.hostClient.getRegistration();
-                const delay = Math.floor(Math.random() * this.#rebateMaxDelay);
-                console.log(`Rebate request scheduled to start in ${delay} milliseconds.`);
-                rebateRequestPending = true;
-                setTimeout(async () => {
-                    await checkAndRequestRebate().catch(console.error);
-                    rebateRequestPending = false;
-                }, delay);
+            try {
+                await this.hostClient.refreshConfig();
+                if (hostRegFee != this.hostClient.config.hostRegFee) {
+                    hostRegFee = this.hostClient.config.hostRegFee;
+                    hostInfo = await this.hostClient.getRegistration();
+                    const delay = Math.floor(Math.random() * this.#rebateMaxDelay);
+                    console.log(`Rebate request scheduled to start in ${delay} milliseconds.`);
+                    rebateRequestPending = true;
+                    setTimeout(async () => {
+                        await checkAndRequestRebate().catch(console.error);
+                        rebateRequestPending = false;
+                    }, delay);
+                }
+            } catch (e) {
+                console.error("Issue occurred while checking and requesting rebates.")
+                console.error(e);
             }
         });
 
@@ -802,13 +813,13 @@ class MessageBoard {
 
     async #catchupMissedLeases() {
         const fullHistoryXrplApi = new evernode.XrplApi();
-        await fullHistoryXrplApi.connect();
 
         this.db.open();
         const leases = (await this.db.getValues(this.leaseTable));
         this.db.close();
 
         try {
+            await fullHistoryXrplApi.connect();
             const lastWatchedLedger = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
             if (lastWatchedLedger && lastWatchedLedger[0]?.value != "NULL") {
                 const hostAccount = await new evernode.XrplAccount(this.cfg.xrpl.address, this.cfg.xrpl.secret, { xrplApi: fullHistoryXrplApi });

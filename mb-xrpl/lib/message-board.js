@@ -227,6 +227,9 @@ class MessageBoard {
         let rebateRequestPending = false;
         // Listen to the host registrations and send rebate requests if registration fee updated.
         this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
+            if (rebateRequestPending)
+                return;
+            
             try {
                 await this.hostClient.refreshConfig();
                 if (hostRegFee != this.hostClient.config.hostRegFee) {

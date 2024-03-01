@@ -27,7 +27,7 @@
     root_user="root"
 
     repo_owner="EvernodeXRPL"
-    repo_name="evernode-resources"
+    repo_name="evernode-test-resources"
     desired_branch="main"
 
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"

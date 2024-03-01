@@ -128,16 +128,12 @@ class MessageBoard {
         const diskMb = Math.floor(sashiConfig.system.max_storage_kbytes / 1000);
         const cpuMicroSec = sashiConfig.system.max_cpu_us;
         const totalInstanceCount = sashiConfig.system.max_instance_count;
-        // Allows to update the lease price if the figure deviates from the figure in host registration entry AND
-        // * All the leases are acquired OR
-        // * The price of an unsold lease is equal to the value in the configuration.
-        const availableLeases = await this.hostClient.getLeases();
-        const allowLeaseAmountUpdate = ((parseFloat(hostInfo.leaseAmount) !== this.cfg.xrpl.leaseAmount) &&
-            (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === this.cfg.xrpl.leaseAmount))
-        if ((parseFloat(hostInfo.leaseAmount) !== this.cfg.xrpl.leaseAmount) && !allowLeaseAmountUpdate) {
+
+        const availableLeaseOffers = await this.hostClient.getLeaseOffers();
+        if (availableLeaseOffers.length > 0 && (Number(availableLeaseOffers[0].Amount?.value) !== this.cfg.xrpl.leaseAmount)) {
             console.log("Lease amount inconsistency was found with existing leases.");
-            console.log(`Using previous lease amount as ${hostInfo.leaseAmount} EVRs.`);
-            this.cfg.xrpl.leaseAmount = parseFloat(hostInfo.leaseAmount);
+            console.log(`Using previous lease amount as ${Number(availableLeaseOffers[0].Amount?.value)} EVRs.`);
+            this.cfg.xrpl.leaseAmount = parseFloat(availableLeaseOffers[0].Amount?.value);
             this.persistConfig();
         }
 
@@ -148,7 +144,7 @@ class MessageBoard {
             hostInfo.cpuMicrosec === cpuMicroSec &&
             hostInfo.ramMb === ramMb &&
             hostInfo.diskMb === diskMb &&
-            !allowLeaseAmountUpdate)) {
+            availableLeaseOffers.length === 0)) {
             await this.#queueAction(async (submissionRefs) => {
                 submissionRefs.refs ??= [{}];
                 // Check again wether the transaction is validated before retry.

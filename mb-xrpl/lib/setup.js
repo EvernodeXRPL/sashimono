@@ -573,11 +573,9 @@ class Setup {
         });
 
         const hostInfo = await hostClient.getHostInfo();
-        const availableLeases = await hostClient.getLeases();
-        const allowLeaseAmountUpdate = ((parseFloat(hostInfo.leaseAmount) !== cfg.xrpl.leaseAmount) &&
-            (availableLeases.length === 0 || Number(availableLeases[0].Amount?.value) === acc.leaseAmount))
-        if (!allowLeaseAmountUpdate) {
-            acc.leaseAmount = parseFloat(hostInfo.leaseAmount);
+        const availableLeaseOffers = await hostClient.getLeaseOffers();
+        if (availableLeaseOffers.length > 0 || Number(availableLeaseOffers[0].Amount?.value) !== acc.leaseAmount) {
+            acc.leaseAmount = parseFloat(availableLeaseOffers[0].Amount?.value);
         }
 
         await hostClient.updateRegInfo(hostInfo.activeInstances, null, null, null, null, null, null, null, null, emailAddress, acc?.leaseAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });

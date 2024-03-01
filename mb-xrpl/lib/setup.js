@@ -574,7 +574,7 @@ class Setup {
 
         const hostInfo = await hostClient.getHostInfo();
         const availableLeaseOffers = await hostClient.getLeaseOffers();
-        if (availableLeaseOffers.length > 0 || Number(availableLeaseOffers[0].Amount?.value) !== acc.leaseAmount) {
+        if (availableLeaseOffers.length > 0 && Number(availableLeaseOffers[0].Amount?.value) !== acc.leaseAmount) {
             acc.leaseAmount = parseFloat(availableLeaseOffers[0].Amount?.value);
         }
 

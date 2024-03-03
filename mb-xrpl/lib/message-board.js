@@ -144,7 +144,7 @@ class MessageBoard {
             hostInfo.cpuMicrosec === cpuMicroSec &&
             hostInfo.ramMb === ramMb &&
             hostInfo.diskMb === diskMb &&
-            hostInfo.leaseAmount === this.cfg.xrpl.leaseAmount)) {
+            parseFloat(hostInfo.leaseAmount) === this.cfg.xrpl.leaseAmount)) {
             await this.#queueAction(async (submissionRefs) => {
                 submissionRefs.refs ??= [{}];
                 // Check again wether the transaction is validated before retry.

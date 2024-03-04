@@ -1447,6 +1447,20 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
     }
 
+    function get_country_code() {
+        local reg_info=$(MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo || echo ERROR)
+        local error=$(echo "$reg_info" | tail -1)
+        [ "$error" == "ERROR" ] && echo "${reg_info/ERROR/""}" && exit 1
+
+        local country_code_line=$(echo "$reg_info" | tail -2 | head -1)
+        local country_code=$(echo "$country_code_line" | awk -F : ' { print $2 } ')
+        echo -e "\n$address_line\n"
+    }
+
+    function is_sactioned() {
+        local country_code="$1"
+    }
+
     function apply_ssl() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
@@ -1892,6 +1906,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "Using '$inetaddr' as host internet address.\n"
 
         set_country_code
+        is_sactioned "$countrycode"
+
         echo -e "Using '$countrycode' as country code.\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_ipv6_subnet
@@ -2058,6 +2074,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         sashi list
 
     elif [ "$mode" == "update" ]; then
+        country_code=$(get_country_code)
+        is_sactioned "$country_code"
+
         update_evernode
 
         echomult "Upgrade complete!

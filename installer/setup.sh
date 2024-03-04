@@ -604,8 +604,8 @@
 
         # Uncomment this if we want the user to manually change the auto-detected country code.
         # if [ -n "$countrycode" ] && ! confirm "Based on the internet address '$inetaddr' we have detected that your country
-        #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
-        #     return 0
+                                                #                                         code is '$countrycode'. Do you want to specify a different country code" ; then
+            #     return 0
         # fi
         # countrycode=""
 
@@ -1447,6 +1447,30 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
     }
 
+    function get_country_code() {
+        local reg_info=$(MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo || echo ERROR)
+        local error=$(echo "$reg_info" | tail -1)
+        [ "$error" == "ERROR" ] && echo "${reg_info/ERROR/""}" && exit 1
+
+        local country_code_line=$(echo "$reg_info" | tail -2 | head -1)
+        local country_code=$(echo "$country_code_line" | awk -F : ' { print $2 } ')
+        echo -e "$country_code"
+    }
+
+    function check_sanctioned() {
+        if [ -z "$1" ]; then
+            echo "Invalid country code received." && exit 1
+        fi
+        sanctioned_countries=("KP" "RU" "VE" "CU" "IR" "SY")
+        local countrycode=$1
+
+        if echo "${sanctioned_countries[*]}" | grep -qiw $countrycode; then
+            echo "Sanctioned country code detected. Unable to install or update $evernode." && exit 1
+        else
+            return 0
+        fi
+    }
+
     function apply_ssl() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
 
@@ -1892,6 +1916,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "Using '$inetaddr' as host internet address.\n"
 
         set_country_code
+        check_sanctioned "$countrycode"
+
         echo -e "Using '$countrycode' as country code.\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_ipv6_subnet
@@ -2058,6 +2084,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         sashi list
 
     elif [ "$mode" == "update" ]; then
+        country_code=$(get_country_code)
+        check_sanctioned "$country_code"
+
         update_evernode
 
         echomult "Upgrade complete!

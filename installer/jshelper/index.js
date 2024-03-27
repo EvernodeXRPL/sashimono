@@ -1,7 +1,30 @@
 // This script helps the evernode setup with xrpl information validations.
 
-const evernode = require("evernode-js-client");
 const process = require("process");
+// Uncaught Exception Handling.
+process.on('uncaughtException', (err) => {
+    process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled exception occurred:', err?.message);
+    console.error('Stack trace:', err?.stack);
+    process.exit(1);
+});
+
+
+// Unhandled Rejection Handling.
+process.on('unhandledRejection', (reason, promise) => {
+    process.removeAllListeners('unhandledRejection');
+    process.removeAllListeners('uncaughtException');
+    if (process.env.RESPFILE)
+        fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+    process.exit(1);
+});
+
+
+const evernode = require("evernode-js-client");
 const fs = require("fs");
 const ip6addr = require('ip6addr');
 const keypairs = require('ripple-keypairs');
@@ -9,7 +32,10 @@ const http = require('http');
 const crypto = require('crypto');
 const { appenv } = require("../../mb-xrpl/lib/appenv");
 
+const MAX_TX_RETRY_ATTEMPTS = 10;
+
 let NETWORK = appenv.NETWORK;
+let FALLBACK_SERVERS = null;
 
 function checkParams(args, count) {
     for (let i = 0; i < count; i++) {
@@ -29,64 +55,15 @@ const funcs = {
             rippledServer: rippledUrl
         });
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
-        await xrplApi.disconnect();
-        return { success: true };
-    },
 
-    'validate-account': async (args) => {
-        checkParams(args, 3);
-        const rippledUrl = args[0];
-        const governorAddress = args[1];
-        const accountAddress = args[2];
-        const validateFor = args[3] || "register";
-
-        await evernode.Defaults.useNetwork(NETWORK);
-
-        evernode.Defaults.set({
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress
-        });
-
-        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
-
-        evernode.Defaults.set({
-            xrplApi: xrplApi
-        });
-
-        const hostClient = new evernode.HostClient(accountAddress, null);
-
-        if (!await hostClient.xrplAcc.exists())
-            return { success: false, result: "Account not found." };
-
-        await hostClient.connect();
-        const registered = await hostClient.isRegistered();
-        // For register validation the host should not be registered in evernode.
-        // For other validations host should be registered in evernode.
-        if (validateFor === "register") {
-            if (registered)
-                return { success: false, result: "Host is already registered." };
+        try {
+            await xrplApi.connect();
+            await xrplApi.disconnect();
         }
-        else if (!registered)
-            return { success: false, result: "Host is not registered." };
-
-        // Check whether pending transfer exists.
-        const isTransferPending = await hostClient.isTransferee();
-
-        // For register validation check the available balance enough for transfer and non transfer registrations.
-        // For other validations there should not be a pending transfer for the host.
-        if (validateFor === "register") {
-            const minEverBalance = isTransferPending ? 1 : hostClient.config.hostRegFee;
-            const currentBalance = await hostClient.getEVRBalance();
-            if (currentBalance < minEverBalance)
-                return { success: false, result: `The account needs minimum balance of ${minEverBalance} EVR. Current balance is ${currentBalance} EVR.` }
+        catch (e) {
+            return { success: false };
         }
-        else if (isTransferPending)
-            return { success: false, result: "There's a pending transfer for this host." };
 
-        await hostClient.disconnect();
-        await xrplApi.disconnect();
         return { success: true };
     },
 
@@ -101,6 +78,12 @@ const funcs = {
         evernode.Defaults.set({
             rippledServer: rippledUrl
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -131,6 +114,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -164,6 +153,12 @@ const funcs = {
             governorAddress: governorAddress
         });
 
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
+
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
 
@@ -178,12 +173,80 @@ const funcs = {
 
         await hostClient.connect();
 
-        await hostClient.transfer(transfereeAddress || accountAddress);
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
 
-        await hostClient.disconnect();
-        await xrplApi.disconnect();
+        try {
+            // Accept if there's available reg token offers.
+            await hostClient.acceptRegToken({ retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
 
-        return { success: true };
+            // Transfer host.
+            await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            await terminateConnections();
+            return { success: true };
+        }
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
+    },
+
+    'deregister': async (args) => {
+        checkParams(args, 4);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+        const accountSecret = args[3];
+
+        await evernode.Defaults.useNetwork(NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        const hostClient = new evernode.HostClient(accountAddress, accountSecret);
+
+        if (!await hostClient.xrplAcc.exists())
+            return { success: false, result: "Account not found." };
+
+        await hostClient.connect();
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        try {
+            // Accept if there's available reg token offers.
+            await hostClient.acceptRegToken({ retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            // Deregister host.
+            await hostClient.deregister(null, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+
+            await terminateConnections();
+            return { success: true };
+        }
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
     },
 
     'ip6-getsubnet': async (args) => {
@@ -243,52 +306,6 @@ const funcs = {
         return { success: false };
     },
 
-    'check-acc-condition': async (args) => {
-        checkParams(args, 3);
-        const rippledUrl = args[0];
-        const governorAddress = args[1];
-        const accountAddress = args[2];
-
-        await evernode.Defaults.useNetwork(NETWORK);
-
-        evernode.Defaults.set({
-            rippledServer: rippledUrl,
-            governorAddress: governorAddress
-        });
-
-        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-        await xrplApi.connect();
-
-        evernode.Defaults.set({
-            xrplApi: xrplApi
-        });
-
-        const hostClient = new evernode.HostClient(accountAddress, null);
-        const terminateConnections = async () => {
-            await hostClient.disconnect();
-            await xrplApi.disconnect();
-        }
-
-        try {
-            // In order to handle the account not found issue via catch block.
-            await hostClient.connect();
-            const trustline = await hostClient.xrplAcc.getTrustLines(evernode.EvernodeConstants.EVR, hostClient.config.evrIssuerAddress);
-            if (trustline.length > 0) {
-                await terminateConnections();
-                return { success: true, result: 'RC-PREPARED' }
-            } else {
-                await terminateConnections();
-                return { success: true, result: 'RC-FRESH' };
-            }
-        } catch (err) {
-            await terminateConnections();
-
-            if ((err.data?.error === 'actNotFound'))
-                return { success: true, result: "RC-FRESH" };
-            return { success: false, result: "Error occurred in account condition check." };
-        }
-    },
-
     'check-balance': async (args) => {
         checkParams(args, 5);
         const rippledUrl = args[0];
@@ -305,6 +322,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         try {
             const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
@@ -381,9 +404,8 @@ const funcs = {
         const accountAddress = args[2];
         const accountSecret = args[3];
         // Optional
-        const domain = args[4] ? args[4] : "";
-
-        const WAIT_PERIOD = 120; // seconds
+        const domain = (args[4] && args[4] !== '-') ? args[4] : "";
+        const affordableExtraFee = (args[5] && args[5] !== '-') ? parseFloat(args[5]) : 0;;
 
         await evernode.Defaults.useNetwork(NETWORK);
 
@@ -391,6 +413,12 @@ const funcs = {
             rippledServer: rippledUrl,
             governorAddress: governorAddress
         });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
         const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
         await xrplApi.connect();
@@ -407,29 +435,15 @@ const funcs = {
             await xrplApi.disconnect();
         }
 
-        {
-            let attempts = 0;
-            while (attempts >= 0) {
-                try {
-                    await hostClient.prepareAccount(domain);
-                    break;
-                }
-                catch (err) {
-                    if (err.data?.error === 'actNotFound' && ++attempts <= WAIT_PERIOD) {
-                        // Wait and retry.
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        continue;
-                    }
-
-                    await terminateConnections();
-                    return { success: false, result: "Error occurred in account preparation." };
-                }
-            }
+        try {
+            await hostClient.prepareAccount(domain, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+            await terminateConnections();
+            return { success: true };
         }
-
-        await terminateConnections();
-        return { success: true };
-
+        catch (e) {
+            await terminateConnections();
+            return { success: false };
+        }
     },
 
     // Starts an HTTP server on port 80 and check whether that's reachable via
@@ -440,6 +454,13 @@ const funcs = {
         const port = parseInt(args[1]);
         const urlPath = "/" + crypto.randomBytes(16).toString('hex');
         const responseString = crypto.randomBytes(16).toString('hex');
+
+        // Bare IP validation.
+        const ipv4Regex = /(([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])/;
+        const ipv6Regex = /((([0-9a-fA-F]){1,4})\:){7}([0-9a-fA-F]){1,4}/;
+
+        if (ipv4Regex.test(domain) || ipv6Regex.test(domain))
+            return { success: false, result: "bare_ip_address" };
 
         const server = http.createServer((req, res) => {
             if (req.url === urlPath) {
@@ -521,14 +542,20 @@ const funcs = {
             rippledServer: rippledUrl
         });
 
-        try {
-            const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
-            await xrplApi.connect();
-
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
             evernode.Defaults.set({
-                xrplApi: xrplApi
-            });
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
 
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        try {
             const serverInfo = await xrplApi.getServerInfo();
             if (serverInfo?.info?.validated_ledger) {
                 const reserves = serverInfo.info.validated_ledger
@@ -545,10 +572,85 @@ const funcs = {
 
 
         } catch {
-            return { success: false, result: "Error occurred in websocket connection." };
+            await xrplApi.disconnect();
+            return { success: false, result: "Error occurred in XAH requirement calculation." };
         }
-    }
+    },
 
+    'compute-evr-requirement': async (args) => {
+        checkParams(args, 3);
+        const rippledUrl = args[0];
+        const governorAddress = args[1];
+        const accountAddress = args[2];
+
+        await evernode.Defaults.useNetwork(NETWORK);
+
+        evernode.Defaults.set({
+            rippledServer: rippledUrl,
+            governorAddress: governorAddress
+        });
+
+        if (FALLBACK_SERVERS && FALLBACK_SERVERS.length) {
+            evernode.Defaults.set({
+                fallbackRippledServers: FALLBACK_SERVERS
+            })
+        }
+
+        const xrplApi = new evernode.XrplApi(null, { autoReconnect: false });
+        await xrplApi.connect();
+
+        evernode.Defaults.set({
+            xrplApi: xrplApi
+        });
+
+        const hostClient = new evernode.HostClient(accountAddress, null);
+
+        const terminateConnections = async () => {
+            await hostClient.disconnect();
+            await xrplApi.disconnect();
+        }
+
+        try {
+            try {
+                await hostClient.connect();
+            }
+            catch (err) {
+                await xrplApi.disconnect();
+                if (err.data?.error === 'actNotFound') {
+                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
+                    await governorClient.connect();
+                    return { success: true, result: `${governorClient.config.hostRegFee}` };
+                }
+                return { success: false, result: "Error occurred in websocket connection." };
+            }
+
+            // Check whether host has a registration token.
+            const regUriToken = await hostClient.getRegistrationUriToken();
+            if (regUriToken) {
+                return { success: true, result: `0` };
+            }
+
+            const regInfo = await hostClient.getHostInfo();
+            if (regInfo) {
+                const registryAcc = new evernode.XrplAccount(hostClient.config.registryAddress);
+                const sellOffer = (await registryAcc.getURITokens()).find(o => o.Issuer == registryAcc.address && o.index == regInfo.uriTokenId && o.Amount);
+                if (sellOffer) {
+                    return { success: true, result: '0' };
+                }
+            }
+
+            const isAReReg = await hostClient.isTransferee();
+            if (isAReReg) {
+                return { success: true, result: '0.00000001' };
+            }
+
+            await terminateConnections();
+            return { success: true, result: `${hostClient.config.hostRegFee}` };
+        } catch {
+            await terminateConnections();
+            return { success: false, result: "Error occurred in EVR requirement calculation." };
+        }
+    },
 }
 
 function handleResponse(resp) {
@@ -560,6 +662,9 @@ function handleResponse(resp) {
     if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, resp.result);
     else console.log(resp.result);
 
+    if (resp.success === false) {
+        process.removeAllListeners('uncaughtException');
+    }
     // Setup script uses the exit code of this script to evaluate the result.
     process.exit(resp.success === true ? 0 : 1);
 }
@@ -576,6 +681,15 @@ async function app() {
             }
         }
 
+        const fallbackServersIdx = process.argv.findIndex(a => a.startsWith('fallback-servers:'));
+        if (fallbackServersIdx >= 0) {
+            const sp = process.argv[fallbackServersIdx].split(':');
+            if (sp.length > 1 && sp[1]) {
+                FALLBACK_SERVERS = sp[1].split(',');
+                process.argv.splice(fallbackServersIdx, 1);
+            }
+        }
+
         const command = process.argv[2];
         if (!command)
             throw "Command not specified.";
@@ -588,6 +702,8 @@ async function app() {
         handleResponse(resp);
     }
     catch (e) {
+        process.removeAllListeners('uncaughtException');
+        process.removeAllListeners('unhandledRejection');
         // Write the placeholder char to response file if specified.
         // Otherwise the reader process (setup script) will get stuck.
         if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
@@ -595,4 +711,13 @@ async function app() {
         process.exit(1);
     }
 }
-app();
+app().then(() => {
+    process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+}).catch((e) => {
+    process.removeAllListeners('uncaughtException');
+    process.removeAllListeners('unhandledRejection');
+    if (process.env.RESPFILE) fs.writeFileSync(process.env.RESPFILE, "-");
+    console.error(e);
+    process.exit(1);
+});

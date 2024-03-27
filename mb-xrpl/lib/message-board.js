@@ -27,6 +27,11 @@ class MessageBoard {
         processing: false,
         queue: []
     };
+    #applyFeeUpliftment = false;
+    #heartbeatRetryDelay = 300000; // 5 mins
+    #heartbeatRetryCount = 3;
+    #feeUpliftment = 0;
+    #rebateMaxDelay = 60000; // 1 min
 
     constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
         this.configPath = configPath;
@@ -64,6 +69,11 @@ class MessageBoard {
                 rippledServer: this.cfg.xrpl.rippledServer
             });
 
+        if (this.cfg.xrpl.fallbackRippledServers && this.cfg.xrpl.fallbackRippledServers.length)
+            evernode.Defaults.set({
+                fallbackRippledServers: this.cfg.xrpl.fallbackRippledServers
+            });
+
         this.xrplApi = new evernode.XrplApi();
         evernode.Defaults.set({
             xrplApi: this.xrplApi
@@ -91,13 +101,13 @@ class MessageBoard {
 
         // Get moment only if heartbeat info is not 0.
         this.lastHeartbeatMoment = hostInfo.lastHeartbeatIndex ? await this.hostClient.getMoment(hostInfo.lastHeartbeatIndex) : 0;
+        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         this.db.open();
         // Create lease table if not exist.
         await this.createLeaseTableIfNotExists();
         await this.createUtilDataTableIfNotExists();
 
-        this.lastValidatedLedgerIndex = this.xrplApi.ledgerIndex;
 
         const leaseRecords = (await this.getLeaseRecords()).filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED));
         for (const lease of leaseRecords)
@@ -113,11 +123,71 @@ class MessageBoard {
         this.activeInstanceCount = this.expiryList.length;
         console.log(`Active instance count: ${this.activeInstanceCount}`);
 
-        await this.#queueAction(async () => {
-            // Update the registry with the active instance count.
-            await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, sashiConfig.system.max_instance_count, null, null,
-                sashiConfig.system.max_cpu_us, Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000),
-                Math.floor(sashiConfig.system.max_storage_kbytes / 1000));
+        // Update only if changed.
+        const ramMb = Math.floor((sashiConfig.system.max_mem_kbytes + sashiConfig.system.max_swap_kbytes) / 1000);
+        const diskMb = Math.floor(sashiConfig.system.max_storage_kbytes / 1000);
+        const cpuMicroSec = sashiConfig.system.max_cpu_us;
+        const totalInstanceCount = sashiConfig.system.max_instance_count;
+
+        const availableLeaseOffers = await this.hostClient.getLeaseOffers();
+        if (availableLeaseOffers.length > 0 && (Number(availableLeaseOffers[0].Amount?.value) !== this.cfg.xrpl.leaseAmount)) {
+            console.log("Lease amount inconsistency was found with existing leases.");
+            console.log(`Using previous lease amount as ${Number(availableLeaseOffers[0].Amount?.value)} EVRs.`);
+            this.cfg.xrpl.leaseAmount = parseFloat(availableLeaseOffers[0].Amount?.value);
+            this.persistConfig();
+        }
+
+        const version = this.cfg.version;
+        if (!(hostInfo.maxInstances === totalInstanceCount &&
+            hostInfo.activeInstances === this.activeInstanceCount &&
+            hostInfo.version === version &&
+            hostInfo.cpuMicrosec === cpuMicroSec &&
+            hostInfo.ramMb === ramMb &&
+            hostInfo.diskMb === diskMb &&
+            parseFloat(hostInfo.leaseAmount) === this.cfg.xrpl.leaseAmount)) {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+                // Update the registry with the active instance count.
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, this.cfg.version, totalInstanceCount, null, null, cpuMicroSec, ramMb, diskMb, null, null, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
+            });
+        }
+
+        // Update host additional information if necessary.
+        if (sashiConfig?.hp?.host_address) {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+                // Prepare the host account if it has not been prepared properly.
+                await this.hostClient.prepareAccount(sashiConfig.hp.host_address, { submissionRef: submissionRefs?.refs[0] });
+            });
+        }
+
+        this.xrplApi.on(evernode.XrplApiEvents.DISCONNECTED, async (e) => {
+            console.log(`Exiting due to server disconnect (code ${e})...`);
+            process.exit(1);
+        });
+
+
+        this.xrplApi.on(evernode.XrplApiEvents.SERVER_DESYNCED, async (e) => {
+            console.log(`Exiting due to server desync condition...`);
+            process.exit(1);
         });
 
         this.xrplApi.on(evernode.XrplApiEvents.LEDGER, async (e) => {
@@ -128,26 +198,54 @@ class MessageBoard {
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
 
+        let hostRegFee = this.hostClient.config.hostRegFee;
         const checkAndRequestRebate = async () => {
-            await this.#queueAction(async () => {
-                // Send rebate request at startup if there's any pending rebates.
+            await this.#queueAction(async (submissionRefs) => {
+                console.log("Checking for rebates...");
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+                // Send rebate request at startup if there's any pending rebates..
                 if (hostInfo?.registrationFee > hostRegFee) {
-                    console.log(`Requesting rebate...`);
-                    await this.hostClient.requestRebate();
+                    console.log(`Requesting rebates ${hostInfo?.registrationFee - hostRegFee} EVRs...`);
+                    await this.hostClient.requestRebate({ submissionRef: submissionRefs?.refs[0] });
                 }
             });
         }
 
-        let hostRegFee = this.hostClient.config.hostRegFee;
-        await checkAndRequestRebate();
+        if (hostInfo?.registrationFee > hostRegFee) {
+            await checkAndRequestRebate();
+        }
 
+        let rebateRequestPending = false;
         // Listen to the host registrations and send rebate requests if registration fee updated.
         this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
-            await this.hostClient.refreshConfig();
-            if (hostRegFee != this.hostClient.config.hostRegFee) {
-                hostRegFee = this.hostClient.config.hostRegFee;
-                hostInfo = await this.hostClient.getRegistration();
-                await checkAndRequestRebate();
+            if (rebateRequestPending)
+                return;
+            
+            try {
+                await this.hostClient.refreshConfig();
+                if (hostRegFee != this.hostClient.config.hostRegFee) {
+                    hostRegFee = this.hostClient.config.hostRegFee;
+                    hostInfo = await this.hostClient.getRegistration();
+                    const delay = Math.floor(Math.random() * this.#rebateMaxDelay);
+                    console.log(`Rebate request scheduled to start in ${delay} milliseconds.`);
+                    rebateRequestPending = true;
+                    setTimeout(async () => {
+                        await checkAndRequestRebate().catch(console.error);
+                        rebateRequestPending = false;
+                    }, delay);
+                }
+            } catch (e) {
+                console.error("Issue occurred while checking and requesting rebates.")
+                console.error(e);
             }
         });
 
@@ -160,6 +258,15 @@ class MessageBoard {
         // Start a job to prune the orphan instances.
         this.#startPruneScheduler();
 
+    }
+
+    #prepareHostClientFunctionOptions() {
+        let options = {}
+        if (this.#applyFeeUpliftment) {
+            options.transactionOptions = { feeUplift: this.#feeUpliftment }
+        }
+
+        return options;
     }
 
     // Try to acquire the lease update lock.
@@ -180,12 +287,15 @@ class MessageBoard {
         this.#concurrencyQueue.processing = false;
     }
 
-    async #queueAction(action) {
+    async #queueAction(action, maxAttempts = 5, delay = 0) {
         await this.#acquireConcurrencyQueue();
 
         this.#concurrencyQueue.queue.push({
             callback: action,
-            attempts: 0
+            submissionRefs: {},
+            attempts: 0,
+            maxAttempts: maxAttempts,
+            delay: delay
         });
 
         await this.#releaseConcurrencyQueue();
@@ -197,12 +307,29 @@ class MessageBoard {
         let toKeep = [];
         for (let action of this.#concurrencyQueue.queue) {
             try {
-                await action.callback();
+                await action.callback(action.submissionRefs);
+                this.#applyFeeUpliftment = false;
+                this.#feeUpliftment = 0;
             }
             catch (e) {
-                if (action.attempts < 5) {
+                if (action.attempts < action.maxAttempts) {
                     action.attempts++;
-                    toKeep.push(action);
+                    if (this.cfg.xrpl.affordableExtraFee > 0 && e.status === "TOOK_LONG") {
+                        this.#applyFeeUpliftment = true;
+                        this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
+                    }
+                    if (action.delay > 0) {
+                        new Promise((resolve) => {
+                            const checkFlagInterval = setInterval(() => {
+                                if (!this.#concurrencyQueue.processing) {
+                                    this.#concurrencyQueue.queue.push(action);
+                                    clearInterval(checkFlagInterval);
+                                    resolve();
+                                }
+                            }, action.delay);
+                        });
+                    } else
+                        toKeep.push(action);
                 }
                 else {
                     console.error(e);
@@ -278,7 +405,18 @@ class MessageBoard {
 
     // Heartbeat sender
     async #sendHeartbeat() {
-        await this.#queueAction(async () => {
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
+
             let ongoingHeartbeat = false;
             const currentMoment = await this.hostClient.getMoment();
 
@@ -310,7 +448,7 @@ class MessageBoard {
                     if (voteArr && voteArr.length) {
                         for (const vote of voteArr) {
                             try {
-                                await this.hostClient.heartbeat(vote);
+                                await this.hostClient.heartbeat(vote, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
                                 this.lastHeartbeatMoment = await this.hostClient.getMoment();
                                 heartbeatSent = true;
                             }
@@ -322,6 +460,7 @@ class MessageBoard {
                                 }
                                 else {
                                     console.error("Heartbeat tx with vote error", e);
+                                    throw e;
                                 }
                             }
                         }
@@ -333,20 +472,23 @@ class MessageBoard {
                     return;
 
                 try {
-                    await this.hostClient.heartbeat();
+                    await this.hostClient.heartbeat({}, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
                     this.lastHeartbeatMoment = await this.hostClient.getMoment();
                 }
                 catch (err) {
-                    if (err.code === 'tecHOOK_REJECTED')
+                    if (err.code === 'tecHOOK_REJECTED') {
                         console.log("Heartbeat rejected by the hook.");
-                    else
+                    }
+                    else {
                         console.log("Heartbeat tx error", err);
+                    }
+                    throw err;
                 }
                 finally {
                     ongoingHeartbeat = false;
                 }
             }
-        });
+        }, this.#heartbeatRetryCount, this.#heartbeatRetryDelay);
     }
 
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
@@ -374,8 +516,19 @@ class MessageBoard {
             // Remove from the queue
             this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
 
-            await this.#queueAction(async () => {
-                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+                // Update the registry with the active instance count.
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             });
             console.log(`Destroyed ${lease.containerName}`);
 
@@ -460,7 +613,10 @@ class MessageBoard {
 
     async #startHeartBeatScheduler() {
         const momentSize = this.hostClient.config.momentSize;
-        const halfMomentSize = momentSize / 2; // Getting half of moment size
+        const halfMomentSize = momentSize / 2; // Getting 50% of moment size
+        const acceptanceLimit = Math.floor(momentSize * 0.75); // Getting 75% of moment size
+        const momentReserve = Math.floor(momentSize * 0.25); // Getting 25% of moment size
+
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
 
         const scheduler = async () => {
@@ -478,16 +634,17 @@ class MessageBoard {
 
         // Schedule the next heartbeat based on last heartbeat occurrence.
         // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
-        // If schedule the next heartbeat based on its last heartbeat.
-        // If it is not further checks whether it is about to send the heartbeat at the second half of a moment or not.
-        // If the current timestamp lies in the second half of the moment, schedule the next heartbeat withing the next moment (in the its first half).
-        // If it is not schedule it right now.
+        // If it's true, then schedule the next heartbeat based on its last heartbeat.
+        // If not, further check whether it is about to send a heartbeat at the which state of a moment.
+        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat withing the next moment in a random slot.
+        // If not, schedule it right now.
         const schedule = (this.lastHeartbeatMoment === currentMoment)
             ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
-            : (currentMomentDuration > halfMomentSize && currentMomentDuration < momentSize) ? halfMomentSize : 0;
+            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? (Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve) : 0;
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (currentMomentDuration) < halfMomentSize ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+        const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+        console.log(`Heartbeat Scheduler scheduled to start in ${startTimeout} milliseconds.`);
 
         setTimeout(async () => {
             await scheduler();
@@ -552,9 +709,19 @@ class MessageBoard {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                            await this.#queueAction(async () => {
+                            await this.#queueAction(async (submissionRefs) => {
+                                submissionRefs.refs ??= [{}];
+                                // Check again wether the transaction is validated before retry.
+                                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                if (txHash) {
+                                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                                        console.log('Transaction is validated and success, Retry skipped!')
+                                        return;
+                                    }
+                                }
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             });
                         }
 
@@ -599,11 +766,21 @@ class MessageBoard {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                        await this.#queueAction(async () => {
+                        await this.#queueAction(async (submissionRefs) => {
+                            submissionRefs.refs ??= [{}];
+                            // Check again wether the transaction is validated before retry.
+                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                            if (txHash) {
+                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                    console.log('Transaction is validated and success, Retry skipped!')
+                                    return;
+                                }
+                            }
                             // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                             if (lease.status === LeaseStatus.ACQUIRING) {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString());
+                                await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             }
                         });
                     }
@@ -614,24 +791,34 @@ class MessageBoard {
             }
         }
 
-        await this.#queueAction(async () => {
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
             // If active instance count is updated, Send the update registration transaction.
             if (this.activeInstanceCount !== activeInstanceCount) {
                 this.activeInstanceCount = activeInstanceCount;
-                await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             }
         });
     }
 
     async #catchupMissedLeases() {
         const fullHistoryXrplApi = new evernode.XrplApi();
-        await fullHistoryXrplApi.connect();
 
         this.db.open();
         const leases = (await this.db.getValues(this.leaseTable));
         this.db.close();
 
         try {
+            await fullHistoryXrplApi.connect();
             const lastWatchedLedger = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
             if (lastWatchedLedger && lastWatchedLedger[0]?.value != "NULL") {
                 const hostAccount = await new evernode.XrplAccount(this.cfg.xrpl.address, this.cfg.xrpl.secret, { xrplApi: fullHistoryXrplApi });
@@ -657,12 +844,20 @@ class MessageBoard {
 
                                 for (const tx of transactions) {
                                     // Skip, if this transaction was previously considered.
-                                    const acquireRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_SUCCESS);
-                                    if (acquireRef === trx.hash)
+                                    const acquireSucRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_SUCCESS);
+                                    if (acquireSucRef === trx.hash)
                                         continue loop1;
 
-                                    const extendRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_SUCCESS);
-                                    if (extendRef === trx.hash)
+                                    const acquireErrRef = this.#getTrxHookParams(tx, evernode.EventTypes.ACQUIRE_ERROR);
+                                    if (acquireErrRef === trx.hash)
+                                        continue loop1;
+
+                                    const extendSucRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_SUCCESS);
+                                    if (extendSucRef === trx.hash)
+                                        continue loop1;
+
+                                    const extendErrRef = this.#getTrxHookParams(tx, evernode.EventTypes.EXTEND_ERROR);
+                                    if (extendErrRef === trx.hash)
                                         continue loop1;
 
                                     const refundRef = this.#getTrxHookParams(tx, evernode.EventTypes.REFUND);
@@ -687,15 +882,25 @@ class MessageBoard {
 
                                 if (!lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
                                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
                                         await this.recreateLeaseOffer(eventInfo.data.uriTokenId, eventInfo.data.tenant, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
-                                        await this.#queueAction(async () => {
+                                        await this.#queueAction(async (submissionRefs) => {
+                                            submissionRefs.refs ??= [{}];
+                                            // Check again wether the transaction is validated before retry.
+                                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                            if (txHash) {
+                                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                    console.log('Transaction is validated and success, Retry skipped!')
+                                                    return;
+                                                }
+                                            }
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString());
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     }
                                 }
@@ -708,12 +913,22 @@ class MessageBoard {
 
                                 if (lease) {
                                     const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
                                     if (uriToken) {
-                                        await this.#queueAction(async () => {
+                                        await this.#queueAction(async (submissionRefs) => {
+                                            submissionRefs.refs ??= [{}];
+                                            // Check again wether the transaction is validated before retry.
+                                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                            if (txHash) {
+                                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                    console.log('Transaction is validated and success, Retry skipped!')
+                                                    return;
+                                                }
+                                            }
                                             // The refund for the extension, if tenant still own the URIToken.
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString());
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString(), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     } else {
                                         console.log(`No such URIToken (${eventInfo.data.uriTokenId}) was found.`);
@@ -746,13 +961,40 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, outboundIP) {
-        await this.#queueAction(async () => {
-            // Burn the URIToken and recreate the offer.
-            await this.hostClient.expireLease(uriTokenId, tenantAddress).catch(console.error);
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}, {}];
+            // Check again wether the transaction is validated before retry.
+            const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            let retry = true;
+            if (txHash1) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash1);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!');
+                    retry = false;
+                }
+            }
+            if (retry) {
+                // Burn the URIToken and recreate the offer.
+                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
+            }
+
             // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
             await this.hostClient.refreshConfig();
-            const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-            await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP).catch(console.error);
+
+            // Check again wether the transaction is validated before retry.
+            const txHash2 = submissionRefs?.refs[1]?.submissionResult?.result?.tx_json?.hash;
+            retry = true;
+            if (txHash2) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash2);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    retry = false;
+                }
+            }
+            if (retry) {
+                const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
+                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] }).catch(console.error);
+            }
         });
     }
 
@@ -847,17 +1089,42 @@ class MessageBoard {
 
                     // Update the active instance count.
                     this.activeInstanceCount++;
-                    await this.#queueAction(async () => {
-                        await this.hostClient.updateRegInfo(this.activeInstanceCount);
+                    await this.#queueAction(async (submissionRefs) => {
+                        submissionRefs.refs ??= [{}, {}];
+                        // Check again wether the transaction is validated before retry.
+                        const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                        let retry = true;
+                        if (txHash1) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash1);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                retry = false;
+                            }
+                        }
+                        if (retry) {
+                            await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                        }
 
                         // Send the acquire response with created instance info.
                         // Modify Response.
-                        createRes.content.domain = createRes.content.ip;
-                        if (uriInfo.outboundIP)
-                            createRes.content.outbound_ip = uriInfo.outboundIP.address;
-                        delete createRes.content.ip;
-                        const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
-                        await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, options);
+                        // Check again wether the transaction is validated before retry.
+                        const txHash2 = submissionRefs?.refs[1]?.submissionResult?.result?.tx_json?.hash;
+                        retry = true;
+                        if (txHash2) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash2);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                retry = false;
+                            }
+                        }
+                        if (retry) {
+                            createRes.content.domain = createRes.content.ip;
+                            if (uriInfo.outboundIP)
+                                createRes.content.outbound_ip = uriInfo.outboundIP.address;
+                            delete createRes.content.ip;
+                            const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
+                            await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, { submissionRef: submissionRefs?.refs[1], ...options });
+                        }
                     });
                 }
             }
@@ -877,9 +1144,19 @@ class MessageBoard {
             if (leaseIndex >= 0)
                 await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, instanceOutboundIPAddress).catch(console.error);
 
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send error transaction with received leaseAmount.
-                await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease').catch(console.error);
+                await this.hostClient.acquireError(acquireRefId, tenantAddress, leaseAmount, e.content || 'invalid_acquire_lease', { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
             });
         }
         finally {
@@ -957,17 +1234,37 @@ class MessageBoard {
                 throw "No matching expiration record was found for the instance";
 
             const expiryMoment = await this.hostClient.getMoment(expiryTimeStamp)
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send the extend success response
-                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment);
+                await this.hostClient.extendSuccess(extendRefId, tenantAddress, expiryMoment, { submissionRef: submissionRefs?.refs[0] });
             });
 
         }
         catch (e) {
             console.error(e);
-            await this.#queueAction(async () => {
+            await this.#queueAction(async (submissionRefs) => {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
                 // Send the extend error response
-                await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount);
+                await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount, { submissionRef: submissionRefs?.refs[0] });
             });
         } finally {
             this.db.close();
@@ -1009,7 +1306,7 @@ class MessageBoard {
     async createLastWatchedLedgerEntryIfNotExists() {
         const ret = await this.db.getValues(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER });
         if (ret.length === 0) {
-            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: -1 });
+            await this.db.insertValue(this.utilTable, { name: appenv.LAST_WATCHED_LEDGER, value: this.lastValidatedLedgerIndex });
         }
     }
 

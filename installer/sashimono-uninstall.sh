@@ -4,9 +4,14 @@
 
 export TRANSFER=${TRANSFER:-0}
 
+mb_cli_exit_success="MB_CLI_SUCCESS"
+mb_cli_out_prefix="CLI_OUT"
+multi_choice_result=""
+
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
 force=$1
+dereg_reason=$2
 
 function confirm() {
     echo -en $1" [Y/n] "
@@ -21,6 +26,57 @@ function confirm() {
 
     echo ""                                     # Insert new line after answering.
     [[ $yn =~ ^[Yy]$ ]] && return 0 || return 1 # 0 means success.
+}
+
+function abort() {
+    echo "Aborting the uninstallation.."
+    exit 1
+}
+
+function multi_choice() {
+    local prompt=$1
+    local choice_display=${2:-y/n}
+
+    IFS='/'
+    read -ra ADDR <<<"$choice_display"
+
+    local default_choice=${3:-1} #Default choice is set to first.
+
+    # Fallback to 1 if invalid.
+    ([[ ! $default_choice =~ ^[0-9]+$ ]] || [[ $default_choice -lt 0 ]] || [[ $default_choice -gt ${#ADDR[@]} ]]) && default_choice=1
+
+    echo -en "$prompt?\n"
+    local i=1
+    for choice in "${ADDR[@]}"; do
+        [[ $default_choice -eq $i ]] && echo "($i) ${choice^^} " || echo "($i) $choice "
+        i=$((i + 1))
+    done
+
+    local choice=""
+    read choice </dev/tty
+
+    [ -z $choice ] && choice="$default_choice"
+    while ! ([[ $choice =~ ^[0-9]+$ ]] && [[ $choice -gt 0 ]] && [[ $choice -lt $i ]]); do
+        read -ep "[1-$i] expected: " choice </dev/tty
+        [ -z $choice ] && choice="$default_choice"
+    done
+
+    multi_choice_result="${ADDR[$((choice - 1))]}"
+}
+
+function multi_choice_output() {
+    echo $multi_choice_result
+}
+
+function exec_mb() {
+    local res=$(sudo -u $MB_XRPL_USER MB_DATA_DIR="$MB_XRPL_DATA" node "$MB_XRPL_BIN" "$@" | tee /dev/fd/2)
+
+    local return_code=0
+    [[ "$res" != *"$mb_cli_exit_success"* ]] && return_code=1
+
+    res=$(echo "$res" | sed -n -e "/^$mb_cli_out_prefix: /p")
+    echo "${res#"$mb_cli_out_prefix: "}"
+    return $return_code
 }
 
 function cgrulesengd_servicename() {
@@ -51,6 +107,74 @@ function cleanup_certbot_ssl() {
         local count=$(certbot certificates 2>/dev/null | grep -c "Certificate Name")
         [ $count -eq 0 ] && certbot unregister -n
     fi
+}
+
+function burn_leases() {
+    if ! res=$(exec_mb burn-leases); then
+        multi_choice "An error occurred while burning! What do you want to do" "Retry/Abort/Rollback" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            burn_leases "$@" && return 0
+        elif [ "$input" == "Rollback" ]; then
+            rollback
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function deregister() {
+    if ! res=$(exec_mb deregister $1); then
+        multi_choice "An error occurred while de-registering! What do you want to do" "Retry/Abort" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            deregister "$@" && return 0
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function accept_reg_token() {
+    if ! res=$(exec_mb accept-reg-token); then
+        multi_choice "An error occurred while accepting the reg token! What do you want to do" "Retry/Abort" && local input=$(multi_choice_output)
+        if [ "$input" == "Retry" ]; then
+            accept_reg_token "$@" && return 0
+        else
+            abort
+        fi
+        return 1
+    fi
+    return 0
+}
+
+function check_and_deregister() {
+    if ! res=$(exec_mb check-reg); then
+        if [[ "$res" == "NOT_REGISTERED" ]]; then
+            echo "This host is de-registered"
+            return 0
+        elif [[ "$res" == "ACC_NOT_FOUND" ]]; then
+            echo "Account not found, Please check your account and try again." && abort
+            return 1
+        elif [[ "$res" == "INVALID_REG" ]]; then
+            echo "Invalid registration please transfer and try again" && abort
+            return 1
+        elif [[ "$res" == "PENDING_SELL_OFFER" ]]; then
+            accept_reg_token && burn_leases && deregister $1 && return 0
+            return 1
+        elif [[ "$res" == "PENDING_TRANSFER" ]]; then
+            echo "There a pending transfer, Please re-install and try again." && abort
+            return 1
+        fi
+    elif [[ "$res" == "REGISTERED" ]]; then
+        burn_leases && deregister $1
+        return 0
+    fi
+
+    echo "Invalid registration please transfer and try again" && abort
+    return 1
 }
 
 [ ! -d $SASHIMONO_BIN ] && echo "$SASHIMONO_BIN does not exist. Aborting uninstall." && exit 1
@@ -133,7 +257,7 @@ if [ -f $SASHIMONO_BIN/docker-registry-uninstall.sh ]; then
 fi
 
 # Delete binaries except message board and sashimnono uninstall script.
-# We keep uninstall script so user can uninstall again if error occured at later steps.
+# We keep uninstall script so user can uninstall again if error occurred at later steps.
 # We'll remove these after deregistration.
 echo "Deleting binaries..."
 find $SASHIMONO_BIN -mindepth 1 ! \( -regex "^$MB_XRPL_BIN\(/.*\)?" -o -path $SASHIMONO_BIN/sashimono-uninstall.sh \) -delete
@@ -157,15 +281,16 @@ fi
 
 # Deregistration---------------------
 # Check whether mb user exists. If so deregister and remove the user.
+# If the deregistration came from rollback, stop doing the deregistration
 if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
-    if [ "$UPGRADE" == "0" ] && [ "$TRANSFER" == "0" ]; then
+    if { [ -z "$dereg_reason" ] || [ "$dereg_reason" != "ROLLBACK" ]; } && [ "$UPGRADE" == "0" ] && [ "$TRANSFER" == "0" ] && grep -q "^$MB_XRPL_USER:" /etc/passwd; then
         # Deregister evernode message board host registration.
         echo "Attempting Evernode host deregistration..."
         # Message board service is created at the end of the installation. So, if this exists previous installation is a successfull one.
         # If not force or quiet mode and deregistration failed and if the previous installation a successful one,
         # Exit the uninstallation, So user can try uninstall again with deregistration.
-        if ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN deregister &&
+        if ! check_and_deregister $dereg_reason &&
             [ "$force" != "-f" ] && [ -f $mb_service_path ]; then
             ! confirm "Evernode host deregistration failed. Still do you want to continue uninstallation?" && echo "Aborting uninstallation. Try again later." && exit 1
             echo "Continuing uninstallation..."

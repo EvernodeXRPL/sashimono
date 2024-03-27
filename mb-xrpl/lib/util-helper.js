@@ -18,6 +18,26 @@ class UtilHelper {
 
         return null;
     }
+
+    static isInIPV6Subnet(subnet, ip) {
+        const [ip1, ip1PrefixLen] = subnet.split('/');
+
+        try {
+            const subnetCidr = ip6addr.createCIDR(ip1, parseInt(ip1PrefixLen));
+            const ipCidr = ip6addr.createCIDR(ip, parseInt(ip1PrefixLen));
+
+            if (subnetCidr.first().compare(ipCidr.first()) <= 0 &&
+                subnetCidr.last().compare(ipCidr.last()) >= 0) {
+                return true;
+            }
+            return false;
+        }
+        catch {
+            // Silent catch so that we don't log exceptions to console.
+            // This will be treated as ip validation failure.
+            return false;
+        }
+    }
 }
 
 module.exports = {

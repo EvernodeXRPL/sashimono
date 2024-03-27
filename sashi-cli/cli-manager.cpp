@@ -10,7 +10,7 @@ namespace cli
     constexpr const int BUFFER_SIZE = 4096;               // Max read buffer size.
     constexpr const char *MSG_LIST = "{\"type\": \"list\"}";
     constexpr const char *MSG_BASIC = "{\"type\":\"%s\",\"container_name\":\"%s\"}";
-    constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"container_name\":\"%s\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"config\":{}}";
+    constexpr const char *MSG_CREATE = "{\"type\":\"create\",\"container_name\":\"%s\",\"owner_pubkey\":\"%s\",\"contract_id\":\"%s\",\"image\":\"%s\",\"outbound_ipv6\":\"%s\",\"outbound_net_interface\":\"%s\",\"config\":{}}";
 
     constexpr const char *DOCKER_ATTACH = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker attach --detach-keys=\"ctrl-c\" %s";
 
@@ -163,7 +163,7 @@ namespace cli
         }
 
         // Read the length of the message to a buffer
-        uint8_t  length_buffer[8];
+        uint8_t length_buffer[8];
         int res = read(ctx.socket_fd, length_buffer, 8);
         if (res == -1)
         {
@@ -171,7 +171,7 @@ namespace cli
             return -1;
         }
 
-        const uint32_t message_length = uint32_from_bytes(length_buffer);   
+        const uint32_t message_length = uint32_from_bytes(length_buffer);
 
         // Resize the message buffer to fit to the message length
         message.resize(message_length);
@@ -214,11 +214,11 @@ namespace cli
         return ret;
     }
 
-    int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image)
+    int create(std::string_view container_name, std::string_view owner, std::string_view contract_id, std::string_view image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
     {
         std::string msg, output;
-        msg.resize(95 + container_name.size() + owner.size() + contract_id.size() + image.size());
-        sprintf(msg.data(), MSG_CREATE, container_name.data(), owner.data(), contract_id.data(), image.data());
+        msg.resize(142 + container_name.size() + owner.size() + contract_id.size() + image.size() + outbound_ipv6.size() + outbound_net_interface.size());
+        sprintf(msg.data(), MSG_CREATE, container_name.data(), owner.data(), contract_id.data(), image.data(), outbound_ipv6.data(), outbound_net_interface.data());
 
         const int ret = get_json_output(msg, output);
         if (ret == 0)

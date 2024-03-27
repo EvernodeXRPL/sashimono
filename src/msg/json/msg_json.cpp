@@ -135,6 +135,8 @@ namespace msg::json
         msg.pubkey = d[msg::FLD_PUBKEY].as<std::string>();
         msg.contract_id = d[msg::FLD_CONTRACT_ID].as<std::string>();
         msg.image = d[msg::FLD_IMAGE].as<std::string>();
+        msg.outbound_ipv6 = d[msg::FLD_OUTBOUND_IPV6].is<std::string>() ? d[msg::FLD_OUTBOUND_IPV6].as<std::string>() : "-";
+        msg.outbound_net_interface = d[msg::FLD_OUTBOUND_NET_INTERFACE].is<std::string>() ? d[msg::FLD_OUTBOUND_NET_INTERFACE].as<std::string>() : "-";
         return 0;
     }
 
@@ -365,6 +367,9 @@ namespace msg::json
 
                 if (round_limits.contains(msg::FLD_PROC_OFD_COUNT))
                     msg.config.contract.round_limits.proc_ofd_count = round_limits[msg::FLD_PROC_OFD_COUNT].as<uint64_t>();
+
+                if (round_limits.contains(msg::FLD_EXEC_TIMEOUT))
+                    msg.config.contract.round_limits.exec_timeout = round_limits[msg::FLD_EXEC_TIMEOUT].as<uint64_t>();
             }
 
             if (contract.contains(msg::FLD_LOG))

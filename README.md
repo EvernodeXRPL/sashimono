@@ -35,7 +35,7 @@ Run `make installer` ('installer.tar.gz' will be placed in build directory)
 ## Run Sashimono
 
 1. `./build/sagent new <data_dir> <ip> <init_peer_port> <init_user_port> <docker_registry_port(optional[0])> <instant_count> <cpu_us> <ram_kbytes> <swap_kbytes> <disk_kbytes>` (This will create the Sashimono config in build directory. You only have to do this once)
-   1. Example: `sudo ./build/sagent new 22861 26201 0 3 900000 1048576 3145728 5242880`
+   1. Example: `sudo ./build/sagent new ./build 127.0.0.1 22861 26201 0 3 900000 1048576 3145728 5242880`
 1. `sudo ./build/sagent run`
 
 ## Sashimono Client
@@ -47,7 +47,7 @@ Run `make installer` ('installer.tar.gz' will be placed in build directory)
 
 1. Node app which is listening to the host xrpl account.
 1. `cd mb-xrpl && npm install` (You only have to do this once)
-1. `node app.js new [address] [secret] [governerAddress] [domain or ip] [leaseAmount] [rippledServer]` will create new config files called `mb-xrpl.cfg` and `secret.cfg`
+1. `node app.js new [address] [secretPath] [governorAddress] [domain or ip] [leaseAmount] [rippledServer] [ipv6Subnet] [ipv6Interface] [network]` will create new config files called `mb-xrpl.cfg` and `secret.cfg`
 1. `node app.js betagen [governerAddress] [domain or ip] [leaseAmount]` will generate beta host account and populate the configs.
 1. `node app.js register [countryCode] [cpuMicroSec] [ramKb] [swapKb] [diskKb] [totalInstanceCount] [cpuModel] [cpuCount] [cpuSpeed] [emailAddress] [description(optional)]` will register the host on Evernode.
 1. `node app.js deregister` will deregister the host from Evernode.

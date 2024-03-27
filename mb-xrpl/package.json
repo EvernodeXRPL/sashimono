@@ -5,8 +5,9 @@
         "build": "npm run lint && ncc build app.js --minify -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.13",
-        "sqlite3": "5.0.2"
+        "evernode-js-client": "0.6.42",
+        "sqlite3": "5.0.2",
+        "ip6addr": "0.2.5"
     },
     "devDependencies": {
         "eslint": "8.3.0"

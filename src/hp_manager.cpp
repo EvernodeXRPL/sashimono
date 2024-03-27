@@ -32,7 +32,7 @@ namespace hp
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
     // For the local log driver compression, minimum max-file should be 2. So we keep two logs each max-size is 5mb
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout --foreground -v -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local \
-                                            --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
+                                            --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -121,7 +121,7 @@ namespace hp
      * @param image Docker image name to use (image prefix name must exists).
      * @return 0 on success and -1 on error.
      */
-    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image)
+    int create_new_instance(std::string &error_msg, instance_info &info, std::string_view container_name, std::string_view owner_pubkey, const std::string &contract_id, const std::string &image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
     {
         // Creating an instance with same name is not allowed.
         hp::instance_info existing_instance;
@@ -185,7 +185,9 @@ namespace hp
 
         int user_id;
         std::string username;
-        if (install_user(user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes, instance_resources.storage_kbytes, container_name, instance_ports, image_name) == -1)
+        if (install_user(
+                user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes,
+                instance_resources.storage_kbytes, container_name, instance_ports, image_name, outbound_ipv6, outbound_net_interface) == -1)
         {
             error_msg = USER_INSTALL_ERROR;
             return -1;
@@ -310,10 +312,10 @@ namespace hp
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
         const std::string timeout = std::to_string(DOCKER_CREATE_TIMEOUT_SECS);
-        const int len = 367 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 2) + contract_dir.length() + image_name.length();
+        const int len = 376 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
-                user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
+                user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
         LOG_INFO << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
@@ -488,7 +490,8 @@ namespace hp
             vacant_ports.push_back(info.assigned_ports);
 
         // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1) {
+        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
+        {
             error_msg = USER_UNINSTALL_ERROR;
             return -1;
         }
@@ -737,6 +740,9 @@ namespace hp
             if (config.contract.round_limits.proc_ofd_count.has_value())
                 d["contract"]["round_limits"]["proc_ofd_count"] = config.contract.round_limits.proc_ofd_count.value();
 
+            if (config.contract.round_limits.exec_timeout.has_value())
+                d["contract"]["round_limits"]["exec_timeout"] = config.contract.round_limits.exec_timeout.value();
+
             if (config.contract.log.max_mbytes_per_file.has_value())
                 d["contract"]["log"]["max_mbytes_per_file"] = config.contract.log.max_mbytes_per_file.value();
 
@@ -888,7 +894,9 @@ namespace hp
      * @param storage_kbytes Disk quota allowed for this user.
      * @param instance_ports Ports assigned to the instance.
      */
-    int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image)
+    int install_user(
+        int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes,
+        std::string_view container_name, const ports instance_ports, std::string_view docker_image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
@@ -901,7 +909,9 @@ namespace hp
             std::to_string(instance_ports.peer_port),
             std::to_string(instance_ports.user_port),
             docker_image,
-            conf::cfg.docker.registry_address};
+            conf::cfg.docker.registry_address,
+            outbound_ipv6,
+            outbound_net_interface};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;

@@ -5,6 +5,8 @@
 #include "cli-manager.hpp"
 #include "version.hpp"
 
+#define DEV_MODE "DEV_MODE"
+
 std::string exec_dir;
 
 /**
@@ -90,10 +92,13 @@ int parse_cmd(int argc, char **argv)
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
 
-    std::string owner, contract_id, image;
+    create->group(""); //Hides 'create' command from help-all
+    std::string owner, contract_id, image, outbound_ipv6, outbound_net_interface;
     create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
     create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
     create->add_option("-i,--image", image, "Container image to use");
+    create->add_option("-a,--outbound-ipv6", outbound_ipv6, "Outbound IPV6 Address");
+    create->add_option("-f,--outbound-net-interface", outbound_net_interface, "Outbound IPV6 Network Interface (Façade)");
 
     std::string container_name;
     create->add_option("-n,--name", container_name, "Instance name");
@@ -124,6 +129,25 @@ int parse_cmd(int argc, char **argv)
     }
 
     // Verifying subcommands.
+
+    bool is_dev_mode = (getenv(DEV_MODE) != nullptr);
+
+    if (!is_dev_mode)
+    {
+        if(create->parsed()){
+            std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
+            return -1;
+        }
+        if(json->parsed() && !json_message.empty()){
+            jsoncons::json json_data = jsoncons::json::parse(json_message);
+            if (json_data.contains("type") && json_data["type"].as_string() == "create")
+            {
+                std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
+                return -1;
+            }
+        }
+    }
+
     if (version->parsed())
     {
         std::cout << "Sashimono CLI version " << version::CLI_VERSION << std::endl;
@@ -134,8 +158,7 @@ int parse_cmd(int argc, char **argv)
         return execute_cli([]()
                            {
                                std::cout << cli::ctx.socket_path << std::endl;
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (list->parsed())
     {
@@ -146,8 +169,7 @@ int parse_cmd(int argc, char **argv)
                                    std::cerr << "Failed to list instances." << std::endl;
                                    return -1;
                                }
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (json->parsed() && !json_message.empty())
     {
@@ -158,13 +180,12 @@ int parse_cmd(int argc, char **argv)
                                    return -1;
 
                                std::cout << output << std::endl;
-                               return 0;
-                           });
+                               return 0; });
     }
     else if (create->parsed() && !container_name.empty() && !owner.empty() && !contract_id.empty() && !image.empty())
     {
         return execute_cli([&]()
-                           { return cli::create(container_name, owner, contract_id, image); });
+                           { return cli::create(container_name, owner, contract_id, image, outbound_ipv6, outbound_net_interface); });
     }
     else if (start->parsed() && !container_name.empty())
     {

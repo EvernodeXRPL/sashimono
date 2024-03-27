@@ -208,7 +208,7 @@ if [ $mode == "reconfig" ]; then
         fi
 
         if ! sshskp $sshuser@$hostaddr $command ; then
-            printf "$PRINTFORMAT" "$nodeno" "Error occured reconfiguring sashimono."
+            printf "$PRINTFORMAT" "$nodeno" "Error occurred reconfiguring sashimono."
         else
             # Remove host info if reinstall.
             if [ ! -z $reinstall ] && [ $reinstall == "R" ]; then
@@ -402,7 +402,7 @@ if [ $mode == "docker-pull" ]; then
 
         command="$contractpath && $user && $dpull"
         if ! sshskp $sshuser@$hostaddr $command 1>/dev/null; then
-            printf "$PRINTFORMAT" "$nodeno" "Error occured pulling $image."
+            printf "$PRINTFORMAT" "$nodeno" "Error occurred pulling $image."
         else
             printf "$PRINTFORMAT" "$nodeno" "Successfully pulled $image."
         fi
@@ -473,7 +473,7 @@ if [ $mode == "create" ] || [ $mode == "createall" ]; then
                 config=$(echo "$config" | jq -c ".mesh.known_peers = [$peers]" | jq -c ".contract.unl = [\"$pubkey\"]")
             fi
 
-            command="sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\",\"config\":$config}'"
+            command="DEV_MODE=1 sashi json -m '{\"type\":\"create\",\"owner_pubkey\":\"$ownerpubkey\",\"contract_id\":\"$contractid\",\"image\":\"$image\",\"config\":$config}'"
             output=$(sshskp $sshuser@$hostaddr $command | tr '\0' '\n')
             # If an output received consider updating the json file.
             if [ ! "$output" = "" ]; then

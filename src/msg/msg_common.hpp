@@ -13,6 +13,8 @@ namespace msg
         std::string pubkey;
         std::string contract_id;
         std::string image;
+        std::string outbound_ipv6;
+        std::string outbound_net_interface;
     };
 
     struct history_configuration
@@ -56,6 +58,7 @@ namespace msg
         std::optional<size_t> proc_cpu_seconds;
         std::optional<size_t> proc_mem_bytes;
         std::optional<size_t> proc_ofd_count;
+        std::optional<uint64_t> exec_timeout;
     };
 
     struct contract_config
@@ -171,6 +174,8 @@ namespace msg
     constexpr const char *FLD_CONTAINER_NAME = "container_name";
     constexpr const char *FLD_CONTRACT_ID = "contract_id";
     constexpr const char *FLD_IMAGE = "image";
+    constexpr const char *FLD_OUTBOUND_IPV6 = "outbound_ipv6";
+    constexpr const char *FLD_OUTBOUND_NET_INTERFACE = "outbound_net_interface";
     constexpr const char *FLD_KNOWN_PEERS = "known_peers";
     constexpr const char *FLD_MESH = "mesh";
     constexpr const char *FLD_USER = "user";
@@ -190,6 +195,7 @@ namespace msg
     constexpr const char *FLD_PROC_CPU_SECS = "proc_cpu_seconds";
     constexpr const char *FLD_PROC_MEM_BYTES = "proc_mem_bytes";
     constexpr const char *FLD_PROC_OFD_COUNT = "proc_ofd_count";
+    constexpr const char *FLD_EXEC_TIMEOUT = "exec_timeout";
     constexpr const char *FLD_LOG = "log";
     constexpr const char *FLD_LOG_LEVEL = "log_level";
     constexpr const char *FLD_ENABLE = "enable";

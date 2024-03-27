@@ -7,6 +7,7 @@ peer_port=$2
 user_port=$3
 instance_name=$4
 prefix="sashi"
+max_kill_attempts=5
 
 # Check whether this is a valid sashimono username.
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
@@ -26,6 +27,7 @@ user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
+cleanup_script=$user_dir/uninstall_cleanup.sh
 
 echo "Uninstalling user '$user'."
 
@@ -54,18 +56,16 @@ for mnt in "${mntarr[@]}"; do
 done
 
 # Force kill user processes.
-procs=$(ps -U $user 2>/dev/null | wc -l)
-if [ "$procs" != "0" ]; then
-
-    # Wait for some time and check again.
+i=0
+while true; do
     sleep 1
     procs=$(ps -U $user 2>/dev/null | wc -l)
-    if [ "$procs" != "0" ]; then
-        echo "Force killing user processes."
-        pkill -SIGKILL -u "$user"
-    fi
-
-fi
+    [ "$procs" == "1" ] && echo "All user processes terminated." && break
+    [[ $i -ge $max_kill_attempts ]] && echo "Max force user process kill attempts $max_kill_attempts reached. Abondaning." && break
+    ((i++))
+    echo "Force killing user processes. Retrying $i..."
+    pkill -SIGKILL -u "$user"
+done
 
 echo "Removing cgroups"
 # Delete config values.
@@ -78,17 +78,37 @@ setquota -g -F vfsv0 "$user" 0 0 0 0 /
 echo "Removing firewall rule allowing hp ports"
 rule_list=$(sudo ufw status)
 comment=$prefix-$instance_name
-sed -n -r -e "/${comment}/{q100}" <<<"$rule_list"
+
+# Remove rules for user port.
+user_port_comment=$comment-user
+sed -n -r -e "/${user_port_comment}/{q100}" <<<"$rule_list"
 res=$?
 if [ $res -eq 100 ]; then
-    echo "Deleting port rule for instance from firewall."
-    sudo ufw delete allow "$peer_port","$user_port"/tcp
+    echo "Deleting user port rule for instance from firewall."
+    sudo ufw delete allow "$user_port"/tcp
 else
-    echo "Rule not added by Sashimono. Skipping.."
+    echo "User port rule not added by Sashimono. Skipping.."
+fi
+
+# Remove rules for peer port.
+peer_port_comment=$comment-peer
+sed -n -r -e "/${peer_port_comment}/{q100}" <<<"$rule_list"
+res=$?
+if [ $res -eq 100 ]; then
+    echo "Deleting peer port rule for instance from firewall."
+    sudo ufw delete allow "$peer_port"
+else
+    echo "Peer port rule not added by Sashimono. Skipping.."
 fi
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"
+
+if [ -f $cleanup_script ]; then
+    echo "Executing cleanup script..."
+    chmod +x $cleanup_script
+    /bin/bash -c $cleanup_script
+fi
 
 echo "Deleting user '$user'"
 userdel "$user"

@@ -195,6 +195,9 @@ stage "Configuring cgroup rules engine"
 # Create new cgrules.conf if not exists to setup control groups.
 [ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
 
+# Create new cgconfig.d directory if not exists to setup control groups.
+[ ! -d /etc/cgconfig.d ] && sudo mkdir /etc/cgconfig.d/
+
 # Setup a service if not exists to run cgroup rules generator.
 cgrulesengd_file="/etc/systemd/system/$cgrulesengd_service.service"
 if ! [ -f "$cgrulesengd_file" ]; then

@@ -183,9 +183,9 @@ function cgrulesengd_servicename() {
 }
 
 function set_cpu_info() {
-    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
-    [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
-    [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
+    [ -z $cpu_model_name ] && cpu_model_name=$(cat /proc/cpuinfo | grep -m 1 "model name" | sed -n 's/model name\s*: //p' | sed 's/ /_/g')
+    [ -z $cpu_count ] && cpu_count=$(grep -c ^processor /proc/cpuinfo)
+    [ -z $cpu_mhz ] && cpu_mhz=$(cat /proc/cpuinfo | grep -m 1 "cpu MHz" | sed -n 's/cpu MHz\s*: //p')
 }
 
 function setup_certbot() {

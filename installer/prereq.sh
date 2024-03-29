@@ -235,6 +235,18 @@ updated=0
 sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{q100}" "$tmpgrub"
 res=$?
 if [ $res -eq 100 ]; then
+    ubt_version=$(lsb_release -rs)
+    if awk 'BEGIN { exit !('$ubt_version' > 20.04) }'; then
+        # Check systemd.unified_cgroup_hierarchy=0 exists, create new if not exists otherwise skip.
+        sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /systemd.unified_cgroup_hierarchy=0/{q100}; }" "$tmpgrub"
+        res=$?
+        if [ $res -eq 0 ]; then
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/\"\s*\$/ systemd.unified_cgroup_hierarchy=0\"/ }" "$tmpgrub"
+            res=$?
+            updated=1
+        fi
+    fi
+
     # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
     sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
     res=$?

@@ -12,6 +12,7 @@ class ReputationD {
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
     #reportTimeQuota = 0.65; // Percentage of moment size.
+    #contractInitTimeQuota = 0.1; // Percentage of moment size.
 
     constructor(configPath, secretConfigPath, mbXrplConfigPath) {
         this.configPath = configPath;
@@ -88,7 +89,10 @@ class ReputationD {
         this.#startReputationClockScheduler();
 
         // Schedule reputation jobs.
-        this.#startReputationScheduler();
+        this.#startReputationSendScheduler();
+
+        // Schedule reputation contract jobs.
+        this.#startReputationContractScheduler();
     }
 
     #prepareHostClientFunctionOptions() {
@@ -223,7 +227,7 @@ class ReputationD {
         }, timeout);
     }
 
-    async #startReputationScheduler() {
+    async #startReputationSendScheduler() {
         const momentSize = this.hostClient.config.momentSize;
 
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
@@ -240,16 +244,47 @@ class ReputationD {
         const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
 
         if ((currentTime - momentStartTime) < (momentSize * this.#reportTimeQuota))
-            startTimeout = (momentStartTime + momentSize + (momentSize * this.#reportTimeQuota)) * 1000 // Converting seconds to milliseconds.
+            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) - currentTime) * 1000 // Converting seconds to milliseconds.
 
-        console.log(`Reputation Scheduler scheduled to start in ${startTimeout} milliseconds.`);
+        console.log(`Reputation sender scheduled to start in ${startTimeout} milliseconds.`);
 
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);
     }
 
-    // Reputation sender
+    async #startReputationContractScheduler() {
+        const momentSize = this.hostClient.config.momentSize;
+
+        const timeout = momentSize * 1000; // Converting seconds to milliseconds.
+
+        const scheduler = async () => {
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+            await this.#createReputationContract();
+        };
+
+        let startTimeout = 0;
+        const momentStartTime = await this.hostClient.getMomentStartIndex();
+        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+
+        if ((currentTime - momentStartTime) > (momentSize * this.#contractInitTimeQuota))
+            startTimeout = (momentStartTime + momentSize - currentTime) * 1000 // Converting seconds to milliseconds.
+
+        console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
+
+        setTimeout(async () => {
+            await scheduler();
+        }, startTimeout);
+    }
+
+    // Create and setup reputation contract.
+    async #createReputationContract() {
+        // TODO: Acquire instance from self host and deploy reputation contract.
+    }
+
+    // Reputation sender.
     async #sendReputations() {
         // TODO: Get reputation scores from the contract.
         const scores = {};

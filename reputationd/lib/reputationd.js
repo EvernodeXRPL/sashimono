@@ -8,7 +8,10 @@ class ReputationD {
         queue: []
     };
     #applyFeeUpliftment = false;
+    #reputationRetryDelay = 300000; // 5 mins
+    #reputationRetryCount = 3;
     #feeUpliftment = 0;
+    #reportTimeQuota = 0.65; // Percentage of moment size.
 
     constructor(configPath, secretConfigPath, mbXrplConfigPath) {
         this.configPath = configPath;
@@ -57,9 +60,13 @@ class ReputationD {
         if (!hostInfo)
             throw "Host is not registered.";
 
+        await this.hostClient.setReputationAcc(this.cfg.xrpl.address, this.cfg.xrpl.secret);
+
         this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
 
         await this.#connectRegistry();
+
+        this.lastReputationMoment = 0;
 
         this.xrplApi.on(evernode.XrplApiEvents.DISCONNECTED, async (e) => {
             console.log(`Exiting due to server disconnect (code ${e})...`);
@@ -76,6 +83,9 @@ class ReputationD {
             this.lastValidatedLedgerIndex = e.ledger_index;
             this.lastLedgerTime = evernode.UtilHelpers.getCurrentUnixTime('milli');
         });
+
+        // Start queue processor job.
+        this.#startReputationClockScheduler();
 
         // Schedule reputation jobs.
         this.#startReputationScheduler();
@@ -198,6 +208,21 @@ class ReputationD {
         await this.#connect(this.regClient);
     }
 
+    #startReputationClockScheduler() {
+        const timeout = appenv.REPUTATIOND_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
+
+        const scheduler = async () => {
+            await this.#processConcurrencyQueue();
+            setTimeout(async () => {
+                await scheduler();
+            }, timeout);
+        };
+
+        setTimeout(async () => {
+            await scheduler();
+        }, timeout);
+    }
+
     async #startReputationScheduler() {
         const momentSize = this.hostClient.config.momentSize;
 
@@ -207,15 +232,66 @@ class ReputationD {
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
-            // Handle reputation.
+            await this.#sendReputations();
         };
 
-        const startTimeout = 0;
+        let startTimeout = 0;
+        const momentStartTime = await this.hostClient.getMomentStartIndex();
+        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+
+        if ((currentTime - momentStartTime) < (momentSize * this.#reportTimeQuota))
+            startTimeout = (momentStartTime + momentSize + (momentSize * this.#reportTimeQuota)) * 1000 // Converting seconds to milliseconds.
+
         console.log(`Reputation Scheduler scheduled to start in ${startTimeout} milliseconds.`);
 
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);
+    }
+
+    // Reputation sender
+    async #sendReputations() {
+        // TODO: Get reputation scores from the contract.
+        const scores = {};
+
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
+
+            let ongoingReputation = false;
+            const currentMoment = await this.hostClient.getMoment();
+
+            // Sending reputations every moment.
+            if (!ongoingReputation && (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment)) {
+                ongoingReputation = true;
+                console.log(`Reporting reputations at Moment ${currentMoment}...`);
+
+                try {
+                    await this.hostClient.sendReputations(scores, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
+                    this.lastReputationMoment = await this.hostClient.getMoment();
+                }
+                catch (err) {
+                    if (err.code === 'tecHOOK_REJECTED') {
+                        console.log("Reputation rejected by the hook.");
+                    }
+                    else {
+                        console.log("Reputation tx error", err);
+                        throw err;
+                    }
+                }
+                finally {
+                    ongoingReputation = false;
+                }
+            }
+        }, this.#reputationRetryCount, this.#reputationRetryDelay);
     }
 
     readConfig() {

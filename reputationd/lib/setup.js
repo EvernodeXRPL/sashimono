@@ -80,7 +80,6 @@ class Setup {
 
         // Prepare host account.
         const hostClient = new evernode.HostClient(acc.hostAddress);
-        await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
         evernode.Defaults.set({
@@ -95,11 +94,16 @@ class Setup {
                     // In order to handle the account not found issue via catch block.
                     await hostClient.connect();
 
+                    // Prepare reputation account.
+                    const reputationAcc = new evernode.XrplAccount(acc.address);
+
                     await new Promise(resolve => setTimeout(resolve, 1000));
                     if (currencyType === 'NATIVE')
-                        balance = Number((await hostClient.xrplAcc.getReputationInfo()).Balance) / 1000000;
-                    else
-                        balance = Number(await hostClient.getReputationEVRBalance());
+                        balance = Number((await reputationAcc.getInfo()).Balance) / 1000000;
+                    else {
+                        const lines = await reputationAcc.getTrustLines(evernode.EvernodeConstants.EVR, hostClient.config.evrIssuerAddress);
+                        balance = lines.length > 0 ? Number(lines[0].balance) : 0;
+                    }
 
                     if (balance < expectedBalance) {
                         if (++attempts <= waitPeriod)

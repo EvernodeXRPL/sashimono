@@ -93,7 +93,6 @@ class Setup {
 
         // Prepare host account.
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
-        await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
         evernode.Defaults.set({

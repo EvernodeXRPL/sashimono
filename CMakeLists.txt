@@ -70,6 +70,7 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
     COMMAND npm --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
+    COMMAND npm --prefix ./reputationd install && npm run --prefix ./reputationd build
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
@@ -82,6 +83,7 @@ add_custom_target(installer
   COMMAND bash -c "cp -r ./dependencies/{user-cgcreate.sh,libblake3.so} ./build/installer/"
   COMMAND bash -c "cp -r ./evernode-license.pdf ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
+  COMMAND bash -c "cp -r ./reputationd/dist ./build/installer/reputationd"
   COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
 

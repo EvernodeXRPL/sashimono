@@ -71,18 +71,23 @@
     export USER_BIN=/usr/bin
     export SASHIMONO_BIN=/usr/bin/sashimono
     export MB_XRPL_BIN=$SASHIMONO_BIN/mb-xrpl
+    export REPUTATIOND_BIN=$SASHIMONO_BIN/reputationd
     export DOCKER_BIN=$SASHIMONO_BIN/dockerbin
     export SASHIMONO_DATA=/etc/sashimono
     export SASHIMONO_CONFIG="$SASHIMONO_DATA/sa.cfg"
     export MB_XRPL_DATA=$SASHIMONO_DATA/mb-xrpl
+    export REPUTATIOND_DATA=$SASHIMONO_DATA/reputationd
     export MB_XRPL_CONFIG="$MB_XRPL_DATA/mb-xrpl.cfg"
+    export REPUTATIOND_CONFIG="$REPUTATIOND_DATA/reputation.cfg"
     export SASHIMONO_SERVICE="sashimono-agent"
     export CGCREATE_SERVICE="sashimono-cgcreate"
     export MB_XRPL_SERVICE="sashimono-mb-xrpl"
+    export REPUTATIOND_SERVICE="sashimono-reputationd"
     export SASHIADMIN_GROUP="sashiadmin"
     export SASHIUSER_GROUP="sashiuser"
     export SASHIUSER_PREFIX="sashi"
     export MB_XRPL_USER="sashimbxrpl"
+    export REPUTATIOND_USER="sashireputationd"
     export CG_SUFFIX="-cg"
     export EVERNODE_AUTO_UPDATE_SERVICE="evernode-auto-update"
     export MIN_OPERATIONAL_COST_PER_MONTH=5
@@ -1503,7 +1508,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function reconfig_sashi() {
-        echomult "Configuaring sashimono...\n"
+        echomult "configuring sashimono...\n"
 
         ! $SASHIMONO_BIN/sagent reconfig $SASHIMONO_DATA $alloc_instcount $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB &&
             echomult "There was an error in updating sashimono configuration." && return 1
@@ -1540,7 +1545,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function reconfig_mb() {
-        echomult "Configuaring message board...\n"
+        echomult "configuring message board...\n"
 
         ! sudo -u $MB_XRPL_USER MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reconfig $lease_amount $alloc_instcount $rippled_server $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers &&
             echo "There was an error in updating message board configuration." && return 1

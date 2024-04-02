@@ -5,7 +5,8 @@
         "build": "npm run lint && ncc build app.js --minify -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.42"
+        "evernode-js-client": "0.6.42",
+        "uuid": "9.0.1"
     },
     "devDependencies": {
         "eslint": "8.3.0"

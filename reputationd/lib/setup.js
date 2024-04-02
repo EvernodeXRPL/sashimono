@@ -40,7 +40,8 @@ class Setup {
             xrpl: {
                 address: address,
                 secretPath: secretPath
-            }
+            },
+            contractInstance: {}
         };
 
         this.#saveConfig(baseConfig);

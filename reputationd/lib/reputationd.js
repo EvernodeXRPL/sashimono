@@ -1,6 +1,10 @@
+const fs = require('fs');
 const evernode = require('evernode-js-client');
+const crypto = require('crypto');
+const uuid = require('uuid');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
+const { CliHelper } = require('./cli-handler');
 
 class ReputationD {
     #concurrencyQueue = {
@@ -13,15 +17,22 @@ class ReputationD {
     #feeUpliftment = 0;
     #reportTimeQuota = 0.65; // Percentage of moment size.
     #contractInitTimeQuota = 0.1; // Percentage of moment size.
+    #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`
 
-    constructor(configPath, secretConfigPath, mbXrplConfigPath) {
-        this.configPath = configPath;
-        this.secretConfigPath = secretConfigPath;
-        this.mbXrplConfigPath = mbXrplConfigPath;
+    #configPath;
+    #secretConfigPath;
+    #mbXrplConfigPath;
+    #instanceImage;
+
+    constructor(configPath, secretConfigPath, mbXrplConfigPath, instanceImage) {
+        this.#configPath = configPath;
+        this.#secretConfigPath = secretConfigPath;
+        this.#mbXrplConfigPath = mbXrplConfigPath;
+        this.#instanceImage = instanceImage;
     }
 
     async init() {
-        this.readConfig();
+        this.#readConfig();
         if (!this.cfg.version || !this.cfg.xrpl.address || !this.cfg.xrpl.secret)
             throw "Required cfg fields cannot be empty.";
 
@@ -279,16 +290,122 @@ class ReputationD {
         }, startTimeout);
     }
 
+    async #getUniverseInfo() {
+        // TODO: Collect the universe info.
+        return {
+            id: '',
+            hosts: ''
+        };
+    }
+
+    async #getInstancesInUniverse(universeId) {
+        // TODO: Collect the universe info.
+        return [];
+    }
+
+    // Find the universe id and generate contract id.
+    async #generateContractId(universeId) {
+        // Generate a hash from the seed
+        const hash = crypto.createHash('sha1').update(universeId).digest('hex');
+        // Use a portion of the hash to generate a random UUID
+        const id = uuid.v4({
+            random: Buffer.from(hash.substring(0, 16), 'hex')
+        });
+
+        return id;
+    }
+
     // Create and setup reputation contract.
     async #createReputationContract() {
-        // TODO: Acquire instance from self host and deploy reputation contract.
+        await this.#queueAction(async (submissionRefs) => {
+            submissionRefs.refs ??= [{}];
+            // Check again wether the transaction is validated before retry.
+            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+            if (txHash) {
+                const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash);
+                if (txResponse && txResponse.code === "tesSUCCESS") {
+                    console.log('Transaction is validated and success, Retry skipped!')
+                    return;
+                }
+            }
+
+            const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
+            await tenantClient.connect();
+            await tenantClient.prepareAccount();
+
+            const universeInfo = await this.#getUniverseInfo();
+            const requirement = {
+                owner_pubkey: ownerPubkey,
+                contract_id: await this.#generateContractId(universeInfo.id),
+                image: this.#instanceImage,
+                config: {
+                    contract: {
+                        consensus: {
+                            roundtime: 5000
+                        }
+                    }
+                }
+            };
+
+            // Update the registry with the active instance count.
+            const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, {});
+
+            await tenantClient.disconnect();
+
+            const acquiredTimestamp = Date.now();
+
+            // Assign ip to domain and outbound_ip for instance created from old sashimono version.
+            if ('ip' in result.instance) {
+                result.instance.domain = result.instance.ip;
+                delete result.instance.ip;
+            }
+
+            this.cfg.contractInstance = { ...result.instance, created_timestamp: acquiredTimestamp };
+            this.#persistConfig();
+
+            const instances = this.#getInstancesInUniverse(universeInfo.id);
+            const overrideConfig = {
+                unl: instances.map(p => `${p.pubkey}`),
+                contract: {
+                    consensus: {
+                        roundtime: 2000
+                    }
+                },
+                mesh: {
+                    known_peers: instances.map(p => `${p.domain}:${p.port}`)
+                }
+            };
+
+            // TODO: Deploy the contract.
+        });
+    }
+
+    async #getScores() {
+        const instanceName = this.cfg.contractInstance.name;
+        if (!instanceName)
+            throw 'No available reputation contract running.';
+
+        const instances = await CliHelper.listInstances();
+
+        const instance = instances.find(i => i.name === instanceName);
+
+        if (!instance) {
+            this.cfg.contractInstance = {};
+            this.#persistConfig();
+
+            throw 'No contract instance matching with the configuration.';
+        }
+
+        const path = this.#scoreFilePath.replace('#USER#', instance.user).replace('#INSTANCE#', instance.name);
+
+        if (!fs.existsSync(path))
+            throw 'Scores file does not exist.';
+
+        return JSON.parse(path);
     }
 
     // Reputation sender.
     async #sendReputations() {
-        // TODO: Get reputation scores from the contract.
-        const scores = {};
-
         await this.#queueAction(async (submissionRefs) => {
             submissionRefs.refs ??= [{}];
             // Check again wether the transaction is validated before retry.
@@ -300,6 +417,9 @@ class ReputationD {
                     return;
                 }
             }
+
+            // TODO: Get reputation scores from the contract.
+            const scores = await this.#getScores();
 
             let ongoingReputation = false;
             const currentMoment = await this.hostClient.getMoment();
@@ -329,12 +449,12 @@ class ReputationD {
         }, this.#reputationRetryCount, this.#reputationRetryDelay);
     }
 
-    readConfig() {
-        this.cfg = ConfigHelper.readConfig(this.configPath, this.secretConfigPath, this.mbXrplConfigPath);
+    #readConfig() {
+        this.cfg = ConfigHelper.readConfig(this.#configPath, this.#secretConfigPath, this.#mbXrplConfigPath);
     }
 
-    persistConfig() {
-        ConfigHelper.writeConfig(this.cfg, this.configPath);
+    #persistConfig() {
+        ConfigHelper.writeConfig(this.cfg, this.#configPath);
     }
 }
 

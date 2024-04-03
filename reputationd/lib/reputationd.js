@@ -15,7 +15,7 @@ class ReputationD {
     #reputationRetryDelay = 300000; // 5 mins
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
-    #reportTimeQuota = 0.65; // Percentage of moment size.
+    #reportTimeQuota = 0.9; // Percentage of moment size.
     #contractInitTimeQuota = 0.1; // Percentage of moment size.
     #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`
 
@@ -383,7 +383,7 @@ class ReputationD {
     async #getScores() {
         const instanceName = this.cfg.contractInstance.name;
         if (!instanceName)
-            throw 'No available reputation contract running.';
+            return null;
 
         const instances = await CliHelper.listInstances();
 
@@ -393,13 +393,13 @@ class ReputationD {
             this.cfg.contractInstance = {};
             this.#persistConfig();
 
-            throw 'No contract instance matching with the configuration.';
+            return null;
         }
 
         const path = this.#scoreFilePath.replace('#USER#', instance.user).replace('#INSTANCE#', instance.name);
 
         if (!fs.existsSync(path))
-            throw 'Scores file does not exist.';
+            return null;
 
         return JSON.parse(path);
     }

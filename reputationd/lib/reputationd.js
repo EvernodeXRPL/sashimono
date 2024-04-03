@@ -78,7 +78,8 @@ class ReputationD {
 
         await this.#connectRegistry();
 
-        this.lastReputationMoment = 0;
+        const repInfo = await this.hostClient.getReputationInfo();
+        this.lastReputationMoment = repInfo ? repInfo.lastRegisteredMoment : 0;
 
         this.xrplApi.on(evernode.XrplApiEvents.DISCONNECTED, async (e) => {
             console.log(`Exiting due to server disconnect (code ${e})...`);
@@ -252,10 +253,16 @@ class ReputationD {
 
         let startTimeout = 0;
         const momentStartTime = await this.hostClient.getMomentStartIndex();
-        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
+        const currentMoment = await this.hostClient.getMoment();
 
-        if ((currentTime - momentStartTime) < (momentSize * this.#reportTimeQuota))
-            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) - currentTime) * 1000 // Converting seconds to milliseconds.
+
+        if ((currentTimestamp - momentStartTime) < (momentSize * this.#reportTimeQuota))
+            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+
+        // If already registered for this moment, Schedule for next moment
+        if ((this.lastReputationMoment === currentMoment))
+            startTimeout += (momentSize * 1000);
 
         console.log(`Reputation sender scheduled to start in ${startTimeout} milliseconds.`);
 
@@ -359,6 +366,9 @@ class ReputationD {
                 result.instance.domain = result.instance.ip;
                 delete result.instance.ip;
             }
+
+            // Set reputation contract info in domain.
+            await this.hostClient.setReputationContractInfo(result.instance.port, result.instance.pubkey);
 
             this.cfg.contractInstance = { ...result.instance, created_timestamp: acquiredTimestamp };
             this.#persistConfig();

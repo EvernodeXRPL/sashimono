@@ -5,10 +5,13 @@ const uuid = require('uuid');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
 const { CliHelper } = require('./cli-handler');
+const { ContractHelper, CommonHelper } = require('./util-helper');
+const { ContractInstanceManager } = require('./contract-instance-manager');
 
-class ContractStatus {
-    static Created = 1;
-    static Deployed = 2;
+const ContractStatus = {
+    Created: 1,
+    Updated: 2,
+    Deployed: 3
 }
 
 class ReputationD {
@@ -22,7 +25,7 @@ class ReputationD {
     #feeUpliftment = 0;
     #reportTimeQuota = 0.9; // Percentage of moment size.
     #contractInitTimeQuota = 0.1; // Percentage of moment size.
-    #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`
+    #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`;
     #preparationWaitDelay = 40000; // 1 min
     #universeSize = 64;
 
@@ -30,12 +33,14 @@ class ReputationD {
     #secretConfigPath;
     #mbXrplConfigPath;
     #instanceImage;
+    #contractPath;
 
-    constructor(configPath, secretConfigPath, mbXrplConfigPath, instanceImage) {
+    constructor(configPath, secretConfigPath, mbXrplConfigPath, instanceImage, contractPath) {
         this.#configPath = configPath;
         this.#secretConfigPath = secretConfigPath;
         this.#mbXrplConfigPath = mbXrplConfigPath;
         this.#instanceImage = instanceImage;
+        this.#contractPath = contractPath;
     }
 
     async init() {
@@ -231,7 +236,7 @@ class ReputationD {
         await this.#connect(this.reputationClient);
     }
 
-    #startReputationClockScheduler() {
+    async #startReputationClockScheduler() {
         const timeout = appenv.REPUTATIOND_SCHEDULER_INTERVAL_SECONDS * 1000; // Seconds to millisecs.
 
         const scheduler = async () => {
@@ -262,7 +267,6 @@ class ReputationD {
         const momentStartTime = await this.hostClient.getMomentStartIndex();
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMoment = await this.hostClient.getMoment();
-
 
         if ((currentTimestamp - momentStartTime) < (momentSize * this.#reportTimeQuota))
             startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
@@ -305,7 +309,7 @@ class ReputationD {
     }
 
     async #getUniverseInfo() {
-        const repInfo = this.hostClient.getReputationInfo();
+        const repInfo = await this.hostClient.getReputationInfo();
 
         if (!repInfo || !repInfo.orderedId)
             return null;
@@ -317,14 +321,14 @@ class ReputationD {
 
     async #getInstancesInUniverse(universeIndex) {
         const minOrderedId = universeIndex * this.#universeSize;
-        return (await Promise.all(Array.from({length: this.#universeSize}, (_, i) => i + minOrderedId).map(async (orderedId) => {
+        return (await Promise.all(Array.from({ length: this.#universeSize }, (_, i) => i + minOrderedId).map(async (orderedId) => {
             const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId);
             return repInfo.contract;
         }))).filter(i => i);
     }
 
     // Find the universe id and generate contract id.
-    async #generateContractId(universeIndex) {
+    #generateContractId(universeIndex) {
         const buf = Buffer.alloc(4, 0);
         buf.writeUint32LE(universeIndex);
 
@@ -338,6 +342,31 @@ class ReputationD {
         return id;
     }
 
+    async #deployContract(instanceIp, instanceUserPort, userPrivateKey, hpOverrideCfg) {
+        const bundlePath = await ContractHelper.prepareContractBundle(this.#contractPath, hpOverrideCfg);
+        console.log(`Prepared contract bundle at ${bundlePath}`);
+
+        let instanceMgr;
+        try {
+            instanceMgr = new ContractInstanceManager({
+                ip: instanceIp,
+                userPort: instanceUserPort,
+                userPrivateKey: userPrivateKey
+            });
+
+            await instanceMgr.init();
+            await instanceMgr.uploadBundle(bundlePath);
+
+            success(`Contract bundle uploaded!`);
+        } catch (e) {
+            error('Error occurred while uploading the bundle:', e);
+        }
+        finally {
+            if (instanceMgr)
+                await instanceMgr.terminate();
+        }
+    }
+
     // Create and setup reputation contract.
     async #createReputationContract() {
         await this.#queueAction(async (submissionRefs) => {
@@ -347,6 +376,8 @@ class ReputationD {
                 return;
 
             const curMoment = await this.reputationClient.getMoment();
+
+            console.log(`Preparing reputation contract at Moment ${curMoment}...`);
 
             if (!this.cfg.contractInstance || !this.cfg.contractInstance.created_timestamp ||
                 curMoment > (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
@@ -365,9 +396,11 @@ class ReputationD {
                 await tenantClient.connect();
                 await tenantClient.prepareAccount();
 
+                const ownerKeys = await CommonHelper.generateKeys();
+
                 const requirement = {
-                    owner_pubkey: ownerPubkey,
-                    contract_id: await this.#generateContractId(universeInfo.index),
+                    owner_pubkey: ownerKeys.publicKey,
+                    contract_id: this.#generateContractId(universeInfo.index),
                     image: this.#instanceImage,
                     config: {
                         contract: {
@@ -377,6 +410,8 @@ class ReputationD {
                         }
                     }
                 };
+
+                console.log(`Acquiring the reputation contract instance.`);
 
                 // Update the registry with the active instance count.
                 const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
@@ -391,36 +426,56 @@ class ReputationD {
                     delete result.instance.ip;
                 }
 
-                // Set reputation contract info in domain.
-                await this.hostClient.setReputationContractInfo(result.instance.port, result.instance.pubkey);
+                console.log(`Reputation contract created in instance ${result.instance}.`);
 
-                this.cfg.contractInstance = { ...result.instance, created_timestamp: acquiredTimestamp, status: ContractStatus.Created };
+                this.cfg.contractInstance = {
+                    ...result.instance,
+                    created_timestamp: acquiredTimestamp,
+                    owner_privatekey: ownerKeys.privateKey,
+                    status: ContractStatus.Created
+                };
                 this.#persistConfig();
-
-                // Wait for some time to let others to prepare.
-                await new Promise((resolve) => setTimeout(resolve, this.#preparationWaitDelay));
             }
 
-            if (this.cfg.contractInstance && this.cfg.contractInstance.status !== ContractStatus.Deployed &&
-                this.cfg.contractInstance.created_timestamp && curMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
-                const instances = this.#getInstancesInUniverse(universeInfo.index);
-                const overrideConfig = {
-                    unl: instances.map(p => `${p.pubkey}`),
-                    contract: {
-                        consensus: {
-                            roundtime: 2000
+            if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
+                curMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
+
+                if (this.cfg.contractInstance.status === ContractStatus.Created) {
+                    // Set reputation contract info in domain.
+                    console.log(`Updating host reputation domain info.`);
+                    await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.port, this.cfg.contractInstance.pubkey);
+                    console.log(`Updated host reputation domain info.`);
+
+                    // Mark as updated.
+                    this.cfg.contractInstance.status = ContractStatus.Updated;
+                    this.#persistConfig();
+
+                    // Wait for some time to let others to prepare.
+                    await new Promise((resolve) => setTimeout(resolve, this.#preparationWaitDelay));
+                }
+
+                if (this.cfg.contractInstance.status === ContractStatus.Updated) {
+                    const instances = await this.#getInstancesInUniverse(universeInfo.index);
+                    const overrideConfig = {
+                        unl: instances.map(p => `${p.pubkey}`),
+                        contract: {
+                            consensus: {
+                                roundtime: 2000
+                            }
+                        },
+                        mesh: {
+                            known_peers: instances.map(p => `${p.domain}:${p.port}`)
                         }
-                    },
-                    mesh: {
-                        known_peers: instances.map(p => `${p.domain}:${p.port}`)
-                    }
-                };
+                    };
 
-                // TODO: Deploy the contract.
+                    console.log(`Deploying the reputation contract instance.`);
+                    await this.#deployContract(this.cfg.contractInstance.domain, this.cfg.contractInstance.port, this.cfg.contractInstance.owner_privatekey, overrideConfig);
+                    console.log(`Reputation contract instance deployed.`);
 
-                // Mark as deployed.
-                this.cfg.contractInstance.deployed = true;
-                this.#persistConfig();
+                    // Mark as deployed.
+                    this.cfg.contractInstance.status = ContractStatus.Deployed;
+                    this.#persistConfig();
+                }
             }
         });
     }

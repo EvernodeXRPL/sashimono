@@ -6,6 +6,11 @@ const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
 const { CliHelper } = require('./cli-handler');
 
+class ContractStatus {
+    static Created = 1;
+    static Deployed = 2;
+}
+
 class ReputationD {
     #concurrencyQueue = {
         processing: false,
@@ -18,6 +23,8 @@ class ReputationD {
     #reportTimeQuota = 0.9; // Percentage of moment size.
     #contractInitTimeQuota = 0.1; // Percentage of moment size.
     #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`
+    #preparationWaitDelay = 40000; // 1 min
+    #universeSize = 64;
 
     #configPath;
     #secretConfigPath;
@@ -298,22 +305,31 @@ class ReputationD {
     }
 
     async #getUniverseInfo() {
-        // TODO: Collect the universe info.
+        const repInfo = this.hostClient.getReputationInfo();
+
+        if (!repInfo || !repInfo.orderedId)
+            return null;
+
         return {
-            id: '',
-            hosts: ''
+            index: repInfo.orderedId / this.#universeSize
         };
     }
 
-    async #getInstancesInUniverse(universeId) {
-        // TODO: Collect the universe info.
-        return [];
+    async #getInstancesInUniverse(universeIndex) {
+        const minOrderedId = universeIndex * this.#universeSize;
+        return (await Promise.all(Array.from({length: this.#universeSize}, (_, i) => i + minOrderedId).map(async (orderedId) => {
+            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId);
+            return repInfo.contract;
+        }))).filter(i => i);
     }
 
     // Find the universe id and generate contract id.
-    async #generateContractId(universeId) {
+    async #generateContractId(universeIndex) {
+        const buf = Buffer.alloc(4, 0);
+        buf.writeUint32LE(universeIndex);
+
         // Generate a hash from the seed
-        const hash = crypto.createHash('sha1').update(universeId).digest('hex');
+        const hash = crypto.createHash('sha1').update(buf.toString('hex')).digest('hex');
         // Use a portion of the hash to generate a random UUID
         const id = uuid.v4({
             random: Buffer.from(hash.substring(0, 16), 'hex')
@@ -325,68 +341,87 @@ class ReputationD {
     // Create and setup reputation contract.
     async #createReputationContract() {
         await this.#queueAction(async (submissionRefs) => {
-            submissionRefs.refs ??= [{}];
-            // Check again wether the transaction is validated before retry.
-            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
-            if (txHash) {
-                const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash);
-                if (txResponse && txResponse.code === "tesSUCCESS") {
-                    console.log('Transaction is validated and success, Retry skipped!')
-                    return;
-                }
-            }
-
-            const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
-            await tenantClient.connect();
-            await tenantClient.prepareAccount();
-
             const universeInfo = await this.#getUniverseInfo();
-            const requirement = {
-                owner_pubkey: ownerPubkey,
-                contract_id: await this.#generateContractId(universeInfo.id),
-                image: this.#instanceImage,
-                config: {
-                    contract: {
-                        consensus: {
-                            roundtime: 5000
+
+            if (!universeInfo)
+                return;
+
+            const curMoment = await this.reputationClient.getMoment();
+
+            if (!this.cfg.contractInstance || !this.cfg.contractInstance.created_timestamp ||
+                curMoment > (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+
+                const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
+                await tenantClient.connect();
+                await tenantClient.prepareAccount();
+
+                const requirement = {
+                    owner_pubkey: ownerPubkey,
+                    contract_id: await this.#generateContractId(universeInfo.index),
+                    image: this.#instanceImage,
+                    config: {
+                        contract: {
+                            consensus: {
+                                roundtime: 5000
+                            }
                         }
                     }
+                };
+
+                // Update the registry with the active instance count.
+                const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
+
+                await tenantClient.disconnect();
+
+                const acquiredTimestamp = Date.now();
+
+                // Assign ip to domain and outbound_ip for instance created from old sashimono version.
+                if ('ip' in result.instance) {
+                    result.instance.domain = result.instance.ip;
+                    delete result.instance.ip;
                 }
-            };
 
-            // Update the registry with the active instance count.
-            const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, {});
+                // Set reputation contract info in domain.
+                await this.hostClient.setReputationContractInfo(result.instance.port, result.instance.pubkey);
 
-            await tenantClient.disconnect();
+                this.cfg.contractInstance = { ...result.instance, created_timestamp: acquiredTimestamp, status: ContractStatus.Created };
+                this.#persistConfig();
 
-            const acquiredTimestamp = Date.now();
-
-            // Assign ip to domain and outbound_ip for instance created from old sashimono version.
-            if ('ip' in result.instance) {
-                result.instance.domain = result.instance.ip;
-                delete result.instance.ip;
+                // Wait for some time to let others to prepare.
+                await new Promise((resolve) => setTimeout(resolve, this.#preparationWaitDelay));
             }
 
-            // Set reputation contract info in domain.
-            await this.hostClient.setReputationContractInfo(result.instance.port, result.instance.pubkey);
-
-            this.cfg.contractInstance = { ...result.instance, created_timestamp: acquiredTimestamp };
-            this.#persistConfig();
-
-            const instances = this.#getInstancesInUniverse(universeInfo.id);
-            const overrideConfig = {
-                unl: instances.map(p => `${p.pubkey}`),
-                contract: {
-                    consensus: {
-                        roundtime: 2000
+            if (this.cfg.contractInstance && this.cfg.contractInstance.status !== ContractStatus.Deployed &&
+                this.cfg.contractInstance.created_timestamp && curMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
+                const instances = this.#getInstancesInUniverse(universeInfo.index);
+                const overrideConfig = {
+                    unl: instances.map(p => `${p.pubkey}`),
+                    contract: {
+                        consensus: {
+                            roundtime: 2000
+                        }
+                    },
+                    mesh: {
+                        known_peers: instances.map(p => `${p.domain}:${p.port}`)
                     }
-                },
-                mesh: {
-                    known_peers: instances.map(p => `${p.domain}:${p.port}`)
-                }
-            };
+                };
 
-            // TODO: Deploy the contract.
+                // TODO: Deploy the contract.
+
+                // Mark as deployed.
+                this.cfg.contractInstance.deployed = true;
+                this.#persistConfig();
+            }
         });
     }
 
@@ -428,7 +463,6 @@ class ReputationD {
                 }
             }
 
-            // TODO: Get reputation scores from the contract.
             const scores = await this.#getScores();
 
             let ongoingReputation = false;

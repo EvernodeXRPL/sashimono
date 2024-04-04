@@ -74,9 +74,9 @@ class ReputationD {
 
         await this.hostClient.setReputationAcc(this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
-        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+        this.reputationClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
 
-        await this.#connectRegistry();
+        await this.#connectReputation();
 
         const repInfo = await this.hostClient.getReputationInfo();
         this.lastReputationMoment = repInfo ? repInfo.lastRegisteredMoment : 0;
@@ -220,8 +220,8 @@ class ReputationD {
         await this.#connect(this.hostClient);
     }
 
-    async #connectRegistry() {
-        await this.#connect(this.regClient);
+    async #connectReputation() {
+        await this.#connect(this.reputationClient);
     }
 
     #startReputationClockScheduler() {

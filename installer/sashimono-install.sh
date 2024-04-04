@@ -439,6 +439,7 @@ function upgrade() {
 
     return 0
 }
+#
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -691,65 +692,5 @@ fi
 
 echo "Sashimono installed successfully."
 
-# Reputationd
-echo "would you like to opt-in to the evernode reputation and reward system?"
-read -p "Type 'yes' to opt-in: " confirmation </dev/tty
-[ "$confirmation" != "yes" ] && echo "Cancelled from opting-in evernode reputation and reward system." && exit 0
-
-# Configure reputationd users and register host.
-stage "configuring evernode reputation and reward system..."
-
-cp -r "$script_dir"/reputationd $SASHIMONO_BIN
-
-# Create REPUTATIOND_USER if does not exists..
-if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
-    useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER
-
-    # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
-    # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
-    chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" /home/$REPUTATIOND_USER
-
-    secret_path=$(jq -r '.reputation.secretPath' "$REPUTATIOND_CONFIG")
-    chown "$REPUTATIOND_USER": $secret_path
-fi
-
-# Assign reputationd user priviledges.
-if ! id -nG "$REPUTATIOND_USER" | grep -qw "$SASHIADMIN_GROUP"; then
-    usermod --lock $REPUTATIOND_USER
-    usermod -a -G $SASHIADMIN_GROUP $REPUTATIOND_USER
-    loginctl enable-linger $REPUTATIOND_USER # Enable lingering to support service installation.
-fi
-
-# First create the folder from root and then transfer ownership to the user
-# since the folder is created in /etc/sashimono directory.
-! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
-# Change ownership to reputationd user.
-chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
-
-reputationd_user_dir=/home/"$REPUTATIOND_USER"
-reputationd_user_id=$(id -u "$REPUTATIOND_USER")
-reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
-
-stage "Configuring reputationd service"
-! (sudo -u $REPUTATIOND_USER mkdir -p "$mb_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && abort
-# StartLimitIntervalSec=0 to make unlimited retries. RestartSec=5 is to keep 5 second gap between restarts.
-echo "[Unit]
-    Description=Running evernode reputation and reward system.
-    After=network.target
-    StartLimitIntervalSec=0
-    [Service]
-    Type=simple
-    WorkingDirectory=$REPUTATIOND_BIN
-    Environment=\"MB_DATA_DIR=$REPUTATIOND_DATA\"
-    ExecStart=/usr/bin/node $REPUTATIOND_BIN
-    Restart=on-failure
-    RestartSec=5
-    [Install]
-    WantedBy=default.target" | sudo -u $REPUTATIOND_USER tee "$reputationd_user_dir"/.config/systemd/user/$REPUTATIOND_SERVICE.service >/dev/null
-
-# This service needs to be restarted whenever reputation.cfg or secret.cfg is changed.
-sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user enable $REPUTATIOND_SERVICE
-# We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
-echo "Opted-in to the evernode reputation and reward system."
 
 exit 0

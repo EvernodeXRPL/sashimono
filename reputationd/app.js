@@ -87,7 +87,7 @@ async function main() {
 
             // If error is a RippledError show internal error message, Otherwise show err.
             console.log(err?.data?.error_message || err);
-            console.log("Evernode Xahau message board exiting with error.");
+            console.log("Evernode ReputationD exiting with error.");
             console.log("REPUTATIOND_EXITED");
             process.exit(1);
         }
@@ -98,7 +98,7 @@ main().then(() => {
     process.removeAllListeners('uncaughtException');
     process.removeAllListeners('unhandledRejection');
 
-    console.log("MB_CLI_SUCCESS");
+    console.log("REPUTATIOND_SUCCESS");
 }).catch((e) => {
     process.removeAllListeners('uncaughtException');
     process.removeAllListeners('unhandledRejection');

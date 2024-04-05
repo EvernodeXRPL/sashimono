@@ -1,8 +1,9 @@
 const process = require('process');
 const fs = require('fs');
+const path = require('path');
 
 let appenv = {
-    IS_DEV_MODE: process.env.MB_DEV === "1",
+    IS_DEV_MODE: process.env.REPUTATIOND_DEV === "1",
     FILE_LOG_ENABLED: process.env.REPUTATIOND_FILE_LOG === "1",
     DATA_DIR: process.env.REPUTATIOND_DATA_DIR || __dirname,
     INSTANCE_IMAGE: 'evernode/sashimono:hp.0.6.4-ubt.20.04-njs.20',

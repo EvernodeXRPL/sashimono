@@ -77,7 +77,7 @@ class ReputationD {
         console.log("Using,");
         console.log("\tGovernor account " + this.cfg.xrpl.governorAddress);
         console.log("\tReputation account " + this.hostClient.config.reputationAddress);
-        console.log("Using rippled " + this.cfg.xrpl.rippledServer);
+        console.log("Using xahaud " + this.cfg.xrpl.rippledServer);
 
         // Get last heartbeat moment from the host info.
         let hostInfo = await this.hostClient.getRegistration();

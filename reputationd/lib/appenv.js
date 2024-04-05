@@ -14,7 +14,7 @@ appenv = {
     LOG_PATH: appenv.DATA_DIR + '/log/reputationd.log',
     REPUTATIOND_VERSION: '0.8.2',
     REPUTATIOND_SCHEDULER_INTERVAL_SECONDS: 2,
-    CONTRACT_PATH: appenv.DATA_DIR + "reputation-contract",
+    CONTRACT_PATH: appenv.DATA_DIR + "/reputation-contract",
     MB_XRPL_CONFIG_PATH: path.join(appenv.DATA_DIR, '../') + "mb-xrpl/mb-xrpl.cfg",
 }
 

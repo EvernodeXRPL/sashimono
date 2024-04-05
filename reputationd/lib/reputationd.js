@@ -481,7 +481,7 @@ class ReputationD {
     }
 
     async #getScores() {
-        const instanceName = this.cfg.contractInstance.name;
+        const instanceName = this.cfg.contractInstance?.name;
         if (!instanceName)
             return null;
 

@@ -91,7 +91,8 @@ class ReputationD {
         await this.#connectReputation();
 
         const repInfo = await this.hostClient.getReputationInfo();
-        this.lastReputationMoment = repInfo ? repInfo.lastRegisteredMoment : 0;
+        // Last registered moment n means reputation is sent in n-1 moment.
+        this.lastReputationMoment = repInfo ? (repInfo.lastRegisteredMoment - 1) : 0;
 
         this.xrplApi.on(evernode.XrplApiEvents.DISCONNECTED, async (e) => {
             console.log(`Exiting due to server disconnect (code ${e})...`);

@@ -24,9 +24,9 @@
     min_swap_mb=0
     evernode_alias=/usr/bin/evernode
     log_dir=/tmp/evernode
-    script_dir=$(dirname "$(realpath "$0")")
+    reputationd_script_dir=$(dirname "$(realpath "$0")")
     root_user="root"
-    
+
     repo_owner="EvernodeXRPL"
     repo_name="evernode-test-resources"
     desired_branch="main"
@@ -1165,8 +1165,8 @@
                 generate_keys
 
                 echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
-                    chmod 400 "$key_file_path" &&
-                    chown $REPUTATIOND_USER: $key_file_path &&
+                    chmod 400 "$reputationd_key_file_path" &&
+                    chown $REPUTATIOND_USER: $reputationd_key_file_path &&
                     echomult "Key file saved successfully at $reputationd_key_file_path" || {
                     echomult "Error occurred in permission and ownership assignment of key file."
                     exit 1
@@ -1384,7 +1384,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         # Reputationd
         #placing binaries
-        cp -r "$script_dir"/reputationd $SASHIMONO_BIN
+        cp -r "$reputationd_script_dir"/reputationd $SASHIMONO_BIN
 
         # Create REPUTATIOND_USER if does not exists..
         if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
@@ -1418,7 +1418,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         installed=true
 
-        echo "\nwould you like to opt-in to the evernode reputation and reward system?"
+        echo "would you like to opt-in to the evernode reputation and reward system?"
         read -p "Type 'yes' to opt-in: " confirmation </dev/tty
         [ "$confirmation" != "yes" ] && echo "Cancelled from opting-in evernode reputation and reward system." && exit 0
 

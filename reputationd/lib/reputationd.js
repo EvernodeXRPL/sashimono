@@ -312,11 +312,11 @@ class ReputationD {
     async #getUniverseInfo() {
         const repInfo = await this.hostClient.getReputationInfo();
 
-        if (!repInfo || !repInfo.orderedId)
+        if (!repInfo || !('orderedId' in repInfo))
             return null;
 
         return {
-            index: repInfo.orderedId / this.#universeSize
+            index: Math.floor(repInfo.orderedId / this.#universeSize)
         };
     }
 

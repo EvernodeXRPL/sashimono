@@ -191,7 +191,7 @@ class GovernanceManager {
         if (command == 'propose' || command === 'withdraw' || command === 'vote' || command === 'status' || command === 'report') {
             // Secret is needed for propose, withdraw, and report in order to send the transaction
             const sashiMBConfig = ConfigHelper.readConfig(appenv.CONFIG_PATH,
-                (command == 'propose' || command === 'withdraw' || command === 'report') ? appenv.SECRET_CONFIG_PATH : null);
+                appenv.REPUTATIOND_CONFIG_PATH, (command == 'propose' || command === 'withdraw' || command === 'report'));
             await setEvernodeDefaults(sashiMBConfig.xrpl.network, sashiMBConfig.xrpl.governorAddress, sashiMBConfig.xrpl.rippledServer, sashiMBConfig.xrpl.fallbackRippledServers);
             hostClient = new evernode.HostClient(sashiMBConfig.xrpl.address, sashiMBConfig.xrpl.secret);
         }

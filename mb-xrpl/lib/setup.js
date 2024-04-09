@@ -31,7 +31,7 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 class Setup {
 
     #getConfig(readSecret = true) {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.REPUTATIOND_CONFIG_PATH, readSecret);
     }
 
     #saveConfig(cfg) {
@@ -846,7 +846,7 @@ class Setup {
             console.log(`Destroying the instance...`);
 
             // Destroy the instance.
-            const sashiCli = new SashiCLI(sashiCliPath);
+            const sashiCli = new SashiCLI(sashiCliPath, appenv.IS_DEV_MODE ? { DATA_DIR: path.join(appenv.DATA_DIR, '../') } : {});
             await sashiCli.destroyInstance(containerName);
 
             db = new SqliteDatabase(appenv.DB_PATH);

@@ -27,14 +27,9 @@ appenv = {
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
     MB_VERSION: '0.8.2',
     TOS_HASH: '0801677EBCB2F76EF97D531549D8B27DB2C7A4A8EE7F60032AE40184247F0810', // This is the sha256 hash of EVERNODE-HOSTING-PRINCIPLES.pdf.
-    NETWORK: 'mainnet'
+    NETWORK: 'mainnet',
+    REPUTATIOND_CONFIG_PATH: path.join(appenv.DATA_DIR, '../') + "reputationd/reputationd.cfg",
 }
-
-const getSecretPath = () => {
-    return fs.existsSync(appenv.CONFIG_PATH) ? JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath : "";
-}
-
-appenv = { ...appenv, SECRET_CONFIG_PATH: getSecretPath() }
 
 Object.freeze(appenv);
 

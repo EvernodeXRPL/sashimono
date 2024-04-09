@@ -1,17 +1,17 @@
 const fs = require('fs');
 
 class ConfigHelper {
-    static readConfig(configPath, secretConfigPath = null) {
+    static readConfig(configPath, reputationDConfigPath = null, readSecret = false) {
         if (!fs.existsSync(configPath))
             throw `Config file does not exist at ${configPath}`;
 
         let config = JSON.parse(fs.readFileSync(configPath).toString());
 
-        if (secretConfigPath) {
-            if (!fs.existsSync(secretConfigPath))
-                throw `Secret config file does not exist at ${secretConfigPath}`;
+        if (readSecret) {
+            if (!fs.existsSync(config.xrpl.secretPath))
+                throw `Secret config file does not exist at ${config.xrpl.secretPath}`;
 
-            const secretCfg = JSON.parse(fs.readFileSync(secretConfigPath).toString());
+            const secretCfg = JSON.parse(fs.readFileSync(config.xrpl.secretPath).toString());
             config.xrpl = { ...config.xrpl, ...secretCfg.xrpl };
         }
 
@@ -24,6 +24,21 @@ class ConfigHelper {
 
         if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
             throw "Lease amount should be a positive value";
+
+        if (reputationDConfigPath && fs.existsSync(reputationDConfigPath)) {
+            const reputationDConfig = JSON.parse(fs.readFileSync(reputationDConfigPath).toString());
+            config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
+
+            if (readSecret) {
+                if (!fs.existsSync(reputationDConfig.xrpl.secretPath))
+                    throw `Secret config file does not exist at ${reputationDConfig.xrpl.secretPath}`;
+
+                const reputationDSecretCfg = JSON.parse(fs.readFileSync(reputationDConfig.xrpl.secretPath).toString());
+                config.xrpl.reputationSecret = reputationDSecretCfg.xrpl.secret;
+            }
+
+            config.xrpl = { ...reputationDConfig.xrpl, ...config.xrpl }
+        }
 
         return config;
     }

@@ -5,6 +5,7 @@ const { appenv } = require('./appenv');
 const { SashiCLI } = require('./sashi-cli');
 const { ConfigHelper } = require('./config-helper');
 const { GovernanceManager } = require('./governance-manager');
+const path = require('path');
 
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
@@ -33,9 +34,9 @@ class MessageBoard {
     #feeUpliftment = 0;
     #rebateMaxDelay = 60000; // 1 min
 
-    constructor(configPath, secretConfigPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath) {
+    constructor(configPath, dbPath, sashiCliPath, sashiDbPath, sashiConfigPath, reputationDConfigPath = null) {
         this.configPath = configPath;
-        this.secretConfigPath = secretConfigPath;
+        this.reputationDConfigPath = reputationDConfigPath;
         this.leaseTable = appenv.DB_TABLE_NAME;
         this.utilTable = appenv.DB_UTIL_TABLE_NAME;
         this.expiryList = [];
@@ -44,7 +45,7 @@ class MessageBoard {
         if (!fs.existsSync(sashiCliPath))
             throw `Sashi CLI does not exist in ${sashiCliPath}.`;
 
-        this.sashiCli = new SashiCLI(sashiCliPath);
+        this.sashiCli = new SashiCLI(sashiCliPath, appenv.IS_DEV_MODE ? { DATA_DIR: path.join(appenv.DATA_DIR, '../') } : {});
         this.db = new SqliteDatabase(dbPath);
         this.sashiDb = new SqliteDatabase(sashiDbPath);
         this.sashiTable = appenv.SASHI_TABLE_NAME;
@@ -229,7 +230,7 @@ class MessageBoard {
         this.regClient.on(evernode.RegistryEvents.HostRegistered, async r => {
             if (rebateRequestPending)
                 return;
-            
+
             try {
                 await this.hostClient.refreshConfig();
                 if (hostRegFee != this.hostClient.config.hostRegFee) {
@@ -540,13 +541,13 @@ class MessageBoard {
 
     // Connect the host and trying to reconnect in the event of account not found error.
     // Account not found error can be because of a network reset. (Dev and test nets)
-    async #connect(client) {
+    async #connect(client, options = null) {
         let attempts = 0;
         // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
                 attempts++;
-                const ret = await client.connect();
+                const ret = options ? await client.connect(options) : await client.connect();
                 if (ret)
                     break;
             } catch (error) {
@@ -567,7 +568,7 @@ class MessageBoard {
     }
 
     async #connectHost() {
-        await this.#connect(this.hostClient);
+        await this.#connect(this.hostClient, { reputationAddress: this.cfg.xrpl.reputationAddress, reputationSecret: this.cfg.xrpl.reputationSecret });
     }
 
     async #connectRegistry() {
@@ -1380,7 +1381,7 @@ class MessageBoard {
 
 
     readConfig() {
-        this.cfg = ConfigHelper.readConfig(this.configPath, this.secretConfigPath);
+        this.cfg = ConfigHelper.readConfig(this.configPath, this.reputationDConfigPath, true);
     }
 
     persistConfig() {

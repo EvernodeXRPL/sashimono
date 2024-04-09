@@ -26,7 +26,7 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 class Setup {
 
     #getConfig(readSecret = true) {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.MB_XRPL_CONFIG_PATH, readSecret);
     }
 
     #saveConfig(cfg) {
@@ -36,7 +36,6 @@ class Setup {
     newConfig(address = "", secretPath = "") {
         const baseConfig = {
             version: appenv.REPUTATIOND_VERSION,
-            mbXrplCfgPath: appenv.MB_XRPL_CONFIG_PATH,
             xrpl: {
                 address: address,
                 secretPath: secretPath
@@ -75,7 +74,7 @@ class Setup {
 
     async waitForFunds(currencyType, expectedBalance, waitPeriod = 120) {
 
-        const config = this.#getConfig();
+        const config = this.#getConfig(false);
         const acc = config.xrpl;
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
@@ -138,7 +137,7 @@ class Setup {
     async upgrade() {
 
         // Do a simple version change in the config.
-        const cfg = this.#getConfig();
+        const cfg = this.#getConfig(false);
         cfg.version = appenv.REPUTATIOND_VERSION;
 
         this.#saveConfig(cfg);

@@ -15,15 +15,9 @@ appenv = {
     LOG_PATH: appenv.DATA_DIR + '/log/reputationd.log',
     REPUTATIOND_VERSION: '0.8.2',
     REPUTATIOND_SCHEDULER_INTERVAL_SECONDS: 2,
-    CONTRACT_PATH: appenv.IS_DEV_MODE ? "../evernode-reputation-contract/dist" : "reputation-contract",
+    CONTRACT_PATH: appenv.IS_DEV_MODE ? "../evernode-reputation-contract/dist" : (appenv.DATA_DIR + "/reputation-contract"),
     MB_XRPL_CONFIG_PATH: path.join(appenv.DATA_DIR, '../') + "mb-xrpl/mb-xrpl.cfg",
 }
-
-const getSecretPath = () => {
-    return fs.existsSync(appenv.CONFIG_PATH) ? JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath : "";
-}
-
-appenv = { ...appenv, SECRET_CONFIG_PATH: getSecretPath() }
 
 Object.freeze(appenv);
 

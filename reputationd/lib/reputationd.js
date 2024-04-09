@@ -30,14 +30,12 @@ class ReputationD {
     #universeSize = 64;
 
     #configPath;
-    #secretConfigPath;
     #mbXrplConfigPath;
     #instanceImage;
     #contractPath;
 
-    constructor(configPath, secretConfigPath, mbXrplConfigPath, instanceImage, contractPath) {
+    constructor(configPath, mbXrplConfigPath, instanceImage, contractPath) {
         this.#configPath = configPath;
-        this.#secretConfigPath = secretConfigPath;
         this.#mbXrplConfigPath = mbXrplConfigPath;
         this.#instanceImage = instanceImage;
         this.#contractPath = contractPath;
@@ -71,7 +69,7 @@ class ReputationD {
         })
         await this.xrplApi.connect();
 
-        this.hostClient = new evernode.HostClient(this.cfg.xrpl.hostAddress);
+        this.hostClient = new evernode.HostClient(this.cfg.xrpl.hostAddress, this.cfg.xrpl.hostSecret);
         await this.#connectHost();
 
         console.log("Using,");
@@ -83,8 +81,6 @@ class ReputationD {
         let hostInfo = await this.hostClient.getRegistration();
         if (!hostInfo)
             throw "Host is not registered.";
-
-        await this.hostClient.setReputationAcc(this.cfg.xrpl.address, this.cfg.xrpl.secret);
 
         this.reputationClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
 
@@ -203,13 +199,13 @@ class ReputationD {
 
     // Connect the host and trying to reconnect in the event of account not found error.
     // Account not found error can be because of a network reset. (Dev and test nets)
-    async #connect(client) {
+    async #connect(client, options = null) {
         let attempts = 0;
         // eslint-disable-next-line no-constant-condition
         while (true) {
             try {
                 attempts++;
-                const ret = await client.connect();
+                const ret = options ? await client.connect(options) : await client.connect();
                 if (ret)
                     break;
             } catch (error) {
@@ -230,7 +226,7 @@ class ReputationD {
     }
 
     async #connectHost() {
-        await this.#connect(this.hostClient);
+        await this.#connect(this.hostClient, { reputationAddress: this.cfg.xrpl.address, reputationSecret: this.cfg.xrpl.secret });
     }
 
     async #connectReputation() {
@@ -393,7 +389,7 @@ class ReputationD {
                     }
                 }
 
-                const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
+                const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret, { messagePrivateKey: this.hostClient.accKeyPair.privateKey });
                 await tenantClient.connect();
                 await tenantClient.prepareAccount();
 
@@ -550,7 +546,7 @@ class ReputationD {
     }
 
     #readConfig() {
-        this.cfg = ConfigHelper.readConfig(this.#configPath, this.#secretConfigPath, this.#mbXrplConfigPath);
+        this.cfg = ConfigHelper.readConfig(this.#configPath, this.#mbXrplConfigPath, true);
     }
 
     #persistConfig() {

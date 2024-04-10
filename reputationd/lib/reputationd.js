@@ -374,6 +374,9 @@ class ReputationD {
 
             const curMoment = await this.reputationClient.getMoment();
 
+            if ((this.lastReputationMoment + 1) !== curMoment)
+                console.log(`Skipping reputation contract preparation since not registered for the  Moment ${curMoment}...`);
+
             console.log(`Preparing reputation contract at Moment ${curMoment}...`);
 
             if (!this.cfg.contractInstance || !this.cfg.contractInstance.created_timestamp ||
@@ -516,10 +519,13 @@ class ReputationD {
                 }
             }
 
-            const scores = await this.#getScores();
-
             let ongoingReputation = false;
             const currentMoment = await this.hostClient.getMoment();
+
+            let scores = null;
+            if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
+                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp)))
+                scores = await this.#getScores();
 
             // Sending reputations every moment.
             if (!ongoingReputation && (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment)) {

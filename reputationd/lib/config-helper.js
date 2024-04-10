@@ -1,5 +1,7 @@
 const fs = require('fs');
 
+const COMMON_CONFIG_KEYS = ['network', 'governorAddress', 'rippledServer'];
+
 class ConfigHelper {
     static readConfig(configPath, mbXrplConfigPath = null, readSecret = false) {
         if (!fs.existsSync(configPath))
@@ -26,8 +28,11 @@ class ConfigHelper {
                 mbXrplConfig.xrpl = { ...mbXrplConfig.xrpl, ...mbXrplSecretCfg.xrpl }
             }
 
-            for (const e of Object.entries(mbXrplConfig.xrpl).filter(e => !(e[0] in config.xrpl)))
-                config.xrpl[`host${e[0].charAt(0).toUpperCase()}${e[0].slice(1)}`] = e[1];
+            for (const e of Object.entries(mbXrplConfig.xrpl)) {
+                const key = COMMON_CONFIG_KEYS.includes(e[0]) ? e[0] : `host${e[0].charAt(0).toUpperCase()}${e[0].slice(1)}`;
+                if (!(key in config.xrpl))
+                    config.xrpl[key] = e[1];
+            }
         }
 
         return config;

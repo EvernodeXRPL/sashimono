@@ -333,7 +333,7 @@ class ReputationD {
         const hash = crypto.createHash('sha1').update(buf.toString('hex')).digest('hex');
         // Use a portion of the hash to generate a random UUID
         const id = uuid.v4({
-            random: Buffer.from(hash.substring(0, 16), 'hex')
+            random: Buffer.from(hash, 'hex')
         });
 
         return id;
@@ -423,11 +423,11 @@ class ReputationD {
                     delete result.instance.ip;
                 }
 
-                console.log(`Reputation contract created in instance ${result.instance}.`);
+                console.log('Reputation contract created in instance', result.instance);
 
                 this.cfg.contractInstance = {
                     ...result.instance,
-                    created_timestamp: acquiredTimestamp,
+                    created_timestamp: Math.floor(acquiredTimestamp / 1000), // Convert to seconds
                     owner_privatekey: ownerKeys.privateKey,
                     status: ContractStatus.Created
                 };
@@ -448,6 +448,7 @@ class ReputationD {
                     this.#persistConfig();
 
                     // Wait for some time to let others to prepare.
+                    console.log(`Waiting other hosts to prepare.`);
                     await new Promise((resolve) => setTimeout(resolve, this.#preparationWaitDelay));
                 }
 

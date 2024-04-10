@@ -6,6 +6,7 @@ const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 const { UtilHelper } = require('./util-helper');
+const path = require('path');
 
 async function setEvernodeDefaults(network, governorAddress, rippledServer, fallbackRippledServers) {
     await evernode.Defaults.useNetwork(network || appenv.NETWORK);

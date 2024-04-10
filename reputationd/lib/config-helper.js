@@ -16,18 +16,18 @@ class ConfigHelper {
         }
 
         if (mbXrplConfigPath && fs.existsSync(mbXrplConfigPath)) {
-            const mbXrplConfig = JSON.parse(fs.readFileSync(mbXrplConfigPath).toString());
-            config.xrpl.hostAddress = mbXrplConfig.xrpl.address;
+            let mbXrplConfig = JSON.parse(fs.readFileSync(mbXrplConfigPath).toString());
 
             if (readSecret) {
                 if (!fs.existsSync(mbXrplConfig.xrpl.secretPath))
                     throw `Secret config file does not exist at ${mbXrplConfig.xrpl.secretPath}`;
 
                 const mbXrplSecretCfg = JSON.parse(fs.readFileSync(mbXrplConfig.xrpl.secretPath).toString());
-                config.xrpl.hostSecret = mbXrplSecretCfg.xrpl.secret;
+                mbXrplConfig.xrpl = { ...mbXrplConfig.xrpl, ...mbXrplSecretCfg.xrpl }
             }
 
-            config.xrpl = { ...mbXrplConfig.xrpl, ...config.xrpl }
+            for (const e of Object.entries(mbXrplConfig.xrpl).filter(e => !(e[0] in config.xrpl)))
+                config.xrpl[`host${e[0].charAt(0).toUpperCase()}${e[0].slice(1)}`] = e[1];
         }
 
         return config;
@@ -37,6 +37,11 @@ class ConfigHelper {
         let publicCfg = JSON.parse(JSON.stringify(config)); // Make a copy. So, referenced object won't get changed.
         if ('secret' in publicCfg.xrpl)
             delete publicCfg.xrpl.secret;
+        // Remove host related props.
+        for (const e of Object.entries(publicCfg.xrpl)) {
+            if (e[0].startsWith('host'))
+                delete publicCfg.xrpl[e[0]];
+        }
         fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
 }

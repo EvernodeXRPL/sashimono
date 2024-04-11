@@ -443,7 +443,7 @@ class ReputationD {
                 if (this.cfg.contractInstance.status === ContractStatus.Created) {
                     // Set reputation contract info in domain.
                     console.log(`Updating host reputation domain info.`);
-                    await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.port, this.cfg.contractInstance.pubkey);
+                    await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.peer_port, this.cfg.contractInstance.pubkey);
                     console.log(`Updated host reputation domain info.`);
 
                     // Mark as updated.
@@ -465,12 +465,12 @@ class ReputationD {
                             }
                         },
                         mesh: {
-                            known_peers: instances.map(p => `${p.domain}:${p.port}`)
+                            known_peers: instances.map(p => `${p.domain}:${p.peerPort}`)
                         }
                     };
 
                     console.log(`Deploying the reputation contract instance.`);
-                    await this.#deployContract(this.cfg.contractInstance.domain, this.cfg.contractInstance.port, this.cfg.contractInstance.owner_privatekey, overrideConfig);
+                    await this.#deployContract(this.cfg.contractInstance.domain, this.cfg.contractInstance.user_port, this.cfg.contractInstance.owner_privatekey, overrideConfig);
                     console.log(`Reputation contract instance deployed.`);
 
                     // Mark as deployed.

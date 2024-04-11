@@ -26,7 +26,7 @@ class ReputationD {
     #reportTimeQuota = 0.9; // Percentage of moment size.
     #contractInitTimeQuota = 0.1; // Percentage of moment size.
     #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`;
-    #preparationWaitDelay = 40000; // 1 min
+    #preparationWaitDelay = 30000; // 30 sec.
     #universeSize = 64;
 
     #configPath;
@@ -265,10 +265,12 @@ class ReputationD {
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMoment = await this.hostClient.getMoment();
 
+        // Set time relative to current passed time.
         if ((currentTimestamp - momentStartTime) < (momentSize * this.#reportTimeQuota))
-            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) +
+                Math.floor(((currentTimestamp - momentStartTime) * (1 - this.#reportTimeQuota)) / this.#reportTimeQuota) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
 
-        // If already registered for this moment, Schedule for next moment
+        // If already registered for this moment, Schedule for next moment.
         if ((this.lastReputationMoment === currentMoment))
             startTimeout += (momentSize * 1000);
 
@@ -293,10 +295,15 @@ class ReputationD {
 
         let startTimeout = 0;
         const momentStartTime = await this.hostClient.getMomentStartIndex();
-        const currentTime = evernode.UtilHelpers.getCurrentUnixTime();
+        const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
+        const currentMoment = await this.hostClient.getMoment();
 
-        if ((currentTime - momentStartTime) > (momentSize * this.#contractInitTimeQuota))
-            startTimeout = (momentStartTime + momentSize - currentTime) * 1000 // Converting seconds to milliseconds.
+        if ((currentTimestamp - momentStartTime) > (momentSize * this.#contractInitTimeQuota))
+            startTimeout = (momentStartTime + momentSize - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+
+        // If not registered for this moment, Schedule for next moment.
+        if ((this.lastReputationMoment === currentMoment))
+            startTimeout += (momentSize * 1000);
 
         console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
 
@@ -320,6 +327,9 @@ class ReputationD {
         const minOrderedId = universeIndex * this.#universeSize;
         return (await Promise.all(Array.from({ length: this.#universeSize }, (_, i) => i + minOrderedId).map(async (orderedId) => {
             const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId);
+            if (!repInfo)
+                return null;
+
             return repInfo.contract;
         }))).filter(i => i);
     }
@@ -354,9 +364,9 @@ class ReputationD {
             await instanceMgr.init();
             await instanceMgr.uploadBundle(bundlePath);
 
-            success(`Contract bundle uploaded!`);
+            console.log(`Contract bundle uploaded!`);
         } catch (e) {
-            error('Error occurred while uploading the bundle:', e);
+            console.error('Error occurred while uploading the bundle:', e);
         }
         finally {
             if (instanceMgr)
@@ -451,8 +461,16 @@ class ReputationD {
                     this.#persistConfig();
 
                     // Wait for some time to let others to prepare.
-                    console.log(`Waiting other hosts to prepare.`);
-                    await new Promise((resolve) => setTimeout(resolve, this.#preparationWaitDelay));
+                    const momentSize = this.hostClient.config.momentSize;
+                    const momentStartTime = await this.hostClient.getMomentStartIndex();
+                    const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
+                    const startTimestamp = (momentStartTime + (momentSize * this.#contractInitTimeQuota)) + (this.#preparationWaitDelay / 1000);
+                    let startTimeout = 0;
+                    if (startTimestamp > currentTimestamp)
+                        startTimeout = (startTimestamp - currentTimestamp) * 1000;
+
+                    console.log(`Waiting ${startTimeout} until other hosts are ready.`);
+                    await new Promise((resolve) => setTimeout(resolve, startTimeout));
                 }
 
                 if (this.cfg.contractInstance.status === ContractStatus.Updated) {
@@ -460,6 +478,8 @@ class ReputationD {
                     const overrideConfig = {
                         unl: instances.map(p => `${p.pubkey}`),
                         contract: {
+                            bin_path: '/usr/bin/node',
+                            bin_args: 'index.js',
                             consensus: {
                                 roundtime: 2000
                             }

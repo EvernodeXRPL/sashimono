@@ -1,6 +1,9 @@
 const archiver = require('archiver');
+const fs = require('fs');
+const os = require('os');
 const HotPocket = require('hotpocket-js-client');
 const { execSync } = require('child_process');
+const path = require('path');
 
 const PREREQ_SCRIPT_CONTENT = `#!/bin/bash\n` +
     `echo "Prerequisite installer script"\n` +
@@ -46,7 +49,7 @@ class FsHelper {
 
 class ContractHelper {
     static async prepareContractBundle(contractPath, hpOverrideCfg) {
-        const contractPrepPath = fs.mkdtempSync('reputation-bundle-');
+        const contractPrepPath = fs.mkdtempSync(path.join(os.tmpdir(), 'reputation-bundle-'));
         const hpCfgOverridePath = path.resolve(contractPrepPath, CONSTANTS.hpCfgOverrideFile);
         const prerequisiteInstaller = path.resolve(contractPrepPath, CONSTANTS.prerequisiteInstaller);
 
@@ -65,7 +68,7 @@ class ContractHelper {
         fs.chmodSync(prerequisiteInstaller, 0o755);
         console.log("Added prerequisite installer script.");
 
-        const bundleTargetPath = fs.mkdtempSync('reputation-bundle-target-');
+        const bundleTargetPath = fs.mkdtempSync(path.join(os.tmpdir(), 'reputation-bundle-target-'));
 
         return await FsHelper.archiveDirectory(contractPrepPath, bundleTargetPath);
     }

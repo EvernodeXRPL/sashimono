@@ -2,6 +2,7 @@ const fs = require('fs');
 const evernode = require('evernode-js-client');
 const crypto = require('crypto');
 const uuid = require('uuid');
+const path = require('path');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
 const { CliHelper } = require('./cli-handler');
@@ -261,14 +262,15 @@ class ReputationD {
         };
 
         let startTimeout = 0;
-        const momentStartTime = await this.hostClient.getMomentStartIndex();
+        const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMoment = await this.hostClient.getMoment();
 
         // Set time relative to current passed time.
-        if ((currentTimestamp - momentStartTime) < (momentSize * this.#reportTimeQuota))
-            startTimeout = (momentStartTime + (momentSize * this.#reportTimeQuota) +
-                Math.floor(((currentTimestamp - momentStartTime) * (1 - this.#reportTimeQuota)) / this.#reportTimeQuota) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+        if ((currentTimestamp - momentStartTimestamp) < (momentSize * this.#reportTimeQuota)) {
+            startTimeout = (momentStartTimestamp + (momentSize * this.#reportTimeQuota) -
+                currentTimestamp + Math.floor(momentSize * (1 - this.#reportTimeQuota) * Math.random())) * 1000 // Converting seconds to milliseconds.
+        }
 
         // If already registered for this moment, Schedule for next moment.
         if ((this.lastReputationMoment === currentMoment))
@@ -294,15 +296,17 @@ class ReputationD {
         };
 
         let startTimeout = 0;
-        const momentStartTime = await this.hostClient.getMomentStartIndex();
+        const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMoment = await this.hostClient.getMoment();
 
-        if ((currentTimestamp - momentStartTime) > (momentSize * this.#contractInitTimeQuota))
-            startTimeout = (momentStartTime + momentSize - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+        if ((currentTimestamp - momentStartTimestamp) > (momentSize * this.#contractInitTimeQuota)) {
+            startTimeout = (momentStartTimestamp + momentSize - currentTimestamp +
+                Math.floor(momentSize * this.#contractInitTimeQuota * Math.random())) * 1000 // Converting seconds to milliseconds.
+        }
 
         // If not registered for this moment, Schedule for next moment.
-        if ((this.lastReputationMoment === currentMoment))
+        if (startTimeout === 0 && this.lastReputationMoment !== (currentMoment - 1))
             startTimeout += (momentSize * 1000);
 
         console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
@@ -369,6 +373,7 @@ class ReputationD {
             console.error('Error occurred while uploading the bundle:', e);
         }
         finally {
+            fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
             if (instanceMgr)
                 await instanceMgr.terminate();
         }
@@ -462,9 +467,9 @@ class ReputationD {
 
                     // Wait for some time to let others to prepare.
                     const momentSize = this.hostClient.config.momentSize;
-                    const momentStartTime = await this.hostClient.getMomentStartIndex();
+                    const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
                     const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
-                    const startTimestamp = (momentStartTime + (momentSize * this.#contractInitTimeQuota)) + (this.#preparationWaitDelay / 1000);
+                    const startTimestamp = (momentStartTimestamp + (momentSize * this.#contractInitTimeQuota)) + (this.#preparationWaitDelay / 1000);
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)
                         startTimeout = (startTimestamp - currentTimestamp) * 1000;

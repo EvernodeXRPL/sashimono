@@ -439,7 +439,6 @@ function upgrade() {
 
     return 0
 }
-#
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -522,6 +521,7 @@ fi
 echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+cp -r "$script_dir"/reputationd $SASHIMONO_BIN
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

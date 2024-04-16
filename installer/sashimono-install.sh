@@ -439,7 +439,6 @@ function upgrade() {
 
     return 0
 }
-#
 
 # Check cgroup rule config exists.
 [ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
@@ -522,6 +521,7 @@ fi
 echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+cp -r "$script_dir"/reputationd $SASHIMONO_BIN
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
@@ -529,7 +529,7 @@ if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
     # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
     # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+    chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" /home/$MB_XRPL_USER
 
     secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
     chown "$MB_XRPL_USER": $secret_path
@@ -635,7 +635,7 @@ mb_user_runtime_dir="/run/user/$mb_user_id"
 
 # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
 # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $mb_user_dir
+chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" $mb_user_dir
 
 # Setup env variable for the message board user.
 echo "

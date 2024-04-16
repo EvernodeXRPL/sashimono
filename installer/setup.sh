@@ -189,7 +189,7 @@
             echo "$evernode is already installed on your host. You cannot deregister without uninstalling. Use the 'evernode' command to manage your host." &&
             exit 1
 
-        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] && [ "$1" != "offerlease" ] &&
+        [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] && [ "$1" != "offerlease" ] && [ "$1" != "reputationd" ] &&
             echomult "$evernode host management tool
                 \nYour have $evernode installed on your machine.
                 \nSupported commands:
@@ -204,7 +204,8 @@
                 \nuninstall - Uninstall and deregister from $evernode.
                 \ngovernance - Governance candidate management.
                 \nregkey - Regular key management.
-                \nofferlease - Create Lease offers for the instances." &&
+                \nofferlease - Create Lease offers for the instances.
+                \nreputationd - opt-in to the evernode reputation and reward system." &&
             exit 1
     else
         [ "$1" != "install" ] && [ "$1" != "transfer" ] && [ "$1" != "deregister" ] &&
@@ -1046,7 +1047,7 @@
 
             if [ "$key_file_path" == "$default_key_filepath" ]; then
                 parent_directory=$(dirname "$key_file_path")
-                chmod -R 500 "$parent_directory" &&
+                chmod -R 550 "$parent_directory" &&
                     chown -R $MB_XRPL_USER: "$parent_directory" || {
                     echomult "Error occurred in permission and ownership assignment of key file directory."
                     exit 1
@@ -1067,7 +1068,7 @@
                         xrpl_address=$(jq -r '.address' <<<"$account_json")
                         xrpl_secret=$(jq -r '.secret' <<<"$account_json")
 
-                        chmod 400 "$key_file_path" &&
+                        chmod 440 "$key_file_path" &&
                             chown $MB_XRPL_USER: $key_file_path || {
                             echomult "Error occurred in permission and ownership assignment of key file."
                             exit 1
@@ -1093,7 +1094,7 @@
                 fi
 
                 echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
-                    chmod 400 "$key_file_path" &&
+                    chmod 440 "$key_file_path" &&
                     chown $MB_XRPL_USER: $key_file_path &&
                     echomult "Key file saved successfully at $key_file_path" || {
                     echomult "Error occurred in permission and ownership assignment of key file."
@@ -1104,83 +1105,79 @@
     }
     function set_host_reputationd_account() {
 
-        [ ! -z $1 ] && operation=$1 || operation="register"
+        confirm "\nDo you want to use the default key file path ${default_reputationd_key_filepath} to save the new account key?" && reputationd_key_file_path=$default_reputationd_key_filepath
 
-        if [ "$reputationd_xrpl_secret" == "-" ]; then 
-            confirm "\nDo you want to use the default key file path ${default_reputationd_key_filepath} to save the new account key?" && reputationd_key_file_path=$default_reputationd_key_filepath
-
-            if [ "$reputationd_key_file_path" != "$default_reputationd_key_filepath" ]; then
-                while true; do
-                    read -ep "Specify the preferred key file path: " key_file_path </dev/tty
-                    parent_directory=$(dirname "$reputationd_key_file_path")
-
-                    canonicalized_directory=$(realpath "$parent_directory")
-                    root_directory="/root"
-                    canonicalized_root=$(realpath "$root_directory")
-
-
-                    if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
-                        echo "Key should not be located in /root directory." && continue
-                    fi
-
-                    ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
-                done
-            fi
-
-            reputationd_key_dir=$(dirname "$reputationd_key_file_path")
-            if [ ! -d "$reputationd_key_dir" ]; then
-                mkdir -p "$reputationd_key_dir"
-            fi
-
-            if [ "$reputationd_key_file_path" == "$default_reputationd_key_filepath" ]; then
+        if [ "$reputationd_key_file_path" != "$default_reputationd_key_filepath" ]; then
+            while true; do
+                read -ep "Specify the preferred key file path: " key_file_path </dev/tty
                 parent_directory=$(dirname "$reputationd_key_file_path")
-                chmod -R 500 "$parent_directory" &&
-                    chown -R $REPUTATIOND_USER: "$parent_directory" || {
-                    echomult "Error occurred in permission and ownership assignment of key file directory."
-                    exit 1
-                }
-            fi
 
-            if [ -e "$reputationd_key_file_path" ]; then
-                if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
-                    echomult "Continuing with the existing key file."
-                    reputationd_existing_secret=$(jq -r '.xrpl.secret' "$reputationd_key_file_path" 2>/dev/null)
-                    if [ "$reputationd_existing_secret" != "null" ] && [ "$reputationd_existing_secret" != "-" ]; then
-                        while true; do
-                            account_json=$(exec_jshelper generate-account $reputationd_existing_secret) && break
-                            echo "Error occurred when existing account retrieval."
-                            confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || exit 1
-                        done
+                canonicalized_directory=$(realpath "$parent_directory")
+                root_directory="/root"
+                canonicalized_root=$(realpath "$root_directory")
 
-                        reputationd_xrpl_address=$(jq -r '.address' <<<"$account_json")
-                        reputationd_xrpl_secret=$(jq -r '.secret' <<<"$account_json")
 
-                        chmod 400 "$reputationd_key_file_path" &&
-                            chown $REPUTATIOND_USER: $reputationd_key_file_path || {
-                            echomult "Error occurred in permission and ownership assignment of key file."
-                            exit 1
-                        }
+                if [[ "$canonicalized_directory" == "$canonicalized_root"* ]]; then
+                    echo "Key should not be located in /root directory." && continue
+                fi
 
-                        echomult "Retrived account details via secret.\n"
-                        return 0
-                    else
-                        echomult "Error: Existing secret file does not have the expected format."
+                ! [ -e "$parent_directory" ] && echo "Invalid directory path." || break
+            done
+        fi
+
+        reputationd_key_dir=$(dirname "$reputationd_key_file_path")
+        if [ ! -d "$reputationd_key_dir" ]; then
+            mkdir -p "$reputationd_key_dir"
+        fi
+
+        if [ "$reputationd_key_file_path" == "$default_reputationd_key_filepath" ]; then
+            parent_directory=$(dirname "$reputationd_key_file_path")
+            chmod -R 500 "$parent_directory" &&
+                chown -R $REPUTATIOND_USER: "$parent_directory" || {
+                echomult "Error occurred in permission and ownership assignment of key file directory."
+                return 1
+            }
+        fi
+
+        if [ -e "$reputationd_key_file_path" ]; then
+            if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
+                echomult "Continuing with the existing key file."
+                reputationd_existing_secret=$(jq -r '.xrpl.secret' "$reputationd_key_file_path" 2>/dev/null)
+                if [ "$reputationd_existing_secret" != "null" ] && [ "$reputationd_existing_secret" != "-" ]; then
+                    while true; do
+                        account_json=$(exec_jshelper generate-account $reputationd_existing_secret) && break
+                        echo "Error occurred when existing account retrieval."
+                        confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || return 1
+                    done
+
+                    reputationd_xrpl_address=$(jq -r '.address' <<<"$account_json")
+                    reputationd_xrpl_secret=$(jq -r '.secret' <<<"$account_json")
+
+                    chmod 440 "$reputationd_key_file_path" &&
+                        chown $REPUTATIOND_USER: $reputationd_key_file_path || {
+                        echomult "Error occurred in permission and ownership assignment of key file."
                         exit 1
-                    fi
+                    }
+
+                    echomult "Retrived account details via secret.\n"
+                    return 0
                 else
+                    echomult "Error: Existing secret file does not have the expected format."
                     exit 1
                 fi
             else
-                generate_keys "reputationd"
-
-                echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
-                    chmod 400 "$reputationd_key_file_path" &&
-                    chown $REPUTATIOND_USER: $reputationd_key_file_path &&
-                    echomult "Key file saved successfully at $reputationd_key_file_path" || {
-                    echomult "Error occurred in permission and ownership assignment of key file."
-                    exit 1
-                }
+                exit 1
             fi
+        else
+            generate_keys "reputationd"
+
+            echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
+                chmod 440 "$reputationd_key_file_path" &&
+                chown $REPUTATIOND_USER: $reputationd_key_file_path &&
+                echomult "Key file saved successfully at $reputationd_key_file_path" || {
+                echomult "Error occurred in permission and ownership assignment of key file."
+                exit 1
+            }
         fi
     }
     function prepare_host() {
@@ -1391,17 +1388,30 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line:3}" || echo "${cleaned_line}"
             done && install_failure
 
-        # Reputationd
-        #placing binaries
-        cp -r "$reputationd_script_dir"/reputationd $SASHIMONO_BIN
+        echomult "Installation successful! Installation log can be found at $logfile
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
+            \n\nNOTE: Installation will only mint the lease tokens. Please use 'evernode offerlease' command to create offers for the minted lease tokens.
+            \nThe host becomes eligible to send heartbeats after generating offers for minted lease tokens."
 
+        installed=true
+
+        ! create_evernode_alias && install_failure
+
+        set +o pipefail
+
+        rm -r $tmp
+        
+        # Write the verison timestamp to a file for later updated version comparison.
+        echo $installer_version_timestamp >$SASHIMONO_DATA/$installer_version_timestamp_file
+        
+        # Reputationd
         # Create REPUTATIOND_USER if does not exists..
         if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
             useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER
 
             # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
             # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
-            chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" /home/$REPUTATIOND_USER
+            chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" /home/$REPUTATIOND_USER
 
             reputationd_secret_path=$(jq -r '.reputation.secretPath' "$REPUTATIOND_CONFIG")
             chown "$REPUTATIOND_USER": $reputationd_secret_path
@@ -1419,28 +1429,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
         # Change ownership to reputationd user.
         chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
-        
-        echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
-            \n\nNOTE: Installation will only mint the lease tokens. Please use 'evernode offerlease' command to create offers for the minted lease tokens.
-            \nThe host becomes eligible to send heartbeats after generating offers for minted lease tokens."
-
-        installed=true
-
         echo "would you like to opt-in to the evernode reputation and reward system?"
         read -p "Type 'yes' to opt-in: " confirmation </dev/tty
         [ "$confirmation" != "yes" ] && echo "Cancelled from opting-in evernode reputation and reward system." && exit 0
-
+        
         configure_reputationd_system
-
-        ! create_evernode_alias && install_failure
-
-        set +o pipefail
-
-        rm -r $tmp
-
-        # Write the verison timestamp to a file for later updated version comparison.
-        echo $installer_version_timestamp >$SASHIMONO_DATA/$installer_version_timestamp_file
+        if [ ! $? -eq 0 ]; then
+            echo "error configuring reputationd system."
+            return 1
+        fi
     }
 
     function check_exisiting_contracts() {
@@ -2002,17 +1999,29 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ $has_error == 0 ] && echo "Lease offer creation for minted lease tokens was completed."
     }
 
-    configure_reputationd_system(){
+    function configure_reputationd_system(){
         # Configure reputationd users and register host.
         echomult "configuring evernode reputation and reward system..."
 
-        #account generation, new, wait-for-funds, prepare
-        set_host_reputationd_account "register"
+        #account generation,
+        if ! set_host_reputationd_account; then
+            echo "error setting up reputationd account."
+            return 1;
+        fi
+
+        #new, wait-for-funds, prepare, wait-for-funds wait_call
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "error creating configs" && exit 1
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE 50 && echo "error retrieving funds" && exit 1
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "error preparing account"  && exit 1
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE 50 && echo "'error retrieving funds" && exit 1
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
         reputationd_user_id=$(id -u "$REPUTATIOND_USER")
         reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
-        
+
         #configure reputationd service
         echomult "Configuring reputationd service"
         ! (sudo -u $REPUTATIOND_USER mkdir -p "$reputationd_user_dir"/.config/systemd/user/) && echo "Message board user systemd folder creation failed" && abort
@@ -2024,7 +2033,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             [Service]
             Type=simple
             WorkingDirectory=$REPUTATIOND_BIN
-            Environment=\"MB_DATA_DIR=$REPUTATIOND_DATA\"
+            Environment=\"REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA\"
             ExecStart=/usr/bin/node $REPUTATIOND_BIN
             Restart=on-failure
             RestartSec=5
@@ -2072,7 +2081,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
             # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-            chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+            chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" /home/$MB_XRPL_USER
         fi
 
         # Check if message board config and sa.cfg exists.
@@ -2316,6 +2325,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     elif [ "$mode" == "offerlease" ]; then
         offerlease
+
+    elif [ "$mode" == "reputationd" ]; then
+        init_setup_helpers
+        configure_reputationd_system
     fi
 
     $installed && check_installer_pending_finish

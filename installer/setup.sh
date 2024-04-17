@@ -1132,7 +1132,7 @@
 
         if [ "$reputationd_key_file_path" == "$default_reputationd_key_filepath" ]; then
             parent_directory=$(dirname "$reputationd_key_file_path")
-            chmod -R 500 "$parent_directory" &&
+            chmod -R 550 "$parent_directory" &&
                 chown -R $REPUTATIOND_USER: "$parent_directory" || {
                 echomult "Error occurred in permission and ownership assignment of key file directory."
                 return 1
@@ -1407,14 +1407,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Reputationd
         # Create REPUTATIOND_USER if does not exists..
         if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
-            useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER
+            useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER 2>/dev/null
 
             # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
             # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
             chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" /home/$REPUTATIOND_USER
 
-            reputationd_secret_path=$(jq -r '.reputation.secretPath' "$REPUTATIOND_CONFIG")
-            chown "$REPUTATIOND_USER": $reputationd_secret_path
         fi
 
         # Assign reputationd user priviledges.
@@ -1429,9 +1427,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
         # Change ownership to reputationd user.
         chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
-        echo "would you like to opt-in to the evernode reputation and reward system?"
-        read -p "Type 'yes' to opt-in: " confirmation </dev/tty
-        [ "$confirmation" != "yes" ] && echo "Cancelled from opting-in evernode reputation and reward system." && exit 0
+        ! confirm "\nWould you like to opt-in to the Evernode reputation and reward system?" && echomult "Cancelled from opting-in Evernode reputation and reward system.\nYou can opt-in later by using \'evernode reputationd\' command" && exit 0
         
         configure_reputationd_system
         if [ ! $? -eq 0 ]; then
@@ -2003,6 +1999,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Configure reputationd users and register host.
         echomult "configuring evernode reputation and reward system..."
 
+        if [ -f  "$REPUTATIOND_CONFIG" ] ; then
+            reputationd_secret_path=$(jq -r '.reputation.secretPath' "$REPUTATIOND_CONFIG")
+            chown "$REPUTATIOND_USER": $reputationd_secret_path
+        fi
+
         #account generation,
         if ! set_host_reputationd_account; then
             echo "error setting up reputationd account."
@@ -2021,6 +2022,23 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
         reputationd_user_id=$(id -u "$REPUTATIOND_USER")
         reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
+
+        # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
+        # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
+        chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_user_dir
+
+        # Setup env variable for the reputationd user.
+        echo "
+            export XDG_RUNTIME_DIR=$reputationd_user_runtime_dir" >>"$reputationd_user_dir"/.bashrc
+        echo "Updated reputationd user .bashrc."
+
+        reputationd_user_systemd=""
+        for ((i = 0; i < 30; i++)); do
+            sleep 0.1
+            reputationd_user_systemd=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-system-running 2>/dev/null)
+            [ "$reputationd_user_systemd" == "running" ] && break
+        done
+        [ "$reputationd_user_systemd" != "running" ] && echo "NO_REPUTATIOND_USER_SYSTEMD" && abort
 
         #configure reputationd service
         echomult "Configuring reputationd service"
@@ -2043,6 +2061,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # This service needs to be restarted whenever reputation.cfg or secret.cfg is changed.
         sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user enable $REPUTATIOND_SERVICE
         # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
+
+
+        # If there's no pending reboot, start the reputationd services now. Otherwise
+        # they'll get started at next startup.
+        if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-required.pkgs)" ]; then
+            echo "Starting the reputationd service."
+
+            sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user restart $REPUTATIOND_SERVICE
+        fi
 
         echo "Opted-in to the evernode reputation and reward system."
     }

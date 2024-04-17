@@ -53,7 +53,7 @@ class Setup {
         await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
 
         // Prepare host account.
-        const hostClient = new evernode.HostClient(acc.hostAddress);
+        const hostClient = new evernode.HostClient(acc.hostAddress, acc.hostSecret);
         await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.

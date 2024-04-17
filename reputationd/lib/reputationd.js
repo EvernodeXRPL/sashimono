@@ -528,7 +528,6 @@ class ReputationD {
 
             await instanceMgr.init();
             const res = await instanceMgr.sendContractReadRequest({ command: this.#readScoreCmd }, INPUT_PROTOCOLS.json);
-
             return res;
         } catch (e) {
             console.error('Error occurred while reading the scores:', e);
@@ -559,7 +558,7 @@ class ReputationD {
 
             let scores = null;
             if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) - 1))
+                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
                 scores = await this.#getScores();
 
             // Sending reputations every moment.

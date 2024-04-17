@@ -16,8 +16,28 @@ appenv = {
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',
     DB_TABLE_NAME: 'leases',
     DB_UTIL_TABLE_NAME: 'util_data',
-    SASHI_DB_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.sqlite",
-    SASHI_CONFIG_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.cfg",
+    SASHI_DB_PATH: (() => {
+        if (appenv.IS_DEV_MODE) {
+            const devPath = "../build/sa.sqlite";
+            if (!fs.existsSync(devPath))
+                return path.join(appenv.DATA_DIR, '../') + "sa.sqlite";
+            return devPath;
+        }
+        else {
+            return path.join(appenv.DATA_DIR, '../') + "sa.sqlite"
+        }
+    })(),
+    SASHI_CONFIG_PATH: (() => {
+        if (appenv.IS_DEV_MODE) {
+            const devPath = "../build/sa.cfg";
+            if (!fs.existsSync(devPath))
+                return path.join(appenv.DATA_DIR, '../') + "sa.cfg";
+            return devPath;
+        }
+        else {
+            return path.join(appenv.DATA_DIR, '../') + "sa.cfg"
+        }
+    })(),
     SASHI_TABLE_NAME: 'instances',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,

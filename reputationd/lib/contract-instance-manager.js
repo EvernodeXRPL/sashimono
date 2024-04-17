@@ -6,6 +6,7 @@ const { CommonHelper } = require('./util-helper');
 
 const DEFAULT_TIMEOUT = 120000;
 const INSTALL_SCRIPT_FAILURE = "Input failed. reason: InstallScriptFailed";
+const INPUT_PROTOCOLS = HotPocket.protocols;
 
 class ContractInstanceManager {
     #ip;
@@ -45,7 +46,7 @@ class ContractInstanceManager {
             await this.#hpClient.close()
     }
 
-    async sendContractInput(input, timeoutMs = DEFAULT_TIMEOUT) {
+    async sendContractInput(input, timeoutMs = DEFAULT_TIMEOUT, protocol = HotPocket.protocols.bson) {
         return new Promise(async (resolve, reject) => {
 
             const inputTimer = setTimeout(() => {
@@ -70,7 +71,7 @@ class ContractInstanceManager {
                 r.outputs.forEach(output => {
                     let result;
                     try {
-                        result = bson.deserialize(output);
+                        result = protocol === INPUT_PROTOCOLS.bson ? bson.deserialize(output) : JSON.parse(output);
                     }
                     catch (e) {
                         failure(e);
@@ -84,12 +85,18 @@ class ContractInstanceManager {
                 });
             });
 
-            const res = await this.#hpClient.submitContractInput(bson.serialize(input));
+            const res = await this.#hpClient.submitContractInput(protocol === INPUT_PROTOCOLS.bson ? bson.serialize(input) : JSON.stringify(input));
 
             const submission = await res.submissionStatus;
             if (submission.status != "accepted")
                 failure("Input submission failed. reason: " + submission.reason);
         });
+    }
+
+    async sendContractReadRequest(input, protocol = HotPocket.protocols.bson) {
+        const output = await this.#hpClient.submitContractReadRequest(protocol === INPUT_PROTOCOLS.bson ? bson.serialize(input) : JSON.stringify(input));
+        const result = protocol === INPUT_PROTOCOLS.bson ? bson.deserialize(output) : JSON.parse(output);
+        return result.message;
     }
 
     async checkBootstrapStatus() {
@@ -133,5 +140,6 @@ class ContractInstanceManager {
 }
 
 module.exports = {
-    ContractInstanceManager
+    ContractInstanceManager,
+    INPUT_PROTOCOLS
 }

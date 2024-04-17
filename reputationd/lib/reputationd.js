@@ -5,9 +5,8 @@ const uuid = require('uuid');
 const path = require('path');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
-const { CliHelper } = require('./cli-handler');
 const { ContractHelper, CommonHelper } = require('./util-helper');
-const { ContractInstanceManager } = require('./contract-instance-manager');
+const { ContractInstanceManager, INPUT_PROTOCOLS } = require('./contract-instance-manager');
 
 const ContractStatus = {
     Created: 1,
@@ -25,9 +24,9 @@ class ReputationD {
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
     #preparationTimeQuota = 0.9; // Percentage of moment size.
-    #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`;
     #preparationWaitDelay = 30000; // 30 sec.
     #universeSize = 64;
+    #readScoreCmd = 'read_scores';
 
     #configPath;
     #mbXrplConfigPath;
@@ -372,14 +371,15 @@ class ReputationD {
             await instanceMgr.init();
             await instanceMgr.uploadBundle(bundlePath);
 
-            console.log(`Contract bundle uploaded!`);
-        } catch (e) {
-            console.error('Error occurred while uploading the bundle:', e);
-        }
-        finally {
             fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
             if (instanceMgr)
                 await instanceMgr.terminate();
+            console.log(`Contract bundle uploaded!`);
+        } catch (e) {
+            fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
+            if (instanceMgr)
+                await instanceMgr.terminate();
+            throw e;
         }
     }
 
@@ -515,27 +515,29 @@ class ReputationD {
     }
 
     async #getScores() {
-        const instanceName = this.cfg.contractInstance?.name;
-        if (!instanceName)
+        if (!this.cfg.contractInstance?.domain || !this.cfg.contractInstance?.user_port)
             return null;
 
-        const instances = await CliHelper.listInstances();
+        let instanceMgr;
+        try {
+            instanceMgr = new ContractInstanceManager({
+                ip: this.cfg.contractInstance.domain,
+                userPort: this.cfg.contractInstance.user_port,
+                userPrivateKey: this.cfg.contractInstance.owner_privatekey
+            });
 
-        const instance = instances.find(i => i.name === instanceName);
+            await instanceMgr.init();
+            const res = await instanceMgr.sendContractReadRequest({ command: this.#readScoreCmd }, INPUT_PROTOCOLS.json);
 
-        if (!instance) {
-            this.cfg.contractInstance = {};
-            this.#persistConfig();
-
+            return res;
+        } catch (e) {
+            console.error('Error occurred while reading the scores:', e);
             return null;
         }
-
-        const path = this.#scoreFilePath.replace('#USER#', instance.user).replace('#INSTANCE#', instance.name);
-
-        if (!fs.existsSync(path))
-            return null;
-
-        return JSON.parse(path);
+        finally {
+            if (instanceMgr)
+                await instanceMgr.terminate();
+        }
     }
 
     // Reputation sender.

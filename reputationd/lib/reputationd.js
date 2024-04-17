@@ -24,8 +24,7 @@ class ReputationD {
     #reputationRetryDelay = 300000; // 5 mins
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
-    #reportTimeQuota = 0.9; // Percentage of moment size.
-    #contractInitTimeQuota = 0.1; // Percentage of moment size.
+    #preparationTimeQuota = 0.9; // Percentage of moment size.
     #scoreFilePath = `/home/#USER#/#INSTANCE#/contract_fs/mnt/opinion.txt`;
     #preparationWaitDelay = 30000; // 30 sec.
     #universeSize = 64;
@@ -267,10 +266,13 @@ class ReputationD {
         const currentMoment = await this.hostClient.getMoment();
 
         // Set time relative to current passed time.
-        if ((currentTimestamp - momentStartTimestamp) < (momentSize * this.#reportTimeQuota)) {
-            startTimeout = (momentStartTimestamp + (momentSize * this.#reportTimeQuota) -
-                currentTimestamp + Math.floor(momentSize * (1 - this.#reportTimeQuota) * Math.random())) * 1000 // Converting seconds to milliseconds.
-        }
+        const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
+        const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
+        const lowerBound = Math.floor(momentStartTimestamp + momentSize - timeQuota);
+        if (currentTimestamp < lowerBound)
+            startTimeout = Math.floor(lowerBound + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+        else if (currentTimestamp >= upperBound) // If greater than upper bound, schedule for the next moment
+            startTimeout = Math.floor(lowerBound + momentSize + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
 
         // If already registered for this moment, Schedule for next moment.
         if ((this.lastReputationMoment === currentMoment))
@@ -300,13 +302,15 @@ class ReputationD {
         const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
         const currentMoment = await this.hostClient.getMoment();
 
-        if ((currentTimestamp - momentStartTimestamp) > (momentSize * this.#contractInitTimeQuota)) {
-            startTimeout = (momentStartTimestamp + momentSize - currentTimestamp +
-                Math.floor(momentSize * this.#contractInitTimeQuota * Math.random())) * 1000 // Converting seconds to milliseconds.
-        }
+        const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
+        const upperBound = Math.floor(momentStartTimestamp + momentSize);
+        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
 
-        // If not registered for this moment, Schedule for next moment.
-        if (startTimeout === 0 && this.lastReputationMoment !== (currentMoment - 1))
+        if (currentTimestamp < lowerBound)
+            startTimeout = Math.floor(lowerBound + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+
+        // If not registered for next moment, Schedule for next moment.
+        if (startTimeout === 0 && this.lastReputationMoment !== currentMoment)
             startTimeout += (momentSize * 1000);
 
         console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
@@ -316,8 +320,8 @@ class ReputationD {
         }, startTimeout);
     }
 
-    async #getUniverseInfo() {
-        const repInfo = await this.hostClient.getReputationInfo();
+    async #getUniverseInfo(moment) {
+        const repInfo = await this.hostClient.getReputationInfo(moment);
 
         if (!repInfo || !('orderedId' in repInfo))
             return null;
@@ -327,10 +331,10 @@ class ReputationD {
         };
     }
 
-    async #getInstancesInUniverse(universeIndex) {
+    async #getInstancesInUniverse(universeIndex, moment) {
         const minOrderedId = universeIndex * this.#universeSize;
         return (await Promise.all(Array.from({ length: this.#universeSize }, (_, i) => i + minOrderedId).map(async (orderedId) => {
-            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId);
+            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId, moment);
             if (!repInfo)
                 return null;
 
@@ -382,17 +386,21 @@ class ReputationD {
     // Create and setup reputation contract.
     async #createReputationContract() {
         await this.#queueAction(async (submissionRefs) => {
-            const universeInfo = await this.#getUniverseInfo();
-
-            if (!universeInfo)
-                return;
-
             const curMoment = await this.reputationClient.getMoment();
 
-            if ((this.lastReputationMoment + 1) !== curMoment)
-                console.log(`Skipping reputation contract preparation since not registered for the  Moment ${curMoment}...`);
+            const universeInfo = await this.#getUniverseInfo(curMoment + 1);
 
-            console.log(`Preparing reputation contract at Moment ${curMoment}...`);
+            if (!universeInfo) {
+                console.log(`Skipping reputation contract preparation since there's no universe info for the moment ${curMoment + 1}.`);
+                return;
+            }
+
+            if (this.lastReputationMoment !== curMoment) {
+                console.log(`Skipping reputation contract preparation since not registered for the moment ${curMoment + 1}.`);
+                return;
+            }
+
+            console.log(`Preparing reputation contract for the Moment ${curMoment + 1}...`);
 
             if (!this.cfg.contractInstance || !this.cfg.contractInstance.created_timestamp ||
                 curMoment > (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
@@ -469,7 +477,7 @@ class ReputationD {
                     const momentSize = this.hostClient.config.momentSize;
                     const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
                     const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
-                    const startTimestamp = (momentStartTimestamp + (momentSize * this.#contractInitTimeQuota)) + (this.#preparationWaitDelay / 1000);
+                    const startTimestamp = (momentStartTimestamp + (momentSize * this.#preparationTimeQuota)) + (this.#preparationWaitDelay / 1000);
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)
                         startTimeout = (startTimestamp - currentTimestamp) * 1000;
@@ -479,7 +487,7 @@ class ReputationD {
                 }
 
                 if (this.cfg.contractInstance.status === ContractStatus.Updated) {
-                    const instances = await this.#getInstancesInUniverse(universeInfo.index);
+                    const instances = await this.#getInstancesInUniverse(universeInfo.index, curMoment + 1);
                     const overrideConfig = {
                         unl: instances.map(p => `${p.pubkey}`),
                         contract: {
@@ -549,7 +557,7 @@ class ReputationD {
 
             let scores = null;
             if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp)))
+                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) - 1))
                 scores = await this.#getScores();
 
             // Sending reputations every moment.

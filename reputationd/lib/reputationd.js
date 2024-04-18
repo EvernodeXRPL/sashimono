@@ -525,7 +525,7 @@ class ReputationD {
                 }
             }
             else {
-                console.log(`Skipping deploy since instance is created in the moment ${curMoment + 1}.`)
+                console.log(`Skipping deploy since instance is not created in the moment ${curMoment}.`)
             }
         });
     }

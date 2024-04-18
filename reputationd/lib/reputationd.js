@@ -268,13 +268,11 @@ class ReputationD {
         const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
         const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
         const lowerBound = Math.floor(momentStartTimestamp + momentSize - timeQuota);
-        if (currentTimestamp < lowerBound)
+        if (currentTimestamp < lowerBound || currentTimestamp >= upperBound)
             startTimeout = Math.floor(lowerBound + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
-        else if (currentTimestamp >= upperBound) // If greater than upper bound, schedule for the next moment
-            startTimeout = Math.floor(lowerBound + momentSize + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
 
         // If already registered for this moment, Schedule for next moment.
-        if ((this.lastReputationMoment === currentMoment))
+        if (startTimeout < 0 || this.lastReputationMoment === currentMoment)
             startTimeout += (momentSize * 1000);
 
         console.log(`Reputation sender scheduled to start in ${startTimeout} milliseconds.`);
@@ -385,6 +383,8 @@ class ReputationD {
 
     // Create and setup reputation contract.
     async #createReputationContract() {
+        const scheduledMoment = await this.hostClient.getMoment();
+
         await this.#queueAction(async (submissionRefs) => {
             const curMoment = await this.reputationClient.getMoment();
 
@@ -395,7 +395,11 @@ class ReputationD {
                 return;
             }
 
-            if (this.lastReputationMoment !== curMoment) {
+            if (scheduledMoment != curMoment) {
+                console.log(`Skipping since scheduled moment has passed. Scheduled in ${scheduledMoment}, Current moment ${curMoment}.`);
+                return;
+            }
+            else if (this.lastReputationMoment !== curMoment) {
                 console.log(`Skipping reputation contract preparation since not registered for the moment ${curMoment + 1}.`);
                 return;
             }
@@ -459,6 +463,9 @@ class ReputationD {
                 };
                 this.#persistConfig();
             }
+            else {
+                console.log(`Skipping acquire since there are already created instance for the moment ${curMoment + 1}.`)
+            }
 
             if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
                 curMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
@@ -477,7 +484,11 @@ class ReputationD {
                     const momentSize = this.hostClient.config.momentSize;
                     const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
                     const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
-                    const startTimestamp = (momentStartTimestamp + (momentSize * this.#preparationTimeQuota)) + (this.#preparationWaitDelay / 1000);
+
+                    const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
+                    const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
+                    const startTimestamp = lowerBound + (this.#preparationWaitDelay / 1000);
+
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)
                         startTimeout = (startTimestamp - currentTimestamp) * 1000;
@@ -511,6 +522,9 @@ class ReputationD {
                     this.#persistConfig();
                 }
             }
+            else {
+                console.log(`Skipping deploy since instance is created in the moment ${curMoment + 1}.`)
+            }
         });
     }
 
@@ -541,29 +555,34 @@ class ReputationD {
 
     // Reputation sender.
     async #sendReputations() {
-        await this.#queueAction(async (submissionRefs) => {
-            submissionRefs.refs ??= [{}];
-            // Check again wether the transaction is validated before retry.
-            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
-            if (txHash) {
-                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
-                if (txResponse && txResponse.code === "tesSUCCESS") {
-                    console.log('Transaction is validated and success, Retry skipped!')
-                    return;
-                }
-            }
+        const scheduledMoment = await this.hostClient.getMoment();
 
-            let ongoingReputation = false;
+        await this.#queueAction(async (submissionRefs) => {
             const currentMoment = await this.hostClient.getMoment();
 
-            let scores = null;
-            if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
-                scores = await this.#getScores();
+            if (scheduledMoment != currentMoment) {
+                console.log(`Skipping reputation sender since scheduled moment has passed. Scheduled in ${scheduledMoment}, Current moment ${curMoment}.`);
+                return;
+            }
 
             // Sending reputations every moment.
-            if (!ongoingReputation && (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment)) {
-                ongoingReputation = true;
+            if (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment) {
+                submissionRefs.refs ??= [{}];
+                // Check again wether the transaction is validated before retry.
+                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                if (txHash) {
+                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        return;
+                    }
+                }
+
+                let scores = null;
+                if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
+                    currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
+                    scores = await this.#getScores();
+
                 console.log(`Reporting reputations at Moment ${currentMoment}...`);
 
                 try {
@@ -578,9 +597,6 @@ class ReputationD {
                         console.log("Reputation tx error", err);
                         throw err;
                     }
-                }
-                finally {
-                    ongoingReputation = false;
                 }
             }
         }, this.#reputationRetryCount, this.#reputationRetryDelay);

@@ -465,7 +465,7 @@ class ReputationD {
                 this.#persistConfig();
             }
             else {
-                console.log(`Skipping acquire since there are already created instance for the moment ${curMoment + 1}.`)
+                console.log(`Skipping acquire since there is already created instance for the moment ${curMoment + 1}.`)
             }
 
             if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
@@ -585,7 +585,7 @@ class ReputationD {
                     currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
                     scores = await this.#getScores();
 
-                console.log(`Reporting reputations at Moment ${currentMoment}...`);
+                console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);
 
                 try {
                     await this.hostClient.sendReputations(scores, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });

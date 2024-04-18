@@ -24,7 +24,8 @@ class ReputationD {
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
     #preparationTimeQuota = 0.9; // Percentage of moment size.
-    #preparationWaitDelay = 30000; // 30 sec.
+    #reputationSendTimeSlice = 0.35; // Slice of preparationTimeQuota for reputation registration.
+    #deploymentStartTimeQuota = 0.75;
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
 
@@ -266,10 +267,10 @@ class ReputationD {
 
         // Set time relative to current passed time.
         const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
-        const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
+        const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
         const lowerBound = Math.floor(momentStartTimestamp + momentSize - timeQuota);
         if (currentTimestamp < lowerBound || currentTimestamp >= upperBound)
-            startTimeout = Math.floor(lowerBound + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+            startTimeout = Math.floor(lowerBound + (Math.random() * ((upperBound - lowerBound) / 2)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
 
         // If already registered for this moment, Schedule for next moment.
         if (startTimeout < 0 || this.lastReputationMoment === currentMoment)
@@ -301,10 +302,10 @@ class ReputationD {
 
         const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
         const upperBound = Math.floor(momentStartTimestamp + momentSize);
-        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
+        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
 
         if (currentTimestamp < lowerBound)
-            startTimeout = Math.floor(lowerBound + (Math.random() * (upperBound - lowerBound)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+            startTimeout = Math.floor(lowerBound + (Math.random() * ((upperBound - lowerBound) / 2)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
 
         // If not registered for next moment, Schedule for next moment.
         if (startTimeout === 0 && this.lastReputationMoment !== currentMoment)
@@ -486,8 +487,9 @@ class ReputationD {
                     const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
 
                     const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
-                    const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota / 2));
-                    const startTimestamp = lowerBound + (this.#preparationWaitDelay / 1000);
+                    const upperBound = Math.floor(momentStartTimestamp + momentSize);
+                    const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
+                    const startTimestamp = lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota);
 
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)

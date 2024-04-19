@@ -495,7 +495,7 @@ class ReputationD {
                     if (startTimestamp > currentTimestamp)
                         startTimeout = (startTimestamp - currentTimestamp) * 1000;
 
-                    console.log(`Waiting ${startTimeout} until other hosts are ready.`);
+                    console.log(`Waiting ${startTimeout} milliseconds until other hosts are ready.`);
                     await new Promise((resolve) => setTimeout(resolve, startTimeout));
                 }
 

@@ -459,8 +459,6 @@ mkdir -p $SASHIMONO_DATA
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
 chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
-# Setting up Sashimono admin group.
-! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && abort
 
 ! set_cpu_info && echo "Fetching CPU info failed" && abort
 

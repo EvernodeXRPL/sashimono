@@ -96,7 +96,7 @@
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATION=3
-    export MIN_REPUTATION_COST_PER_MONTH=7 
+    export MIN_REPUTATION_COST_PER_MONTH=7
 
     #export NETWORK="${NETWORK:-mainnet}"
     export NETWORK="${NETWORK:-devnet}"
@@ -1428,7 +1428,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
         # Change ownership to reputationd user.
         chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
-        ! confirm "\nWould you like to opt-in to the Evernode reputation and reward system?" && echomult "Cancelled from opting-in Evernode reputation and reward system.\nYou can opt-in later by using \'evernode reputationd\' command" && exit 0
+        ! confirm "\nWould you like to opt-in to the Evernode reputation and reward system?" && echomult "Cancelled from opting-in Evernode reputation and reward system.\nYou can opt-in later by using 'evernode reputationd' command" && exit 0
         
         configure_reputationd_system
         if [ ! $? -eq 0 ]; then
@@ -2029,7 +2029,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         
         #TODO - min_evr_requirement $lease_amount
         local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
-        local min_evr_requirement=$((1*24*30*$MIN_OPERATIONAL_DURATION))
+        local lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
+        local min_evr_requirement=$(($lease_amount*24*30*$MIN_OPERATIONAL_DURATION))
         local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
         local need_evr=$(echo "$min_evr_requirement > 0" | bc -l)
         [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
@@ -2127,6 +2128,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         init_setup_helpers
 
         download_public_config && set_environment_configs
+
+        # Setting up Sashimono admin group.
+        ! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && abort
 
         # Create MB_XRPL_USER as we require that user for secret key ownership management.
         if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

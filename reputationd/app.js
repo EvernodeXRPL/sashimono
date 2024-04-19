@@ -38,7 +38,7 @@ async function main() {
                 setup.newConfig(accountAddress, accountSecretPath);
             }
             else if (process.argv.length >= 4 && process.argv[2] === 'wait-for-funds') {
-                await new Setup().waitForFunds(process.argv[3], parseInt(process.argv[4]));
+                await new Setup().waitForFunds(process.argv[3], parseFloat(process.argv[4]));
             }
             else if (process.argv.length >= 2 && process.argv[2] === 'prepare') {
                 await new Setup().prepareReputationAccount();

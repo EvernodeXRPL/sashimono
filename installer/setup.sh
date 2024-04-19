@@ -1104,6 +1104,7 @@
             fi
         fi
     }
+
     function set_host_reputationd_account() {
 
         confirm "\nDo you want to use the default key file path ${default_reputationd_key_filepath} to save the new account key?" && reputationd_key_file_path=$default_reputationd_key_filepath
@@ -1181,6 +1182,7 @@
             }
         fi
     }
+
     function prepare_host() {
         ([ -z $rippled_server ] || [ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $xrpl_secret ] || [ -z $inetaddr ]) && echo "No params specified." && return 1
 
@@ -2027,14 +2029,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
         \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
         
-        #TODO - min_evr_requirement $lease_amount
         local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
         local lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
-        local min_evr_requirement=$(($lease_amount*24*30*$MIN_OPERATIONAL_DURATION))
+        local min_reputation_evr_requirement=$(echo "$lease_amount*24*30*$MIN_OPERATIONAL_DURATION" | bc)
+
         local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
-        local need_evr=$(echo "$min_evr_requirement > 0" | bc -l)
+        local need_evr=$(echo "$min_reputation_evr_requirement > 0" | bc -l)
         [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
-        [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_evr_requirement EVR to cover Evernode registration."
+        [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_reputation_evr_requirement EVR to cover Evernode registration."
 
         message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -2045,15 +2047,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "error creating configs" && exit 1
 
         echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
-        echomult "\nChecking the account condition...\nWaiting for funds"
+        echomult "\nChecking the account condition.\n\nWaiting for funds..."
 
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement && echo "error retrieving funds" && exit 1
 
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "error preparing account"  && exit 1
 
-        echomult "\n\nIn order to register in reputation and reward system you need to have $min_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
-        \nYou can scan the provided QR code in your wallet app to send funds\nWaiting for funds:"
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_evr_requirement && echo "error retrieving funds" && exit 1
+        echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
+        \nYou can scan the provided QR code in your wallet app to send funds.\n\nWaiting for funds..."
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement && echo "error retrieving funds" && exit 1
 
         # Setup env variable for the reputationd user.
         echo "

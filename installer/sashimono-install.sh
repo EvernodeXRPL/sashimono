@@ -515,11 +515,18 @@ fi
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
+ # First create the folder from root and then transfer ownership to the user
+# since the folder is created in /etc/sashimono directory.
+! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
+# Change ownership to reputationd user.
+chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
+
 # Configure message board users and register host.
 echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 cp -r "$script_dir"/reputationd $SASHIMONO_BIN
+cp -r "$script_dir"/reputation-contract $REPUTATIOND_DATA/
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

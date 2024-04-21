@@ -1380,6 +1380,24 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             done
         fi
 
+        # Reputationd
+        # Create REPUTATIOND_USER if does not exists..
+        if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
+            useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER 2>/dev/null
+
+            # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
+            # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
+            chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" /home/$REPUTATIOND_USER
+
+        fi
+
+        # Assign reputationd user priviledges.
+        if ! id -nG "$REPUTATIOND_USER" | grep -qw "$SASHIADMIN_GROUP"; then
+            usermod --lock $REPUTATIOND_USER
+            usermod -a -G $SASHIADMIN_GROUP $REPUTATIOND_USER
+            loginctl enable-linger $REPUTATIOND_USER # Enable lingering to support service installation.
+        fi
+
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
         ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
@@ -1406,30 +1424,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         
         # Write the verison timestamp to a file for later updated version comparison.
         echo $installer_version_timestamp >$SASHIMONO_DATA/$installer_version_timestamp_file
-        
-        # Reputationd
-        # Create REPUTATIOND_USER if does not exists..
-        if ! grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
-            useradd --shell /usr/sbin/nologin -m $REPUTATIOND_USER 2>/dev/null
 
-            # Setting the ownership of the REPUTATIOND_USER's home to REPUTATIOND_USER expilcity.
-            # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
-            chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" /home/$REPUTATIOND_USER
-
-        fi
-
-        # Assign reputationd user priviledges.
-        if ! id -nG "$REPUTATIOND_USER" | grep -qw "$SASHIADMIN_GROUP"; then
-            usermod --lock $REPUTATIOND_USER
-            usermod -a -G $SASHIADMIN_GROUP $REPUTATIOND_USER
-            loginctl enable-linger $REPUTATIOND_USER # Enable lingering to support service installation.
-        fi
-
-        # First create the folder from root and then transfer ownership to the user
-        # since the folder is created in /etc/sashimono directory.
-        ! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
-        # Change ownership to reputationd user.
-        chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
         ! confirm "\nWould you like to opt-in to the Evernode reputation and reward system?" && echomult "Cancelled from opting-in Evernode reputation and reward system.\nYou can opt-in later by using 'evernode reputationd' command" && exit 0
         
         configure_reputationd_system

@@ -1506,6 +1506,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function create_log() {
+        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+            reputationd_enabled=true
+        else
+            reputationd_enabled=false
+        fi
         tempfile=$(mktemp /tmp/evernode.XXXXXXXXX.log)
         {
             echo "System:"
@@ -1523,6 +1528,13 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echo ""
             echo "Message board log:"
             sudo -u sashimbxrpl bash -c journalctl --user -u sashimono-mb-xrpl | tail -n 200
+            echo ""
+            if [[ "$reputationd_enabled" == "true" ]] ; then
+                echo "Reputationd log:"
+                sudo -u sashireputationd bash -c journalctl --user -u sashimono-reputationd | tail -n 200
+            else
+                echo "Reputation and reward system is not enabled."
+            fi
         } >"$tempfile" 2>&1
         echo "Evernode log saved to $tempfile"
     }
@@ -1578,7 +1590,21 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local sashimono_mb_xrpl_status=$(sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user is-active $MB_XRPL_SERVICE)
         echo "Sashimono agent status: $sashimono_agent_status"
         echo "Sashimono message board status: $sashimono_mb_xrpl_status"
-        echo -e "\nYour account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo -e "\nYour registration account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
+        echo ""
+        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+            reputationd_enabled=true
+        else
+            reputationd_enabled=false
+        fi
+        local reputationd_user_id=$(id -u "$REPUTATIOND_USER")
+        local reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
+        local sashimono_reputationd_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)    
+        echo "Sashimono reputationd status: $sashimono_reputationd_status"
+        #TODO $sashimono_reputationd_status == "active"
+        if [[ $reputationd_enabled == true ]]; then
+            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputation.cfg"
+        fi
     }
 
     function get_country_code() {

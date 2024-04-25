@@ -426,14 +426,20 @@ class ReputationD {
 
                 const ownerKeys = await CommonHelper.generateKeys();
 
+                const contractId = this.#generateContractId(universeInfo.index);
                 const requirement = {
                     owner_pubkey: ownerKeys.publicKey,
-                    contract_id: this.#generateContractId(universeInfo.index),
+                    contract_id: contractId,
                     image: this.#instanceImage,
                     config: {
                         contract: {
                             consensus: {
                                 roundtime: 5000
+                            }
+                        },
+                        mesh: {
+                            peer_discovery: {
+                                enabled: false
                             }
                         }
                     }
@@ -480,7 +486,9 @@ class ReputationD {
                     // Mark as updated.
                     this.cfg.contractInstance.status = ContractStatus.Updated;
                     this.#persistConfig();
+                }
 
+                if (this.cfg.contractInstance.status === ContractStatus.Updated) {
                     // Wait for some time to let others to prepare.
                     const momentSize = this.hostClient.config.momentSize;
                     const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
@@ -497,13 +505,11 @@ class ReputationD {
 
                     console.log(`Waiting ${startTimeout} milliseconds until other hosts are ready.`);
                     await new Promise((resolve) => setTimeout(resolve, startTimeout));
-                }
 
-                if (this.cfg.contractInstance.status === ContractStatus.Updated) {
                     const instances = await this.#getInstancesInUniverse(universeInfo.index, curMoment + 1);
                     const overrideConfig = {
-                        unl: instances.map(p => `${p.pubkey}`),
                         contract: {
+                            unl: instances.map(p => `${p.pubkey}`),
                             bin_path: '/usr/bin/node',
                             bin_args: 'index.js',
                             consensus: {

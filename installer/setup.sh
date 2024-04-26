@@ -1408,13 +1408,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 [[ $cleaned_line =~ ^-p(.*)$ ]] && echo -e "\\e[1A\\e[K${cleaned_line:3}" || echo "${cleaned_line}"
             done && install_failure
 
-        echomult "Installation successful! Installation log can be found at $logfile
-            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
-            \n\nNOTE: Installation will only mint the lease tokens. Please use 'evernode offerlease' command to create offers for the minted lease tokens.
-            \nThe host becomes eligible to send heartbeats after generating offers for minted lease tokens."
-
-        installed=true
-
         ! create_evernode_alias && install_failure
 
         set +o pipefail
@@ -1424,12 +1417,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Write the verison timestamp to a file for later updated version comparison.
         echo $installer_version_timestamp >$SASHIMONO_DATA/$installer_version_timestamp_file
 
-        ! confirm "\nWould you like to opt-in to the Evernode reputation and reward system?" && echomult "Cancelled from opting-in Evernode reputation and reward system.\nYou can opt-in later by using 'evernode reputationd' command" && exit 0
-
-        configure_reputationd
-        if [ ! $? -eq 0 ]; then
-            echo "error configuring reputationd system."
-            return 1
+        if confirm "\nWould you like to opt-in to the Evernode reputation and reward system?"; then
+            if ! configure_reputationd; then
+                echomult "\nError occured configuring ReputationD!!\n You can retry opting-in by executing 'evernode reputationd' after installation.\n"
+            else
+                echomult "\nReputationD configuration successfull!!\n"
+            fi
+        else
+            echomult "\nSkipped from opting-in Evernode reputation and reward system.\nYou can opt-in later by using 'evernode reputationd' command.\n"
         fi
     }
 
@@ -2071,17 +2066,17 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echomult "\nChecking the reputationd account condition."
         while true; do
             wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
-            confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || exit 1
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
         done
 
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "error preparing account" && exit 1
 
         echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
         \nYou can scan the provided QR code in your wallet app to send funds."
-        
+
         while true; do
             wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
-            confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || exit 1
+            confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
         done
 
         # Setup env variable for the reputationd user.
@@ -2246,6 +2241,13 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         install_evernode 0
 
         rm -r $setup_helper_dir >/dev/null 2>&1
+
+        echomult "Installation successful! Installation log can be found at $logfile
+            \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
+            \n\nNOTE: Installation will only mint the lease tokens. Please use 'evernode offerlease' command to create offers for the minted lease tokens.
+            \nThe host becomes eligible to send heartbeats after generating offers for minted lease tokens."
+
+        installed=true
 
     elif [ "$mode" == "uninstall" ]; then
 
@@ -2435,7 +2437,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     elif [ "$mode" == "reputationd" ]; then
         if [ "$2" == "opt-in" ]; then
             init_setup_helpers
-            configure_reputationd
+            configure_reputationd || echomult "\nError occured configuring ReputationD."
         elif [ "$2" == "opt-out" ]; then
             ! confirm "Are you sure you want to opt out from Evernode reputation for reward distribution?" "n" && exit 1
             remove_reputationd

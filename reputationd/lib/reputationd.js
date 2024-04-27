@@ -24,8 +24,8 @@ class ReputationD {
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
     #preparationTimeQuota = 0.9; // Percentage of moment size.
-    #reputationSendTimeSlice = 0.35; // Slice of preparationTimeQuota for reputation registration.
-    #deploymentStartTimeQuota = 0.75;
+    #reputationSendTimeSlice = 0.2; // Slice of preparationTimeQuota for reputation registration.
+    #deploymentStartTimeQuota = 0.8;
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
 
@@ -305,17 +305,49 @@ class ReputationD {
         const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
 
         if (currentTimestamp < lowerBound)
-            startTimeout = Math.floor(lowerBound + (Math.random() * ((upperBound - lowerBound) / 2)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
+            startTimeout = Math.floor(lowerBound - currentTimestamp) * 1000;
 
-        // If not registered for next moment, Schedule for next moment.
-        if (startTimeout === 0 && this.lastReputationMoment !== currentMoment)
-            startTimeout += (momentSize * 1000);
+        // If deploy widow has passed or, not registered for next moment, Schedule for next moment.
+        if (currentTimestamp > upperBound || (startTimeout === 0 && this.lastReputationMoment !== currentMoment))
+            startTimeout = Math.floor(lowerBound + momentSize - currentTimestamp) * 1000;
 
-        console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
+        // If zero, We are in the deploy window. Try to deploy now and schedule the next in start of next moments window.
+        if (startTimeout === 0) {
+            console.log(`Reputation contract creation will be done now since we are in the window.`);
+            setTimeout(async () => {
+                await this.#createReputationContract();
+            }, 0);
+            startTimeout = Math.floor(lowerBound + momentSize - currentTimestamp) * 1000;
+            console.log(`Next reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
+        }
+        else {
+            console.log(`Reputation contract creation scheduled to start in ${startTimeout} milliseconds.`);
+        }
 
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);
+    }
+
+    async #waitForHostInstance(orderedId, moment) {
+        const momentSize = this.hostClient.config.momentSize;
+        const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
+
+        const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
+        const upperBound = Math.floor(momentStartTimestamp + momentSize);
+        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
+        const prepareEndTimestamp = Math.floor(lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota));
+
+        while (true) {
+            const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
+            if (currentTimestamp > prepareEndTimestamp)
+                throw 'Maximum timeout reached for preparation';
+
+            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId, moment).catch((e) => { });
+            if (repInfo && repInfo.contract)
+                return repInfo.contract;
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
     }
 
     async #getUniverseInfo(moment) {
@@ -325,7 +357,8 @@ class ReputationD {
             return null;
 
         return {
-            index: Math.floor(repInfo.orderedId / this.#universeSize)
+            ...repInfo,
+            universeIndex: Math.floor(repInfo.orderedId / this.#universeSize)
         };
     }
 
@@ -426,8 +459,23 @@ class ReputationD {
 
                 const ownerKeys = await CommonHelper.generateKeys();
 
-                const contractId = this.#generateContractId(universeInfo.index);
-                const requirement = {
+                const contractId = this.#generateContractId(universeInfo.universeIndex);
+
+                // If we are the first in order acquire instance, Wait for first one if not.
+                const firstOrderedId = universeInfo.universeIndex * this.#universeSize;
+                let firstInstanceInfo;
+                if (universeInfo.orderedId != firstOrderedId) {
+                    console.log(`Waiting until ${firstOrderedId} node is acquired...`);
+                    firstInstanceInfo = await this.#waitForHostInstance(firstOrderedId, curMoment + 1).catch(console.error);
+                    if (!firstInstanceInfo) {
+                        console.log(`Skipping since first host failed for the moment ${curMoment + 1}.`)
+                        return;
+                    }
+                }
+
+                console.log(`Acquiring the reputation contract instance${firstInstanceInfo ? ' (Observer)' : ''}...`);
+
+                let requirement = {
                     owner_pubkey: ownerKeys.publicKey,
                     contract_id: contractId,
                     image: this.#instanceImage,
@@ -445,7 +493,10 @@ class ReputationD {
                     }
                 };
 
-                console.log(`Acquiring the reputation contract instance.`);
+                if (firstInstanceInfo) {
+                    requirement.config.contract.unl = [firstInstanceInfo.pubkey];
+                    requirement.config.mesh.known_peers = [`${firstInstanceInfo.domain}:${firstInstanceInfo.peerPort}`];
+                }
 
                 // Update the registry with the active instance count.
                 const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
@@ -471,7 +522,7 @@ class ReputationD {
                 this.#persistConfig();
             }
             else {
-                console.log(`Skipping acquire since there is already created instance for the moment ${curMoment + 1}.`)
+                console.log(`Skipping acquire since there is already created instance for the moment ${curMoment + 1}.`);
             }
 
             if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
@@ -479,7 +530,7 @@ class ReputationD {
 
                 if (this.cfg.contractInstance.status === ContractStatus.Created) {
                     // Set reputation contract info in domain.
-                    console.log(`Updating host reputation domain info.`);
+                    console.log(`Updating host reputation domain info...`);
                     await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.peer_port, this.cfg.contractInstance.pubkey);
                     console.log(`Updated host reputation domain info.`);
 
@@ -497,7 +548,7 @@ class ReputationD {
                     const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
                     const upperBound = Math.floor(momentStartTimestamp + momentSize);
                     const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
-                    const startTimestamp = lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota);
+                    const startTimestamp = Math.floor(lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota));
 
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)
@@ -506,7 +557,7 @@ class ReputationD {
                     console.log(`Waiting ${startTimeout} milliseconds until other hosts are ready.`);
                     await new Promise((resolve) => setTimeout(resolve, startTimeout));
 
-                    const instances = await this.#getInstancesInUniverse(universeInfo.index, curMoment + 1);
+                    const instances = await this.#getInstancesInUniverse(universeInfo.universeIndex, curMoment + 1);
                     const overrideConfig = {
                         contract: {
                             unl: instances.map(p => `${p.pubkey}`),
@@ -568,46 +619,52 @@ class ReputationD {
         await this.#queueAction(async (submissionRefs) => {
             const currentMoment = await this.hostClient.getMoment();
 
-            if (scheduledMoment != currentMoment) {
+            if (scheduledMoment == currentMoment) {
+                // Sending reputations every moment.
+                if (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment) {
+                    submissionRefs.refs ??= [{}];
+                    // Check again wether the transaction is validated before retry.
+                    const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                    if (txHash) {
+                        const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                        if (txResponse && txResponse.code === "tesSUCCESS") {
+                            console.log('Transaction is validated and success, Retry skipped!')
+                            return;
+                        }
+                    }
+
+                    let scores = null;
+                    if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
+                        currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1) &&
+                        this.cfg.contractInstance.status === ContractStatus.Deployed)
+                        scores = await this.#getScores();
+
+                    console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);
+
+                    try {
+                        await this.hostClient.sendReputations(scores, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
+                        this.lastReputationMoment = await this.hostClient.getMoment();
+                    }
+                    catch (err) {
+                        if (err.code === 'tecHOOK_REJECTED') {
+                            console.log("Reputation rejected by the hook.");
+                        }
+                        else {
+                            console.log("Reputation tx error", err);
+                            throw err;
+                        }
+                    }
+                }
+            }
+            else {
                 console.log(`Skipping reputation sender since scheduled moment has passed. Scheduled in ${scheduledMoment}, Current moment ${curMoment}.`);
-                return;
             }
 
-            // Sending reputations every moment.
-            if (this.lastReputationMoment === 0 || currentMoment !== this.lastReputationMoment) {
-                submissionRefs.refs ??= [{}];
-                // Check again wether the transaction is validated before retry.
-                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
-                if (txHash) {
-                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
-                    if (txResponse && txResponse.code === "tesSUCCESS") {
-                        console.log('Transaction is validated and success, Retry skipped!')
-                        return;
-                    }
-                }
+            // Remove reputation instance info.
+            console.log(`Removing host reputation domain info...`);
+            await this.hostClient.setReputationContractInfo();
+            console.log(`Removed host reputation domain info.`);
 
-                let scores = null;
-                if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                    currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1) &&
-                    this.cfg.contractInstance.status === ContractStatus.Deployed)
-                    scores = await this.#getScores();
-
-                console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);
-
-                try {
-                    await this.hostClient.sendReputations(scores, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
-                    this.lastReputationMoment = await this.hostClient.getMoment();
-                }
-                catch (err) {
-                    if (err.code === 'tecHOOK_REJECTED') {
-                        console.log("Reputation rejected by the hook.");
-                    }
-                    else {
-                        console.log("Reputation tx error", err);
-                        throw err;
-                    }
-                }
-            }
         }, this.#reputationRetryCount, this.#reputationRetryDelay);
     }
 

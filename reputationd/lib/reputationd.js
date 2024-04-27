@@ -635,8 +635,7 @@ class ReputationD {
 
                     let scores = null;
                     if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                        currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1) &&
-                        this.cfg.contractInstance.status === ContractStatus.Deployed)
+                        currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
                         scores = await this.#getScores();
 
                     console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);

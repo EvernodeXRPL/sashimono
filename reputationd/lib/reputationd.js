@@ -531,7 +531,7 @@ class ReputationD {
                 if (this.cfg.contractInstance.status === ContractStatus.Created) {
                     // Set reputation contract info in domain.
                     console.log(`Updating host reputation domain info...`);
-                    await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.peer_port, this.cfg.contractInstance.pubkey);
+                    await this.hostClient.setReputationContractInfo(this.cfg.contractInstance.peer_port, this.cfg.contractInstance.pubkey, curMoment + 1);
                     console.log(`Updated host reputation domain info.`);
 
                     // Mark as updated.
@@ -658,11 +658,6 @@ class ReputationD {
             else {
                 console.log(`Skipping reputation sender since scheduled moment has passed. Scheduled in ${scheduledMoment}, Current moment ${curMoment}.`);
             }
-
-            // Remove reputation instance info.
-            console.log(`Removing host reputation domain info...`);
-            await this.hostClient.setReputationContractInfo();
-            console.log(`Removed host reputation domain info.`);
 
         }, this.#reputationRetryCount, this.#reputationRetryDelay);
     }

@@ -2034,7 +2034,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echomult "configuring Evernode reputation for reward distribution..."
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then
-            reputationd_secret_path=$(jq -r '.reputation.secretPath' "$REPUTATIOND_CONFIG")
+            reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
             chown "$REPUTATIOND_USER": $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then

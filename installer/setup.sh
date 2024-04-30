@@ -2401,9 +2401,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         update_evernode
 
         echomult "Upgrade complete!
-            \n\nNOTE: This update includes following commands for you to configure extra transaction fee and fallback xahaud servers.
-            \n evernode config extrafee <fee amount in XAH Drops> - Configure extra transaction fee.
-            \n evernode config xahaud-fallback <fallback xahaud servers (comma seperated)> - Configure fallback xahaud servers."
+            \n\nNOTE: This update includes following commands for you to configure reputation for reward distribution.
+            \n evernode config reputationd <opt-in|opt-out> - Opt-in or opt-out for Evernode reputation for reward distribution."
 
     elif [ "$mode" == "log" ]; then
         create_log

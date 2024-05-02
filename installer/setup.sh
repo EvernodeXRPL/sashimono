@@ -1418,7 +1418,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo $installer_version_timestamp >$SASHIMONO_DATA/$installer_version_timestamp_file
         if [ "$upgrade" == "0" ]; then
             if confirm "\nWould you like to opt-in to the Evernode reputation and reward system?"; then
-                if ! configure_reputationd 0; then 
+                if ! configure_reputationd 0; then
                     echomult "\nError occured configuring ReputationD!!\n You can retry opting-in by executing 'evernode reputationd' after installation.\n"
                 else
                     echomult "\nReputationD configuration successfull!!\n"
@@ -1431,7 +1431,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
                 #reputationd_enabled=true
                 echo "Configuring Evernode reputation and reward system."
-                if ! configure_reputationd 1; then 
+                if ! configure_reputationd 1; then
                     echomult "\nError occured configuring ReputationD!!\n You can retry opting-in by executing 'evernode reputationd' after installation.\n"
                 else
                     echomult "\nReputationD configuration successfull!!\n"
@@ -2053,6 +2053,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # NOTE : There can be user id mismatch, as we do not delete REPUTATIOND_USER's home in the uninstallation even though the user is removed.
         chown -R "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_user_dir
 
+        # Setting group ownership for the host secret.
+        local host_key_file_path=$(jq -r ".xrpl.secretPath | select( . != null )" "$MB_XRPL_CONFIG")
+        local host_key_parent_directory=$(dirname "$host_key_file_path")
+        [ $(stat -c "%a" "$host_key_parent_directory") != "550" ] && chmod -R 550 "$host_key_parent_directory"
+        [ $(stat -c "%a" "$host_key_file_path") != "440" ] && chmod 440 "$host_key_file_path"
+
         if [ "$upgrade" == "0" ]; then
             echo -e "\nAccount setup is complete."
 
@@ -2081,10 +2087,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
-                while true; do
-                    wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
-                    confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
-                done
+            while true; do
+                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
+                confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
+            done
 
         fi
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "error preparing account" && exit 1
@@ -2093,10 +2099,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
             \nYou can scan the provided QR code in your wallet app to send funds."
 
-                while true; do
-                    wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
-                    confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
-                done
+            while true; do
+                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
+                confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
+            done
 
         fi
         # Setup env variable for the reputationd user.
@@ -2402,7 +2408,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         echomult "Upgrade complete!
             \n\nNOTE: This update includes following commands for you to configure reputation for reward distribution.
-            \n evernode config reputationd <opt-in|opt-out> - Opt-in or opt-out for Evernode reputation for reward distribution."
+            \n evernode reputationd <opt-in|opt-out> - Opt-in or opt-out for Evernode reputation for reward distribution."
 
     elif [ "$mode" == "log" ]; then
         create_log

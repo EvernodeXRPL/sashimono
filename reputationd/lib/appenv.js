@@ -5,7 +5,7 @@ let appenv = {
     IS_DEV_MODE: process.env.REPUTATIOND_DEV === "1",
     FILE_LOG_ENABLED: process.env.REPUTATIOND_FILE_LOG === "1",
     DATA_DIR: process.env.REPUTATIOND_DATA_DIR || __dirname,
-    INSTANCE_IMAGE: 'evernode/sashimono:hp.0.6.4-ubt.20.04-njs.20',
+    INSTANCE_IMAGE: 'evernode/sashimono:hp.test-ubt.20.04-njs.20',
 }
 
 appenv = {

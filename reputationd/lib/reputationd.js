@@ -482,7 +482,8 @@ class ReputationD {
                     config: {
                         contract: {
                             consensus: {
-                                roundtime: 5000
+                                roundtime: 5000,
+                                threshold: 50
                             }
                         },
                         mesh: {

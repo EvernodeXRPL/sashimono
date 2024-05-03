@@ -96,7 +96,7 @@ class ContractInstanceManager {
     async sendContractReadRequest(input, protocol = HotPocket.protocols.bson) {
         const output = await this.#hpClient.submitContractReadRequest(protocol === INPUT_PROTOCOLS.bson ? bson.serialize(input) : JSON.stringify(input));
         const result = protocol === INPUT_PROTOCOLS.bson ? bson.deserialize(output) : JSON.parse(output);
-        return result.message;
+        return result?.message;
     }
 
     async checkBootstrapStatus() {

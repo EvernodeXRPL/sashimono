@@ -1227,6 +1227,9 @@
                     break
                 confirm "\nDo you want to re-check the balance?\nPressing 'n' would terminate the installation." || exit 1
             done
+
+            # Adding 2 second sleep to avoid account not found.
+            sleep 2
         fi
 
         echomult "\nPreparing host account..."
@@ -2028,7 +2031,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     function configure_reputationd() {
         local upgrade=$1
-        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && return 1
 
         # Configure reputationd users and register host.
         echomult "configuring Evernode reputation for reward distribution..."
@@ -2083,7 +2086,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             generate_qrcode "$reputationd_xrpl_address"
 
-            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "error creating configs" && exit 1
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "Error creating configs" && return 1
 
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
@@ -2093,7 +2096,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             done
 
         fi
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "error preparing account" && exit 1
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
 
         if [ "$upgrade" == "0" ]; then
             echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required registration fee in EVRs.
@@ -2152,7 +2155,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function remove_reputationd() {
-        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && exit 1
+        [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && return 1
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
         reputationd_user_id=$(id -u "$REPUTATIOND_USER")
@@ -2462,10 +2465,16 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     elif [ "$mode" == "reputationd" ]; then
         if [ "$2" == "opt-in" ]; then
             init_setup_helpers
-            configure_reputationd 0 || echomult "\nError occured configuring ReputationD."
+            if ! configure_reputationd 0; then
+                echomult "\nError occured configuring ReputationD. Retry with the same command again."
+                exit 1
+            fi
         elif [ "$2" == "opt-out" ]; then
             ! confirm "Are you sure you want to opt out from Evernode reputation for reward distribution?" "n" && exit 1
-            remove_reputationd
+            if ! remove_reputationd; then
+                echomult "\nError occured removing ReputationD. Retry with the same command again."
+                exit 1
+            fi
         else
             echomult "ReputationD management tool
             \nSupported commands:

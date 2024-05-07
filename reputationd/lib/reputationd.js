@@ -618,6 +618,13 @@ class ReputationD {
         const scheduledMoment = await this.hostClient.getMoment();
 
         await this.#queueAction(async (submissionRefs) => {
+            // Skip if host is not registered.
+            const hostInfo = await this.hostClient.getRegistration();
+            if (!hostInfo.active) {
+                console.log(`Skipping reputation sender since host is not active.`);
+                return;
+            }
+
             const currentMoment = await this.hostClient.getMoment();
 
             if (scheduledMoment == currentMoment) {

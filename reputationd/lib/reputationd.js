@@ -453,7 +453,7 @@ class ReputationD {
                     }
                 }
 
-                const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret, { messagePrivateKey: this.hostClient.accKeyPair.privateKey });
+                const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
                 await tenantClient.connect();
                 await tenantClient.prepareAccount();
 

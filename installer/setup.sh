@@ -2095,6 +2095,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
             done
 
+            sleep 2
         fi
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
 

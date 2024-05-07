@@ -4,7 +4,7 @@
         "build": "ncc build index.js --minify -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.45",
+        "evernode-js-client": "0.6.48",
         "ip6addr": "0.2.5",
         "ripple-keypairs": "1.3.1"
     }

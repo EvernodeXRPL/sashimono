@@ -5,7 +5,7 @@
         "build": "npm run lint && ncc build app.js --minify -o dist"
     },
     "dependencies": {
-        "evernode-js-client": "0.6.45",
+        "evernode-js-client": "0.6.48",
         "hotpocket-js-client": "0.5.6",
         "uuid": "9.0.1",
         "archiver": "5.3.1"

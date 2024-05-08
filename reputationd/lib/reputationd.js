@@ -565,7 +565,7 @@ class ReputationD {
                             bin_path: '/usr/bin/node',
                             bin_args: 'index.js',
                             consensus: {
-                                roundtime: 2000
+                                roundtime: 5000
                             }
                         },
                         mesh: {

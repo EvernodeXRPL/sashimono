@@ -440,94 +440,128 @@ class ReputationD {
 
             console.log(`Preparing reputation contract for the Moment ${curMoment + 1}...`);
 
-            if (!this.cfg.contractInstance || !this.cfg.contractInstance.created_timestamp ||
-                curMoment > (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
-                submissionRefs.refs ??= [{}];
-                // Check again wether the transaction is validated before retry.
-                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
-                if (txHash) {
-                    const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash);
-                    if (txResponse && txResponse.code === "tesSUCCESS") {
-                        console.log('Transaction is validated and success, Retry skipped!')
-                        return;
-                    }
-                }
+            let createdMoment = this.cfg.contractInstance?.created_moment ?? -1;
+            let acquireSentMoment = this.cfg.contractInstance?.transaction ? (this.cfg.contractInstance?.acquire_sent_moment ?? -1) : -1;
 
+            if (curMoment > createdMoment) {
                 const tenantClient = new evernode.TenantClient(this.hostClient.reputationAcc.address, this.hostClient.reputationAcc.secret);
                 await tenantClient.connect();
-                await tenantClient.prepareAccount();
 
-                const ownerKeys = await CommonHelper.generateKeys();
-
-                const contractId = this.#generateContractId(universeInfo.universeIndex);
-
-                // If we are the first in order acquire instance, Wait for first one if not.
-                const firstOrderedId = universeInfo.universeIndex * this.#universeSize;
-                let firstInstanceInfo;
-                if (universeInfo.orderedId != firstOrderedId) {
-                    console.log(`Waiting until ${firstOrderedId} node is acquired...`);
-                    firstInstanceInfo = await this.#waitForHostInstance(firstOrderedId, curMoment + 1).catch(console.error);
-                    if (!firstInstanceInfo) {
-                        console.log(`Skipping since first host failed for the moment ${curMoment + 1}.`)
-                        return;
+                submissionRefs.refs ??= [{}, {}];
+                // Check again wether the transaction is validated before retry.
+                const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                let retry = true;
+                if (txHash1) {
+                    const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash1);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!');
+                        retry = false;
                     }
                 }
 
-                console.log(`Acquiring the reputation contract instance${firstInstanceInfo ? ' (Observer)' : ''}...`);
+                if (retry) {
+                    await tenantClient.prepareAccount({ submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
+                }
 
-                let requirement = {
-                    owner_pubkey: ownerKeys.publicKey,
-                    contract_id: contractId,
-                    image: this.#instanceImage,
-                    config: {
-                        contract: {
-                            consensus: {
-                                roundtime: 5000,
-                                threshold: 50
-                            }
-                        },
-                        mesh: {
-                            peer_discovery: {
-                                enabled: false
-                            }
+                // Check again wether the transaction is validated before retry.
+                const txHash2 = submissionRefs?.refs[1]?.submissionResult?.result?.tx_json?.hash;
+                retry = true;
+                if (txHash2) {
+                    const txResponse = await tenantClient.xrplApi.getTransactionValidatedResults(txHash2);
+                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                        console.log('Transaction is validated and success, Retry skipped!')
+                        retry = false;
+                    }
+                }
+
+                if (retry) {
+                    const ownerKeys = await CommonHelper.generateKeys();
+
+                    const contractId = this.#generateContractId(universeInfo.universeIndex);
+
+                    // If we are the first in order acquire instance, Wait for first one if not.
+                    const firstOrderedId = universeInfo.universeIndex * this.#universeSize;
+                    let firstInstanceInfo;
+                    if (universeInfo.orderedId != firstOrderedId) {
+                        console.log(`Waiting until ${firstOrderedId} node is acquired...`);
+                        firstInstanceInfo = await this.#waitForHostInstance(firstOrderedId, curMoment + 1).catch(console.error);
+                        if (!firstInstanceInfo) {
+                            console.log(`Skipping since first host failed for the moment ${curMoment + 1}.`)
+                            return;
                         }
                     }
-                };
 
-                if (firstInstanceInfo) {
-                    requirement.config.contract.unl = [firstInstanceInfo.pubkey];
-                    requirement.config.mesh.known_peers = [`${firstInstanceInfo.domain}:${firstInstanceInfo.peerPort}`];
+                    if (curMoment > createdMoment ||
+                        curMoment > acquireSentMoment) {
+                        console.log(`Acquiring the reputation contract instance${firstInstanceInfo ? ' (Observer)' : ''}...`);
+
+                        let requirement = {
+                            owner_pubkey: ownerKeys.publicKey,
+                            contract_id: contractId,
+                            image: this.#instanceImage,
+                            config: {
+                                contract: {
+                                    consensus: {
+                                        roundtime: 5000,
+                                        threshold: 50
+                                    }
+                                },
+                                mesh: {
+                                    peer_discovery: {
+                                        enabled: false
+                                    }
+                                }
+                            }
+                        };
+
+                        if (firstInstanceInfo) {
+                            requirement.config.contract.unl = [firstInstanceInfo.pubkey];
+                            requirement.config.mesh.known_peers = [`${firstInstanceInfo.domain}:${firstInstanceInfo.peerPort}`];
+                        }
+
+                        // Update the registry with the active instance count.
+                        const transaction = await tenantClient.acquireLeaseSubmit(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[1], ...this.#prepareHostClientFunctionOptions() });
+                        if (!transaction)
+                            throw 'Error on acquire submit';
+
+                        acquireSentMoment = await this.reputationClient.getMoment();
+
+                        this.cfg.contractInstance = {
+                            transaction: transaction,
+                            acquire_sent_moment: acquireSentMoment,
+                            owner_privatekey: ownerKeys.privateKey,
+                            status: ContractStatus.AcquireSent
+                        };
+                        this.#persistConfig();
+                    }
+
+                    const result = await tenantClient.watchAcquireResponse(this.cfg.contractInstance.transaction);
+                    createdMoment = await this.reputationClient.getMoment();
+
+                    // Assign ip to domain and outbound_ip for instance created from old sashimono version.
+                    if ('ip' in result.instance) {
+                        result.instance.domain = result.instance.ip;
+                        delete result.instance.ip;
+                    }
+
+                    console.log('Reputation contract created in instance', result.instance);
+
+                    this.cfg.contractInstance = {
+                        ...result.instance,
+                        created_moment: createdMoment,
+                        owner_privatekey: ownerKeys.privateKey,
+                        status: ContractStatus.Created
+                    };
+                    this.#persistConfig();
                 }
-
-                // Update the registry with the active instance count.
-                const result = await tenantClient.acquireLease(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[0], ...this.#prepareHostClientFunctionOptions() });
 
                 await tenantClient.disconnect();
-
-                const acquiredTimestamp = Date.now();
-
-                // Assign ip to domain and outbound_ip for instance created from old sashimono version.
-                if ('ip' in result.instance) {
-                    result.instance.domain = result.instance.ip;
-                    delete result.instance.ip;
-                }
-
-                console.log('Reputation contract created in instance', result.instance);
-
-                this.cfg.contractInstance = {
-                    ...result.instance,
-                    created_timestamp: Math.floor(acquiredTimestamp / 1000), // Convert to seconds
-                    owner_privatekey: ownerKeys.privateKey,
-                    status: ContractStatus.Created
-                };
-                this.#persistConfig();
             }
             else {
                 console.log(`Skipping acquire since there is already created instance for the moment ${curMoment + 1}.`);
             }
 
-            if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                curMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp))) {
+            if (curMoment === createdMoment) {
 
                 if (this.cfg.contractInstance.status === ContractStatus.Created) {
                     // Set reputation contract info in domain.
@@ -642,8 +676,8 @@ class ReputationD {
                     }
 
                     let scores = null;
-                    if (this.cfg.contractInstance && this.cfg.contractInstance.created_timestamp &&
-                        currentMoment === (await this.reputationClient.getMoment(this.cfg.contractInstance.created_timestamp) + 1))
+                    const createdMoment = this.cfg.contractInstance?.created_moment ?? -1;
+                    if (currentMoment === createdMoment)
                         scores = await this.#getScores();
 
                     console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);

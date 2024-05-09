@@ -676,8 +676,8 @@ class ReputationD {
                     }
 
                     let scores = null;
-                    const createdMoment = this.cfg.contractInstance?.created_moment ?? -1;
-                    if (currentMoment === createdMoment)
+                    const createdMoment = this.cfg.contractInstance?.created_moment ?? -2;
+                    if (currentMoment === (createdMoment + 1))
                         scores = await this.#getScores();
 
                     console.log(`Reporting reputations at Moment ${currentMoment} ${scores ? 'With scores' : 'Without scores'}...`);

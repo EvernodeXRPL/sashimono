@@ -496,13 +496,13 @@ class MessageBoard {
         try {
             console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance URIToken) and re-minting and creating sell offer for the same lease index.
-            const uriToken = (await (new evernode.XrplAccount(lease.tenant)).getURITokens())?.find(n => n.index == lease.containerName);
+            const uriToken = (await this.hostClient.getLeaseByIndex(lease.containerName));
             // If there's no uriToken for this record it should be already burned and instance is destroyed, So we only delete the record.
             if (!uriToken)
                 console.log(`Cannot find an URIToken for ${lease.containerName}`);
             else {
                 const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
-                await this.destroyInstance(lease.containerName, lease.tenant, uriInfo.leaseIndex, uriInfo?.outboundIP?.address);
+                await this.destroyInstance(lease.containerName, uriInfo.leaseIndex, uriInfo?.outboundIP?.address);
             }
 
             this.activeInstanceCount--;
@@ -696,7 +696,7 @@ class MessageBoard {
                 // If there's a lease record this is created from message board.
                 if (lease) {
                     leases.splice(leaseIndex, 1);
-                    const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getURITokens())?.find(n => n.index == instance.name);
+                    const uriToken = (await this.hostClient.getLeaseByIndex(instance.name));
 
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                     // If the URIToken is not owned by the tenant we destroy the instance since this is not a valid lease.
@@ -708,7 +708,7 @@ class MessageBoard {
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
                         if (uriToken) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
-                            await this.recreateLeaseOffer(instance.name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
+                            await this.recreateLeaseOffer(instance.name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
                             await this.#queueAction(async (submissionRefs) => {
                                 submissionRefs.refs ??= [{}];
@@ -762,10 +762,10 @@ class MessageBoard {
                     if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
                         activeInstanceCount--;
 
-                    const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address)).getURITokens())?.find(n => n.index == lease.container_name);
+                    const uriToken = (await this.hostClient.getLeaseByIndex(lease.container_name));
                     if (uriToken) {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
-                        await this.recreateLeaseOffer(lease.container_name, lease.tenant_xrp_address, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
+                        await this.recreateLeaseOffer(lease.container_name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
                         await this.#queueAction(async (submissionRefs) => {
                             submissionRefs.refs ??= [{}];
@@ -882,12 +882,11 @@ class MessageBoard {
                                 const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
                                 if (!lease) {
-                                    const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
                                     if (uriToken) {
                                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
-                                        await this.recreateLeaseOffer(eventInfo.data.uriTokenId, eventInfo.data.tenant, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
+                                        await this.recreateLeaseOffer(eventInfo.data.uriTokenId, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
                                         await this.#queueAction(async (submissionRefs) => {
                                             submissionRefs.refs ??= [{}];
@@ -913,8 +912,7 @@ class MessageBoard {
                                 const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
 
                                 if (lease) {
-                                    const tenantXrplAcc = new evernode.XrplAccount(eventInfo.data.tenant);
-                                    const uriToken = (await tenantXrplAcc.getURITokens()).find(n => n.Issuer == this.cfg.xrpl.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX) && n.index === eventInfo.data.uriTokenId);
+                                    const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
                                     if (uriToken) {
                                         await this.#queueAction(async (submissionRefs) => {
                                             submissionRefs.refs ??= [{}];
@@ -961,7 +959,7 @@ class MessageBoard {
         return null;
     }
 
-    async recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, outboundIP) {
+    async recreateLeaseOffer(uriTokenId, leaseIndex, outboundIP) {
         await this.#queueAction(async (submissionRefs) => {
             submissionRefs.refs ??= [{}, {}];
             // Check again wether the transaction is validated before retry.
@@ -1058,7 +1056,7 @@ class MessageBoard {
                 console.error(`Sashimono busy timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                 // Update the lease status of the request to 'SashiTimeout'.
                 await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, uriInfo?.outboundIP?.address);
+                await this.recreateLeaseOffer(uriTokenId, leaseIndex, uriInfo?.outboundIP?.address);
             }
             else {
                 const instanceRequirements = { ...r.payload, outbound_ipv6: (uriInfo.outboundIP?.family == 6) ? uriInfo.outboundIP?.address : "-", outbound_net_interface: (uriInfo.outboundIP?.family == 6) ? this.cfg.networking.ipv6.interface : "-" };
@@ -1072,7 +1070,7 @@ class MessageBoard {
                     console.error(`Instance creation timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                     // Update the lease status of the request to 'SashiTimeout'.
                     await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
-                    await this.destroyInstance(createRes.content.name, tenantAddress, leaseIndex, instanceOutboundIPAddress);
+                    await this.destroyInstance(createRes.content.name, leaseIndex, instanceOutboundIPAddress);
                 } else {
                     console.log(`Instance created for ${tenantAddress}`);
 
@@ -1143,7 +1141,7 @@ class MessageBoard {
 
             // Re-create the lease offer (Only if the uriToken belongs to this request has a lease index).
             if (leaseIndex >= 0)
-                await this.recreateLeaseOffer(uriTokenId, tenantAddress, leaseIndex, instanceOutboundIPAddress).catch(console.error);
+                await this.recreateLeaseOffer(uriTokenId, leaseIndex, instanceOutboundIPAddress).catch(console.error);
 
             await this.#queueAction(async (submissionRefs) => {
                 submissionRefs.refs ??= [{}];
@@ -1166,10 +1164,10 @@ class MessageBoard {
         }
     }
 
-    async destroyInstance(containerName, tenantAddress, leaseIndex, outboundIP = null) {
+    async destroyInstance(containerName, leaseIndex, outboundIP = null) {
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);
-        await this.recreateLeaseOffer(containerName, tenantAddress, leaseIndex, outboundIP).catch(console.error);
+        await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP).catch(console.error);
     }
 
     async handleExtendLease(r) {

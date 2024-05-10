@@ -744,9 +744,8 @@ class Setup {
             let vacant = [];
             for (const l of leaseRecords) {
                 try {
-                    const tenantAddress = l.tenant_xrp_address;
                     const uriTokenId = l.container_name;
-                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
+                    const uriToken = (await hostClient.getLeaseByIndex(uriTokenId));
                     if (uriToken) {
                         const index = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).leaseIndex;
                         acquired.push(index);
@@ -869,13 +868,13 @@ class Setup {
                     xrplApi: xrplApi
                 });
 
+                hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
+                await hostClient.connect();
+                
                 // Get the existing uriToken of the lease.
-                const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);
+                const uriToken = (await hostClient.getLeaseByIndex(lease.container_name));
 
                 if (uriToken) {
-                    hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
-                    await hostClient.connect();
-
                     // Delete instance from sashiDB and burn the token
                     const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
 

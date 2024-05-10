@@ -40,6 +40,7 @@ namespace hp
     constexpr const char *COPY_DIR = "cp -r %s %s";
     constexpr const char *MOVE_DIR = "mv %s %s";
     constexpr const char *CHOWN_DIR = "chown -R %s:%s %s";
+    constexpr const char *CHMOD_DIR = "chmod -R %s %s";
 
     // Error codes used in create and initiate instance.
     constexpr const char *DB_READ_ERROR = "db_read_error";
@@ -157,12 +158,13 @@ namespace hp
             return -1;
         }
 
-        if (image.substr(0, conf::cfg.docker.image_prefix.size()) != conf::cfg.docker.image_prefix)
-        {
-            error_msg = DOCKER_IMAGE_INVALID;
-            LOG_ERROR << "Provided docker image is not allowed.";
-            return -1;
-        }
+        // Allow any image outside of Evernode labs
+        // if (image.substr(0, conf::cfg.docker.image_prefix.size()) != conf::cfg.docker.image_prefix)
+        // {
+        //     error_msg = DOCKER_IMAGE_INVALID;
+        //     LOG_ERROR << "Provided docker image is not allowed.";
+        //     return -1;
+        // }
 
         const std::string image_name = image;
 
@@ -592,7 +594,11 @@ namespace hp
         len = 12 + (username.length() * 2) + contract_dir.length();
         char own_command[len];
         sprintf(own_command, CHOWN_DIR, username.data(), username.data(), contract_dir.data());
-        if (system(own_command) != 0 || chmod(contract_dir.data(), util::DIR_PERMS) == -1)
+        len = 11 + 4 + contract_dir.length();
+        // Give group write access to the contract directory, So contract user can write into it.
+        char perm_command[len];
+        sprintf(perm_command, CHMOD_DIR, "0775", contract_dir.data());
+        if (system(own_command) != 0 || system(perm_command) != 0)
         {
             LOG_ERROR << "Changing contract ownership and permissions failed " << contract_dir;
             return -1;

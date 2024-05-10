@@ -96,7 +96,7 @@
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATION=3
-    export MIN_REPUTATION_COST_PER_MONTH=7
+    export MIN_REPUTATION_COST_PER_MONTH=10
 
     #export NETWORK="${NETWORK:-mainnet}"
     export NETWORK="${NETWORK:-devnet}"

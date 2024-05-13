@@ -740,7 +740,7 @@
             read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
             ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." && continue
             [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size should be "$min_ram_mb" MB." && continue
-            [[ $ramMB -gt $max_ram_mb ]] && echo "According to your system specs. Maximum memory size should be "$max_ram_mb" MB." && continue
+            [[ $ramMB -gt $max_ram_mb ]] && echo "Insufficient memory on your host. Maximum available memory is "$max_ram_mb" MB." && continue
             break
         done
 
@@ -749,7 +749,7 @@
             read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
             ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." && continue
             [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size should be "$min_swap_mb" MB." && continue
-            [[ $swapMB -gt $max_swap_mb ]] && echo "According to your system specs. Maximum swap size should be "$max_swap_mb" MB." && continue
+            [[ $swapMB -gt $max_swap_mb ]] && echo "Insufficient swap on your host. Maximum available swap is "$max_swap_mb" MB." && continue
             break
         done
 
@@ -758,7 +758,7 @@
             read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
             ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." && continue
             [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size should be "$min_disk_mb" MB." && continue
-            [[ $diskMB -gt $max_disk_mb ]] && echo "According to your system specs. Maximum disk size should be "$max_disk_mb" MB." && continue
+            [[ $diskMB -gt $max_disk_mb ]] && echo "Insufficient disk on your host. Maximum available disk is "$max_disk_mb" MB." && continue
             break
         done
 
@@ -1780,7 +1780,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 ! validate_positive_decimal $ramMB && echomult "Invalid memory size.\n $help_text" && exit 1
                 [[ $ramMB -lt $min_ram_mb ]] &&
                     echomult "Minimum memory size should be "$min_ram_mb" MB.\n" && exit 1
-                [[ $ramMB -gt $max_ram_mb ]] && echo "According to your system specs. Maximum memory size should be "$max_ram_mb" MB." && exit 1
+                [[ $ramMB -gt $max_ram_mb ]] && echo "Insufficient memory on your host. Maximum available memory is "$max_ram_mb" MB." && exit 1
             fi
             if ([ ! -z $swapMB ] && [[ $swapMB != 0 ]]); then
                 local swapKB=$(free | grep -i Swap | awk '{print $2}')
@@ -1788,7 +1788,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 ! validate_positive_decimal $swapMB && echomult "Invalid swap size.\n $help_text" && exit 1
                 [[ $swapMB -lt $min_swap_mb ]] &&
                     echomult "Minimum swap size should be "$min_swap_mb" MB.\n " && exit 1
-                [[ $swapMB -gt $max_swap_mb ]] && echo "According to your system specs. Maximum swap size should be "$max_swap_mb" MB." && exit 1
+                [[ $swapMB -gt $max_swap_mb ]] && echo "Insufficient swap on your host. Maximum available swap is "$max_swap_mb" MB." && exit 1
             fi
             if ([ ! -z $diskMB ] && [[ $diskMB != 0 ]]); then
                 local diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
@@ -1797,7 +1797,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 ! validate_positive_decimal $diskMB && echomult "Invalid disk size.\n $help_text" && exit 1
                 [[ $diskMB -lt $min_disk_mb ]] &&
                     echomult "Minimum disk size should be "$min_disk_mb" MB.\n" && exit 1
-                [[ $diskMB -gt $max_disk_mb ]] && echo "According to your system specs. Maximum disk size should be "$max_disk_mb" MB." && exit 1
+                [[ $diskMB -gt $max_disk_mb ]] && echo "Insufficient disk on your host. Maximum available disk is "$max_disk_mb" MB." && exit 1
             fi
             [ ! -z $instcount ] && [[ $instcount != 0 ]] && ! validate_positive_decimal $instcount &&
                 echomult "Invalid instance count.\n   $help_text" && exit 1

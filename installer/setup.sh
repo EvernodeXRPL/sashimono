@@ -735,24 +735,30 @@
             ! [[ $alloc_instcount -gt 0 ]] && echo "Invalid instance count." || break
         done
 
+        local max_ram_mb=$((ramKB / 1000))
         while true; do
             read -ep "Specify the total memory in megabytes to distribute among all contract instances: " ramMB </dev/tty
             ! [[ $ramMB -gt 0 ]] && echo "Invalid memory size." && continue
-            [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size shoule be "$min_ram_mb" MB." && continue
+            [[ $ramMB -lt $min_ram_mb ]] && echo "Minimum memory size should be "$min_ram_mb" MB." && continue
+            [[ $ramMB -gt $max_ram_mb ]] && echo "According to your system specs. Maximum memory size should be "$max_ram_mb" MB." && continue
             break
         done
 
+        local max_swap_mb=$((swapKB / 1000))
         while true; do
             read -ep "Specify the total Swap in megabytes to distribute among all contract instances: " swapMB </dev/tty
             ! [[ $swapMB -gt 0 ]] && echo "Invalid swap size." && continue
-            [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size shoule be "$min_swap_mb" MB." && continue
+            [[ $swapMB -lt $min_swap_mb ]] && echo "Minimum swap size should be "$min_swap_mb" MB." && continue
+            [[ $swapMB -gt $max_swap_mb ]] && echo "According to your system specs. Maximum swap size should be "$max_swap_mb" MB." && continue
             break
         done
 
+        local max_disk_mb=$((diskKB / 1000))
         while true; do
             read -ep "Specify the total disk space in megabytes to distribute among all contract instances: " diskMB </dev/tty
             ! [[ $diskMB -gt 0 ]] && echo "Invalid disk size." && continue
-            [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size shoule be "$min_disk_mb" MB." && continue
+            [[ $diskMB -lt $min_disk_mb ]] && echo "Minimum disk size should be "$min_disk_mb" MB." && continue
+            [[ $diskMB -gt $max_disk_mb ]] && echo "According to your system specs. Maximum disk size should be "$max_disk_mb" MB." && continue
             break
         done
 
@@ -1768,12 +1774,31 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 \n Instance count: $max_instance_count\n" && exit 0
 
             local help_text="Usage: evernode config resources | evernode config resources <memory MB> <swap MB> <disk MB> <max instance count>\n"
-            [ ! -z $ramMB ] && [[ $ramMB != 0 ]] && (! validate_positive_decimal $ramMB || [[ $ramMB -lt $min_ram_mb ]]) &&
-                echomult "Invalid memory size $([[ $min_ram_mb != 0 ]] && echo "(Minimum should be "$min_ram_mb" MB)" || echo "").\n   $help_text" && exit 1
-            [ ! -z $swapMB ] && [[ $swapMB != 0 ]] && (! validate_positive_decimal $swapMB || [[ $swapMB -lt $min_swap_mb ]]) &&
-                echomult "Invalid swap size $([[ $min_swap_mb != 0 ]] && echo "(Minimum should be "$min_swap_mb" MB)" || echo "").\n   $help_text" && exit 1
-            [ ! -z $diskMB ] && [[ $diskMB != 0 ]] && (! validate_positive_decimal $diskMB || [[ $diskMB -lt $min_disk_mb ]]) &&
-                echomult "Invalid disk size $([[ $min_disk_mb != 0 ]] && echo "(Minimum should be "$min_disk_mb" MB)" || echo "").\n   $help_text" && exit 1
+            if ([ ! -z $ramMB ] && [[ $ramMB != 0 ]]); then
+                local ramKB=$(free | grep Mem | awk '{print $2}')
+                local max_ram_mb=$((ramKB / 1000))
+                ! validate_positive_decimal $ramMB && echomult "Invalid memory size.\n $help_text" && exit 1
+                [[ $ramMB -lt $min_ram_mb ]] &&
+                    echomult "Minimum memory size should be "$min_ram_mb" MB.\n" && exit 1
+                [[ $ramMB -gt $max_ram_mb ]] && echo "According to your system specs. Maximum memory size should be "$max_ram_mb" MB." && exit 1
+            fi
+            if ([ ! -z $swapMB ] && [[ $swapMB != 0 ]]); then
+                local swapKB=$(free | grep -i Swap | awk '{print $2}')
+                local max_swap_mb=$((swapKB / 1000))
+                ! validate_positive_decimal $swapMB && echomult "Invalid swap size.\n $help_text" && exit 1
+                [[ $swapMB -lt $min_swap_mb ]] &&
+                    echomult "Minimum swap size should be "$min_swap_mb" MB.\n " && exit 1
+                [[ $swapMB -gt $max_swap_mb ]] && echo "According to your system specs. Maximum swap size should be "$max_swap_mb" MB." && exit 1
+            fi
+            if ([ ! -z $diskMB ] && [[ $diskMB != 0 ]]); then
+                local diskKB=$(df | grep -w /home | head -1 | awk '{print $4}')
+                [ -z "$diskKB" ] && local diskKB=$(df | grep -w / | head -1 | awk '{print $4}')
+                local max_disk_mb=$((diskKB / 1000))
+                ! validate_positive_decimal $diskMB && echomult "Invalid disk size.\n $help_text" && exit 1
+                [[ $diskMB -lt $min_disk_mb ]] &&
+                    echomult "Minimum disk size should be "$min_disk_mb" MB.\n" && exit 1
+                [[ $diskMB -gt $max_disk_mb ]] && echo "According to your system specs. Maximum disk size should be "$max_disk_mb" MB." && exit 1
+            fi
             [ ! -z $instcount ] && [[ $instcount != 0 ]] && ! validate_positive_decimal $instcount &&
                 echomult "Invalid instance count.\n   $help_text" && exit 1
 

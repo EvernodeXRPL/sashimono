@@ -28,6 +28,9 @@ class ReputationD {
     #deploymentStartTimeQuota = 0.8;
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
+    #consensusRoundTime = 6000;
+    #consensusStageSlice = 20;
+    #consensusThreshold = 50;
 
     #configPath;
     #mbXrplConfigPath;
@@ -502,8 +505,9 @@ class ReputationD {
                             config: {
                                 contract: {
                                     consensus: {
-                                        roundtime: 5000,
-                                        threshold: 50
+                                        roundtime: this.#consensusRoundTime,
+                                        stage_slice: this.#consensusStageSlice,
+                                        threshold: this.#consensusThreshold
                                     }
                                 },
                                 mesh: {
@@ -597,10 +601,7 @@ class ReputationD {
                         contract: {
                             unl: instances.map(p => `${p.pubkey}`),
                             bin_path: '/usr/bin/node',
-                            bin_args: 'index.js',
-                            consensus: {
-                                roundtime: 5000
-                            }
+                            bin_args: 'index.js'
                         },
                         mesh: {
                             known_peers: instances.map(p => `${p.domain}:${p.peerPort}`)

@@ -28,8 +28,7 @@ class ReputationD {
     #deploymentStartTimeQuota = 0.8;
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
-    #consensusRoundTime = 6000;
-    #consensusStageSlice = 20;
+    #consensusRoundTime = 10000;
     #consensusThreshold = 50;
 
     #configPath;
@@ -506,7 +505,6 @@ class ReputationD {
                                 contract: {
                                     consensus: {
                                         roundtime: this.#consensusRoundTime,
-                                        stage_slice: this.#consensusStageSlice,
                                         threshold: this.#consensusThreshold
                                     }
                                 },

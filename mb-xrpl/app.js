@@ -65,7 +65,7 @@ async function main() {
                 await new Setup().checkBalance();
             }
             else if (process.argv.length >= 4 && process.argv[2] === 'wait-for-funds') {
-                await new Setup().waitForFunds(process.argv[3], parseInt(process.argv[4]));
+                await new Setup().waitForFunds(process.argv[3], parseFloat(process.argv[4]));
             }
             else if (process.argv.length >= 3 && process.argv[2] === 'prepare') {
                 await new Setup().prepareHostAccount(process.argv[3]);
@@ -171,7 +171,7 @@ async function main() {
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 
-            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.SECRET_CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH);
+            const mb = new MessageBoard(appenv.CONFIG_PATH, appenv.DB_PATH, appenv.SASHI_CLI_PATH, appenv.SASHI_DB_PATH, appenv.SASHI_CONFIG_PATH, appenv.REPUTATIOND_CONFIG_PATH);
             await mb.init();
         }
         catch (err) {

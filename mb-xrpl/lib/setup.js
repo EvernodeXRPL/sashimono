@@ -6,6 +6,7 @@ const { SqliteDatabase } = require('./sqlite-handler');
 const { ConfigHelper } = require('./config-helper');
 const { SashiCLI } = require('./sashi-cli');
 const { UtilHelper } = require('./util-helper');
+const path = require('path');
 
 async function setEvernodeDefaults(network, governorAddress, rippledServer, fallbackRippledServers) {
     await evernode.Defaults.useNetwork(network || appenv.NETWORK);
@@ -31,7 +32,7 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 class Setup {
 
     #getConfig(readSecret = true) {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, readSecret ? appenv.SECRET_CONFIG_PATH : null);
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.REPUTATIOND_CONFIG_PATH, readSecret);
     }
 
     #saveConfig(cfg) {
@@ -93,7 +94,6 @@ class Setup {
 
         // Prepare host account.
         const hostClient = new evernode.HostClient(acc.address, acc.secret);
-        await hostClient.connect();
 
         // Update the Defaults with "xrplApi" of the client.
         evernode.Defaults.set({
@@ -744,9 +744,8 @@ class Setup {
             let vacant = [];
             for (const l of leaseRecords) {
                 try {
-                    const tenantAddress = l.tenant_xrp_address;
                     const uriTokenId = l.container_name;
-                    const uriToken = (await (new evernode.XrplAccount(tenantAddress, null, { xrplApi: xrplApi })).getURITokens())?.find(n => n.index == uriTokenId);
+                    const uriToken = (await hostClient.getLeaseByIndex(uriTokenId));
                     if (uriToken) {
                         const index = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).leaseIndex;
                         acquired.push(index);
@@ -847,7 +846,7 @@ class Setup {
             console.log(`Destroying the instance...`);
 
             // Destroy the instance.
-            const sashiCli = new SashiCLI(sashiCliPath);
+            const sashiCli = new SashiCLI(sashiCliPath, appenv.IS_DEV_MODE ? { DATA_DIR: path.join(appenv.DATA_DIR, '../') } : {});
             await sashiCli.destroyInstance(containerName);
 
             db = new SqliteDatabase(appenv.DB_PATH);
@@ -869,13 +868,13 @@ class Setup {
                     xrplApi: xrplApi
                 });
 
+                hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
+                await hostClient.connect();
+                
                 // Get the existing uriToken of the lease.
-                const uriToken = (await (new evernode.XrplAccount(lease.tenant_xrp_address, null, { xrplApi: xrplApi }).getURITokens()))?.find(n => n.index == lease.container_name);
+                const uriToken = (await hostClient.getLeaseByIndex(lease.container_name));
 
                 if (uriToken) {
-                    hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
-                    await hostClient.connect();
-
                     // Delete instance from sashiDB and burn the token
                     const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
 

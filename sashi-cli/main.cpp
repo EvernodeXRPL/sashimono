@@ -6,8 +6,9 @@
 #include "version.hpp"
 
 #define DEV_MODE "DEV_MODE"
+#define DATA_DIR "DATA_DIR"
 
-std::string exec_dir;
+std::string data_dir;
 
 /**
  * Performs any cleanup on graceful application termination.
@@ -57,7 +58,7 @@ void std_terminate() noexcept
 template <typename executor>
 int execute_cli(executor const &func)
 {
-    if (cli::init(exec_dir) == -1)
+    if (cli::init(data_dir) == -1)
         return -1;
 
     const int ret = func();
@@ -92,7 +93,7 @@ int parse_cmd(int argc, char **argv)
     std::string json_message;
     json->add_option("-m,--message", json_message, "JSON message");
 
-    create->group(""); //Hides 'create' command from help-all
+    create->group(""); // Hides 'create' command from help-all
     std::string owner, contract_id, image, outbound_ipv6, outbound_net_interface;
     create->add_option("-o,--owner", owner, "Hex (ed-prefixed) public key of the instance owner");
     create->add_option("-c,--contract-id", contract_id, "Contract Id (GUID) of the instance");
@@ -112,9 +113,14 @@ int parse_cmd(int argc, char **argv)
     // Take the realpath of sashi cli exec path.
     {
         std::array<char, PATH_MAX> buffer;
-        if (realpath(argv[0], buffer.data()))
+        const char *env_var = getenv(DATA_DIR);
+        if (env_var != nullptr)
         {
-            exec_dir = dirname(buffer.data());
+            data_dir = std::string(env_var);
+        }
+        else if (realpath(argv[0], buffer.data()))
+        {
+            data_dir = dirname(buffer.data());
         }
         else
         {
@@ -124,7 +130,7 @@ int parse_cmd(int argc, char **argv)
                 std::cerr << errno << ": Error in executable path." << std::endl;
                 return -1;
             }
-            exec_dir = buffer.data();
+            data_dir = buffer.data();
         }
     }
 
@@ -134,11 +140,13 @@ int parse_cmd(int argc, char **argv)
 
     if (!is_dev_mode)
     {
-        if(create->parsed()){
+        if (create->parsed())
+        {
             std::cout << "Command not supported: Run with --help or --help-all for more information." << std::endl;
             return -1;
         }
-        if(json->parsed() && !json_message.empty()){
+        if (json->parsed() && !json_message.empty())
+        {
             jsoncons::json json_data = jsoncons::json::parse(json_message);
             if (json_data.contains("type") && json_data["type"].as_string() == "create")
             {

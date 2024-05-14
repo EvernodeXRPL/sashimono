@@ -459,8 +459,6 @@ mkdir -p $SASHIMONO_DATA
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
 chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
-# Setting up Sashimono admin group.
-! grep -q $SASHIADMIN_GROUP /etc/group && ! groupadd $SASHIADMIN_GROUP && echo "$SASHIADMIN_GROUP group creation failed." && abort
 
 ! set_cpu_info && echo "Fetching CPU info failed" && abort
 
@@ -517,10 +515,18 @@ fi
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
+ # First create the folder from root and then transfer ownership to the user
+# since the folder is created in /etc/sashimono directory.
+! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
+# Change ownership to reputationd user.
+chown -R "$REPUTATIOND_USER":"$REPUTATIOND_USER" $REPUTATIOND_DATA
+
 # Configure message board users and register host.
-echo "Configuaring host setup on Evernode..."
+echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
+cp -r "$script_dir"/reputationd $SASHIMONO_BIN
+cp -r "$script_dir"/reputation-contract $REPUTATIOND_DATA/
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
@@ -528,7 +534,7 @@ if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
     # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
     # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-    chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" /home/$MB_XRPL_USER
+    chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" /home/$MB_XRPL_USER
 
     secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
     chown "$MB_XRPL_USER": $secret_path
@@ -634,7 +640,7 @@ mb_user_runtime_dir="/run/user/$mb_user_id"
 
 # Setting the ownership of the MB_XRPL_USER's home to MB_XRPL_USER expilcity.
 # NOTE : There can be user id mismatch, as we do not delete MB_XRPL_USER's home in the uninstallation even though the user is removed.
-chown -R "$MB_XRPL_USER":"$MB_XRPL_USER" $mb_user_dir
+chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" $mb_user_dir
 
 # Setup env variable for the message board user.
 echo "
@@ -690,5 +696,6 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
 fi
 
 echo "Sashimono installed successfully."
+
 
 exit 0

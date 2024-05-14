@@ -16,8 +16,28 @@ appenv = {
     DB_PATH: appenv.DATA_DIR + '/mb-xrpl.sqlite',
     DB_TABLE_NAME: 'leases',
     DB_UTIL_TABLE_NAME: 'util_data',
-    SASHI_DB_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.sqlite",
-    SASHI_CONFIG_PATH: (appenv.IS_DEV_MODE ? "../build/" : path.join(appenv.DATA_DIR, '../')) + "sa.cfg",
+    SASHI_DB_PATH: (() => {
+        if (appenv.IS_DEV_MODE) {
+            const devPath = "../build/sa.sqlite";
+            if (!fs.existsSync(devPath))
+                return path.join(appenv.DATA_DIR, '../') + "sa.sqlite";
+            return devPath;
+        }
+        else {
+            return path.join(appenv.DATA_DIR, '../') + "sa.sqlite"
+        }
+    })(),
+    SASHI_CONFIG_PATH: (() => {
+        if (appenv.IS_DEV_MODE) {
+            const devPath = "../build/sa.cfg";
+            if (!fs.existsSync(devPath))
+                return path.join(appenv.DATA_DIR, '../') + "sa.cfg";
+            return devPath;
+        }
+        else {
+            return path.join(appenv.DATA_DIR, '../') + "sa.cfg"
+        }
+    })(),
     SASHI_TABLE_NAME: 'instances',
     LAST_WATCHED_LEDGER: 'last_watched_ledger',
     ACQUIRE_LEASE_TIMEOUT_THRESHOLD: 0.8,
@@ -25,16 +45,11 @@ appenv = {
     ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS: 4,
     SASHIMONO_SCHEDULER_INTERVAL_SECONDS: 2,
     SASHI_CLI_PATH: appenv.IS_DEV_MODE ? "../build/sashi" : "/usr/bin/sashi",
-    MB_VERSION: '0.8.2',
+    MB_VERSION: '0.8.3',
     TOS_HASH: '0801677EBCB2F76EF97D531549D8B27DB2C7A4A8EE7F60032AE40184247F0810', // This is the sha256 hash of EVERNODE-HOSTING-PRINCIPLES.pdf.
-    NETWORK: 'mainnet'
+    NETWORK: 'mainnet',
+    REPUTATIOND_CONFIG_PATH: path.join(appenv.DATA_DIR, '../') + "reputationd/reputationd.cfg",
 }
-
-const getSecretPath = () => {
-    return fs.existsSync(appenv.CONFIG_PATH) ? JSON.parse(fs.readFileSync(appenv.CONFIG_PATH).toString()).xrpl.secretPath : "";
-}
-
-appenv = { ...appenv, SECRET_CONFIG_PATH: getSecretPath() }
 
 Object.freeze(appenv);
 

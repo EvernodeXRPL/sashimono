@@ -5,8 +5,9 @@ class SashiCLI {
 
     #waiting = false;
 
-    constructor(cliPath) {
+    constructor(cliPath, env = {}) {
         this.cliPath = cliPath;
+        this.env = env;
     }
 
     async createInstance(containerName, requirements) {
@@ -49,7 +50,7 @@ class SashiCLI {
     execSashiCli(msg) {
         this.#waiting = true;
         return new Promise((resolve, reject) => {
-            let command = `${this.cliPath} json -m '${JSON.stringify(msg)}'`;
+            let command = (Object.keys(this.env).length > 0 ? `${Object.entries(this.env).map(e => `${e[0]}=${e[1]}`)} ` : '') + `${this.cliPath} json -m '${JSON.stringify(msg)}'`;
 
             if (msg.type === "create") {
                 command = `DEV_MODE=1 ${command}`;

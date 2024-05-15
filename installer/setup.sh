@@ -2136,7 +2136,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         fi
 
-        if [ "$upgrade" == "0" ]; then
+        if [ "$upgrade" == "1" ]; then
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
         fi
 

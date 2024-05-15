@@ -32,7 +32,7 @@ namespace hp
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
     // For the local log driver compression, minimum max-file should be 2. So we keep two logs each max-size is 5mb
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout --foreground -v -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local \
-                                            --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
+     --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -182,9 +182,9 @@ namespace hp
                 sqlite::get_max_ports(db, last_assigned_ports);
                 last_port_assign_from_vacant = false;
             }
-            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
+            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1), (uint16_t)(last_assigned_ports.gp_tcp_port_start + 1), (uint16_t)(last_assigned_ports.gp_udp_port_start + 1) };
         }
-
+// 
         int user_id;
         std::string username;
         if (install_user(
@@ -313,18 +313,30 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
+        const std::string gp_tcp_port_1 = std::to_string(assigned_ports.gp_tcp_port_start);
+        const std::string gp_tcp_port_2 = std::to_string(assigned_ports.gp_tcp_port_start +1 );
+        const std::string gp_udp_port_1 = std::to_string(assigned_ports.gp_udp_port_start);
+        const std::string gp_udp_port_2 = std::to_string(assigned_ports.gp_udp_port_start +1 );
         const std::string timeout = std::to_string(DOCKER_CREATE_TIMEOUT_SECS);
         const int len = 376 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
-                user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
+                user_port.data(), user_port.data(), 
+                peer_port.data(), peer_port.data(), 
+                peer_port.data(), peer_port.data(), 
+                gp_tcp_port_1.data(), gp_tcp_port_1.data(), 
+                gp_tcp_port_2.data(), gp_tcp_port_2.data(), 
+                gp_udp_port_1.data(), gp_udp_port_1.data(), 
+                gp_udp_port_2.data(), gp_udp_port_2.data(), 
+                contract_dir.data(), image_name.data());
+//
         LOG_INFO << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
             return -1;
         }
-
+//
         info.container_name = container_name;
         info.contract_dir = contract_dir;
         info.image_name = image_name;
@@ -487,6 +499,7 @@ namespace hp
             LOG_ERROR << errno << ": Error destroying container " << container_name;
             return -1;
         }
+        //
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
@@ -914,6 +927,9 @@ namespace hp
             std::to_string(contract_ugid.gid),
             std::to_string(instance_ports.peer_port),
             std::to_string(instance_ports.user_port),
+            std::to_string(instance_ports.gp_tcp_port_start),
+            std::to_string(instance_ports.gp_udp_port_start),
+
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,

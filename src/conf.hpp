@@ -71,6 +71,8 @@ namespace conf
         std::string host_address;
         uint16_t init_peer_port = 0;
         uint16_t init_user_port = 0;
+        uint16_t init_gp_tcp_port = 0;
+        uint16_t init_gp_udp_port = 0;
     };
 
     struct system_config
@@ -125,7 +127,7 @@ namespace conf
 
     int init();
 
-    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port, const uint16_t docker_registry_port,
+    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port,const uint16_t init_gp_tcp_port, const uint16_t init_gp_udp_port, const uint16_t docker_registry_port,
                const size_t inst_count, const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes);
 
     void set_dir_paths(std::string exepath, std::string datadir);

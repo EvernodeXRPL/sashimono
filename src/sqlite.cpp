@@ -22,14 +22,14 @@ namespace sqlite
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, username, status, name, ip,"
-                                                    "peer_port, user_port, pubkey, contract_id, image_name"
-                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?)";
+                                                    "peer_port, user_port, init_gp_tcp_port, init_gp_udp_port, pubkey, contract_id, image_name"
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
-    constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
+    constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM "
                                                      "instances WHERE status == ? AND user_port NOT IN"
                                                      "(SELECT user_port FROM instances WHERE status != ?)";
 
-    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT max(peer_port), max(user_port) FROM instances WHERE status != ?";
+    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT max(peer_port), max(user_port), max(init_gp_tcp_port), max(init_gp_udp_port) FROM instances WHERE status != ?";
 
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 
@@ -303,6 +303,8 @@ namespace sqlite
                 table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("user_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_udp_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("image_name", COLUMN_DATA_TYPE::TEXT)};
@@ -333,9 +335,11 @@ namespace sqlite
             sqlite3_bind_text(stmt, 6, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 7, info.assigned_ports.peer_port) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 8, info.assigned_ports.user_port) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 9, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 10, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 11, info.image_name.data(), info.image_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 9, info.assigned_ports.gp_tcp_port_start) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 10, info.assigned_ports.gp_udp_port_start) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 11, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 12, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 13, info.image_name.data(), info.image_name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
         {
             sqlite3_finalize(stmt);
@@ -414,13 +418,15 @@ namespace sqlite
         {
             const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
             const uint16_t user_port = sqlite3_column_int64(stmt, 1);
+            const uint16_t gp_tcp_port = sqlite3_column_int64(stmt, 2);
+            const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);
 
-            max_ports = {peer_port, user_port};
+            max_ports = {peer_port, user_port, (uint16_t)(gp_tcp_port + 1), (uint16_t)(gp_udp_port + 1)};
         }
         // Initialize with default config values if either of the ports are zero.
-        if (max_ports.peer_port == 0 || max_ports.user_port == 0)
+        if (max_ports.peer_port == 0 || max_ports.user_port == 0 || max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
         {
-            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1)};
+            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1), (uint16_t)(conf::cfg.hp.init_gp_tcp_port - 1), (uint16_t)(conf::cfg.hp.init_gp_udp_port - 1)};
         }
 
         // Finalize and distroys the statement.
@@ -446,7 +452,9 @@ namespace sqlite
             {
                 const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
                 const uint16_t user_port = sqlite3_column_int64(stmt, 1);
-                vacant_ports.push_back({peer_port, user_port});
+                const uint16_t gp_tcp_port = sqlite3_column_int64(stmt, 2);
+                const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);             
+                vacant_ports.push_back({peer_port, user_port, gp_tcp_port, gp_udp_port});
             }
         }
 

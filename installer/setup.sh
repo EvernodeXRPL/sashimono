@@ -27,9 +27,13 @@
     reputationd_script_dir=$(dirname "$(realpath "$0")")
     root_user="root"
 
-    repo_owner="EvernodeXRPL"
-    repo_name="evernode-test-resources"
-    desired_branch="main"
+    repo_owner="du1ana" 
+    repo_name="evres1" 
+    desired_branch="main" 
+
+    # repo_owner="EvernodeXRPL"
+    # repo_name="evernode-test-resources"
+    # desired_branch="main"
 
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
     latest_version_data=$(curl -s "$latest_version_endpoint")
@@ -570,6 +574,8 @@
         # Default starting ports.
         init_peer_port=22861
         init_user_port=26201
+        init_gp_tcp_port=22871,
+        init_gp_udp_port=26211,
 
         if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
                                         This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then

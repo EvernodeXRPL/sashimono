@@ -46,6 +46,7 @@
     resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
     licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
     config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
+    reputation_contract_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/sashimono/installer/reputation-contract.tar.gz"
     setup_script_url="$resource_storage/setup.sh"
     installer_url="$resource_storage/installer.tar.gz"
     jshelper_url="$resource_storage/setup-jshelper.tar.gz"
@@ -1619,7 +1620,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local evernode_reputationd_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)
         echo "Evernode reputationd status: $evernode_reputationd_status"
         if [[ $reputationd_enabled == true ]]; then
-            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputation.cfg"
+            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputationd.cfg"
         fi
     }
 
@@ -2134,6 +2135,13 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             done
 
         fi
+
+        if [ "$upgrade" == "0" ]; then
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
+        fi
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN update-config $reputation_contract_url && echo "Error configuring reputation contract URL." && return 1
+
         # Setup env variable for the reputationd user.
         echo "
             export XDG_RUNTIME_DIR=$reputationd_user_runtime_dir" >>"$reputationd_user_dir"/.bashrc
@@ -2165,7 +2173,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             [Install]
             WantedBy=default.target" | sudo -u $REPUTATIOND_USER tee "$reputationd_user_dir"/.config/systemd/user/$REPUTATIOND_SERVICE.service >/dev/null
 
-        # This service needs to be restarted whenever reputation.cfg or secret.cfg is changed.
+        # This service needs to be restarted whenever reputationd.cfg or secret.cfg is changed.
         sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user enable $REPUTATIOND_SERVICE
         # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
 

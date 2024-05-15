@@ -34,13 +34,11 @@ class ReputationD {
     #configPath;
     #mbXrplConfigPath;
     #instanceImage;
-    #contractPath;
 
     constructor(configPath, mbXrplConfigPath, instanceImage, contractPath) {
         this.#configPath = configPath;
         this.#mbXrplConfigPath = mbXrplConfigPath;
         this.#instanceImage = instanceImage;
-        this.#contractPath = contractPath;
     }
 
     async init() {
@@ -391,7 +389,7 @@ class ReputationD {
     }
 
     async #deployContract(instanceIp, instanceUserPort, userPrivateKey, hpOverrideCfg) {
-        const bundlePath = await ContractHelper.prepareContractBundle(this.#contractPath, hpOverrideCfg);
+        const bundlePath = await ContractHelper.prepareContractBundle(this.cfg.contractUrl, hpOverrideCfg);
         console.log(`Prepared contract bundle at ${bundlePath}`);
 
         let instanceMgr;

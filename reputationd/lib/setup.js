@@ -172,7 +172,7 @@ class Setup {
             const moment = await hostClient.getMoment();
 
             if (!repInfo) {
-                console.log('You haven\'t opted in for reputation.');
+                console.log('You don\'t have reputation info yet. Make sure you have opted-in.\n Or else wait until your host reporting for first reputation.');
                 return;
             }
             else if (!repInfo.moment) {

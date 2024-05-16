@@ -186,7 +186,7 @@ class Setup {
 
             await repClient.disconnect();
 
-            console.log(JSON.stringify({ ...repInfo, universeHostCount: globalInfo.count }, null, 2));
+            console.log(JSON.stringify({ ...repInfo, reportedHostCount: globalInfo?.count ?? 0 }, null, 2));
         }
         catch (e) {
             await hostClient.disconnect();

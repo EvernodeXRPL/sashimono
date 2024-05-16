@@ -39,7 +39,7 @@ namespace sqlite
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
-    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name, contract_id FROM instances WHERE status != ?";
+    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name, contract_id FROM instances WHERE status != ?";
 
     constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
@@ -418,10 +418,10 @@ namespace sqlite
         {
             const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
             const uint16_t user_port = sqlite3_column_int64(stmt, 1);
-            const uint16_t gp_tcp_port = sqlite3_column_int64(stmt, 2);
-            const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);
+            const uint16_t gp_tcp_port_start = sqlite3_column_int64(stmt, 2);
+            const uint16_t gp_udp_port_start = sqlite3_column_int64(stmt, 3);
 
-            max_ports = {peer_port, user_port, (uint16_t)(gp_tcp_port + 1), (uint16_t)(gp_udp_port + 1)};
+            max_ports = {peer_port, user_port, (uint16_t)(gp_tcp_port_start + 1), (uint16_t)(gp_udp_port_start + 1)};
         }
         // Initialize with default config values if either of the ports are zero.
         if (max_ports.peer_port == 0 || max_ports.user_port == 0 || max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
@@ -508,9 +508,11 @@ namespace sqlite
                 info.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
                 info.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
                 info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
-                info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
-                info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
-                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+                info.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+                info.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
+                info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+                info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
                 instances.push_back(info);
             }
         }

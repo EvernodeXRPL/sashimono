@@ -182,7 +182,7 @@ namespace hp
                 sqlite::get_max_ports(db, last_assigned_ports);
                 last_port_assign_from_vacant = false;
             }
-            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1), (uint16_t)(last_assigned_ports.gp_tcp_port_start + 1), (uint16_t)(last_assigned_ports.gp_udp_port_start + 1) };
+            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1), (uint16_t)(last_assigned_ports.gp_tcp_port_start + 2), (uint16_t)(last_assigned_ports.gp_udp_port_start + 2) };
         }
 // 
         int user_id;

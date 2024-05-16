@@ -12,15 +12,17 @@ contract_uid=$6
 contract_gid=$7
 peer_port=$8
 user_port=$9
-gc_udp_port_start=${10}
-gc_tcp_port_start=${11}
+gp_tcp_port_start=${10}
+gp_udp_port_start=${11}
 docker_image=${12}
 docker_registry=${13}
 outbound_ipv6=${14}
 outbound_net_interface=${15}
 
+echo "ports - $peer_port $user_port $gp_tcp_port_start $gp_udp_port_start "
+
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
-    [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] || [ -z "$gc_udp_port_start" ] || [ -z "$gc_tcp_port_start" ] ||
+    [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] || [ -z "$gp_udp_port_start" ] || [ -z "$gp_tcp_port_start" ] ||
     [ -z "$docker_image" ] || [ -z "$docker_registry" ] || [ -z "$outbound_ipv6" ] || [ -z "$outbound_net_interface" ]; then
     echo "INVALID_PARAMS,INST_ERR" && exit 1
 fi
@@ -37,8 +39,8 @@ docker_bin=$script_dir/dockerbin
 docker_service="docker.service"
 docker_pull_timeout_secs=120
 cleanup_script=$user_dir/uninstall_cleanup.sh
-gc_udp_port_count=2
-gc_tcp_port_count=2
+gp_udp_port_count=2
+gp_tcp_port_count=2
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -141,7 +143,7 @@ rule_list=$(sudo ufw status)
 comment=$prefix-$contract_dir
 
 # Add rules for user port.
-sed -n -r -e "/${$user_port}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+sed -n -r -e "/${user_port}\/tcp\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
 res=$?
 if [ ! $res -eq 100 ]; then
     user_port_comment=$comment-user
@@ -152,7 +154,7 @@ else
 fi
 
 # Add rules for peer port.
-sed -n -r -e "/${$peer_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+sed -n -r -e "/${peer_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
 res=$?
 if [ ! $res -eq 100 ]; then
     peer_port_comment=$comment-peer
@@ -163,28 +165,28 @@ else
 fi
 
 # Add rules for general purpose udp ports.
-for ((i = 0; i < gc_udp_port_count; i++)); do
-    local gc_udp_port=$(expr $gc_udp_port_start + $i)
-    sed -n -r -e "/${gc_udp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+for ((i = 0; i < $gp_udp_port_count; i++)); do
+    gp_udp_port=$(expr $gp_udp_port_start + $i)
+    sed -n -r -e "/${gp_udp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
     res=$?
     if [ ! $res -eq 100 ]; then
-        gc_udp_port_comment=$comment-gc-udp-$i
+        gp_udp_port_comment=$comment-gc-udp-$i
         echo "Adding new rule to allow general purpose udp port for new instance from firewall."
-        sudo ufw allow "$gc_udp_port" comment "$gc_udp_port_comment"
+        sudo ufw allow "$gp_udp_port" comment "$gp_udp_port_comment"
     else
         echo "General purpose udp port rule already exists. Skipping."
     fi
 done
 
 # Add rules for general purpose tcp ports.
-for ((i = 0; i < gc_tcp_port_count; i++)); do
-    local gc_tcp_port=$(expr $gc_tcp_port_start + $i)
-    sed -n -r -e "/${gc_tcp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
+for ((i = 0; i < $gp_tcp_port_count; i++)); do
+    gp_tcp_port=$(expr $gp_tcp_port_start + $i)
+    sed -n -r -e "/${gp_tcp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
     res=$?
     if [ ! $res -eq 100 ]; then
-        gc_tcp_port_comment=$comment-gc-tcp-$i
+        gp_tcp_port_comment=$comment-gc-tcp-$i
         echo "Adding new rule to allow general purpose tcp port for new instance from firewall."
-        sudo ufw allow "$gc_tcp_port" comment "$gc_tcp_port_comment"
+        sudo ufw allow "$gp_tcp_port" comment "$gp_tcp_port_comment"
     else
         echo "General purpose tcp rule already exists. Skipping."
     fi

@@ -89,6 +89,7 @@ add_custom_target(installer
   COMMAND tar cfz ./build/reputation-contract.tar.gz --directory=./build/ reputation-contract
   COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
+  COMMAND rm -r ./build/reputation-contract
 
   # js helper for installer setup.
   COMMAND npm  --prefix ./installer/jshelper install && npm run --prefix ./installer/jshelper build

@@ -50,6 +50,9 @@ async function main() {
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }
+            else if (process.argv.length === 3 && process.argv[2] === 'repinfo') {
+                await new Setup().repInfo();
+            }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
         node index.js - Run message board.

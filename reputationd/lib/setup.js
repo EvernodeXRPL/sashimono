@@ -25,8 +25,8 @@ const MAX_TX_RETRY_ATTEMPTS = 10;
 
 class Setup {
 
-    #getConfig(readSecret = true) {
-        return ConfigHelper.readConfig(appenv.CONFIG_PATH, appenv.MB_XRPL_CONFIG_PATH, readSecret);
+    #getConfig(readSecret = true, includeMbConfig = true) {
+        return ConfigHelper.readConfig(appenv.CONFIG_PATH, includeMbConfig ? appenv.MB_XRPL_CONFIG_PATH : null, readSecret);
     }
 
     #saveConfig(cfg) {
@@ -44,6 +44,15 @@ class Setup {
         };
 
         this.#saveConfig(baseConfig);
+    }
+
+    async updateConfig(contractUrl) {
+        const cfg = this.#getConfig(false, false);
+        cfg.contractUrl = contractUrl
+
+        this.#saveConfig(cfg);
+
+        await Promise.resolve(); // async placeholder.
     }
 
     async prepareReputationAccount() {
@@ -137,12 +146,55 @@ class Setup {
     async upgrade() {
 
         // Do a simple version change in the config.
-        const cfg = this.#getConfig(false);
+        const cfg = this.#getConfig(false, false);
         cfg.version = appenv.REPUTATIOND_VERSION;
 
         this.#saveConfig(cfg);
 
         await Promise.resolve(); // async placeholder.
+    }
+
+    async repInfo() {
+        const acc = this.#getConfig(false).xrpl;
+        await setEvernodeDefaults(acc.network, acc.governorAddress, acc.rippledServer, acc.fallbackRippledServers);
+
+        const hostClient = new evernode.HostClient(acc.hostAddress);
+        await hostClient.connect();
+
+        // Update the Defaults with "xrplApi" of the client.
+        evernode.Defaults.set({
+            xrplApi: hostClient.xrplApi
+        });
+
+        try {
+            const repInfo = await hostClient.getReputationInfo();
+            await hostClient.disconnect();
+            const moment = await hostClient.getMoment();
+
+            if (!repInfo) {
+                console.log('You haven\'t opted in for reputation.');
+                return;
+            }
+            else if (!repInfo.moment) {
+                repInfo.moment = moment;
+            }
+
+            const repClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
+            await repClient.connect();
+
+            const globalInfo = await repClient.getReputationInfo();
+
+            await repClient.disconnect();
+
+            console.log(JSON.stringify({ ...repInfo, universeHostCount: globalInfo.count }, null, 2));
+        }
+        catch (e) {
+            await hostClient.disconnect();
+            throw e;
+        }
+        finally {
+            await evernode.Defaults.values.xrplApi.disconnect();
+        }
     }
 }
 

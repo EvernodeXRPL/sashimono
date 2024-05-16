@@ -85,9 +85,11 @@ add_custom_target(installer
   COMMAND bash -c "cp -r ./evernode-license.pdf ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
   COMMAND bash -c "cp -r ./reputationd/dist ./build/installer/reputationd"
-  COMMAND bash -c "cp -r ./evernode-reputation-contract/dist ./build/installer/reputation-contract"
+  COMMAND bash -c "cp -r ./evernode-reputation-contract/dist ./build/reputation-contract"
+  COMMAND tar cfz ./build/reputation-contract.tar.gz --directory=./build/ reputation-contract
   COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
+  COMMAND rm -r ./build/reputation-contract
 
   # js helper for installer setup.
   COMMAND npm  --prefix ./installer/jshelper install && npm run --prefix ./installer/jshelper build

@@ -46,6 +46,7 @@
     resource_storage="https://github.com/$repo_owner/$repo_name/releases/download/$latest_version"
     licence_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/license/evernode-license.pdf"
     config_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/definitions/definitions.json"
+    reputation_contract_url="https://raw.githubusercontent.com/$repo_owner/$repo_name/$desired_branch/sashimono/installer/reputation-contract.tar.gz"
     setup_script_url="$resource_storage/setup.sh"
     installer_url="$resource_storage/installer.tar.gz"
     jshelper_url="$resource_storage/setup-jshelper.tar.gz"
@@ -1585,6 +1586,21 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         fi
     }
 
+    function reputationd_info() {
+        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+            reputationd_enabled=true
+        else
+            reputationd_enabled=false
+        fi
+        local reputationd_user_id=$(id -u "$REPUTATIOND_USER")
+        local reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
+        local evernode_reputationd_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)
+        echo "Evernode reputationd status: $evernode_reputationd_status"
+        if [[ $reputationd_enabled == true ]]; then
+            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputationd.cfg"
+        fi
+    }
+
     function reg_info() {
         local reg_info=$(MB_DATA_DIR=$MB_XRPL_DATA node $MB_XRPL_BIN reginfo || echo ERROR)
         local error=$(echo "$reg_info" | tail -1)
@@ -1609,18 +1625,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo "Sashimono message board status: $sashimono_mb_xrpl_status"
         echo -e "\nYour registration account details are stored in $MB_XRPL_DATA/mb-xrpl.cfg"
         echo ""
-        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
-            reputationd_enabled=true
-        else
-            reputationd_enabled=false
-        fi
-        local reputationd_user_id=$(id -u "$REPUTATIOND_USER")
-        local reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
-        local evernode_reputationd_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)
-        echo "Evernode reputationd status: $evernode_reputationd_status"
-        if [[ $reputationd_enabled == true ]]; then
-            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputation.cfg"
-        fi
+
+        reputationd_info
     }
 
     function get_country_code() {
@@ -2134,6 +2140,13 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             done
 
         fi
+
+        if [ "$upgrade" == "1" ]; then
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
+        fi
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN update-config $reputation_contract_url && echo "Error configuring reputation contract URL." && return 1
+
         # Setup env variable for the reputationd user.
         echo "
             export XDG_RUNTIME_DIR=$reputationd_user_runtime_dir" >>"$reputationd_user_dir"/.bashrc
@@ -2165,7 +2178,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             [Install]
             WantedBy=default.target" | sudo -u $REPUTATIOND_USER tee "$reputationd_user_dir"/.config/systemd/user/$REPUTATIOND_SERVICE.service >/dev/null
 
-        # This service needs to be restarted whenever reputation.cfg or secret.cfg is changed.
+        # This service needs to be restarted whenever reputationd.cfg or secret.cfg is changed.
         sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user enable $REPUTATIOND_SERVICE
         # We only enable this service. It'll be started after pending reboot checks at the bottom of this script.
 
@@ -2437,7 +2450,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         echomult "Upgrade complete!
             \n\nNOTE: This update includes following commands for you to configure reputation for reward distribution.
-            \n evernode reputationd <opt-in|opt-out> - Opt-in or opt-out for Evernode reputation for reward distribution."
+            \n evernode reputationd <opt-in|opt-out> - Opt-in or opt-out for Evernode reputation for reward distribution.
+            \n evernode reputationd status - Check the status of Evernode reputation for reward distribution."
 
     elif [ "$mode" == "log" ]; then
         create_log
@@ -2501,11 +2515,17 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echomult "\nError occured removing ReputationD. Retry with the same command again."
                 exit 1
             fi
+        elif [ "$2" == "status" ]; then
+            echo ""
+            reputationd_info
+            echo ""
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
         else
             echomult "ReputationD management tool
             \nSupported commands:
             \nopt-in - Opt in to the Evernode reputation for reward distribution.
-            \ndelete - Opt out from the Evernode reputation for reward distribution." && exit 1
+            \nopt-out - Opt out from the Evernode reputation for reward distribution.
+            \nstatus - Check the status of Evernode reputation for reward distribution." && exit 1
         fi
     fi
 

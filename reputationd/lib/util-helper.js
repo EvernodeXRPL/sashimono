@@ -48,13 +48,15 @@ class FsHelper {
 }
 
 class ContractHelper {
-    static async prepareContractBundle(contractPath, hpOverrideCfg) {
+    static async prepareContractBundle(contractUrl, hpOverrideCfg) {
         const contractPrepPath = fs.mkdtempSync(path.join(os.tmpdir(), 'reputation-bundle-'));
         const hpCfgOverridePath = path.resolve(contractPrepPath, CONSTANTS.hpCfgOverrideFile);
         const prerequisiteInstaller = path.resolve(contractPrepPath, CONSTANTS.prerequisiteInstaller);
 
-        // Copy content inside contract directory;
-        execSync(`cp -r ${contractPath}/* ${contractPrepPath}`);
+        // Download content inside contract directory;
+        execSync(`curl --silent -L ${contractUrl} --output ${contractPrepPath}/reputation-contract.tgz && 
+        tar zxf ${contractPrepPath}/reputation-contract.tgz -C ${contractPrepPath}/ --strip-components=1 && 
+        rm ${contractPrepPath}/reputation-contract.tgz`);
         console.log("Placed contract content.");
 
         // Write hp.cfg.override file content.

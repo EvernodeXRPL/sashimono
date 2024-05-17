@@ -28,17 +28,17 @@ class ReputationD {
     #deploymentStartTimeQuota = 0.8;
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
+    #consensusRoundTime = 10000;
+    #consensusThreshold = 50;
 
     #configPath;
     #mbXrplConfigPath;
     #instanceImage;
-    #contractPath;
 
     constructor(configPath, mbXrplConfigPath, instanceImage, contractPath) {
         this.#configPath = configPath;
         this.#mbXrplConfigPath = mbXrplConfigPath;
         this.#instanceImage = instanceImage;
-        this.#contractPath = contractPath;
     }
 
     async init() {
@@ -389,7 +389,7 @@ class ReputationD {
     }
 
     async #deployContract(instanceIp, instanceUserPort, userPrivateKey, hpOverrideCfg) {
-        const bundlePath = await ContractHelper.prepareContractBundle(this.#contractPath, hpOverrideCfg);
+        const bundlePath = await ContractHelper.prepareContractBundle(this.cfg.contractUrl, hpOverrideCfg);
         console.log(`Prepared contract bundle at ${bundlePath}`);
 
         let instanceMgr;
@@ -502,8 +502,8 @@ class ReputationD {
                             config: {
                                 contract: {
                                     consensus: {
-                                        roundtime: 5000,
-                                        threshold: 50
+                                        roundtime: this.#consensusRoundTime,
+                                        threshold: this.#consensusThreshold
                                     }
                                 },
                                 mesh: {
@@ -597,10 +597,7 @@ class ReputationD {
                         contract: {
                             unl: instances.map(p => `${p.pubkey}`),
                             bin_path: '/usr/bin/node',
-                            bin_args: 'index.js',
-                            consensus: {
-                                roundtime: 5000
-                            }
+                            bin_args: 'index.js'
                         },
                         mesh: {
                             known_peers: instances.map(p => `${p.domain}:${p.peerPort}`)

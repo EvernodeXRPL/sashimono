@@ -43,8 +43,15 @@ async function main() {
             else if (process.argv.length >= 2 && process.argv[2] === 'prepare') {
                 await new Setup().prepareReputationAccount();
             }
+            else if (process.argv.length >= 4 && process.argv[2] === 'update-config') {
+                const contractUrl = process.argv[3];
+                await new Setup().updateConfig(contractUrl);
+            }
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
+            }
+            else if (process.argv.length === 3 && process.argv[2] === 'repinfo') {
+                await new Setup().repInfo();
             }
             else if (process.argv[2] === 'help') {
                 console.log(`Usage:
@@ -78,7 +85,7 @@ async function main() {
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using message board config: ' + appenv.MB_XRPL_CONFIG_PATH);
 
-            const rep = new ReputationD(appenv.CONFIG_PATH, appenv.MB_XRPL_CONFIG_PATH, appenv.INSTANCE_IMAGE, appenv.CONTRACT_PATH);
+            const rep = new ReputationD(appenv.CONFIG_PATH, appenv.MB_XRPL_CONFIG_PATH, appenv.INSTANCE_IMAGE);
             await rep.init();
         }
         catch (err) {

@@ -33,7 +33,7 @@ namespace sqlite
 
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 
-    constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port FROM instances WHERE name = ?";
+    constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_ALOCATED_INSTANCE_COUNT = "SELECT COUNT(name) FROM instances WHERE status != ?";
 
@@ -41,7 +41,7 @@ namespace sqlite
 
     constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name, contract_id FROM instances WHERE status != ?";
 
-    constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
+    constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
@@ -370,6 +370,8 @@ namespace sqlite
             info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
             info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 2);
             info.assigned_ports.user_port = sqlite3_column_int64(stmt, 3);
+            info.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+            info.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
@@ -568,8 +570,10 @@ namespace sqlite
             instance.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
             instance.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
             instance.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
-            instance.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
-            instance.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+            instance.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+            instance.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
+            instance.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+            instance.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);

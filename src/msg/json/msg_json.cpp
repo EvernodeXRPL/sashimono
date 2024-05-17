@@ -709,6 +709,14 @@ namespace msg::json
         msg += "user_port";
         msg += SEP_COLON;
         msg += std::to_string(info.assigned_ports.user_port);
+        msg += SEP_COMMA;
+        msg += "gp_tcp_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.assigned_ports.gp_tcp_port_start);
+        msg += SEP_COMMA;
+        msg += "gp_udp_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.assigned_ports.gp_udp_port_start);
         msg += "\"}";
     }
 

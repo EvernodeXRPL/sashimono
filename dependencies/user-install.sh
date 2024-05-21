@@ -19,7 +19,6 @@ docker_registry=${13}
 outbound_ipv6=${14}
 outbound_net_interface=${15}
 
-echo "ports - $peer_port $user_port $gp_tcp_port_start $gp_udp_port_start "
 
 if [ -z "$cpu" ] || [ -z "$memory" ] || [ -z "$swapmem" ] || [ -z "$disk" ] || [ -z "$contract_dir" ] ||
     [ -z "$contract_uid" ] || [ -z "$contract_gid" ] || [ -z "$peer_port" ] || [ -z "$user_port" ] || [ -z "$gp_udp_port_start" ] || [ -z "$gp_tcp_port_start" ] ||

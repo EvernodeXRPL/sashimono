@@ -165,8 +165,10 @@ class ReputationD {
                 this.#feeUpliftment = 0;
             }
             catch (e) {
+                console.error(e);
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
+                    console.log(`Retry attempt ${action.attempts}`);
                     if (this.cfg.xrpl.affordableExtraFee > 0 && e.status === "TOOK_LONG") {
                         this.#applyFeeUpliftment = true;
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
@@ -185,7 +187,7 @@ class ReputationD {
                         toKeep.push(action);
                 }
                 else {
-                    console.error(e);
+                    console.error('Max retry attempts reached. Abandoned.');
                 }
             }
         }
@@ -375,7 +377,7 @@ class ReputationD {
 
             await lobbyMgr.init();
             await lobbyMgr.upgradeContract(unl, peers);
-            
+
             if (lobbyMgr)
                 lobbyMgr.terminate();
             console.log(`Contract bundle uploaded!`);
@@ -490,7 +492,7 @@ class ReputationD {
                     this.cfg.contractInstance = {
                         ...result.instance,
                         created_moment: createdMoment,
-                        owner_privatekey: ownerKeys.privateKey,
+                        owner_privatekey: this.cfg.contractInstance.owner_privatekey,
                         status: ContractStatus.Created
                     };
                     this.#persistConfig();

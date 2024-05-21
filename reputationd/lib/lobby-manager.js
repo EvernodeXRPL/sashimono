@@ -26,7 +26,7 @@ class LobbyManager {
             throw "Instance user private key is missing!";
 
         this.#userKeys = await CommonHelper.generateKeys(this.#userPrivateKey, 'binary');
-        console.log('My public key is: ' + Buffer.from(userKeys.publicKey).toString('hex'));
+        console.log('My public key is: ' + Buffer.from(this.#userKeys.publicKey).toString('hex'));
 
         const server = `wss://${this.#ip}:${this.#userPort}`;
         this.#wsClient = new WebSocket(server, {

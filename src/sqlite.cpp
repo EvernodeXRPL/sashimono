@@ -423,12 +423,12 @@ namespace sqlite
             const uint16_t gp_tcp_port_start = sqlite3_column_int64(stmt, 2);
             const uint16_t gp_udp_port_start = sqlite3_column_int64(stmt, 3);
 
-            max_ports = {peer_port, user_port, (uint16_t)(gp_tcp_port_start + 1), (uint16_t)(gp_udp_port_start + 1)};
+            max_ports = {peer_port, user_port, gp_tcp_port_start, gp_udp_port_start};
         }
         // Initialize with default config values if either of the ports are zero.
         if (max_ports.peer_port == 0 || max_ports.user_port == 0 || max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
         {
-            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1), (uint16_t)(conf::cfg.hp.init_gp_tcp_port - 1), (uint16_t)(conf::cfg.hp.init_gp_udp_port - 1)};
+            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1), (uint16_t)(conf::cfg.hp.init_gp_tcp_port - 2), (uint16_t)(conf::cfg.hp.init_gp_udp_port - 2)};
         }
 
         // Finalize and distroys the statement.
@@ -455,7 +455,7 @@ namespace sqlite
                 const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
                 const uint16_t user_port = sqlite3_column_int64(stmt, 1);
                 const uint16_t gp_tcp_port = sqlite3_column_int64(stmt, 2);
-                const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);             
+                const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);
                 vacant_ports.push_back({peer_port, user_port, gp_tcp_port, gp_udp_port});
             }
         }

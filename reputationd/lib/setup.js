@@ -46,15 +46,6 @@ class Setup {
         this.#saveConfig(baseConfig);
     }
 
-    async updateConfig(contractUrl) {
-        const cfg = this.#getConfig(false, false);
-        cfg.contractUrl = contractUrl
-
-        this.#saveConfig(cfg);
-
-        await Promise.resolve(); // async placeholder.
-    }
-
     async prepareReputationAccount() {
 
         const config = this.#getConfig();

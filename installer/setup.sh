@@ -947,7 +947,7 @@
             ([ -z $xrpl_address ] || [ -z $key_file_path ] || [ -z $lease_amount ] || [ -z $extra_txn_fee ] || [ -z $email_address ]) && echo "Configuration file format has been altered." && exit 1
             if [ -n "$key_file_path" ] && [ -e "$key_file_path" ]; then
                 # Change the ownership in case user is removed.
-                chown "$MB_XRPL_USER": $key_file_path
+                chown "$MB_XRPL_USER":"$SASHIADMIN_GROUP" $key_file_path
 
                 xrpl_secret=$(jq -r ".xrpl.secret | select( . != null )" "$key_file_path")
 
@@ -1437,7 +1437,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         else
             #[ "$upgrade" == "1" ]
-            if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+            if [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
                 #reputationd_enabled=true
                 echo "Configuring Evernode reputation and reward system."
                 if ! configure_reputationd 1; then
@@ -1523,7 +1523,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function create_log() {
-        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+        if [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
             reputationd_enabled=true
         else
             reputationd_enabled=false
@@ -1586,7 +1586,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     }
 
     function reputationd_info() {
-        if sudo -u "$REPUTATIOND_USER" [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
+        if [ -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
             reputationd_enabled=true
         else
             reputationd_enabled=false
@@ -2068,7 +2068,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
-            chown "$REPUTATIOND_USER": $reputationd_secret_path
+            chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
             #account generation,

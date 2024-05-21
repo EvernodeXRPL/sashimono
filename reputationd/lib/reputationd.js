@@ -27,8 +27,6 @@ class ReputationD {
     #lobbyTimeQuota = 0.8; // Percentage of (1 - reputationRegTimeQuota) for reputation contract deployment.
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
-    #consensusRoundTime = 10000;
-    #consensusThreshold = 50;
 
     #configPath;
     #mbXrplConfigPath;
@@ -459,25 +457,8 @@ class ReputationD {
                             owner_pubkey: ownerKeys.publicKey,
                             contract_id: contractId,
                             image: this.#instanceImage,
-                            config: {
-                                contract: {
-                                    consensus: {
-                                        roundtime: this.#consensusRoundTime,
-                                        threshold: this.#consensusThreshold
-                                    }
-                                },
-                                mesh: {
-                                    peer_discovery: {
-                                        enabled: false
-                                    }
-                                }
-                            }
+                            config: {}
                         };
-
-                        if (firstInstanceInfo) {
-                            requirement.config.contract.unl = [firstInstanceInfo.pubkey];
-                            requirement.config.mesh.known_peers = [`${firstInstanceInfo.domain}:${firstInstanceInfo.peerPort}`];
-                        }
 
                         // Update the registry with the active instance count.
                         const transaction = await tenantClient.acquireLeaseSubmit(this.hostClient.xrplAcc.address, requirement, { submissionRef: submissionRefs?.refs[1], ...this.#prepareHostClientFunctionOptions() });

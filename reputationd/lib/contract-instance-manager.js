@@ -1,11 +1,9 @@
 
-const fs = require('fs');
 const bson = require('bson');
 const HotPocket = require('hotpocket-js-client');
 const { CommonHelper } = require('./util-helper');
 
 const DEFAULT_TIMEOUT = 120000;
-const INSTALL_SCRIPT_FAILURE = "Input failed. reason: InstallScriptFailed";
 const INPUT_PROTOCOLS = HotPocket.protocols;
 
 class ContractInstanceManager {
@@ -97,45 +95,6 @@ class ContractInstanceManager {
         const output = await this.#hpClient.submitContractReadRequest(protocol === INPUT_PROTOCOLS.bson ? bson.serialize(input) : JSON.stringify(input));
         const result = protocol === INPUT_PROTOCOLS.bson ? bson.deserialize(output) : JSON.parse(output);
         return result?.message;
-    }
-
-    async checkBootstrapStatus() {
-        const res = await this.sendContractInput({
-            type: "status"
-        });
-        if (res)
-            return res;
-        else
-            return null;
-    }
-
-    async uploadBundle(bundlePath, handleScriptFailure = false) {
-        try {
-            const status = await this.checkBootstrapStatus();
-            if (status)
-                console.log(status);
-            else
-                throw 'Status response is empty';
-        }
-        catch (e) {
-            throw `Bootstrap contact is not available: ${e}`;
-        }
-
-        const fileContent = fs.readFileSync(bundlePath);
-
-        try {
-            const res = await this.sendContractInput({
-                type: "upload",
-                content: fileContent
-            });
-            return res;
-
-        } catch (e) {
-            if (!handleScriptFailure || e !== INSTALL_SCRIPT_FAILURE)
-                throw e;
-        }
-
-        return null;
     }
 }
 

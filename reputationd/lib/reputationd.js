@@ -1,12 +1,11 @@
-const fs = require('fs');
 const evernode = require('evernode-js-client');
 const crypto = require('crypto');
 const uuid = require('uuid');
-const path = require('path');
 const { appenv } = require('./appenv');
 const { ConfigHelper } = require('./config-helper');
-const { ContractHelper, CommonHelper } = require('./util-helper');
+const { CommonHelper } = require('./util-helper');
 const { ContractInstanceManager, INPUT_PROTOCOLS } = require('./contract-instance-manager');
+const { LobbyManager } = require('./lobby-manager');
 
 const ContractStatus = {
     Created: 1,
@@ -24,8 +23,8 @@ class ReputationD {
     #reputationRetryCount = 3;
     #feeUpliftment = 0;
     #preparationTimeQuota = 0.9; // Percentage of moment size.
-    #reputationSendTimeSlice = 0.2; // Slice of preparationTimeQuota for reputation registration.
-    #deploymentStartTimeQuota = 0.8;
+    #reputationRegTimeQuota = 0.2; // Percentage of (1 - preparationTimeQuota) for reputation registration.
+    #lobbyTimeQuota = 0.8; // Percentage of (1 - reputationRegTimeQuota) for reputation contract deployment.
     #universeSize = 64;
     #readScoreCmd = 'read_scores';
     #consensusRoundTime = 10000;
@@ -35,7 +34,7 @@ class ReputationD {
     #mbXrplConfigPath;
     #instanceImage;
 
-    constructor(configPath, mbXrplConfigPath, instanceImage, contractPath) {
+    constructor(configPath, mbXrplConfigPath, instanceImage) {
         this.#configPath = configPath;
         this.#mbXrplConfigPath = mbXrplConfigPath;
         this.#instanceImage = instanceImage;
@@ -267,7 +266,7 @@ class ReputationD {
 
         // Set time relative to current passed time.
         const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
-        const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
+        const upperBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationRegTimeQuota)));
         const lowerBound = Math.floor(momentStartTimestamp + momentSize - timeQuota);
         if (currentTimestamp < lowerBound || currentTimestamp >= upperBound)
             startTimeout = Math.floor(lowerBound + (Math.random() * ((upperBound - lowerBound) / 2)) - currentTimestamp) * 1000 // Converting seconds to milliseconds.
@@ -302,7 +301,7 @@ class ReputationD {
 
         const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
         const upperBound = Math.floor(momentStartTimestamp + momentSize);
-        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
+        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationRegTimeQuota)));
 
         if (currentTimestamp < lowerBound)
             startTimeout = Math.floor(lowerBound - currentTimestamp) * 1000;
@@ -327,27 +326,6 @@ class ReputationD {
         setTimeout(async () => {
             await scheduler();
         }, startTimeout);
-    }
-
-    async #waitForHostInstance(orderedId, moment) {
-        const momentSize = this.hostClient.config.momentSize;
-        const momentStartTimestamp = await this.hostClient.getMomentStartIndex();
-
-        const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
-        const upperBound = Math.floor(momentStartTimestamp + momentSize);
-        const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
-        const prepareEndTimestamp = Math.floor(lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota));
-
-        while (true) {
-            const currentTimestamp = evernode.UtilHelpers.getCurrentUnixTime();
-            if (currentTimestamp > prepareEndTimestamp)
-                throw 'Maximum timeout reached for preparation';
-
-            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId, moment).catch((e) => { });
-            if (repInfo && repInfo.contract)
-                return repInfo.contract;
-            await new Promise(resolve => setTimeout(resolve, 500));
-        }
     }
 
     async #getUniverseInfo(moment) {
@@ -388,29 +366,24 @@ class ReputationD {
         return id;
     }
 
-    async #deployContract(instanceIp, instanceUserPort, userPrivateKey, hpOverrideCfg) {
-        const bundlePath = await ContractHelper.prepareContractBundle(this.cfg.contractUrl, hpOverrideCfg);
-        console.log(`Prepared contract bundle at ${bundlePath}`);
-
-        let instanceMgr;
+    async #upgradeContract(instanceIp, instanceUserPort, userPrivateKey, unl, peers) {
+        let lobbyMgr;
         try {
-            instanceMgr = new ContractInstanceManager({
+            lobbyMgr = new LobbyManager({
                 ip: instanceIp,
                 userPort: instanceUserPort,
                 userPrivateKey: userPrivateKey
             });
 
-            await instanceMgr.init();
-            await instanceMgr.uploadBundle(bundlePath);
-
-            fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
-            if (instanceMgr)
-                await instanceMgr.terminate();
+            await lobbyMgr.init();
+            await lobbyMgr.upgradeContract(unl, peers);
+            
+            if (lobbyMgr)
+                lobbyMgr.terminate();
             console.log(`Contract bundle uploaded!`);
         } catch (e) {
-            fs.rmSync(path.dirname(bundlePath), { recursive: true, force: true });
-            if (instanceMgr)
-                await instanceMgr.terminate();
+            if (lobbyMgr)
+                lobbyMgr.terminate();
             throw e;
         }
     }
@@ -475,25 +448,12 @@ class ReputationD {
                 }
 
                 if (retry) {
-                    const ownerKeys = await CommonHelper.generateKeys();
-
-                    const contractId = this.#generateContractId(universeInfo.universeIndex);
-
-                    // If we are the first in order acquire instance, Wait for first one if not.
-                    const firstOrderedId = universeInfo.universeIndex * this.#universeSize;
-                    let firstInstanceInfo;
-                    if (universeInfo.orderedId != firstOrderedId) {
-                        console.log(`Waiting until ${firstOrderedId} node is acquired...`);
-                        firstInstanceInfo = await this.#waitForHostInstance(firstOrderedId, curMoment + 1).catch(console.error);
-                        if (!firstInstanceInfo) {
-                            console.log(`Skipping since first host failed for the moment ${curMoment + 1}.`)
-                            return;
-                        }
-                    }
-
                     if (curMoment > createdMoment ||
                         curMoment > acquireSentMoment) {
-                        console.log(`Acquiring the reputation contract instance${firstInstanceInfo ? ' (Observer)' : ''}...`);
+                        console.log(`Acquiring the reputation contract instance...`);
+
+                        const ownerKeys = await CommonHelper.generateKeys();
+                        const contractId = this.#generateContractId(universeInfo.universeIndex);
 
                         let requirement = {
                             owner_pubkey: ownerKeys.publicKey,
@@ -582,8 +542,8 @@ class ReputationD {
 
                     const timeQuota = momentSize * (1 - this.#preparationTimeQuota);
                     const upperBound = Math.floor(momentStartTimestamp + momentSize);
-                    const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationSendTimeSlice)));
-                    const startTimestamp = Math.floor(lowerBound + ((upperBound - lowerBound) * this.#deploymentStartTimeQuota));
+                    const lowerBound = Math.floor(momentStartTimestamp + momentSize - (timeQuota * (1 - this.#reputationRegTimeQuota)));
+                    const startTimestamp = Math.floor(lowerBound + ((upperBound - lowerBound) * this.#lobbyTimeQuota));
 
                     let startTimeout = 0;
                     if (startTimestamp > currentTimestamp)
@@ -593,20 +553,12 @@ class ReputationD {
                     await new Promise((resolve) => setTimeout(resolve, startTimeout));
 
                     const instances = await this.#getInstancesInUniverse(universeInfo.universeIndex, curMoment + 1);
-                    const overrideConfig = {
-                        contract: {
-                            unl: instances.map(p => `${p.pubkey}`),
-                            bin_path: '/usr/bin/node',
-                            bin_args: 'index.js'
-                        },
-                        mesh: {
-                            known_peers: instances.map(p => `${p.domain}:${p.peerPort}`)
-                        }
-                    };
+                    const unl = [this.cfg.contractInstance.pubkey, ...instances.map(p => `${p.pubkey}`)];
+                    const peers = instances.map(p => `${p.domain}:${p.peerPort}`);
 
-                    console.log(`Deploying the reputation contract instance.`);
-                    await this.#deployContract(this.cfg.contractInstance.domain, this.cfg.contractInstance.user_port, this.cfg.contractInstance.owner_privatekey, overrideConfig);
-                    console.log(`Reputation contract instance deployed.`);
+                    console.log(`Upgrading the reputation contract instance.`);
+                    await this.#upgradeContract(this.cfg.contractInstance.domain, this.cfg.contractInstance.user_port, this.cfg.contractInstance.owner_privatekey, unl, peers);
+                    console.log(`Reputation contract instance upgraded.`);
 
                     // Mark as deployed.
                     this.cfg.contractInstance.status = ContractStatus.Deployed;

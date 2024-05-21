@@ -530,9 +530,8 @@ class MessageBoard {
                 }
                 // Update the registry with the active instance count.
                 await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                console.log(`Destroyed ${lease.containerName}`);
             });
-            console.log(`Destroyed ${lease.containerName}`);
-
         }
         catch (e) {
             console.error(e);

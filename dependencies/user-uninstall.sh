@@ -11,7 +11,6 @@ instance_name=$6
 prefix="sashi"
 max_kill_attempts=5
 
-echo "ports del - $peer_port $user_port $gp_tcp_port_start $gp_udp_port_start "
 
 
 # Check whether this is a valid sashimono username.

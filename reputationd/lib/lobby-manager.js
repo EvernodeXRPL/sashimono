@@ -54,7 +54,6 @@ class LobbyManager {
 
     async upgradeContract(unl, peers, timeoutMs = DEFAULT_TIMEOUT) {
         return new Promise(async (resolve, reject) => {
-
             const inputTimer = setTimeout(() => {
                 clearTimeout(inputTimer);
                 reject("Input timeout.");
@@ -64,34 +63,52 @@ class LobbyManager {
                 clearTimeout(inputTimer);
                 reject(e);
             }
+
             const success = (result) => {
                 clearTimeout(inputTimer);
                 resolve(result);
             }
 
-            // This will get fired when contract sends an output.
-            this.#wsClient.on('message', (data) => {
-                console.log('Received from server:', data.toString());
-                try {
-                    const res = this.#handleMessage(data);
-                    if (res)
-                        success('CONTRACT_UPGRADED');
-                    else
-                        throw 'UNKNOWN_ERROR'
-                }
-                catch (e) {
-                    failure(e);
-                }
-            });
+            if (!this.#wsClient)
+                failure('Web socket connection is not initiated');
 
-            this.#wsClient.send(JSON.stringify({
-                type: 'upgrade',
-                user: this.#userKeys.publicKey,
-                data: {
-                    unl: unl,
-                    peers: peers
-                }
-            }));
+            try {
+                // This will get fired when contract sends an output.
+                this.#wsClient.on('message', (data) => {
+                    console.log('Received from server:', data.toString());
+                    try {
+                        const res = this.#handleMessage(data);
+                        if (res)
+                            success('CONTRACT_UPGRADED');
+                        else
+                            throw 'UNKNOWN_ERROR'
+                    }
+                    catch (e) {
+                        failure(e);
+                    }
+                });
+
+                this.#wsClient.on('open', () => {
+                    console.log('Connection opened. Sending upgrade request...');
+                    try {
+                        this.#wsClient.send(JSON.stringify({
+                            type: 'upgrade',
+                            user: this.#userKeys.publicKey,
+                            data: {
+                                unl: unl,
+                                peers: peers
+                            }
+                        }));
+                    }
+                    catch (e) {
+                        failure(e);
+                    }
+                });
+            }
+            catch (e) {
+                failure(e);
+            }
+
         });
     }
 }

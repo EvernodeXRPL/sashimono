@@ -536,7 +536,7 @@ class ReputationD {
                     await new Promise((resolve) => setTimeout(resolve, startTimeout));
 
                     const instances = await this.#getInstancesInUniverse(universeInfo.universeIndex, curMoment + 1);
-                    const unl = [this.cfg.contractInstance.pubkey, ...instances.map(p => `${p.pubkey}`)];
+                    const unl = instances.map(p => `${p.pubkey}`);
                     const peers = instances.map(p => `${p.domain}:${p.peerPort}`);
 
                     console.log(`Upgrading the reputation contract instance.`);

@@ -571,8 +571,10 @@
         # Default starting ports.
         init_peer_port=22861
         init_user_port=26201
-        init_gp_tcp_port=22871,
-        init_gp_udp_port=26211,
+        init_gp_tcp_port=22871
+        init_gp_udp_port=26211
+        gp_tcp_port_count=2
+        gp_udp_port_count=2
 
         if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
                                         This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then
@@ -588,6 +590,21 @@
         while [ -z "$init_user_port" ]; do
             read -ep "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
             ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
+        done
+        if [ -n "$init_gp_tcp_port" ] && [ -n "$init_gp_udp_port" ] && confirm "Selected default general purpose port ranges (TCP: $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)), UDP: $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).
+                                        This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then
+            return 0
+        fi
+
+        init_gp_tcp_port=""
+        init_gp_udp_port=""
+        while [ -z "$init_gp_tcp_port" ]; do
+            read -ep "Please specify the starting port of the public 'General purpose TCP port range' your server is reachable at: " init_gp_tcp_port </dev/tty
+            ! check_port_validity $init_gp_tcp_port && init_gp_tcp_port="" && echo "Invalid port."
+        done
+        while [ -z "$init_gp_udp_port" ]; do
+            read -ep "Please specify the starting port of the public 'General purpose UDP port range' your server is reachable at: " init_gp_udp_port </dev/tty
+            ! check_port_validity $init_gp_udp_port && init_gp_udp_port="" && echo "Invalid port."
         done
     }
 
@@ -2294,6 +2311,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
+        echo -e "Using General purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"

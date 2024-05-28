@@ -1155,14 +1155,14 @@
         fi
 
         if [ -e "$reputationd_key_file_path" ]; then
-            if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
+            if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the opting-in."; then
                 echomult "Continuing with the existing key file."
                 reputationd_existing_secret=$(jq -r '.xrpl.secret' "$reputationd_key_file_path" 2>/dev/null)
                 if [ "$reputationd_existing_secret" != "null" ] && [ "$reputationd_existing_secret" != "-" ]; then
                     while true; do
                         account_json=$(exec_jshelper generate-account $reputationd_existing_secret) && break
                         echo "Error occurred when existing account retrieval."
-                        confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || return 1
+                        confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in.." || return 1
                     done
 
                     reputationd_xrpl_address=$(jq -r '.address' <<<"$account_json")

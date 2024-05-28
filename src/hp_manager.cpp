@@ -478,25 +478,17 @@ namespace hp
             return -1;
         }
 
-        LOG_INFO << "Destroying container " << container_name;
-        if (docker_remove(info.username, container_name) == -1 ||
+        LOG_INFO << "Deleting instance " << container_name;
+        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1 ||
             // sqlite::update_status_in_container(db, container_name, CONTAINER_STATES[STATES::DESTROYED]) == -1) // Soft Deletion.
             sqlite::delete_hp_instance(db, container_name) == -1) // Permanent Deletion.
         {
-            error_msg = CONTAINER_DESTROY_ERROR;
-            LOG_ERROR << errno << ": Error destroying container " << container_name;
+            error_msg = USER_UNINSTALL_ERROR;
             return -1;
         }
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
-
-        // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
-        {
-            error_msg = USER_UNINSTALL_ERROR;
-            return -1;
-        }
 
         return 0;
     }

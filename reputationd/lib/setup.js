@@ -62,7 +62,7 @@ class Setup {
         });
 
         try {
-            console.log(`Preparing reputation account:${acc.address} reputation:${hostClient.config.reputationAddress}`);
+            console.log(`Preparing reputation account:${acc.address} | Reputation Hook:${hostClient.config.reputationAddress}`);
             await hostClient.prepareReputationAccount(acc.address, acc.secret, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
             await hostClient.disconnect();
         }

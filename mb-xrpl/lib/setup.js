@@ -591,8 +591,9 @@ class Setup {
     // Burn the host minted URITokens at the de-registration.
     async burnMintedURITokens(hostClient, options = {}) {
         // Get unsold URITokens.
-        const uriTokens = (await hostClient.xrplAcc.getURITokens()).filter(n => n.Issuer == hostClient.xrplAcc.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
-            .map(o => { return { uriTokenId: o.index, ownerAddress: hostClient.xrplAcc.address }; });
+        const leases = await hostClient.getLeases();
+        const uriTokens = leases ?
+            leases.map(o => { return { uriTokenId: o.index, ownerAddress: hostClient.xrplAcc.address }; }) : [];
 
         // Get sold URITokens.
         // We check for db existence since db is created by message board (not setup).
@@ -870,7 +871,7 @@ class Setup {
 
                 hostClient = new evernode.HostClient(acc.address, acc.secret, { xrplApi: xrplApi });
                 await hostClient.connect();
-                
+
                 // Get the existing uriToken of the lease.
                 const uriToken = (await hostClient.getLeaseByIndex(lease.container_name));
 

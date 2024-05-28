@@ -1002,18 +1002,26 @@
     }
 
     function collect_host_xrpl_account_inputs() {
+        # NOTE this method declares the accounts and secrets for a provided prefix.
+        local xahau_account_address=""
+        local xahau_account_secret=""
+        local prefix="${1:-xrpl}"
+
         while true; do
-            read -ep "Specify the Xahau account address: " xrpl_address </dev/tty
-            ! [[ $xrpl_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
+            read -ep "Specify the Xahau account address: " xahau_account_address </dev/tty
+            ! [[ $xahau_account_address =~ ^r[0-9a-zA-Z]{24,34}$ ]] && echo "Invalid Xahau account address." && continue
 
-            read -ep "Specify the Xahau account secret: " xrpl_secret </dev/tty
-            ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
+            read -sep "Specify the Xahau account secret: " xahau_account_secret </dev/tty
+            ! [[ $xahau_account_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
 
-            echo "Checking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && xrpl_secret="" && continue
+            echomult "\nChecking account keys..."
+            ! exec_jshelper validate-keys $rippled_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
 
             break
         done
+
+        eval "${prefix}_address='$xahau_account_address'"
+        eval "${prefix}_secret='$xahau_account_secret'"
     }
 
     function set_host_xrpl_account() {
@@ -1102,7 +1110,7 @@
 
                 echo "{ \"xrpl\": { \"secret\": \"$xrpl_secret\" } }" >"$key_file_path" &&
                     chmod 440 "$key_file_path" &&
-                    chown $MB_XRPL_USER: $key_file_path &&
+                    chown $MB_XRPL_USER:$SASHIADMIN_GROUP $key_file_path &&
                     echomult "Key file saved successfully at $key_file_path" || {
                     echomult "Error occurred in permission and ownership assignment of key file."
                     exit 1
@@ -1147,14 +1155,14 @@
         fi
 
         if [ -e "$reputationd_key_file_path" ]; then
-            if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the installation."; then
+            if confirm "The file '$reputationd_key_file_path' already exists. Do you want to continue using that key file?\nPressing 'n' would terminate the opting-in."; then
                 echomult "Continuing with the existing key file."
                 reputationd_existing_secret=$(jq -r '.xrpl.secret' "$reputationd_key_file_path" 2>/dev/null)
                 if [ "$reputationd_existing_secret" != "null" ] && [ "$reputationd_existing_secret" != "-" ]; then
                     while true; do
                         account_json=$(exec_jshelper generate-account $reputationd_existing_secret) && break
                         echo "Error occurred when existing account retrieval."
-                        confirm "\nDo you want to retry?\nPressing 'n' would terminate the installation." || return 1
+                        confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in.." || return 1
                     done
 
                     reputationd_xrpl_address=$(jq -r '.address' <<<"$account_json")
@@ -1176,11 +1184,16 @@
                 exit 1
             fi
         else
-            generate_keys "reputationd"
+
+            if ! confirm "Do you already have a Xahau account that has been used for reputation assessment?" "n"; then
+                generate_keys "reputationd"
+            else
+                collect_host_xrpl_account_inputs "reputationd_xrpl"
+            fi
 
             echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
                 chmod 440 "$reputationd_key_file_path" &&
-                chown $REPUTATIOND_USER: $reputationd_key_file_path &&
+                chown $REPUTATIOND_USER:$SASHIADMIN_GROUP $reputationd_key_file_path &&
                 echomult "Key file saved successfully at $reputationd_key_file_path" || {
                 echomult "Error occurred in permission and ownership assignment of key file."
                 exit 1
@@ -2064,14 +2077,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && return 1
 
         # Configure reputationd users and register host.
-        echomult "configuring Evernode reputation for reward distribution..."
+        echomult "Configuring Evernode reputation for reward distribution..."
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
             chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
-            #account generation,
+            # Account generation,
             if ! set_host_reputationd_account; then
                 echo "error setting up reputationd account."
                 return 1
@@ -2320,8 +2333,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     elif [ "$mode" == "uninstall" ]; then
 
-        echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
-    \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+        echomult "\nNOTE: By continuing with this, you will not LOSE the ACCOUNT SECRETs; those remain within the specified paths.
+    \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
+    \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
 
         ! confirm "\nAre you sure you want to uninstall $evernode?" && exit 1
 
@@ -2344,8 +2358,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 while allowing you to transfer the registration to a preferred transferee.
                 \n\nAre you sure you want to transfer $evernode registration from this host?" && exit 1
 
-                echomult "\nNOTE: By continuing with this, you will not LOSE the SECRET; it remains within the specified path.
-                \nThe secret path can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'."
+                echomult "\nNOTE: By continuing with this, you will not LOSE the ACCOUNT SECRETs; those remain within the specified paths.
+    \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
+    \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
+
 
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 

@@ -112,5 +112,7 @@ namespace hp
 
     bool system_ready();
 
+    void get_vacant_ports_list(std::vector<hp::ports> &vacant_ports);
+
 } // namespace hp
 #endif

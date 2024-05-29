@@ -88,8 +88,9 @@ namespace hp
         }
 
         // Populate the vacant ports vector with vacant ports of destroyed containers.
-        sqlite::get_vacant_ports(db, vacant_ports);
-
+        get_vacant_ports_list(vacant_ports);
+        // sqlite::get_vacant_ports(db, vacant_ports);
+        LOG_ERROR << "get_vacant_ports_list: " << vacant_ports.data() << ".";
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
@@ -503,6 +504,8 @@ namespace hp
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
+
+        LOG_ERROR << "destroy_container vacant ports: " << vacant_ports.data() << ".";
 
         // Remove user after destroying.
         if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
@@ -1043,7 +1046,66 @@ namespace hp
 
         return 0;
     }
+    /**
+     * Populate the given vector with vacant ports which are not already assigned.
+     * @param vacant_ports Ports vector to hold port pairs from database.
+     */
+    void get_vacant_ports_list(std::vector<hp::ports> &vacant_ports)
+    {
+        const int gp_tcp_port_count=2;
+        const int gp_udp_port_count=2;
 
+        //get all instances
+        //TODO: reuse previous instances list
+        LOG_ERROR << "get all instances";
+
+        std::vector<hp::instance_info> instances;
+        get_instance_list(instances);
+        LOG_ERROR << "get_instance_list - total :"<< instances.size();
+        //no instances
+        if (instances.empty()) {
+            LOG_ERROR << "no instances, returning ..";
+            return;
+        }
+
+        //get the max instance
+        instance_info element_max_peer_port = *std::max_element(instances.begin(), instances.end(),
+            [](const hp::instance_info& a, const hp::instance_info& b) {
+            return (uint16_t)(a.assigned_ports.user_port) < (uint16_t)(b.assigned_ports.user_port);
+            });
+        
+        LOG_ERROR << "element_max_peer_port :" << element_max_peer_port.assigned_ports.peer_port;
+
+        //get init port (temp)
+        ports init_ports;
+        init_ports = {(uint16_t)(conf::cfg.hp.init_peer_port), (uint16_t)(conf::cfg.hp.init_user_port), (uint16_t)(conf::cfg.hp.init_gp_tcp_port), (uint16_t)(conf::cfg.hp.init_gp_udp_port)};
+        LOG_ERROR << "init_ports.gp_udp_port_start :" << init_ports.gp_udp_port_start;
+        //keep increasing init port (peer port) until it reaches max port
+        //if init port values did not match with an item in the instances list, add init port values to vacant ports list.
+        while (init_ports.peer_port < element_max_peer_port.assigned_ports.peer_port)
+        {
+            bool isItemAvailable = false;
+            //targetPort = init_ports.peer_port;
+            for(instance_info& instance : instances){
+                LOG_ERROR << instance.assigned_ports.peer_port << " == " << init_ports.peer_port;
+                if(instance.assigned_ports.peer_port == init_ports.peer_port){
+                    isItemAvailable=true;
+                    break;
+                }
+            }
+            if(isItemAvailable != true){
+                LOG_ERROR << "Item not available - adding to vacant_ports";
+                vacant_ports.push_back(init_ports);
+                isItemAvailable = false;
+            }
+
+            init_ports.peer_port++;
+            init_ports.user_port++;
+            init_ports.gp_tcp_port_start+=gp_tcp_port_count;
+            init_ports.gp_udp_port_start+=gp_udp_port_count;
+        }
+        
+    }
     /**
      * Check whether there's a pending reboot and cgrules service is running and configured.
      * @return true if active and configured otherwise false.

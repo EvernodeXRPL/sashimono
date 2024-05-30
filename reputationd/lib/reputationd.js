@@ -79,9 +79,9 @@ class ReputationD {
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.reputationClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
+        this.reputationClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation, { config: this.hostClient.config });
 
-        await this.#connectReputation();
+        await this.#connectReputation({ skipConfigs: true });
 
         const repInfo = await this.hostClient.getReputationInfo();
         // Last registered moment n means reputation is sent in n-1 moment.
@@ -228,8 +228,8 @@ class ReputationD {
         await this.#connect(this.hostClient, { reputationAddress: this.cfg.xrpl.address, reputationSecret: this.cfg.xrpl.secret });
     }
 
-    async #connectReputation() {
-        await this.#connect(this.reputationClient);
+    async #connectReputation(options = {}) {
+        await this.#connect(this.reputationClient, options);
     }
 
     async #startReputationClockScheduler() {

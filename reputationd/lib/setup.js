@@ -159,6 +159,7 @@ class Setup {
 
         try {
             const repInfo = await hostClient.getReputationInfo();
+            const config = hostClient.config;
             await hostClient.disconnect();
             const moment = await hostClient.getMoment();
 
@@ -170,8 +171,8 @@ class Setup {
                 repInfo.moment = moment;
             }
 
-            const repClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
-            await repClient.connect();
+            const repClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation, { config: config });
+            await repClient.connect({ skipConfigs: true });
 
             const globalInfo = await repClient.getReputationInfo();
 

@@ -329,21 +329,23 @@ class ReputationD {
     }
 
     async #getUniverseInfo(moment) {
-        const repInfo = await this.hostClient.getReputationInfo(moment);
+        if (!this.hostClient.reputationAcc)
+            return null;
 
-        if (!repInfo || !('orderedId' in repInfo))
+        const orderInfo = await this.reputationClient.getReputationOrderByAddress(this.hostClient.reputationAcc.address, moment);
+
+        if (!orderInfo || !('orderedId' in orderInfo))
             return null;
 
         return {
-            ...repInfo,
-            universeIndex: Math.floor(repInfo.orderedId / this.#universeSize)
+            universeIndex: Math.floor(orderInfo.orderedId / this.#universeSize)
         };
     }
 
     async #getInstancesInUniverse(universeIndex, moment) {
         const minOrderedId = universeIndex * this.#universeSize;
         return (await Promise.all(Array.from({ length: this.#universeSize }, (_, i) => i + minOrderedId).map(async (orderedId) => {
-            const repInfo = await this.reputationClient.getReputationInfoByOrderedId(orderedId, moment);
+            const repInfo = await this.reputationClient.getReputationContractInfoByOrderedId(orderedId, moment);
             if (!repInfo)
                 return null;
 

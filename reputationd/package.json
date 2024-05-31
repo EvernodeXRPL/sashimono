@@ -6,7 +6,7 @@
     },
     "dependencies": {
         "archiver": "5.3.1",
-        "evernode-js-client": "0.6.51",
+        "evernode-js-client": "0.6.52",
         "hotpocket-js-client": "0.5.6",
         "uuid": "9.0.1",
         "ws": "8.17.0"

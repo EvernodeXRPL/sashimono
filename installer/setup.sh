@@ -571,8 +571,8 @@
         # Default starting ports.
         init_peer_port=22861
         init_user_port=26201
-        init_gp_tcp_port=22871
-        init_gp_udp_port=26211
+        init_gp_tcp_port=36525
+        init_gp_udp_port=39064
         gp_tcp_port_count=2
         gp_udp_port_count=2
 

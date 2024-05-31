@@ -46,15 +46,6 @@ class Setup {
         this.#saveConfig(baseConfig);
     }
 
-    async updateConfig(contractUrl) {
-        const cfg = this.#getConfig(false, false);
-        cfg.contractUrl = contractUrl
-
-        this.#saveConfig(cfg);
-
-        await Promise.resolve(); // async placeholder.
-    }
-
     async prepareReputationAccount() {
 
         const config = this.#getConfig();
@@ -168,6 +159,7 @@ class Setup {
 
         try {
             const repInfo = await hostClient.getReputationInfo();
+            const config = hostClient.config;
             await hostClient.disconnect();
             const moment = await hostClient.getMoment();
 
@@ -179,8 +171,8 @@ class Setup {
                 repInfo.moment = moment;
             }
 
-            const repClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation);
-            await repClient.connect();
+            const repClient = await evernode.HookClientFactory.create(evernode.HookTypes.reputation, { config: config });
+            await repClient.connect({ skipConfigs: true });
 
             const globalInfo = await repClient.getReputationInfo();
 

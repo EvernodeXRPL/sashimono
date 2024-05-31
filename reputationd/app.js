@@ -43,10 +43,6 @@ async function main() {
             else if (process.argv.length >= 2 && process.argv[2] === 'prepare') {
                 await new Setup().prepareReputationAccount();
             }
-            else if (process.argv.length >= 4 && process.argv[2] === 'update-config') {
-                const contractUrl = process.argv[3];
-                await new Setup().updateConfig(contractUrl);
-            }
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
             }

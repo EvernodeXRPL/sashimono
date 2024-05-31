@@ -11,7 +11,8 @@ const LeaseStatus = {
     ACQUIRING: 'Acquiring',
     ACQUIRED: 'Acquired',
     FAILED: 'Failed',
-    EXPIRED: 'Expired',
+    DESTROYED: 'Destroyed',
+    BURNED: 'Burned',
     SASHI_TIMEOUT: 'SashiTimeout',
     EXTENDED: 'Extended'
 }
@@ -248,6 +249,12 @@ class MessageBoard {
                 console.error("Issue occurred while checking and requesting rebates.")
                 console.error(e);
             }
+        });
+
+        //Initially prune orphan instances
+        await this.#acquireLeaseUpdateLock();
+        await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
+            await this.#releaseLeaseUpdateLock();
         });
 
         // Start a job to expire instances and check for halts
@@ -511,8 +518,6 @@ class MessageBoard {
              */
             // await this.updateLeaseStatus(x.txHash, LeaseStatus.EXPIRED);
 
-            // Delete the lease record related to this instance (Permanent Delete).
-            await this.deleteLeaseRecord(lease.txHash);
 
             // Remove from the queue
             this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != lease.containerName);
@@ -531,7 +536,6 @@ class MessageBoard {
                 // Update the registry with the active instance count.
                 await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
             });
-            console.log(`Destroyed ${lease.containerName}`);
 
         }
         catch (e) {
@@ -682,7 +686,7 @@ class MessageBoard {
         const instances = (await this.sashiDb.getValues(this.sashiTable));
         this.sashiDb.close();
         this.db.open();
-        const leases = (await this.db.getValues(this.leaseTable));
+        const leases = (await this.getLeaseRecords());
         this.db.close();
 
         let activeInstanceCount = leases.filter(r => (r.status === LeaseStatus.ACQUIRED || r.status === LeaseStatus.EXTENDED)).length;
@@ -704,6 +708,10 @@ class MessageBoard {
                     if (lease.status === LeaseStatus.ACQUIRING || !uriToken) {
                         console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
+                        this.db.open();
+                        let leaseTxHash = await this.getLeaseTxHash(instance.name);
+                        await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
+                        this.db.close();
 
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
                         if (uriToken) {
@@ -960,6 +968,7 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, leaseIndex, outboundIP) {
+        let leaseTxHash = await this.getLeaseTxHash(uriTokenId);
         await this.#queueAction(async (submissionRefs) => {
             submissionRefs.refs ??= [{}, {}];
             // Check again wether the transaction is validated before retry.
@@ -972,10 +981,14 @@ class MessageBoard {
                     retry = false;
                 }
             }
-            if (retry) {
+
+            this.db.open();
+            if (retry && await this.getLeaseStatus(leaseTxHash) == LeaseStatus.DESTROYED) {
                 // Burn the URIToken and recreate the offer.
                 await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
+                await this.updateLeaseStatus(leaseTxHash, LeaseStatus.BURNED);
             }
+            this.db.close();
 
             // We refresh the config here, So if the purchaserTargetPrice is updated by the purchaser service, the new value will be taken.
             await this.hostClient.refreshConfig();
@@ -990,10 +1003,15 @@ class MessageBoard {
                     retry = false;
                 }
             }
-            if (retry) {
+            this.db.open();
+            if (retry && await this.getLeaseStatus(leaseTxHash) == LeaseStatus.BURNED) {
                 const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
                 await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] }).catch(console.error);
+                //Delete the lease record related to this instance (Permanent Delete).
+                await this.deleteLeaseRecord(leaseTxHash);
+                console.log(`Destroyed ${uriTokenId}.`);
             }
+            this.db.close();
         });
     }
 
@@ -1167,6 +1185,8 @@ class MessageBoard {
     async destroyInstance(containerName, leaseIndex, outboundIP = null) {
         // Destroy the instance.
         await this.sashiCli.destroyInstance(containerName);
+        let leaseTxHash = await this.getLeaseTxHash(containerName);
+        await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
         await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP).catch(console.error);
     }
 
@@ -1347,6 +1367,16 @@ class MessageBoard {
 
     async updateLeaseStatus(txHash, status) {
         await this.db.updateValue(this.leaseTable, { status: status }, { tx_hash: txHash });
+    }
+
+    async getLeaseStatus(tx_hash) {
+        const leaseData = await this.db.getValues(this.leaseTable, { tx_hash: tx_hash });
+        return leaseData[0]?.status;
+    }
+
+    async getLeaseTxHash(container_name) {
+        const leaseData = await this.db.getValues(this.leaseTable, { container_name: container_name });
+        return leaseData[0]?.tx_hash;
     }
 
     /**

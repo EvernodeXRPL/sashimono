@@ -42,6 +42,8 @@ async function main() {
             }
             else if (process.argv.length >= 2 && process.argv[2] === 'prepare') {
                 await new Setup().prepareReputationAccount();
+            } else if (process.argv.length >= 4 && process.argv[2] === 'update-config') {
+                // TODO: Remove this in 0.8.4.
             }
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();

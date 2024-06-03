@@ -42,10 +42,8 @@ async function main() {
             }
             else if (process.argv.length >= 2 && process.argv[2] === 'prepare') {
                 await new Setup().prepareReputationAccount();
-            }
-            else if (process.argv.length >= 4 && process.argv[2] === 'update-config') {
-                const contractUrl = process.argv[3];
-                await new Setup().updateConfig(contractUrl);
+            } else if (process.argv.length >= 4 && process.argv[2] === 'update-config') {
+                // TODO: Remove this in 0.8.4.
             }
             else if (process.argv.length >= 3 && process.argv[2] === 'upgrade') {
                 await new Setup().upgrade();
@@ -81,7 +79,7 @@ async function main() {
             // Logs are formatted with the timestamp and a log file will be created inside log directory.
             logger.init(appenv.LOG_PATH, appenv.FILE_LOG_ENABLED);
 
-            console.log('Starting the Evernode Xahau reputationd.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
+            console.log('Starting the Evernode Xahau reputationd.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : '') + ' --- patch applied ---');
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using message board config: ' + appenv.MB_XRPL_CONFIG_PATH);
 

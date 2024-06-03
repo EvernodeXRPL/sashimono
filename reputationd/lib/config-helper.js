@@ -42,6 +42,12 @@ class ConfigHelper {
         let publicCfg = JSON.parse(JSON.stringify(config)); // Make a copy. So, referenced object won't get changed.
         if ('secret' in publicCfg.xrpl)
             delete publicCfg.xrpl.secret;
+        if ('network' in publicCfg.xrpl)
+            delete publicCfg.xrpl.network;
+        if ('governorAddress' in publicCfg.xrpl)
+            delete publicCfg.xrpl.governorAddress;
+        if ('rippledServer' in publicCfg.xrpl)
+            delete publicCfg.xrpl.rippledServer;
         // Remove host related props.
         for (const e of Object.entries(publicCfg.xrpl)) {
             if (e[0].startsWith('host'))

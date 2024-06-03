@@ -95,9 +95,9 @@ class MessageBoard {
         if (!hostInfo)
             throw "Host is not registered.";
 
-        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry);
+        this.regClient = await evernode.HookClientFactory.create(evernode.HookTypes.registry, { config: this.hostClient.config });
 
-        await this.#connectRegistry();
+        await this.#connectRegistry({ skipConfigs: true });
         await this.regClient.subscribe();
 
         // Get moment only if heartbeat info is not 0.
@@ -530,9 +530,8 @@ class MessageBoard {
                 }
                 // Update the registry with the active instance count.
                 await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                console.log(`Destroyed ${lease.containerName}`);
             });
-            console.log(`Destroyed ${lease.containerName}`);
-
         }
         catch (e) {
             console.error(e);
@@ -571,8 +570,8 @@ class MessageBoard {
         await this.#connect(this.hostClient, { reputationAddress: this.cfg.xrpl.reputationAddress, reputationSecret: this.cfg.xrpl.reputationSecret });
     }
 
-    async #connectRegistry() {
-        await this.#connect(this.regClient);
+    async #connectRegistry(options = {}) {
+        await this.#connect(this.regClient, options);
     }
 
     #startPruneScheduler() {

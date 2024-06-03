@@ -1055,10 +1055,9 @@ namespace hp
         const int gp_udp_port_count=2;
 
         //get all instances
-        //TODO: reuse previous instances list
-
         std::vector<hp::instance_info> instances;
         get_instance_list(instances);
+        
         //no instances
         if (instances.empty()) {
             return;

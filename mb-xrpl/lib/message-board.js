@@ -716,7 +716,9 @@ class MessageBoard {
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
                         if (uriToken) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
+                            this.db.open();
                             await this.recreateLeaseOffer(instance.name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
+                            this.db.close();
 
                             await this.#queueAction(async (submissionRefs) => {
                                 submissionRefs.refs ??= [{}];
@@ -732,16 +734,16 @@ class MessageBoard {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
                                 await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             });
-                        }
+                        } else {
+                            // Remove the lease record.
+                            if (lease) {
+                                this.db.open();
+                                await this.deleteLeaseRecord(lease.tx_hash);
+                                this.db.close();
 
-                        // Remove the lease record.
-                        if (lease) {
-                            this.db.open();
-                            await this.deleteLeaseRecord(lease.tx_hash);
-                            this.db.close();
-
-                            if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
-                                activeInstanceCount--;
+                                if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
+                                    activeInstanceCount--;
+                            }
                         }
                     }
                 }
@@ -1073,7 +1075,7 @@ class MessageBoard {
             if (diff > threshold) {
                 console.error(`Sashimono busy timeout. Took: ${diff} seconds. Threshold: ${threshold} seconds`);
                 // Update the lease status of the request to 'SashiTimeout'.
-                await this.updateAcquireStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
+                await this.updateLeaseStatus(acquireRefId, LeaseStatus.SASHI_TIMEOUT);
                 await this.recreateLeaseOffer(uriTokenId, leaseIndex, uriInfo?.outboundIP?.address);
             }
             else {

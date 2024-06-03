@@ -171,7 +171,7 @@ int main(int argc, char **argv)
         if (crypto::init() == -1)
             return 1;
 
-        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ") --- patch ---";
+        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ") --- patch applied ---";
         LOG_INFO << "Log level: " << conf::cfg.log.log_level;
         LOG_INFO << "Data dir: " << conf::ctx.data_dir;
 

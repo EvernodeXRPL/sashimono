@@ -571,10 +571,6 @@
         # Default starting ports.
         init_peer_port=22861
         init_user_port=26201
-        init_gp_tcp_port=36525
-        init_gp_udp_port=39064
-        gp_tcp_port_count=2
-        gp_udp_port_count=2
 
         if [ -n "$init_peer_port" ] && [ -n "$init_user_port" ] && confirm "Selected default port ranges (Peer: $init_peer_port-$((init_peer_port + alloc_instcount)), User: $init_user_port-$((init_user_port + alloc_instcount))).
                                         This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then
@@ -591,6 +587,20 @@
             read -ep "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
             ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
         done
+    }
+
+    function set_init_gp_ports() {
+
+        # Take default ports in interactive mode or if 'default' is specified.
+        # Picked default ports according to https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml
+        # (36525-36601) and (39064-39680) ranges are unassigned.
+
+        # Default starting ports.
+        init_gp_tcp_port=36525
+        init_gp_udp_port=39064
+        gp_tcp_port_count=2
+        gp_udp_port_count=2
+
         if [ -n "$init_gp_tcp_port" ] && [ -n "$init_gp_udp_port" ] && confirm "Selected default general purpose port ranges (TCP: $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)), UDP: $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).
                                         This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then
             return 0
@@ -1428,7 +1438,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $init_gp_tcp_port $init_gp_udp_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_address $key_file_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers 2>&1 |
             tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
@@ -2311,6 +2321,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
+        
+        [ ! -f "$SASHIMONO_CONFIG" ] && set_init_gp_ports
         echo -e "Using General purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_lease_amount

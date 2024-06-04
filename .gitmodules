@@ -2,6 +2,3 @@
 	path = evernode-bootstrap-contract
 	url = https://github.com/HotPocketDev/evernode-bootstrap-contract.git
 	branch = release
-[submodule "evernode-reputation-contract"]
-	path = evernode-reputation-contract
-	url = https://github.com/EvernodeXRPL/evernode-reputation-contract

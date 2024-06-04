@@ -528,7 +528,6 @@ echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 cp -r "$script_dir"/reputationd $SASHIMONO_BIN
-cp -r "$script_dir"/reputation-contract $REPUTATIOND_DATA/
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
@@ -539,7 +538,7 @@ if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then
     chown -R "$MB_XRPL_USER":"$SASHIADMIN_GROUP" /home/$MB_XRPL_USER
 
     secret_path=$(jq -r '.xrpl.secretPath' "$MB_XRPL_CONFIG")
-    chown "$MB_XRPL_USER": $secret_path
+    chown "$MB_XRPL_USER":"$SASHIADMIN_GROUP" $secret_path
 fi
 
 # Assign message board user priviledges.

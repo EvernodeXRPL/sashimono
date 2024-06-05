@@ -213,7 +213,7 @@ namespace comm
             std::string error_msg;
             if (hp::create_new_instance(error_msg, info, msg.container_name, msg.pubkey, msg.contract_id, msg.image, msg.outbound_ipv6, msg.outbound_net_interface) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
-//
+
             if (hp::initiate_instance(error_msg, info.container_name, init_msg) == -1)
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
 

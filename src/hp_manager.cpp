@@ -89,7 +89,6 @@ namespace hp
 
         // Populate the vacant ports vector with vacant ports of destroyed containers.
         get_vacant_ports_list(vacant_ports);
-        // sqlite::get_vacant_ports(db, vacant_ports);
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
@@ -184,7 +183,7 @@ namespace hp
             }
             instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1), (uint16_t)(last_assigned_ports.gp_tcp_port_start + 2), (uint16_t)(last_assigned_ports.gp_udp_port_start + 2) };
         }
-// 
+
         int user_id;
         std::string username;
         if (install_user(
@@ -329,14 +328,14 @@ namespace hp
                 gp_udp_port_1.data(), gp_udp_port_1.data(), 
                 gp_udp_port_2.data(), gp_udp_port_2.data(), 
                 contract_dir.data(), image_name.data());
-//
+
         LOG_INFO << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
             LOG_ERROR << "Error when running container. name: " << container_name;
             return -1;
         }
-//
+
         info.container_name = container_name;
         info.contract_dir = contract_dir;
         info.image_name = image_name;
@@ -498,7 +497,6 @@ namespace hp
             error_msg = USER_UNINSTALL_ERROR;
             return -1;
         }
-        //
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);

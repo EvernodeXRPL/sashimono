@@ -62,8 +62,8 @@ namespace conf
             cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
             cfg.hp.init_peer_port = !init_peer_port ? 22861 : init_peer_port;
             cfg.hp.init_user_port = !init_user_port ? 26201 : init_user_port;
-            cfg.hp.init_gp_tcp_port = !init_gp_tcp_port ? 22871 : init_gp_tcp_port;
-            cfg.hp.init_gp_udp_port = !init_gp_udp_port ? 26211 : init_gp_udp_port;
+            cfg.hp.init_gp_tcp_port = !init_gp_tcp_port ? 36525 : init_gp_tcp_port;
+            cfg.hp.init_gp_udp_port = !init_gp_udp_port ? 39064 : init_gp_udp_port;
 
             cfg.system.max_instance_count = !inst_count ? 3 : inst_count;
             cfg.system.max_mem_kbytes = !ram_kbytes ? 1048576 : ram_kbytes;
@@ -115,7 +115,7 @@ namespace conf
         ctx.data_dir = datadir.empty() ? ctx.exe_dir : util::realpath(datadir);
 
         ctx.hpfs_exe_path = ctx.exe_dir + "/hpfs";
-        ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";//
+        ctx.user_install_sh = ctx.exe_dir + "/user-install.sh";
         ctx.user_uninstall_sh = ctx.exe_dir + "/user-uninstall.sh";
 
         ctx.socket_path = ctx.data_dir + "/sa.sock";
@@ -217,7 +217,7 @@ namespace conf
                     std::cerr << "Configured hp host_address is empty.\n";
                     return -1;
                 }
-//
+
                 cfg.hp.init_peer_port = hp["init_peer_port"].as<uint16_t>();
                 if (cfg.hp.init_peer_port <= 1024)
                 {

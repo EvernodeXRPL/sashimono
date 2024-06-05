@@ -38,7 +38,7 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 12) ||
+        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 14) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2) ||

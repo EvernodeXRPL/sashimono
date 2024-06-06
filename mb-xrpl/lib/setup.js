@@ -530,12 +530,6 @@ class Setup {
             updated = true;
         }
 
-        // Fill missing fields.
-        if (!cfg.xrpl.rippledServer) {
-            cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
-            updated = true;
-        }
-
         if (updated)
             this.#saveConfig(cfg);
     }

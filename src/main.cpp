@@ -63,12 +63,6 @@ int check_config_changes()
         updated = true;
     }
 
-    if (conf::cfg.docker.registry_port == 0)
-    {
-        conf::cfg.docker.registry_port = 4444;
-        updated = true;
-    }
-
     if (updated && conf::write_config(conf::cfg) != 0)
         return -1;
 

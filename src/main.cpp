@@ -51,6 +51,31 @@ int parse_cmd(int argc, char **argv)
 }
 
 /**
+ * Check and update config values.
+ */
+int check_config_changes()
+{
+    bool updated = false;
+
+    if (conf::cfg.version != version::AGENT_VERSION)
+    {
+        conf::cfg.version = version::AGENT_VERSION;
+        updated = true;
+    }
+
+    if (conf::cfg.docker.registry_port == 0)
+    {
+        conf::cfg.docker.registry_port = 4444;
+        updated = true;
+    }
+
+    if (updated && conf::write_config(conf::cfg) != 0)
+        return -1;
+
+    return 0;
+}
+
+/**
  * Performs any cleanup on graceful application termination.
  */
 void deinit()
@@ -169,6 +194,9 @@ int main(int argc, char **argv)
         salog::init();
 
         if (crypto::init() == -1)
+            return 1;
+
+        if (check_config_changes() == -1)
             return 1;
 
         LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ") --- patch applied ---";

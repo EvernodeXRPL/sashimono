@@ -520,6 +520,26 @@ class Setup {
         }
     }
 
+    // Check config and modify default values.
+    checkConfigChanges() {
+        const cfg = this.#getConfig();
+        var updated = false;
+
+        if (cfg.version != appenv.MB_VERSION) {
+            cfg.version = appenv.MB_VERSION;
+            updated = true;
+        }
+
+        // Fill missing fields.
+        if (!cfg.xrpl.rippledServer) {
+            cfg.xrpl.rippledServer = appenv.DEFAULT_RIPPLED_SERVER
+            updated = true;
+        }
+
+        if (updated)
+            this.#saveConfig(cfg);
+    }
+
     // Upgrades existing message board data to the new version.
     async upgrade() {
 

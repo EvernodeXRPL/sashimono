@@ -167,6 +167,8 @@ async function main() {
             // Logs are formatted with the timestamp and a log file will be created inside log directory.
             logger.init(appenv.LOG_PATH, appenv.FILE_LOG_ENABLED);
 
+            new Setup().checkConfigChanges();
+
             console.log('Starting the Evernode Xahau message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : '') + ' --- patch applied ---');
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);

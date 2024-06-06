@@ -169,7 +169,7 @@ async function main() {
 
             new Setup().checkConfigChanges();
 
-            console.log('Starting the Evernode Xahau message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : '') + ' --- patch applied ---');
+            console.log('Starting the Evernode Xahau message board.' + (appenv.IS_DEV_MODE ? ' (in dev mode)' : ''));
             console.log('Data dir: ' + appenv.DATA_DIR);
             console.log('Using Sashimono cli: ' + appenv.SASHI_CLI_PATH);
 

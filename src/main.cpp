@@ -199,7 +199,7 @@ int main(int argc, char **argv)
         if (check_config_changes() == -1)
             return 1;
 
-        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ") --- patch applied ---";
+        LOG_INFO << "Sashimono agent (version " << version::AGENT_VERSION << ")";
         LOG_INFO << "Log level: " << conf::cfg.log.log_level;
         LOG_INFO << "Data dir: " << conf::ctx.data_dir;
 

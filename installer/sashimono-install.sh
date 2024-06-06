@@ -526,7 +526,6 @@ echo "configuring host setup on Evernode..."
 
 cp -r "$script_dir"/mb-xrpl $SASHIMONO_BIN
 cp -r "$script_dir"/reputationd $SASHIMONO_BIN
-cp -r "$script_dir"/reputation-contract $REPUTATIOND_DATA/
 
 # Create MB_XRPL_USER if does not exists..
 if ! grep -q "^$MB_XRPL_USER:" /etc/passwd; then

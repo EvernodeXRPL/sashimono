@@ -47,6 +47,11 @@ class ConfigHelper {
         let publicCfg = JSON.parse(JSON.stringify(config)); // Make a copy. So, referenced object won't get changed.
         if ('secret' in publicCfg.xrpl)
             delete publicCfg.xrpl.secret;
+        // Remove reputation related props.
+        for (const e of Object.entries(publicCfg.xrpl)) {
+            if (e[0].startsWith('reputation'))
+                delete publicCfg.xrpl[e[0]];
+        }
         fs.writeFileSync(configPath, JSON.stringify(publicCfg, null, 2), { mode: 0o644 }); // Set file permission so only current user can read/write and others can read.
     }
 

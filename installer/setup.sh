@@ -957,7 +957,7 @@
                 ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && exit 1
 
                 echo "Checking configured account keys..."
-                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && echo "Invalid account secret." && exit 1
+                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && echo "Unable to confirm secret, Invalid account secret, or bad Xahaud connection." && exit 1
             else
                 echo "Cannot resume the installation due to secret path issue." && exit 1
             fi

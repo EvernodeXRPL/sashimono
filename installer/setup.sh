@@ -98,8 +98,7 @@
     export MIN_OPERATIONAL_DURATION=3
     export MIN_REPUTATION_COST_PER_MONTH=10
 
-    #export NETWORK="${NETWORK:-mainnet}"
-    export NETWORK="${NETWORK:-devnet}"
+    export NETWORK="${NETWORK:-mainnet}"
 
     # Private docker registry (not used for now)
     export DOCKER_REGISTRY_USER="sashidockerreg"

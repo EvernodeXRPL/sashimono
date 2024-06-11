@@ -252,10 +252,12 @@ class MessageBoard {
         });
 
         //Initially prune orphan instances
+        console.log(`Starting the initial prune job...`);
         await this.#acquireLeaseUpdateLock();
         await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
             await this.#releaseLeaseUpdateLock();
         });
+        console.log(`Ended the initial prune job.`);
 
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
@@ -535,6 +537,7 @@ class MessageBoard {
                 }
                 // Update the registry with the active instance count.
                 await this.hostClient.updateRegInfo(this.activeInstanceCount, null, null, null, null, null, null, null, null, null, null, { submissionRef: submissionRefs?.refs[0] });
+                console.log(`${lease.containerName} queued for expiry.`)
             });
 
         }
@@ -588,7 +591,7 @@ class MessageBoard {
             await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
                 await this.#releaseLeaseUpdateLock();
             });
-            console.log(`Stopped the scheduled prune job.`);
+            console.log(`Ended the scheduled prune job.`);
             setTimeout(async () => {
                 await scheduler();
             }, timeout);
@@ -716,10 +719,7 @@ class MessageBoard {
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
                         if (uriToken) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
-                            this.db.open();
                             await this.recreateLeaseOffer(instance.name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
-                            this.db.close();
-
                             await this.#queueAction(async (submissionRefs) => {
                                 submissionRefs.refs ??= [{}];
                                 // Check again wether the transaction is validated before retry.
@@ -970,7 +970,6 @@ class MessageBoard {
     }
 
     async recreateLeaseOffer(uriTokenId, leaseIndex, outboundIP) {
-        let leaseTxHash = await this.getLeaseTxHash(uriTokenId);
         await this.#queueAction(async (submissionRefs) => {
             submissionRefs.refs ??= [{}, {}];
             // Check again wether the transaction is validated before retry.
@@ -985,6 +984,7 @@ class MessageBoard {
             }
 
             this.db.open();
+            let leaseTxHash = await this.getLeaseTxHash(uriTokenId);
             if (retry && await this.getLeaseStatus(leaseTxHash) == LeaseStatus.DESTROYED) {
                 // Burn the URIToken and recreate the offer.
                 await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);

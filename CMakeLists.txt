@@ -69,8 +69,9 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./evernode-bootstrap-contract/src/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
-    COMMAND npm --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
-    COMMAND npm --prefix ./reputationd install && npm run --prefix ./reputationd build
+    COMMAND npm run --prefix ./mb-xrpl build
+    COMMAND npm run --prefix ./reputationd build
+    COMMAND npm --prefix ./reputationd/delegate-hook install && npm run --prefix ./reputationd/delegate-hook build
 )
 
 target_precompile_headers(sagent PUBLIC src/pchheader.hpp)
@@ -84,11 +85,14 @@ add_custom_target(installer
   COMMAND bash -c "cp -r ./evernode-license.pdf ./build/installer/"
   COMMAND bash -c "cp -r ./mb-xrpl/dist ./build/installer/mb-xrpl"
   COMMAND bash -c "cp -r ./reputationd/dist ./build/installer/reputationd"
+  COMMAND mkdir -p ./build/installer/reputationd/delegate/
+  COMMAND bash -c "cp -r ./reputationd/delegate-hook/dist/hook-setup/* ./build/installer/reputationd/delegate/"
+
   COMMAND tar cfz ./build/installer.tar.gz --directory=./build/ installer
   COMMAND rm -r ./build/installer
 
   # js helper for installer setup.
-  COMMAND npm  --prefix ./installer/jshelper install && npm run --prefix ./installer/jshelper build
+  COMMAND npm run --prefix ./installer/jshelper build
   COMMAND tar cfz ./build/setup-jshelper.tar.gz --directory=./installer/jshelper/ dist
 )
 set_target_properties(installer PROPERTIES EXCLUDE_FROM_ALL TRUE)

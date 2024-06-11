@@ -1058,8 +1058,8 @@ namespace hp
             });
         
         
-        ports init_ports;
-        init_ports = {(uint16_t)(conf::cfg.hp.init_peer_port), (uint16_t)(conf::cfg.hp.init_user_port), (uint16_t)(conf::cfg.hp.init_gp_tcp_port), (uint16_t)(conf::cfg.hp.init_gp_udp_port)};
+        ports init_ports = {(uint16_t)(conf::cfg.hp.init_peer_port), (uint16_t)(conf::cfg.hp.init_user_port), (uint16_t)(conf::cfg.hp.init_gp_tcp_port), (uint16_t)(conf::cfg.hp.init_gp_udp_port)};
+        
         //Keep increasing init port (peer port) until it reaches max port
         //If init port values did not match with an item in the instances list, add init port values to vacant ports list.
         while (init_ports.peer_port < element_max_peer_port->assigned_ports.peer_port)

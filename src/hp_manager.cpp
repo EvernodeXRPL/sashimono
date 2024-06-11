@@ -501,13 +501,6 @@ namespace hp
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
             vacant_ports.push_back(info.assigned_ports);
 
-        // Remove user after destroying.
-        if (uninstall_user(info.username, info.assigned_ports, container_name) == -1)
-        {
-            error_msg = USER_UNINSTALL_ERROR;
-            return -1;
-        }
-
         return 0;
     }
 
@@ -1058,30 +1051,26 @@ namespace hp
             return;
         }
 
-        //get the max instance
-        instance_info element_max_peer_port = *std::max_element(instances.begin(), instances.end(),
+        //Get the max instance
+        const std::vector<hp::instance_info>::iterator element_max_peer_port = std::max_element(instances.begin(), instances.end(),
             [](const hp::instance_info& a, const hp::instance_info& b) {
             return (uint16_t)(a.assigned_ports.user_port) < (uint16_t)(b.assigned_ports.user_port);
             });
         
-        //get init port (temp)
+        
         ports init_ports;
         init_ports = {(uint16_t)(conf::cfg.hp.init_peer_port), (uint16_t)(conf::cfg.hp.init_user_port), (uint16_t)(conf::cfg.hp.init_gp_tcp_port), (uint16_t)(conf::cfg.hp.init_gp_udp_port)};
-        //keep increasing init port (peer port) until it reaches max port
-        //if init port values did not match with an item in the instances list, add init port values to vacant ports list.
-        while (init_ports.peer_port < element_max_peer_port.assigned_ports.peer_port)
+        //Keep increasing init port (peer port) until it reaches max port
+        //If init port values did not match with an item in the instances list, add init port values to vacant ports list.
+        while (init_ports.peer_port < element_max_peer_port->assigned_ports.peer_port)
         {
-            bool isItemAvailable = false;
-            //targetPort = init_ports.peer_port;
-            for(instance_info& instance : instances){
-                if(instance.assigned_ports.peer_port == init_ports.peer_port){
-                    isItemAvailable=true;
-                    break;
-                }
-            }
-            if(isItemAvailable != true){
+
+            bool is_item_available = std::find_if(instances.begin(),instances.end(),[init_ports](const instance_info& instance){
+                return instance.assigned_ports.peer_port == init_ports.peer_port;
+            }) != instances.end();
+
+            if(!is_item_available){
                 vacant_ports.push_back(init_ports);
-                isItemAvailable = false;
             }
 
             init_ports.peer_port++;

@@ -2092,7 +2092,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 return 1
             fi
 
-            if confirm "Would you like to consider this account as a delegate account that works for multiple hosts 
+            if confirm "\nWould you like to consider this account as a delegate account that works for multiple hosts 
                 for the purpose of reputationD service? \
                 \n(NOTE:If you choose YES, there is a chance of missing the current reputation assessment if it is already being used by a single host.)" "n"; then
                 reputation_account_mode=2                

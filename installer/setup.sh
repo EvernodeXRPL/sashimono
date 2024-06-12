@@ -2095,10 +2095,10 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             if confirm "\nWould you like to consider this account as a delegate account that works for multiple hosts 
                 for the purpose of reputationD service? \
                 \n(NOTE:If you choose YES, there is a chance of missing the current reputation assessment if it is already being used by a single host.)" "n"; then
-                reputation_account_mode=2                
+                reputation_account_mode=2
             else
-                reputation_account_mode=1  
-            fi           
+                reputation_account_mode=1
+            fi
 
         fi
 
@@ -2142,7 +2142,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             generate_qrcode "$reputationd_xrpl_address"
 
-            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path $reputation_account_mode && echo "Error creating configs" && return 1
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "Error creating configs" && return 1
 
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
@@ -2153,7 +2153,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             sleep 2
         fi
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare $reputation_account_mode && echo "Error preparing account" && return 1
 
         if [ "$reputation_account_mode" == "2" ]; then
             ! sudo -u $REPUTATIOND_USER CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
@@ -2375,7 +2376,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
     \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
 
-
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 
             fi
@@ -2547,9 +2547,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            reputationd_info
-            echo ""
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            echo -e "\n"
+            reputationd_info
         else
             echomult "ReputationD management tool
             \nSupported commands:

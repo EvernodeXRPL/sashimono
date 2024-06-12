@@ -92,7 +92,7 @@ add_custom_target(installer
   COMMAND rm -r ./build/installer
 
   # js helper for installer setup.
-  COMMAND npm run --prefix ./installer/jshelper build
+  COMMAND npm  --prefix ./installer/jshelper install && npm run --prefix ./installer/jshelper build
   COMMAND tar cfz ./build/setup-jshelper.tar.gz --directory=./installer/jshelper/ dist
 )
 set_target_properties(installer PROPERTIES EXCLUDE_FROM_ALL TRUE)

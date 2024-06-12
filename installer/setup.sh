@@ -69,6 +69,7 @@
     tls_cabundle_file="self"
     description="-"
     fallback_rippled_servers="-"
+    reimburse_frequency="-"
 
     # export vars used by Sashimono installer.
     export USER_BIN=/usr/bin
@@ -2105,6 +2106,21 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ $(stat -c "%a" "$host_key_file_path") != "440" ] && chmod 440 "$host_key_file_path"
 
         if [ "$upgrade" == "0" ]; then
+            if confirm "\nWould you like to reimburse reputation account for reputation contract lease costs?"; then
+                while true; do
+                    read -p "Enter the hours amount for reimbursement frequency: " -e reimburse_frequency </dev/tty
+                    if [[ "$reimburse_frequency" =~ ^[0-9]+$ ]]; then
+                        break
+                    else
+                        echo "Invalid frequency. Please enter a valid number."
+                    fi
+                done
+            fi
+        else
+            echomult "\nDenied reputation account reimbursement.\nYou can opt-in for reimbursement later by using 'evernode reputationd reimburse' command.\n"
+        fi
+
+        if [ "$upgrade" == "0" ]; then
             echo -e "\nAccount setup is complete."
 
             local message="Your host account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
@@ -2130,7 +2146,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             generate_qrcode "$reputationd_xrpl_address"
 
-            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path && echo "Error creating configs" && return 1
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN new $reputationd_xrpl_address $reputationd_key_file_path $reimburse_frequency && echo "Error creating configs" && return 1
 
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
@@ -2534,6 +2550,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             reputationd_info
             echo ""
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+        #elif [ "$2" == "reimburse" ]; then
+            #dulTest>>> add function to edit reputation.cfg's reimburseFrequency value.
         else
             echomult "ReputationD management tool
             \nSupported commands:

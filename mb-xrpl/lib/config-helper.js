@@ -28,6 +28,7 @@ class ConfigHelper {
         if (reputationDConfigPath && fs.existsSync(reputationDConfigPath)) {
             const reputationDConfig = JSON.parse(fs.readFileSync(reputationDConfigPath).toString());
             config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
+            config.reputationReimburseFrequency = reputationDConfig.reimburseFrequency;
 
             if (readSecret) {
                 if (!fs.existsSync(reputationDConfig.xrpl.secretPath))

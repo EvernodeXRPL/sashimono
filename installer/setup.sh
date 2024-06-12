@@ -2126,15 +2126,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
 
             local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
-            local lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
-            # Format lease amount since jq gives it in exponential format.
-            local lease_amount=$(awk -v lease_amount="$lease_amount" 'BEGIN { printf("%f\n", lease_amount) }' </dev/null)
-            local min_reputation_evr_requirement=$(echo "$lease_amount*24*30*$MIN_OPERATIONAL_DURATION" | bc)
 
             local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
-            local need_evr=$(echo "$min_reputation_evr_requirement > 0" | bc -l)
             [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
-            [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_reputation_evr_requirement EVR to cover Evernode registration."
 
             message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -2147,7 +2141,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
             while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
+                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" "Sufficient XAH funds have been received." && break
                 confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
             done
 
@@ -2160,16 +2154,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             ! sudo -u $REPUTATIOND_USER CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
         fi
 
-        if [ "$upgrade" == "0" ]; then
-            echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required amount in EVRs.
-            \nYou can scan the provided QR code in your wallet app to send funds."
-
-            while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
-                confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
-            done
-
-        fi
+        echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
 
         if [ "$upgrade" == "1" ]; then
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
@@ -2550,6 +2536,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
             echo -e "\n"
             reputationd_info
+
+            echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
         else
             echomult "ReputationD management tool
             \nSupported commands:

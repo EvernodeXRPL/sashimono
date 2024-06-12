@@ -2151,6 +2151,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare $reputation_account_mode && echo "Error preparing account" && return 1
 
         if [ "$reputation_account_mode" == "2" ]; then
+            echomult "\nInstalling Delegate Hook..."
             ! sudo -u $REPUTATIOND_USER CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
         fi
 

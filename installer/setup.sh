@@ -31,6 +31,9 @@
     repo_name="evernode-resources"
     desired_branch="main"
 
+    # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"
+    reputation_account_mode=0
+
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
     latest_version_data=$(curl -s "$latest_version_endpoint")
     latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
@@ -2088,6 +2091,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echo "error setting up reputationd account."
                 return 1
             fi
+
+            if confirm "\nWould you like to consider this account as a delegate account that works for multiple hosts 
+                for the purpose of reputationD service? \
+                \n(NOTE:If you choose YES, there is a chance of missing the current reputation assessment if it is already being used by a single host.)" "n"; then
+                reputation_account_mode=2
+            else
+                reputation_account_mode=1
+            fi
+
         fi
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
@@ -2141,7 +2153,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
             sleep 2
         fi
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
+
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare $reputation_account_mode && echo "Error preparing account" && return 1
+
+        if [ "$reputation_account_mode" == "2" ]; then
+            ! sudo -u $REPUTATIOND_USER CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
+        fi
 
         if [ "$upgrade" == "0" ]; then
             echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required amount in EVRs.
@@ -2359,7 +2376,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
     \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
 
-
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 
             fi
@@ -2531,9 +2547,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            reputationd_info
-            echo ""
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            echo -e "\n"
+            reputationd_info
         else
             echomult "ReputationD management tool
             \nSupported commands:

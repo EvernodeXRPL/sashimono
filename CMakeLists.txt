@@ -69,8 +69,8 @@ add_custom_command(TARGET sagent POST_BUILD
     COMMAND cp ./evernode-bootstrap-contract/src/bootstrap_upgrade.sh ./build/contract_template/contract_fs/seed/state/
     COMMAND mv ./build/bootstrap_contract ./build/contract_template/contract_fs/seed/state/
     COMMAND ./installer/docker-install.sh ./build/dockerbin
-    COMMAND npm run --prefix ./mb-xrpl build
-    COMMAND npm run --prefix ./reputationd build
+    COMMAND npm --prefix ./mb-xrpl install && npm run --prefix ./mb-xrpl build
+    COMMAND npm --prefix ./reputationd install && npm run --prefix ./reputationd build
     COMMAND npm --prefix ./reputationd/delegate-hook install && npm run --prefix ./reputationd/delegate-hook build
 )
 

@@ -1005,6 +1005,15 @@
 
     function collect_host_xrpl_account_inputs() {
         # NOTE this method declares the accounts and secrets for a provided prefix.
+        if [ -z $rippled_server ]; then
+            if [ -f "$MB_XRPL_CONFIG" ]; then
+                local xahau_server=$(jq -r '.xrpl.rippledServer' $MB_XRPL_CONFIG)
+            else
+                echo "Message board configuration does not exist." && return 1
+            fi
+        else
+            local xahau_server="$rippled_server"
+        fi
         local xahau_account_address=""
         local xahau_account_secret=""
         local prefix="${1:-xrpl}"
@@ -1017,7 +1026,7 @@
             ! [[ $xahau_account_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
 
             echomult "\nChecking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
+            ! exec_jshelper validate-keys $xahau_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
 
             break
         done
@@ -1190,7 +1199,7 @@
             if ! confirm "Do you already have a Xahau account that has been used for reputation assessment?" "n"; then
                 generate_keys "reputationd"
             else
-                collect_host_xrpl_account_inputs "reputationd_xrpl"
+                collect_host_xrpl_account_inputs "reputationd_xrpl" || exit 1
             fi
 
             echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
@@ -2083,7 +2092,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
-            chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
+            [ -f $reputationd_secret_path ] && chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
             # Account generation,

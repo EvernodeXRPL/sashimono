@@ -2083,6 +2083,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Configure reputationd users and register host.
         echomult "Configuring Evernode reputation for reward distribution..."
 
+        local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
+        if [ ! -z $override_network ]; then
+            NETWORK="$override_network"
+            set_environment_configs || exit 1
+        fi
+
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
             chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path

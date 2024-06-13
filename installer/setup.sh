@@ -32,6 +32,7 @@
     desired_branch="main"
 
     # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"
+    is_fresh_reputation_acc=false
     reputation_account_mode=0
 
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
@@ -1189,6 +1190,7 @@
 
             if ! confirm "Do you already have a Xahau account that has been used for reputation assessment?" "n"; then
                 generate_keys "reputationd"
+                is_fresh_reputation_acc=true
             else
                 collect_host_xrpl_account_inputs "reputationd_xrpl"
             fi
@@ -2092,11 +2094,16 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 return 1
             fi
 
-            if confirm "\nWould you like to consider this account as a delegate account that works for multiple hosts 
-                for the purpose of reputationD service? \
-                \n(NOTE:If you choose YES, there is a chance of missing the current reputation assessment if it is already being used by a single host.)" "n"; then
+            if confirm "\nThe Xahau account that you are going to use with the reputationD service can be configured as a delegate account for multiple hosts. \
+                \nPlease note that if you set it up this way, there is a chance of missing the current reputation assessment if it is already being used by a single host.  \
+                \nAdditionally, using a single delegate account for multiple hosts may lead to simultaneous transaction submissions, which can cause some transaction failures.\
+                \nHowever, these transactions will succeed on the next attempt.\
+                \nWould you like to configure this account as a delegate account for multiple hosts for the reputationD service?" "n"; then
                 reputation_account_mode=2
             else
+                [ !$is_fresh_reputation_acc ] && echomult "Warning !!!.\nIf you are planning to configure the delegate account dedicated to your own host, make sure it is not used by another host before continuing."
+                confirm "\nContinue?" || exit 1
+
                 reputation_account_mode=1
             fi
 
@@ -2152,7 +2159,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         if [ "$reputation_account_mode" == "2" ]; then
             echomult "\nInstalling Delegate Hook..."
-            ! sudo -u $REPUTATIOND_USER CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
+            ! sudo -u $REPUTATIOND_USER NETWORK=$NETWORK CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
         fi
 
         echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account

@@ -25,16 +25,24 @@ class ConfigHelper {
         if (config.xrpl.leaseAmount && config.xrpl.leaseAmount < 0)
             throw "Lease amount should be a positive value";
 
-        if (reputationDConfigPath && fs.existsSync(reputationDConfigPath)) {
-            const reputationDConfig = JSON.parse(fs.readFileSync(reputationDConfigPath).toString());
-            if (fs.existsSync(reputationDConfig.xrpl.secretPath)) {
-                config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
-                if (readSecret) {
-                    const reputationDSecretCfg = JSON.parse(fs.readFileSync(reputationDConfig.xrpl.secretPath).toString());
-                    config.xrpl.reputationSecret = reputationDSecretCfg.xrpl.secret;
+        try {
+            if (reputationDConfigPath && fs.existsSync(reputationDConfigPath)) {
+                const reputationDConfig = JSON.parse(fs.readFileSync(reputationDConfigPath).toString());
+                if (fs.existsSync(reputationDConfig.xrpl.secretPath)) {
+                    config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
+                    if (readSecret) {
+                        const reputationDSecretCfg = JSON.parse(fs.readFileSync(reputationDConfig.xrpl.secretPath).toString());
+                        config.xrpl.reputationSecret = reputationDSecretCfg.xrpl.secret;
+                    }
+                    config.xrpl = { ...reputationDConfig.xrpl, ...config.xrpl }
                 }
-                config.xrpl = { ...reputationDConfig.xrpl, ...config.xrpl }
+                else {
+                    console.error(`Secret config file does not exist at ${reputationDConfig.xrpl.secretPath}.`);
+                }
             }
+        }
+        catch (e) {
+            console.error('Error while reading the reputation config.', e);
         }
 
         return config;

@@ -27,17 +27,14 @@ class ConfigHelper {
 
         if (reputationDConfigPath && fs.existsSync(reputationDConfigPath)) {
             const reputationDConfig = JSON.parse(fs.readFileSync(reputationDConfigPath).toString());
-            config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
-
-            if (readSecret) {
-                if (!fs.existsSync(reputationDConfig.xrpl.secretPath))
-                    throw `Secret config file does not exist at ${reputationDConfig.xrpl.secretPath}`;
-
-                const reputationDSecretCfg = JSON.parse(fs.readFileSync(reputationDConfig.xrpl.secretPath).toString());
-                config.xrpl.reputationSecret = reputationDSecretCfg.xrpl.secret;
+            if (fs.existsSync(reputationDConfig.xrpl.secretPath)) {
+                config.xrpl.reputationAddress = reputationDConfig.xrpl.address;
+                if (readSecret) {
+                    const reputationDSecretCfg = JSON.parse(fs.readFileSync(reputationDConfig.xrpl.secretPath).toString());
+                    config.xrpl.reputationSecret = reputationDSecretCfg.xrpl.secret;
+                }
+                config.xrpl = { ...reputationDConfig.xrpl, ...config.xrpl }
             }
-
-            config.xrpl = { ...reputationDConfig.xrpl, ...config.xrpl }
         }
 
         return config;

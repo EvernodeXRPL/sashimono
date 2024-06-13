@@ -32,7 +32,7 @@ namespace hp
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
     // For the local log driver compression, minimum max-file should be 2. So we keep two logs each max-size is 5mb
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout --foreground -v -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local \
-                                            --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
+     --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -88,8 +88,7 @@ namespace hp
         }
 
         // Populate the vacant ports vector with vacant ports of destroyed containers.
-        sqlite::get_vacant_ports(db, vacant_ports);
-
+        get_vacant_ports_list(vacant_ports);
         // Calculate the resources per instance.
         instance_resources.cpu_us = conf::cfg.system.max_cpu_us / conf::cfg.system.max_instance_count;
         instance_resources.mem_kbytes = conf::cfg.system.max_mem_kbytes / conf::cfg.system.max_instance_count;
@@ -182,7 +181,7 @@ namespace hp
                 sqlite::get_max_ports(db, last_assigned_ports);
                 last_port_assign_from_vacant = false;
             }
-            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1)};
+            instance_ports = {(uint16_t)(last_assigned_ports.peer_port + 1), (uint16_t)(last_assigned_ports.user_port + 1), (uint16_t)(last_assigned_ports.gp_tcp_port_start + 2), (uint16_t)(last_assigned_ports.gp_udp_port_start + 2) };
         }
 
         int user_id;
@@ -313,11 +312,23 @@ namespace hp
     {
         const std::string user_port = std::to_string(assigned_ports.user_port);
         const std::string peer_port = std::to_string(assigned_ports.peer_port);
+        const std::string gp_tcp_port_1 = std::to_string(assigned_ports.gp_tcp_port_start);
+        const std::string gp_tcp_port_2 = std::to_string(assigned_ports.gp_tcp_port_start + 1 );
+        const std::string gp_udp_port_1 = std::to_string(assigned_ports.gp_udp_port_start);
+        const std::string gp_udp_port_2 = std::to_string(assigned_ports.gp_udp_port_start + 1 );
         const std::string timeout = std::to_string(DOCKER_CREATE_TIMEOUT_SECS);
-        const int len = 376 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + contract_dir.length() + image_name.length();
+        const int len = 376 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + (gp_tcp_port_1.length() * 2) + (gp_tcp_port_2.length() * 2) + (gp_udp_port_1.length() * 2) + (gp_udp_port_2.length() * 2) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
-                user_port.data(), user_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), peer_port.data(), contract_dir.data(), image_name.data());
+                user_port.data(), user_port.data(), 
+                peer_port.data(), peer_port.data(), 
+                peer_port.data(), peer_port.data(), 
+                gp_tcp_port_1.data(), gp_tcp_port_1.data(), 
+                gp_tcp_port_2.data(), gp_tcp_port_2.data(), 
+                gp_udp_port_1.data(), gp_udp_port_1.data(), 
+                gp_udp_port_2.data(), gp_udp_port_2.data(), 
+                contract_dir.data(), image_name.data());
+
         LOG_INFO << "Creating the docker container. name: " << container_name;
         if (system(command) != 0)
         {
@@ -906,6 +917,9 @@ namespace hp
             std::to_string(contract_ugid.gid),
             std::to_string(instance_ports.peer_port),
             std::to_string(instance_ports.user_port),
+            std::to_string(instance_ports.gp_tcp_port_start),
+            std::to_string(instance_ports.gp_udp_port_start),
+
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,
@@ -1019,7 +1033,53 @@ namespace hp
 
         return 0;
     }
+    /**
+     * Populate the given vector with vacant ports which are not already assigned.
+     * @param vacant_ports Ports vector to hold port pairs from database.
+     */
+    void get_vacant_ports_list(std::vector<hp::ports> &vacant_ports)
+    {
+        const int gp_tcp_port_count=2;
+        const int gp_udp_port_count=2;
 
+        //get all instances
+        std::vector<hp::instance_info> instances;
+        get_instance_list(instances);
+        
+        //no instances
+        if (instances.empty()) {
+            return;
+        }
+
+        //Get the max instance
+        const std::vector<hp::instance_info>::iterator element_max_peer_port = std::max_element(instances.begin(), instances.end(),
+            [](const hp::instance_info& a, const hp::instance_info& b) {
+            return (uint16_t)(a.assigned_ports.user_port) < (uint16_t)(b.assigned_ports.user_port);
+            });
+        
+        
+        ports init_ports = {(uint16_t)(conf::cfg.hp.init_peer_port), (uint16_t)(conf::cfg.hp.init_user_port), (uint16_t)(conf::cfg.hp.init_gp_tcp_port), (uint16_t)(conf::cfg.hp.init_gp_udp_port)};
+        
+        //Keep increasing init port (peer port) until it reaches max port
+        //If init port values did not match with an item in the instances list, add init port values to vacant ports list.
+        while (init_ports.peer_port < element_max_peer_port->assigned_ports.peer_port)
+        {
+
+            bool is_item_available = std::find_if(instances.begin(),instances.end(),[init_ports](const instance_info& instance){
+                return instance.assigned_ports.peer_port == init_ports.peer_port;
+            }) != instances.end();
+
+            if(!is_item_available){
+                vacant_ports.push_back(init_ports);
+            }
+
+            init_ports.peer_port++;
+            init_ports.user_port++;
+            init_ports.gp_tcp_port_start+=gp_tcp_port_count;
+            init_ports.gp_udp_port_start+=gp_udp_port_count;
+        }
+        
+    }
     /**
      * Check whether there's a pending reboot and cgrules service is running and configured.
      * @return true if active and configured otherwise false.

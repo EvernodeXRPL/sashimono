@@ -38,7 +38,7 @@ int parse_cmd(int argc, char **argv)
     {
         conf::ctx.command = argv[1];
 
-        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 12) ||
+        if ((conf::ctx.command == "new" && argc >= 2 && argc <= 14) ||
             (conf::ctx.command == "run" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "upgrade" && argc >= 2 && argc <= 3) ||
             (conf::ctx.command == "version" && argc == 2) ||
@@ -134,18 +134,20 @@ int main(int argc, char **argv)
 
         // This will create a new config.
         const std::string host_addr = (argc >= 4) ? argv[3] : "";
-        uint16_t init_peer_port = 0, init_user_port = 0, docker_registry_port = 0;
+        uint16_t init_peer_port = 0, init_user_port = 0, init_gp_tcp_port = 0, init_gp_udp_port = 0, docker_registry_port = 0;
         size_t inst_count = 0, cpu_us = 0, ram_kbytes = 0, swap_kbytes = 0, disk_kbytes = 0;
 
         if (((argc >= 5) && util::stoul(argv[4], init_peer_port) != 0) ||
             ((argc >= 6) && util::stoul(argv[5], init_user_port) != 0) ||
-            ((argc >= 7) && util::stoul(argv[6], docker_registry_port) != 0) ||
-            ((argc >= 8) && (util::stoull(argv[7], inst_count) != 0 || inst_count == 0)) ||
-            ((argc >= 9) && (util::stoull(argv[8], cpu_us) != 0 || cpu_us == 0)) ||
-            ((argc >= 10) && (util::stoull(argv[9], ram_kbytes) != 0 || ram_kbytes == 0)) ||
-            ((argc >= 11) && (util::stoull(argv[10], swap_kbytes) != 0 || swap_kbytes == 0)) ||
-            ((argc >= 12) && (util::stoull(argv[11], disk_kbytes) != 0 || disk_kbytes == 0)) ||
-            conf::create(host_addr, init_peer_port, init_user_port, docker_registry_port, inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
+            ((argc >= 7) && util::stoul(argv[6], init_gp_tcp_port) != 0) ||
+            ((argc >= 8) && util::stoul(argv[7], init_gp_udp_port) != 0) ||
+            ((argc >= 9) && util::stoul(argv[8], docker_registry_port) != 0) ||
+            ((argc >= 10) && (util::stoull(argv[9], inst_count) != 0 || inst_count == 0)) ||
+            ((argc >= 11) && (util::stoull(argv[10], cpu_us) != 0 || cpu_us == 0)) ||
+            ((argc >= 12) && (util::stoull(argv[11], ram_kbytes) != 0 || ram_kbytes == 0)) ||
+            ((argc >= 13) && (util::stoull(argv[12], swap_kbytes) != 0 || swap_kbytes == 0)) ||
+            ((argc >= 14) && (util::stoull(argv[13], disk_kbytes) != 0 || disk_kbytes == 0)) ||
+            conf::create(host_addr, init_peer_port, init_user_port, init_gp_tcp_port, init_gp_udp_port, docker_registry_port, inst_count, cpu_us, ram_kbytes, swap_kbytes, disk_kbytes) != 0)
         {
             std::cerr << "Invalid Sashimono Agent config creation args.\n";
             std::cerr << docker_registry_port << ", " << inst_count << ", " << cpu_us << ", " << ram_kbytes << ", "

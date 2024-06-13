@@ -6,6 +6,7 @@
 namespace sqlite
 {
     constexpr const char *COLUMN_DATA_TYPES[]{"INT", "TEXT", "BLOB"};
+    constexpr const char *ALTER_TABLE = "ALTER TABLE ";
     constexpr const char *CREATE_TABLE = "CREATE TABLE IF NOT EXISTS ";
     constexpr const char *CREATE_INDEX = "CREATE INDEX ";
     constexpr const char *CREATE_UNIQUE_INDEX = "CREATE UNIQUE INDEX ";
@@ -44,6 +45,8 @@ namespace sqlite
     constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
+
+    constexpr const char *IS_COLUMN_EXISTS = "SHOW COLUMNS FROM ? LIKE ?";
 
     constexpr const char *DELETE_HP_INSTANCE = "DELETE FROM instances WHERE name = ?";
 
@@ -152,6 +155,55 @@ namespace sqlite
         if (ret == -1)
         {
             LOG_ERROR << "Error when creating sqlite table " << table_name;
+        }
+
+        return ret;
+    }
+
+    /**
+     * Alter a table with given table info.
+     * @param db Pointer to the db.
+     * @param table_name Table name to be altered.
+     * @param column_info Column info to add.
+     * @returns returns 0 on success, or -1 on error.
+     */
+    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info, std::string_view after)
+    {
+        std::string sql;
+
+        for (auto itr = column_info.begin(); itr != column_info.end(); ++itr)
+        {
+            sql.append(ALTER_TABLE).append(table_name).append(" ADD COLUMN ");
+            sql.append(itr->name);
+            sql.append(" ");
+            sql.append(COLUMN_DATA_TYPES[itr->column_type]);
+
+            if (itr->is_key)
+            {
+                sql.append(" ");
+                sql.append(PRIMARY_KEY);
+            }
+
+            if (!itr->is_null)
+            {
+                sql.append(" ");
+                sql.append(NOT_NULL);
+            }
+
+            if (!after.empty())
+            {
+                sql.append(" AFTER ");
+                sql.append(after);
+            }
+
+            if (itr != column_info.end() - 1)
+                sql.append("; ");
+        }
+
+        const int ret = exec_sql(db, sql);
+        if (ret == -1)
+        {
+            LOG_ERROR << "Error when altering sqlite table " << table_name;
         }
 
         return ret;
@@ -266,6 +318,32 @@ namespace sqlite
     }
 
     /**
+     * Checks whether column exist in the database.
+     * @param db Pointer to the db.
+     * @param table_name Table name to be checked.
+     * @param column_name Column name to be checked.
+     * @returns returns true is exist, otherwise false.
+     */
+    bool is_column_exists(sqlite3 *db, std::string_view table_name, std::string_view column_name)
+    {
+        sqlite3_stmt *stmt;
+
+        if (sqlite3_prepare_v2(db, IS_COLUMN_EXISTS, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
+            sqlite3_bind_text(stmt, 1, table_name.data(), table_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 1, column_name.data(), column_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_step(stmt) == SQLITE_ROW)
+        {
+            // Finalize and distroys the statement.
+            sqlite3_finalize(stmt);
+            return true;
+        }
+
+        // Finalize and distroys the statement.
+        sqlite3_finalize(stmt);
+        return false;
+    }
+
+    /**
      * Closes a connection to a given databse.
      * @param db Pointer to the db.
      * @returns returns 0 on success, or -1 on error.
@@ -312,6 +390,15 @@ namespace sqlite
             if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
                 create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
                 create_index(db, INSTANCE_TABLE, "owner_pubkey", false) == -1) // one user can have multiple instances running.
+                return -1;
+        }
+        else if (!is_column_exists(db, INSTANCE_TABLE, "init_gp_tcp_port"))
+        {
+            const std::vector<table_column_info> columns{
+                table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_udp_port", COLUMN_DATA_TYPE::INT)};
+
+            if (alter_table(db, INSTANCE_TABLE, columns, "user_port") == -1)
                 return -1;
         }
         return 0;

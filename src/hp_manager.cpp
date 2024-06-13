@@ -499,7 +499,19 @@ namespace hp
         }
         // Add the port pair of the destroyed container to the vacant port vector.
         if (std::find(vacant_ports.begin(), vacant_ports.end(), info.assigned_ports) == vacant_ports.end())
-            vacant_ports.push_back(info.assigned_ports);
+        {
+            if (info.assigned_ports.gp_tcp_port_start == 0)
+            {
+                const uint16_t increment = ((info.assigned_ports.peer_port - conf::cfg.hp.init_peer_port) * 2);
+                const uint16_t gp_tcp_port_start = conf::cfg.hp.init_gp_tcp_port + increment;
+                const uint16_t gp_udp_port_start = conf::cfg.hp.init_gp_udp_port + increment;
+                vacant_ports.push_back({info.assigned_ports.user_port, info.assigned_ports.peer_port, gp_tcp_port_start, gp_udp_port_start});
+            }
+            else
+            {
+                vacant_ports.push_back(info.assigned_ports);
+            }
+        }
 
         return 0;
     }

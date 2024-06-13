@@ -594,6 +594,7 @@ WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 echo "Configuring sashimono agent service..."
 
 # Since gp ports are added as new feature we manually configure the default on upgrade mode if not exists.
+# TODO: Added because v0.8.4 does not have gp ports.
 if [[ "$UPGRADE" == "1" ]] && [ -f "$SASHIMONO_CONFIG" ]; then
     cfg_init_gp_tcp_port=$(jq ".hp.init_gp_tcp_port | select( . != null )" "$SASHIMONO_CONFIG")
     cfg_init_gp_udp_port=$(jq ".hp.init_gp_udp_port | select( . != null )" "$SASHIMONO_CONFIG")

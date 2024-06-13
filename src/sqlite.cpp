@@ -379,7 +379,7 @@ namespace sqlite
                 create_index(db, INSTANCE_TABLE, "owner_pubkey", false) == -1) // one user can have multiple instances running.
                 return -1;
         }
-        else if (!is_column_exists(db, INSTANCE_TABLE, "init_gp_tcp_port"))
+        else if (!is_column_exists(db, INSTANCE_TABLE, "init_gp_tcp_port")) // TODO: Added because v0.8.4 does not have gp ports.
         {
             const std::vector<table_column_info> columns{
                 table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
@@ -500,9 +500,16 @@ namespace sqlite
             max_ports = {peer_port, user_port, gp_tcp_port_start, gp_udp_port_start};
         }
         // Initialize with default config values if either of the ports are zero.
-        if (max_ports.peer_port == 0 || max_ports.user_port == 0 || max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
+        if (max_ports.peer_port == 0 || max_ports.user_port == 0)
         {
             max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1), (uint16_t)(conf::cfg.hp.init_gp_tcp_port - 2), (uint16_t)(conf::cfg.hp.init_gp_udp_port - 2)};
+        }
+        else if (max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
+        {
+            const uint16_t increment = ((max_ports.peer_port - conf::cfg.hp.init_peer_port) * 2);
+            const uint16_t gp_tcp_port_start = conf::cfg.hp.init_gp_tcp_port + increment;
+            const uint16_t gp_udp_port_start = conf::cfg.hp.init_gp_udp_port + increment;
+            max_ports = {max_ports.user_port, max_ports.peer_port, gp_tcp_port_start, gp_udp_port_start};
         }
 
         // Finalize and distroys the statement.

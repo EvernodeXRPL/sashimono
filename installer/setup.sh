@@ -26,7 +26,7 @@
     log_dir=/tmp/evernode
     reputationd_script_dir=$(dirname "$(realpath "$0")")
     root_user="root"
-    
+
     repo_owner="EvernodeXRPL"
     repo_name="evernode-resources"
     desired_branch="main"
@@ -2358,7 +2358,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
-        
+
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_gp_ports
         echo -e "Using General purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
 

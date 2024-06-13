@@ -46,8 +46,6 @@ namespace sqlite
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
-    constexpr const char *IS_COLUMN_EXISTS = "SHOW COLUMNS FROM ? LIKE ?";
-
     constexpr const char *DELETE_HP_INSTANCE = "DELETE FROM instances WHERE name = ?";
 
     // Message boad database queries
@@ -164,10 +162,9 @@ namespace sqlite
      * Alter a table with given table info.
      * @param db Pointer to the db.
      * @param table_name Table name to be altered.
-     * @param column_info Column info to add.
      * @returns returns 0 on success, or -1 on error.
      */
-    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info, std::string_view after)
+    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info)
     {
         std::string sql;
 
@@ -188,12 +185,6 @@ namespace sqlite
             {
                 sql.append(" ");
                 sql.append(NOT_NULL);
-            }
-
-            if (!after.empty())
-            {
-                sql.append(" AFTER ");
-                sql.append(after);
             }
 
             if (itr != column_info.end() - 1)
@@ -326,21 +317,17 @@ namespace sqlite
      */
     bool is_column_exists(sqlite3 *db, std::string_view table_name, std::string_view column_name)
     {
-        sqlite3_stmt *stmt;
+        std::string sql;
+        // Reserving the space for the query before construction.
+        sql.reserve(21 + table_name.size() + column_name.size());
 
-        if (sqlite3_prepare_v2(db, IS_COLUMN_EXISTS, -1, &stmt, 0) == SQLITE_OK && stmt != NULL &&
-            sqlite3_bind_text(stmt, 1, table_name.data(), table_name.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 1, column_name.data(), column_name.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_step(stmt) == SQLITE_ROW)
-        {
-            // Finalize and distroys the statement.
-            sqlite3_finalize(stmt);
-            return true;
-        }
+        sql.append("SELECT ");
+        sql.append(column_name);
+        sql.append(" FROM ");
+        sql.append(table_name);
+        sql.append(" LIMIT 1");
 
-        // Finalize and distroys the statement.
-        sqlite3_finalize(stmt);
-        return false;
+        return exec_sql(db, sql) == 0;
     }
 
     /**
@@ -398,7 +385,7 @@ namespace sqlite
                 table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("init_gp_udp_port", COLUMN_DATA_TYPE::INT)};
 
-            if (alter_table(db, INSTANCE_TABLE, columns, "user_port") == -1)
+            if (alter_table(db, INSTANCE_TABLE, columns) == -1)
                 return -1;
         }
         return 0;

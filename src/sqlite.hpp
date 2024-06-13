@@ -51,7 +51,7 @@ namespace sqlite
 
     int create_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info);
 
-    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info, std::string_view after = "");
+    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info);
 
     int create_index(sqlite3 *db, std::string_view table_name, std::string_view column_names, const bool is_unique);
 

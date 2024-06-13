@@ -5,9 +5,13 @@
 user=$1
 peer_port=$2
 user_port=$3
-instance_name=$4
+gp_tcp_port_start=$4
+gp_udp_port_start=$5
+instance_name=$6
 prefix="sashi"
 max_kill_attempts=5
+
+
 
 # Check whether this is a valid sashimono username.
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
@@ -28,6 +32,8 @@ user_runtime_dir="/run/user/$user_id"
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 cleanup_script=$user_dir/uninstall_cleanup.sh
+gp_udp_port_count=2
+gp_tcp_port_count=2
 
 echo "Uninstalling user '$user'."
 
@@ -100,6 +106,34 @@ if [ $res -eq 100 ]; then
 else
     echo "Peer port rule not added by Sashimono. Skipping.."
 fi
+
+# Remove rules for general purpose udp port.
+for ((i = 0; i < $gp_udp_port_count; i++)); do
+    gp_udp_port=$(expr $gp_udp_port_start + $i)
+    gp_udp_port_comment=$comment-gc-udp-$i
+    sed -n -r -e "/${gp_udp_port_comment}/{q100}" <<<"$rule_list"
+    res=$?
+    if [ $res -eq 100 ]; then
+        echo "Deleting general purpose udp port rule for instance from firewall."
+        sudo ufw delete allow "$gp_udp_port"
+    else
+        echo "General purpose tcp port rule not added by Sashimono. Skipping.."
+    fi
+done
+
+# Remove rules for general purpose tcp port.
+for ((i = 0; i < $gp_tcp_port_count; i++)); do
+    gp_tcp_port=$(expr $gp_tcp_port_start + $i)
+    gp_tcp_port_comment=$comment-gc-tcp-$i
+    sed -n -r -e "/${gp_tcp_port_comment}/{q100}" <<<"$rule_list"
+    res=$?
+    if [ $res -eq 100 ]; then
+        echo "Deleting general purpose tcp port rule for instance from firewall."
+        sudo ufw delete allow "$gp_tcp_port"
+    else
+        echo "General purpose tcp port rule not added by Sashimono. Skipping.."
+    fi
+done
 
 echo "Deleting contract user '$contract_user'"
 userdel "$contract_user"

@@ -20,15 +20,18 @@ namespace hp
         EXITED
     };
 
-    // Stores port pair assigned to a container.
+    // Stores ports assigned to a container.
     struct ports
     {
         uint16_t peer_port = 0;
         uint16_t user_port = 0;
 
+        uint16_t gp_tcp_port_start = 0;
+        uint16_t gp_udp_port_start = 0;
+
         bool operator==(const ports &other) const
         {
-            return peer_port == other.peer_port && user_port == other.user_port;
+            return peer_port == other.peer_port && user_port == other.user_port && gp_tcp_port_start == other.gp_tcp_port_start && gp_udp_port_start == other.gp_udp_port_start;
         }
     };
 
@@ -108,6 +111,8 @@ namespace hp
     int get_instance(std::string &error_msg, std::string_view container_name, hp::instance_info &instance);
 
     bool system_ready();
+
+    void get_vacant_ports_list(std::vector<hp::ports> &vacant_ports);
 
 } // namespace hp
 #endif

@@ -2126,7 +2126,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
         if [ ! -z $override_network ]; then
             NETWORK="$override_network"
-            set_environment_configs || exit 1
         fi
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then

@@ -185,6 +185,16 @@ const funcs = {
             // Transfer host.
             await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
 
+            // Burn unsold URI tokens which aren't sold.
+            const uriTokens = await hostClient.getLeases();
+
+            if (uriTokens.length) {
+                for (const uriToken of uriTokens) {
+                    await hostClient.expireLease(uriToken.index, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+                    console.log(`Burnt unsold hosting URIToken (${uriToken.index})`);
+                }
+            }
+
             await terminateConnections();
             return { success: true };
         }

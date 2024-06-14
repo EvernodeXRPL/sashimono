@@ -30,7 +30,7 @@ namespace sqlite
                                                      "instances WHERE status == ? AND user_port NOT IN"
                                                      "(SELECT user_port FROM instances WHERE status != ?)";
 
-    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT max(peer_port), max(user_port), max(init_gp_tcp_port), max(init_gp_udp_port) FROM instances WHERE status != ?";
+    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM instances WHERE status != ? ORDER BY peer_port DESC LIMIT 1";
 
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 

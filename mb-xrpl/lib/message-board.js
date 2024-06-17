@@ -251,14 +251,6 @@ class MessageBoard {
             }
         });
 
-        //Initially prune orphan instances
-        console.log(`Starting the initial prune job...`);
-        await this.#acquireLeaseUpdateLock();
-        await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
-            await this.#releaseLeaseUpdateLock();
-        });
-        console.log(`Ended the initial prune job.`);
-
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
 
@@ -585,10 +577,10 @@ class MessageBoard {
     #startPruneScheduler() {
         const timeout = appenv.ORPHAN_PRUNE_SCHEDULER_INTERVAL_HOURS * 3600000; // Hours to millisecs.
 
-        const scheduler = async () => {
+        const scheduler = async (isStartup = false) => {
             console.log(`Starting the scheduled prune job...`);
             await this.#acquireLeaseUpdateLock();
-            await this.#pruneOrphanLeases().catch(console.error).finally(async () => {
+            await this.#pruneOrphanLeases(isStartup).catch(console.error).finally(async () => {
                 await this.#releaseLeaseUpdateLock();
             });
             console.log(`Ended the scheduled prune job.`);
@@ -598,8 +590,8 @@ class MessageBoard {
         };
 
         setTimeout(async () => {
-            await scheduler();
-        }, timeout);
+            await scheduler(true);
+        }, 0);
     }
 
     #startSashimonoClockScheduler() {
@@ -677,7 +669,7 @@ class MessageBoard {
         this.#leaseUpdateLock = false;
     }
 
-    async #pruneOrphanLeases() {
+    async #pruneOrphanLeases(isStartup = false) {
         // Note: If this is soft deletion we need to handle the destroyed status and replace deleteLeaseRecord with changing the status.
 
         // Get the records which are created before an acquire timeout x 2.
@@ -717,7 +709,7 @@ class MessageBoard {
                         this.db.close();
 
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
-                        if (uriToken) {
+                        if (uriToken.Owner != this.hostClient.xrplAcc.address) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
                             await this.#queueAction(async (submissionRefs) => {
@@ -734,17 +726,15 @@ class MessageBoard {
                                 console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
                                 await this.hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
                             });
-                        } else {
-                            // Remove the lease record.
-                            if (lease) {
-                                this.db.open();
-                                await this.deleteLeaseRecord(lease.tx_hash);
-                                this.db.close();
-
-                                if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
-                                    activeInstanceCount--;
-                            }
                         }
+
+                        // Remove the lease record.
+                        this.db.open();
+                        await this.deleteLeaseRecord(lease.tx_hash);
+                        this.db.close();
+
+                        if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
+                            activeInstanceCount--;
                     }
                 }
             }
@@ -755,7 +745,10 @@ class MessageBoard {
 
         // Remove the leases which are orphan (Does not have an instance).
         // Only consider the older ones.
-        for (const lease of leases.filter(l => l.timestamp < timeMargin && (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED))) {
+        // If this is prune call at the startup and there are acquiring records, they won't be handled since there's no data for them in the memory.
+        // Since above do not have timestamp we do not consider time margin, we just prune them.
+        for (const lease of leases.filter(l => ((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
+            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED))) {
             try {
                 // If lease does not have an instance.
                 this.sashiDb.open();
@@ -764,16 +757,13 @@ class MessageBoard {
 
                 if (!instances || instances.length === 0) {
                     console.log(`Pruning orphan lease ${lease.container_name}...`);
-
                     this.db.open();
-                    await this.deleteLeaseRecord(lease.tx_hash);
+                    let leaseTxHash = await this.getLeaseTxHash(lease.container_name);
+                    await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
                     this.db.close();
 
-                    if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
-                        activeInstanceCount--;
-
                     const uriToken = (await this.hostClient.getLeaseByIndex(lease.container_name));
-                    if (uriToken) {
+                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
@@ -795,6 +785,14 @@ class MessageBoard {
                             }
                         });
                     }
+
+                    // Remove the lease record.
+                    this.db.open();
+                    await this.deleteLeaseRecord(lease.tx_hash);
+                    this.db.close();
+
+                    if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
+                        activeInstanceCount--;
                 }
             }
             catch (e) {
@@ -893,7 +891,7 @@ class MessageBoard {
 
                                 if (!lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
-                                    if (uriToken) {
+                                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
                                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
                                         await this.recreateLeaseOffer(eventInfo.data.uriTokenId, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
@@ -923,7 +921,7 @@ class MessageBoard {
 
                                 if (lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
-                                    if (uriToken) {
+                                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
                                         await this.#queueAction(async (submissionRefs) => {
                                             submissionRefs.refs ??= [{}];
                                             // Check again wether the transaction is validated before retry.

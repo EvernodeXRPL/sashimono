@@ -2273,18 +2273,15 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echomult "Removing Evernode reputation reimbursement system"
 
         # check config whether already opted in
-        local saved_reimburse_frequency=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
+        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
         
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
-            removed_reimbusement = true
             # set default config
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN update-reimbursement-config && echo "Error updating reputationd reimbursement frequency" && return 1
-            echomult "reputationd reimbursement frequency removed"
+            echomult "Opted-out from the Evernode reputation reimbursement system."
         else
             echo "Evernode reputation reimbursement value is not configured."
         fi
-
-        $removed_reimbusement && echo "Opted-out from the Evernode reputation reimbursement system."
     }
 
     # Begin setup execution flow --------------------

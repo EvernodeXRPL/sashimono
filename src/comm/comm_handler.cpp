@@ -215,7 +215,7 @@ namespace comm
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
 
             if (hp::initiate_instance(error_msg, info.container_name, init_msg) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
+                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_ERROR, error_msg, -1);
 
             std::string create_res;
             msg_parser.build_create_response(create_res, info);

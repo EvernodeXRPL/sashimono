@@ -823,6 +823,7 @@ class MessageBoard {
     }
 
     async #catchupMissedLeases() {
+        console.log("Start catching up missed leases");
         const fullHistoryXrplApi = new evernode.XrplApi();
 
         this.db.open();
@@ -959,6 +960,7 @@ class MessageBoard {
             await fullHistoryXrplApi.disconnect();
         }
 
+        console.log("End catching up missed leases");
     }
 
     #getTrxHookParams(txn, paramName) {

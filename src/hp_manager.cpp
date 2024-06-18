@@ -977,6 +977,8 @@ namespace hp
             username,
             std::to_string(assigned_ports.peer_port),
             std::to_string(assigned_ports.user_port),
+            std::to_string(assigned_ports.gp_tcp_port_start),
+            std::to_string(assigned_ports.gp_udp_port_start),
             instance_name};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_uninstall_sh, output_params, input_params) == -1)

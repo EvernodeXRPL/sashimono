@@ -867,4 +867,31 @@ namespace msg::json
         msg += std::to_string(instance.assigned_ports.user_port);
         msg += "}";
     }
+
+    /**
+     * Constructs the response message for inspect message.
+     * @param msg Buffer to construct the generated json message string into.
+     *           Message format:
+     *             {
+     *              "name": "<instance name>",
+     *              "error": "error"
+     *             }
+     * @param instance_name Name of the instance.
+     * @param error Error.
+     *
+     */
+    void build_error_response(std::string &msg, std::string_view container_name, std::string_view error)
+    {
+        msg.reserve(26 + container_name.size() + error.size());
+        msg += "{\"";
+        msg += "instance_name";
+        msg += SEP_COLON;
+        msg += container_name;
+        msg += SEP_COMMA;
+        msg += "error";
+        msg += SEP_COLON;
+        msg += error;
+        msg += DOUBLE_QUOTE;
+        msg += "}";
+    }
 } // namespace msg::json

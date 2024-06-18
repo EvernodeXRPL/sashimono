@@ -2,12 +2,12 @@
 #include "../util/util.hpp"
 #include "../conf.hpp"
 
-#define __HANDLE_RESPONSE(type, content, ret)                                                                                                                                                                              \
-    {                                                                                                                                                                                                                      \
-        std::string res;                                                                                                                                                                                                   \
-        msg_parser.build_response(res, type, content, ((void *)type == (void *)msg::MSGTYPE_CREATE_RES || (void *)type == (void *)msg::MSGTYPE_LIST_RES || (void *)type == (void *)msg::MSGTYPE_INSPECT_RES) && ret == 0); \
-        send(res);                                                                                                                                                                                                         \
-        return ret;                                                                                                                                                                                                        \
+#define __HANDLE_RESPONSE(type, content, ret)                                                                                                                                                                                                                                       \
+    {                                                                                                                                                                                                                                                                               \
+        std::string res;                                                                                                                                                                                                                                                            \
+        msg_parser.build_response(res, type, content, (((void *)type == (void *)msg::MSGTYPE_CREATE_RES || (void *)type == (void *)msg::MSGTYPE_LIST_RES || (void *)type == (void *)msg::MSGTYPE_INSPECT_RES) && ret == 0) || (void *)type == (void *)msg::MSGTYPE_INITIATE_ERROR); \
+        send(res);                                                                                                                                                                                                                                                                  \
+        return ret;                                                                                                                                                                                                                                                                 \
     }
 
 namespace comm
@@ -215,7 +215,11 @@ namespace comm
                 __HANDLE_RESPONSE(msg::MSGTYPE_CREATE_ERROR, error_msg, -1);
 
             if (hp::initiate_instance(error_msg, info.container_name, init_msg) == -1)
-                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_ERROR, error_msg, -1);
+            {
+                std::string content;
+                msg_parser.build_error_response(content, info.container_name, error_msg);
+                __HANDLE_RESPONSE(msg::MSGTYPE_INITIATE_ERROR, content, -1);
+            }
 
             std::string create_res;
             msg_parser.build_create_response(create_res, info);

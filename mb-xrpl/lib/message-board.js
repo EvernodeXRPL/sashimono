@@ -700,7 +700,7 @@ class MessageBoard {
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                     // If the URIToken is still owned by the host we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
-                    if (lease.status === LeaseStatus.ACQUIRING || uriToken.Owner === this.hostClient.xrplAcc.address) {
+                    if (lease.status === LeaseStatus.ACQUIRING || !uriToken || uriToken.Owner === this.hostClient.xrplAcc.address) {
                         console.log(`Pruning orphan instance ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
                         this.db.open();
@@ -709,7 +709,7 @@ class MessageBoard {
                         this.db.close();
 
                         // After destroying, If the URIToken is owned by the tenant, burn the URIToken and recreate and refund the tenant.
-                        if (uriToken.Owner != this.hostClient.xrplAcc.address) {
+                        if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {
                             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                             await this.recreateLeaseOffer(instance.name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
                             await this.#queueAction(async (submissionRefs) => {
@@ -764,7 +764,7 @@ class MessageBoard {
                     this.db.close();
 
                     const uriToken = (await this.hostClient.getLeaseByIndex(lease.container_name));
-                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
+                    if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {
                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                         await this.recreateLeaseOffer(lease.container_name, uriInfo.leaseIndex, uriInfo.outboundIP?.address);
 
@@ -894,7 +894,7 @@ class MessageBoard {
 
                                 if (!lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
-                                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
+                                    if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {
                                         const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
                                         // Have to recreate the URIToken Offer for the lease as previous one was not utilized.
                                         await this.recreateLeaseOffer(eventInfo.data.uriTokenId, uriInfo.leaseIndex, uriInfo.outboundIP?.address, true);
@@ -924,7 +924,7 @@ class MessageBoard {
 
                                 if (lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
-                                    if (uriToken.Owner != this.hostClient.xrplAcc.address) {
+                                    if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {
                                         await this.#queueAction(async (submissionRefs) => {
                                             submissionRefs.refs ??= [{}];
                                             // Check again wether the transaction is validated before retry.
@@ -1047,7 +1047,7 @@ class MessageBoard {
             // Get the existing uriToken of the lease.
 
             const uriToken = (await this.hostClient.getLeaseByIndex(uriTokenId));
-            if (uriToken.Owner !== tenantAddress)
+            if (!uriToken || uriToken.Owner !== tenantAddress)
                 throw "Could not find the uriToken for lease acquire request.";
 
             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI);
@@ -1161,7 +1161,7 @@ class MessageBoard {
 
             // Destroy the instance if created.
             if (createRes || e.type === 'initiate_error')
-                await this.sashiCli.destroyInstance(createRes.content.name).catch(console.error);
+                await this.sashiCli.destroyInstance(e.content.instance_name).catch(console.error);
 
             // Re-create the lease offer (Only if the uriToken belongs to this request has a lease index).
             if (leaseIndex >= 0)
@@ -1215,7 +1215,7 @@ class MessageBoard {
             // Update last watched ledger sequence number.
             await this.updateLastIndexRecord(r.transaction.LedgerIndex);
 
-            if (hostingToken.Owner !== tenantAddress)
+            if (!hostingToken || hostingToken.Owner !== tenantAddress)
                 throw "The URIToken ownership verification was failed in the lease extension process";
 
             const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(hostingToken.URI);

@@ -2119,8 +2119,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         if [ "$upgrade" == "0" ]; then
             configure_reputationd_reimbursement
-        else
-            echomult "\nDenied reputation account reimbursement.\nYou can opt-in for reimbursement later by using 'evernode reputationd reimburse' command.\n"
         fi
 
         if [ "$upgrade" == "0" ]; then
@@ -2260,8 +2258,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
             ! confirm "\nYou have already opted in for reputation reimbursement. Reimbursement interval is $saved_reimburse_frequency hrs. Do you want to change the reimbursement frequency?" && return 1
             set_reimbursement_config
-        elif confirm "\nWould you like to reimburse reputation account for reputation contract lease costs?"; then
-            set_reimbursement_config
+        else
+            if confirm "\nWould you like to reimburse reputation account for reputation contract lease costs?"; then
+                set_reimbursement_config
+            else
+                echomult "\nDenied reputation account reimbursement.\nYou can opt-in for reimbursement later by using 'evernode reputationd reimburse' command.\n"
+            fi
         fi
 
     }

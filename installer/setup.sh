@@ -1616,7 +1616,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     function reputationd_reimbursement_info() {
         # check reputationd reimbursement status with config value
-        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
+        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG" 2>/dev/null)
         
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
             echomult "\nEvernode reputation reimbursement interval : $saved_reimburse_frequency"
@@ -2223,8 +2223,11 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     function remove_reputationd() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && return 1
-
-        remove_reputationd_reimbursement
+        
+        if ! remove_reputationd_reimbursement; then
+            echomult "\nError occured removing ReputationD Reimbursement. Retry with the same command again."
+            exit 1
+        fi
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
         reputationd_user_id=$(id -u "$REPUTATIOND_USER")
@@ -2239,7 +2242,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             rm -f $service_path
             local service_removed=true
         else
-            echo "Evernode reputation for reward distribution is not configured."
+            echo "Evernode reputation for reward distribution is not configured." && exit 1
         fi
 
         $service_removed && echo "Opted-out from the Evernode reputation for reward distribution."
@@ -2251,7 +2254,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         #check reputationd enabled
         if [ ! -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
             # reputationd_enabled=false
-            echo "The host is currently not opted-in to Evernode reputation and reward system." && return 1
+            echo "The host is currently not opted-in to Evernode reputation and reward system." && exit 1
         fi
 
         local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
@@ -2288,10 +2291,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
     function remove_reputationd_reimbursement() {
         [ "$EUID" -ne 0 ] && echo "Please run with root privileges (sudo)." && return 1
 
-        echomult "Removing Evernode reputation reimbursement system"
-
         # check config whether already reimbursing enabled 
-        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
+        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG" 2>/dev/null)
         
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
             # set default config
@@ -2607,18 +2608,21 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            reputationd_info
-            echo ""
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            echo -e "\n"
+            reputationd_info
+
+            echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
         elif [ "$2" == "reimburse" ]; then
             if [ "$3" == "set" ]; then
                 if ! configure_reputationd_reimbursement; then
-                    echomult "\nError occured setting ReputationD Reimbursement. Retry with the same command again."
+                    echomult "\nError occured setting ReputationD Reimbursement."
                     exit 1
                 fi
             elif [ "$3" == "remove" ]; then
                 if ! remove_reputationd_reimbursement; then
-                    echomult "\nError occured removing ReputationD Reimbursement. Retry with the same command again."
+                    echomult "\nError occured removing ReputationD Reimbursement."
                     exit 1
                 fi
             else

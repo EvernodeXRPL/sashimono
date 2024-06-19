@@ -1609,7 +1609,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local evernode_reputationd_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)
         echo "Evernode reputationd status: $evernode_reputationd_status"
         if [[ $reputationd_enabled == true ]]; then
-            echo -e "\nYour reputationd account details are stored in $REPUTATIOND_DATA/reputationd.cfg"
+            echo -e "\nYour reputationd account and reimbursement details are stored in $REPUTATIOND_DATA/reputationd.cfg"
             reputationd_reimbursement_info
         fi
     }
@@ -1619,14 +1619,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
         
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
-            echomult "Evernode reputation reimbursement interval : $saved_reimburse_frequency"
+            echomult "\nEvernode reputation reimbursement interval : $saved_reimburse_frequency"
         else
-            echo "Evernode reputation reimbursement interval : not configured."
-        fi
-        local evernode_reputationd_reimbursement_status=$(sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user is-active $REPUTATIOND_SERVICE)
-        echo "Evernode reputationd reimbursemet status: $evernode_reputationd_reimbursement_status"
-        if [[ $reputationd_enabled == true ]]; then
-            echo -e "\nYour reputationd reimbursement details are stored in $REPUTATIOND_DATA/reputationd.cfg"
+            echo "Evernode reputation reimbursement : not configured."
         fi
     }
 
@@ -2097,7 +2092,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echomult "Configuring Evernode reputation for reward distribution..."
 
         if [ -f "$REPUTATIOND_CONFIG" ]; then
-            reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
+            reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG" 2>/dev/null)
             chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
@@ -2263,7 +2258,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
-            confirm "\nYou have already opted in for reputation reimbursement. Reimbursement interval is $saved_reimburse_frequency hrs. Do you want to change the reimbursement frequency?"; then
+            ! confirm "\nYou have already opted in for reputation reimbursement. Reimbursement interval is $saved_reimburse_frequency hrs. Do you want to change the reimbursement frequency?" && return 1
             set_reimbursement_config
         elif confirm "\nWould you like to reimburse reputation account for reputation contract lease costs?"; then
             set_reimbursement_config
@@ -2627,8 +2622,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             else
                 echomult "ReputationD management reimbursing tool
                 \nSupported commands:
-                \nopt-in - Opt in for the reimbursing evernode contract lease amount.
-                \nopt-out - Opt-out for the reimbursing evernode contract lease amount." && exit 1
+                \nset - set a reimbursing evernode contract lease amount.
+                \nremove - remove reimbursing evernode contract lease amount." && exit 1
             fi
         else
             echomult "ReputationD management tool

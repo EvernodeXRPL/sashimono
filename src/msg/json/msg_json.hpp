@@ -34,6 +34,8 @@ namespace msg::json
 
     void build_inspect_response(std::string &msg, const hp::instance_info &instance);
 
+    void build_error_response(std::string &msg, std::string_view container_name, std::string_view error);
+
 } // namespace msg::json
 
 #endif

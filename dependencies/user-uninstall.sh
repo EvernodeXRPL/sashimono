@@ -110,7 +110,7 @@ fi
 # Remove rules for general purpose udp port.
 for ((i = 0; i < $gp_udp_port_count; i++)); do
     gp_udp_port=$(expr $gp_udp_port_start + $i)
-    gp_udp_port_comment=$comment-gc-udp-$i
+    gp_udp_port_comment=$comment-gp-udp-$i
     sed -n -r -e "/${gp_udp_port_comment}/{q100}" <<<"$rule_list"
     res=$?
     if [ $res -eq 100 ]; then
@@ -124,7 +124,7 @@ done
 # Remove rules for general purpose tcp port.
 for ((i = 0; i < $gp_tcp_port_count; i++)); do
     gp_tcp_port=$(expr $gp_tcp_port_start + $i)
-    gp_tcp_port_comment=$comment-gc-tcp-$i
+    gp_tcp_port_comment=$comment-gp-tcp-$i
     sed -n -r -e "/${gp_tcp_port_comment}/{q100}" <<<"$rule_list"
     res=$?
     if [ $res -eq 100 ]; then

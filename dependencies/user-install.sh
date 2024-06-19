@@ -169,7 +169,7 @@ for ((i = 0; i < $gp_udp_port_count; i++)); do
     sed -n -r -e "/${gp_udp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
     res=$?
     if [ ! $res -eq 100 ]; then
-        gp_udp_port_comment=$comment-gc-udp-$i
+        gp_udp_port_comment=$comment-gp-udp-$i
         echo "Adding new rule to allow general purpose udp port for new instance from firewall."
         sudo ufw allow "$gp_udp_port" comment "$gp_udp_port_comment"
     else
@@ -183,7 +183,7 @@ for ((i = 0; i < $gp_tcp_port_count; i++)); do
     sed -n -r -e "/${gp_tcp_port}\s*ALLOW\s*Anywhere/{q100}" <<<"$rule_list"
     res=$?
     if [ ! $res -eq 100 ]; then
-        gp_tcp_port_comment=$comment-gc-tcp-$i
+        gp_tcp_port_comment=$comment-gp-tcp-$i
         echo "Adding new rule to allow general purpose tcp port for new instance from firewall."
         sudo ufw allow "$gp_tcp_port" comment "$gp_tcp_port_comment"
     else

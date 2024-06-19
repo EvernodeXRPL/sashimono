@@ -26,10 +26,14 @@
     log_dir=/tmp/evernode
     reputationd_script_dir=$(dirname "$(realpath "$0")")
     root_user="root"
-    
+
     repo_owner="EvernodeXRPL"
     repo_name="evernode-resources"
     desired_branch="main"
+
+    # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"
+    is_fresh_reputation_acc=false
+    reputation_account_mode=0
 
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
     latest_version_data=$(curl -s "$latest_version_endpoint")
@@ -1033,6 +1037,15 @@
 
     function collect_host_xrpl_account_inputs() {
         # NOTE this method declares the accounts and secrets for a provided prefix.
+        if [ -z $rippled_server ]; then
+            if [ -f "$MB_XRPL_CONFIG" ]; then
+                local xahau_server=$(jq -r '.xrpl.rippledServer' $MB_XRPL_CONFIG)
+            else
+                echo "Message board configuration does not exist." && return 1
+            fi
+        else
+            local xahau_server="$rippled_server"
+        fi
         local xahau_account_address=""
         local xahau_account_secret=""
         local prefix="${1:-xrpl}"
@@ -1045,7 +1058,7 @@
             ! [[ $xahau_account_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
 
             echomult "\nChecking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
+            ! exec_jshelper validate-keys $xahau_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
 
             break
         done
@@ -1217,8 +1230,9 @@
 
             if ! confirm "Do you already have a Xahau account that has been used for reputation assessment?" "n"; then
                 generate_keys "reputationd"
+                is_fresh_reputation_acc=true
             else
-                collect_host_xrpl_account_inputs "reputationd_xrpl"
+                collect_host_xrpl_account_inputs "reputationd_xrpl" || exit 1
             fi
 
             echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
@@ -2109,9 +2123,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Configure reputationd users and register host.
         echomult "Configuring Evernode reputation for reward distribution..."
 
+        local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
+        if [ ! -z $override_network ]; then
+            NETWORK="$override_network"
+        fi
+
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG")
-            chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
+            [ -f $reputationd_secret_path ] && chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
             # Account generation,
@@ -2119,6 +2138,20 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echo "error setting up reputationd account."
                 return 1
             fi
+
+            if confirm "\nThe Xahau account that you are going to use with the reputationD service can be configured as a delegate account for multiple hosts. \
+                \nPlease note that if you set it up this way, there is a chance of missing the current reputation assessment if it is already being used by a single host.  \
+                \nAdditionally, using a single delegate account for multiple hosts may lead to simultaneous transaction submissions, which can cause some transaction failures.\
+                \nHowever, these transactions will succeed on the next attempt.\
+                \nWould you like to configure this account as a delegate account for multiple hosts for the reputationD service?" "n"; then
+                reputation_account_mode=2
+            else
+                [ !$is_fresh_reputation_acc ] && echomult "Warning !!!.\nIf you are planning to configure the delegate account dedicated to your own host, make sure it is not used by another host before continuing."
+                confirm "\nContinue?" || exit 1
+
+                reputation_account_mode=1
+            fi
+
         fi
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
@@ -2145,15 +2178,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
 
             local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
-            local lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
-            # Format lease amount since jq gives it in exponential format.
-            local lease_amount=$(awk -v lease_amount="$lease_amount" 'BEGIN { printf("%f\n", lease_amount) }' </dev/null)
-            local min_reputation_evr_requirement=$(echo "$lease_amount*24*30*$MIN_OPERATIONAL_DURATION" | bc)
 
             local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
-            local need_evr=$(echo "$min_reputation_evr_requirement > 0" | bc -l)
             [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
-            [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_reputation_evr_requirement EVR to cover Evernode registration."
 
             message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -2166,24 +2193,22 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
             while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
+                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" "Sufficient XAH funds have been received." && break
                 confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
             done
 
             sleep 2
         fi
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
 
-        if [ "$upgrade" == "0" ]; then
-            echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required amount in EVRs.
-            \nYou can scan the provided QR code in your wallet app to send funds."
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare $reputation_account_mode && echo "Error preparing account" && return 1
 
-            while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
-                confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
-            done
-
+        if [ "$reputation_account_mode" == "2" ]; then
+            echomult "\nInstalling Delegate Hook..."
+            ! sudo -u $REPUTATIOND_USER NETWORK=$NETWORK CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
         fi
+
+        echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
 
         if [ "$upgrade" == "1" ]; then
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
@@ -2332,7 +2357,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
-        
+
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_gp_ports
         echo -e "Using General purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
 
@@ -2392,7 +2417,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echomult "\nNOTE: By continuing with this, you will not LOSE the ACCOUNT SECRETs; those remain within the specified paths.
     \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
     \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
-
 
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 
@@ -2565,9 +2589,12 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            reputationd_info
-            echo ""
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            echo -e "\n"
+            reputationd_info
+
+            echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
         else
             echomult "ReputationD management tool
             \nSupported commands:

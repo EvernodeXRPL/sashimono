@@ -25,6 +25,8 @@ namespace msg
         void build_list_response(std::string &msg,
                                              const std::vector<hp::instance_info> &instances, const std::vector<hp::lease_info> &leases) const;
         void build_inspect_response(std::string &msg, const hp::instance_info &instance) const;
+        void build_error_response(std::string &msg,
+                                         std::string_view container_name, std::string_view error) const;
     };
 
 } // namespace msg

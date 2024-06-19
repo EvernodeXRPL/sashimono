@@ -100,7 +100,13 @@
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATION=3
-    export MIN_REPUTATION_COST_PER_MONTH=10
+
+    # NOTE O2MCONST Composition:
+    # 0.000010 - AccoutSet Fee
+    # 0.4 - SetHook Fee
+    # 0.2*5 - Reserves for 5 states
+    export O2MCONST=$(echo "0.000010 + 0.4 + 0.2*5" | bc)
+    export O2OCONST=0.000010
 
     export NETWORK="${NETWORK:-mainnet}"
 
@@ -2171,13 +2177,18 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         if [ "$upgrade" == "0" ]; then
             echo -e "\nAccount setup is complete."
 
-            local message="Your host account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
+            local message="Your host reputation account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
             \nThe secret key of the account is located at $reputationd_key_file_path.
             \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
             \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
             \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
 
-            local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
+            local min_reputation_xah_requirement=""
+            if [ "$reputation_account_mode" == "2" ]; then
+                min_reputation_xah_requirement=$(echo "$O2MCONST + 1.2" | bc)
+            else
+                min_reputation_xah_requirement=$(echo "$O2OCONST + 1.2" | bc)
+            fi
 
             local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
             [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
@@ -2359,7 +2370,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_gp_ports
-        echo -e "Using General purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
+        echo -e "Using general purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"

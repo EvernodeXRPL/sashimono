@@ -1617,6 +1617,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
     function reputationd_reimbursement_info() {
         # check reputationd reimbursement status with config value
+        #TODO:-apply updated config
         local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG" 2>/dev/null)
         
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
@@ -2244,7 +2245,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             systemctl daemon-reload
             local service_removed=true
         else
-            echo "Evernode reputation for reward distribution is not configured." && exit 1
+            echo "Evernode reputation for reward distribution is not configured." && return 1
         fi
 
         $service_removed && echo "Opted-out from the Evernode reputation for reward distribution."
@@ -2256,7 +2257,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         #check reputationd enabled
         if [ ! -f "/home/$REPUTATIOND_USER/.config/systemd/user/$REPUTATIOND_SERVICE.service" ]; then
             # reputationd_enabled=false
-            echo "The host is currently not opted-in to Evernode reputation and reward system." && exit 1
+            echo "The host is currently not opted-in to Evernode reputation and reward system." && return 1
         fi
 
         local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG" 2>/dev/null)
@@ -2605,12 +2606,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         elif [ "$2" == "opt-out" ]; then
             ! confirm "Are you sure you want to opt out from Evernode reputation for reward distribution?" "n" && exit 1
             if ! remove_reputationd; then
-                echomult "\nError occured removing ReputationD. Retry with the same command again."
+                echomult "\nError occured removing ReputationD."
                 exit 1
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            if [ -f "$REPUTATIOND_CONFIG" ]; then
+                ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
+            fi
             echo -e "\n"
             reputationd_info
 

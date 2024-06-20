@@ -124,6 +124,8 @@
     # Default reputationd key path is set to a path in REPUTATIOND_USER home
     default_reputationd_key_filepath="/home/$REPUTATIOND_USER/.evernode-host/.host-reputationd-secret.key"
 
+    verbose_required_ops=("transfer" "deregister")
+
     # Helper to print multi line text.
     # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
     function echomult() {
@@ -385,7 +387,13 @@
 
         # Execute js helper asynchronously while collecting response to fifo file.
         [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
-        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+
+        if echo "${verbose_required_ops[*]}" | grep -qiw "$1"; then
+            sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" 2>&1 &
+        else
+            sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+        fi
+
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
@@ -402,7 +410,13 @@
 
         # Execute js helper asynchronously while collecting response to fifo file.
         [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
-        RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+
+        if echo "${verbose_required_ops[*]}" | grep -qiw "$1"; then
+            RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" 2>&1 &
+        else
+            RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+        fi
+
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 

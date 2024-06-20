@@ -196,22 +196,6 @@ if grep -q "^$MB_XRPL_USER:" /etc/passwd; then
 
 fi
 
-# Reputatind---------------------
-# Check whether reputationd user exists. If so stop the reputationd service.
-if grep -q "^$REPUTATIOND_USER:" /etc/passwd; then
-
-    reputationd_user_dir=/home/"$REPUTATIOND_USER"
-    reputationd_user_id=$(id -u "$REPUTATIOND_USER")
-    reputationd_user_runtime_dir="/run/user/$reputationd_user_id"
-    reputationd_service_path="$reputationd_user_dir"/.config/systemd/user/$REPUTATIOND_SERVICE.service
-    # Remove reputationd service if exists.
-    if [ -f $reputationd_service_path ]; then
-        sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user stop $REPUTATIOND_SERVICE
-        sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user disable $REPUTATIOND_SERVICE
-    fi
-
-fi
-
 # Uninstall all contract instance users---------------------------
 if [ "$UPGRADE" == "0" ]; then
     users=$(cut -d: -f1 /etc/passwd | grep "^$SASHIUSER_PREFIX" | sort)

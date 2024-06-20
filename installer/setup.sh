@@ -1497,6 +1497,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echo "Uninstalling for transfer..."
             ! UPGRADE=$upgrade TRANSFER=1 $SASHIMONO_BIN/sashimono-uninstall.sh $2 && uninstall_failure
         fi
+        remove_reputationd
         # Remove the evernode alias at the end.
         # So, if the uninstallation failed user can try uninstall again with evernode commands.
         remove_evernode_alias
@@ -2240,6 +2241,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user stop $REPUTATIOND_SERVICE
             sudo -u "$REPUTATIOND_USER" XDG_RUNTIME_DIR="$reputationd_user_runtime_dir" systemctl --user disable $REPUTATIOND_SERVICE
             rm -f $service_path
+            systemctl daemon-reload
             local service_removed=true
         else
             echo "Evernode reputation for reward distribution is not configured." && exit 1
@@ -2257,7 +2259,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echo "The host is currently not opted-in to Evernode reputation and reward system." && exit 1
         fi
 
-        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG")
+        local saved_reimburse_frequency=$(jq -r '.reimburse.frequency' "$REPUTATIOND_CONFIG" 2>/dev/null)
         if [[ "$saved_reimburse_frequency" =~ ^[0-9]+$ ]]; then
             ! confirm "\nYou have already opted in for reputation reimbursement. Reimbursement interval is $saved_reimburse_frequency hrs. Do you want to change the reimbursement frequency?" && return 1
             set_reimbursement_config

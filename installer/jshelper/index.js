@@ -199,6 +199,7 @@ const funcs = {
             return { success: true };
         }
         catch (e) {
+            console.error(e);
             await terminateConnections();
             return { success: false };
         }
@@ -254,6 +255,7 @@ const funcs = {
             return { success: true };
         }
         catch (e) {
+            console.error(e);
             await terminateConnections();
             return { success: false };
         }

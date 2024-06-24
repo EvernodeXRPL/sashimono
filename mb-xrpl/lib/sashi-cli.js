@@ -16,7 +16,7 @@ class SashiCLI {
         requirements.container_name = containerName;
 
         const res = await this.execSashiCli(requirements);
-        if (res.type === 'create_error')
+        if (res.type === 'create_error' || res.type === 'initiate_error')
             throw res;
 
         return res;

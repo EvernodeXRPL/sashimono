@@ -64,4 +64,10 @@ namespace msg
         json::build_inspect_response(msg, instance);
     }
 
+    void msg_parser::build_error_response(std::string &msg,
+                                         std::string_view container_name, std::string_view error) const
+    {
+        json::build_error_response(msg, container_name, error);
+    }
+
 } // namespace msg

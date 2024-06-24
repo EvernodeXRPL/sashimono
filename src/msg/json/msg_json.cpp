@@ -709,6 +709,14 @@ namespace msg::json
         msg += "user_port";
         msg += SEP_COLON;
         msg += std::to_string(info.assigned_ports.user_port);
+        msg += SEP_COMMA;
+        msg += "gp_tcp_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.assigned_ports.gp_tcp_port_start);
+        msg += SEP_COMMA;
+        msg += "gp_udp_port";
+        msg += SEP_COLON;
+        msg += std::to_string(info.assigned_ports.gp_udp_port_start);
         msg += "\"}";
     }
 
@@ -773,6 +781,14 @@ namespace msg::json
             msg += "user_port";
             msg += SEP_COLON_NOQUOTE;
             msg += std::to_string(instance.assigned_ports.user_port);
+            msg += SEP_COMMA_NOQUOTE;
+            msg += "gp_tcp_port";
+            msg += SEP_COLON_NOQUOTE;
+            msg += std::to_string(instance.assigned_ports.gp_tcp_port_start);
+            msg += SEP_COMMA_NOQUOTE;
+            msg += "gp_udp_port";
+            msg += SEP_COLON_NOQUOTE;
+            msg += std::to_string(instance.assigned_ports.gp_udp_port_start);
 
             // Include matching lease information.
             const auto lease = std::find_if(leases.begin(), leases.end(), [&](const hp::lease_info &l)
@@ -849,6 +865,33 @@ namespace msg::json
         msg += "user_port";
         msg += SEP_COLON_NOQUOTE;
         msg += std::to_string(instance.assigned_ports.user_port);
+        msg += "}";
+    }
+
+    /**
+     * Constructs the response message for inspect message.
+     * @param msg Buffer to construct the generated json message string into.
+     *           Message format:
+     *             {
+     *              "name": "<instance name>",
+     *              "error": "error"
+     *             }
+     * @param instance_name Name of the instance.
+     * @param error Error.
+     *
+     */
+    void build_error_response(std::string &msg, std::string_view container_name, std::string_view error)
+    {
+        msg.reserve(26 + container_name.size() + error.size());
+        msg += "{\"";
+        msg += "instance_name";
+        msg += SEP_COLON;
+        msg += container_name;
+        msg += SEP_COMMA;
+        msg += "error";
+        msg += SEP_COLON;
+        msg += error;
+        msg += DOUBLE_QUOTE;
         msg += "}";
     }
 } // namespace msg::json

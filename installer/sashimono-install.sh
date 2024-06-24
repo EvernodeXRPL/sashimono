@@ -7,25 +7,27 @@
 inetaddr=${1}
 init_peer_port=${2}
 init_user_port=${3}
-country_code=${4}
-total_instance_count=${5}
-cpu_micro_sec=${6}
-ram_kb=${7}
-swap_kb=${8}
-disk_kb=${9}
-lease_amount=${10}
-rippled_server=${11}
-xrpl_account_address=${12}
-xrpl_account_secret_path=${13}
-email_address=${14}
-tls_key_file=${15}
-tls_cert_file=${16}
-tls_cabundle_file=${17}
-description=${18}
-ipv6_subnet=${19}
-ipv6_net_interface=${20}
-extra_txn_fee=${21}
-fallback_rippled_servers=${22}
+init_gp_tcp_port=${4}
+init_gp_udp_port=${5}
+country_code=${6}
+total_instance_count=${7}
+cpu_micro_sec=${8}
+ram_kb=${9}
+swap_kb=${10}
+disk_kb=${11}
+lease_amount=${12}
+rippled_server=${13}
+xrpl_account_address=${14}
+xrpl_account_secret_path=${15}
+email_address=${16}
+tls_key_file=${17}
+tls_cert_file=${18}
+tls_cabundle_file=${19}
+description=${20}
+ipv6_subnet=${21}
+ipv6_net_interface=${22}
+extra_txn_fee=${23}
+fallback_rippled_servers=${24}
 
 script_dir=$(dirname "$(realpath "$0")")
 desired_slirp4netns_version="1.2.1"
@@ -459,7 +461,6 @@ mkdir -p $SASHIMONO_DATA
 cp "$script_dir"/sashimono-uninstall.sh $SASHIMONO_BIN
 chmod +x $SASHIMONO_BIN/sashimono-uninstall.sh
 
-
 ! set_cpu_info && echo "Fetching CPU info failed" && abort
 
 # Copy contract template and licence file (delete existing)
@@ -515,7 +516,7 @@ fi
 # If installing with sudo, add current logged-in user to Sashimono admin group.
 [ -n "$SUDO_USER" ] && usermod -a -G $SASHIADMIN_GROUP $SUDO_USER
 
- # First create the folder from root and then transfer ownership to the user
+# First create the folder from root and then transfer ownership to the user
 # since the folder is created in /etc/sashimono directory.
 ! mkdir -p $REPUTATIOND_DATA && echo "Could not create '$REPUTATIOND_DATA'. Make sure you are running as sudo." && exit 1
 # Change ownership to reputationd user.
@@ -592,12 +593,32 @@ WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 
 echo "Configuring sashimono agent service..."
 
+# Since gp ports are added as new feature we manually configure the default on upgrade mode if not exists.
+# TODO: Added because v0.8.4 does not have gp ports.
+if [[ "$UPGRADE" == "1" ]] && [ -f "$SASHIMONO_CONFIG" ]; then
+    cfg_init_gp_tcp_port=$(jq ".hp.init_gp_tcp_port | select( . != null )" "$SASHIMONO_CONFIG")
+    cfg_init_gp_udp_port=$(jq ".hp.init_gp_udp_port | select( . != null )" "$SASHIMONO_CONFIG")
+    if [ -z $cfg_init_gp_tcp_port ] || [ -z $cfg_init_gp_udp_port ]; then
+        if [ -z $cfg_init_gp_tcp_port ]; then
+            cfg_init_gp_tcp_port=36525
+            tmp=$(mktemp)
+            jq ".hp.init_gp_tcp_port = $cfg_init_gp_tcp_port" "$SASHIMONO_CONFIG" >"$tmp" && mv "$tmp" "$SASHIMONO_CONFIG"
+        fi
+        if [ -z $cfg_init_gp_udp_port ]; then
+            cfg_init_gp_udp_port=39064
+            tmp=$(mktemp)
+            jq ".hp.init_gp_udp_port = $cfg_init_gp_udp_port" "$SASHIMONO_CONFIG" >"$tmp" && mv "$tmp" "$SASHIMONO_CONFIG"
+        fi
+        chmod 644 "$SASHIMONO_CONFIG"
+    fi
+fi
+
 # Create sashimono agent config (if not exists).
 if [ -f $SASHIMONO_DATA/sa.cfg ]; then
     echo "Existing Sashimono data directory found. Updating..."
     ! $SASHIMONO_BIN/sagent upgrade $SASHIMONO_DATA && abort
 elif [ ! -f "$SASHIMONO_CONFIG" ]; then
-    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $DOCKER_REGISTRY_PORT \
+    ! $SASHIMONO_BIN/sagent new $SASHIMONO_DATA $inetaddr $init_peer_port $init_user_port $init_gp_tcp_port $init_gp_udp_port $DOCKER_REGISTRY_PORT \
         $total_instance_count $cpu_micro_sec $ram_kb $swap_kb $disk_kb && abort
 fi
 
@@ -695,6 +716,5 @@ if [ ! -f /run/reboot-required.pkgs ] || [ ! -n "$(grep sashimono /run/reboot-re
 fi
 
 echo "Sashimono installed successfully."
-
 
 exit 0

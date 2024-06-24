@@ -185,10 +185,21 @@ const funcs = {
             // Transfer host.
             await hostClient.transfer(transfereeAddress || accountAddress, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
 
+            // Burn unsold URI tokens which aren't sold.
+            const uriTokens = await hostClient.getLeases();
+
+            if (uriTokens.length) {
+                for (const uriToken of uriTokens) {
+                    await hostClient.expireLease(uriToken.index, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS } });
+                    console.log(`Burnt unsold hosting URIToken (${uriToken.index})`);
+                }
+            }
+
             await terminateConnections();
             return { success: true };
         }
         catch (e) {
+            console.error(e);
             await terminateConnections();
             return { success: false };
         }
@@ -244,6 +255,7 @@ const funcs = {
             return { success: true };
         }
         catch (e) {
+            console.error(e);
             await terminateConnections();
             return { success: false };
         }
@@ -617,8 +629,8 @@ const funcs = {
             catch (err) {
                 await xrplApi.disconnect();
                 if (err.data?.error === 'actNotFound') {
-                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
-                    await governorClient.connect();
+                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor, { config: hostClient.config });
+                    await governorClient.connect({ skipConfigs: true });
                     return { success: true, result: `${governorClient.config.hostRegFee}` };
                 }
                 return { success: false, result: "Error occurred in websocket connection." };

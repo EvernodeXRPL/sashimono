@@ -6,6 +6,7 @@
 namespace sqlite
 {
     constexpr const char *COLUMN_DATA_TYPES[]{"INT", "TEXT", "BLOB"};
+    constexpr const char *ALTER_TABLE = "ALTER TABLE ";
     constexpr const char *CREATE_TABLE = "CREATE TABLE IF NOT EXISTS ";
     constexpr const char *CREATE_INDEX = "CREATE INDEX ";
     constexpr const char *CREATE_UNIQUE_INDEX = "CREATE UNIQUE INDEX ";
@@ -22,26 +23,26 @@ namespace sqlite
 
     constexpr const char *INSERT_INTO_HP_INSTANCE = "INSERT INTO instances("
                                                     "owner_pubkey, time, username, status, name, ip,"
-                                                    "peer_port, user_port, pubkey, contract_id, image_name"
-                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?)";
+                                                    "peer_port, user_port, init_gp_tcp_port, init_gp_udp_port, pubkey, contract_id, image_name"
+                                                    ") VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
-    constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port FROM "
+    constexpr const char *GET_VACANT_PORTS_FROM_HP = "SELECT DISTINCT peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM "
                                                      "instances WHERE status == ? AND user_port NOT IN"
                                                      "(SELECT user_port FROM instances WHERE status != ?)";
 
-    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT max(peer_port), max(user_port) FROM instances WHERE status != ?";
+    constexpr const char *GET_MAX_PORTS_FROM_HP = "SELECT peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM instances WHERE status != ? ORDER BY peer_port DESC LIMIT 1";
 
     constexpr const char *UPDATE_STATUS_IN_HP = "UPDATE instances SET status = ? WHERE name = ?";
 
-    constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port FROM instances WHERE name = ?";
+    constexpr const char *IS_CONTAINER_EXISTS = "SELECT username, status, peer_port, user_port, init_gp_tcp_port, init_gp_udp_port FROM instances WHERE name = ?";
 
     constexpr const char *GET_ALOCATED_INSTANCE_COUNT = "SELECT COUNT(name) FROM instances WHERE status != ?";
 
     constexpr const char *GET_RUNNING_INSTANCE_NAMES = "SELECT name FROM instances WHERE status = ?";
 
-    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, status, image_name, contract_id FROM instances WHERE status != ?";
+    constexpr const char *GET_INSTANCE_LIST = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name, contract_id FROM instances WHERE status != ?";
 
-    constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, status, image_name FROM instances WHERE name == ? AND status != ?";
+    constexpr const char *GET_INSTANCE = "SELECT name, username, user_port, peer_port, init_gp_tcp_port, init_gp_udp_port, status, image_name FROM instances WHERE name == ? AND status != ?";
 
     constexpr const char *IS_TABLE_EXISTS = "SELECT * FROM sqlite_master WHERE type='table' AND name = ?";
 
@@ -157,6 +158,48 @@ namespace sqlite
         return ret;
     }
 
+    /**
+     * Alter a table with given table info.
+     * @param db Pointer to the db.
+     * @param table_name Table name to be altered.
+     * @returns returns 0 on success, or -1 on error.
+     */
+    int alter_table(sqlite3 *db, std::string_view table_name, const std::vector<table_column_info> &column_info)
+    {
+        std::string sql;
+
+        for (auto itr = column_info.begin(); itr != column_info.end(); ++itr)
+        {
+            sql.append(ALTER_TABLE).append(table_name).append(" ADD COLUMN ");
+            sql.append(itr->name);
+            sql.append(" ");
+            sql.append(COLUMN_DATA_TYPES[itr->column_type]);
+
+            if (itr->is_key)
+            {
+                sql.append(" ");
+                sql.append(PRIMARY_KEY);
+            }
+
+            if (!itr->is_null)
+            {
+                sql.append(" ");
+                sql.append(NOT_NULL);
+            }
+
+            if (itr != column_info.end() - 1)
+                sql.append("; ");
+        }
+
+        const int ret = exec_sql(db, sql);
+        if (ret == -1)
+        {
+            LOG_ERROR << "Error when altering sqlite table " << table_name;
+        }
+
+        return ret;
+    }
+
     int create_index(sqlite3 *db, std::string_view table_name, std::string_view column_names, const bool is_unique)
     {
         std::string index_name = std::string("idx_").append(table_name).append("_").append(column_names);
@@ -266,6 +309,28 @@ namespace sqlite
     }
 
     /**
+     * Checks whether column exist in the database.
+     * @param db Pointer to the db.
+     * @param table_name Table name to be checked.
+     * @param column_name Column name to be checked.
+     * @returns returns true is exist, otherwise false.
+     */
+    bool is_column_exists(sqlite3 *db, std::string_view table_name, std::string_view column_name)
+    {
+        std::string sql;
+        // Reserving the space for the query before construction.
+        sql.reserve(21 + table_name.size() + column_name.size());
+
+        sql.append("SELECT ");
+        sql.append(column_name);
+        sql.append(" FROM ");
+        sql.append(table_name);
+        sql.append(" LIMIT 1");
+
+        return exec_sql(db, sql) == 0;
+    }
+
+    /**
      * Closes a connection to a given databse.
      * @param db Pointer to the db.
      * @returns returns 0 on success, or -1 on error.
@@ -303,6 +368,8 @@ namespace sqlite
                 table_column_info("ip", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("peer_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("user_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_udp_port", COLUMN_DATA_TYPE::INT),
                 table_column_info("pubkey", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("contract_id", COLUMN_DATA_TYPE::TEXT),
                 table_column_info("image_name", COLUMN_DATA_TYPE::TEXT)};
@@ -310,6 +377,15 @@ namespace sqlite
             if (create_table(db, INSTANCE_TABLE, columns) == -1 ||
                 create_index(db, INSTANCE_TABLE, "name", true) == -1 ||
                 create_index(db, INSTANCE_TABLE, "owner_pubkey", false) == -1) // one user can have multiple instances running.
+                return -1;
+        }
+        else if (!is_column_exists(db, INSTANCE_TABLE, "init_gp_tcp_port")) // TODO: Added because v0.8.4 does not have gp ports.
+        {
+            const std::vector<table_column_info> columns{
+                table_column_info("init_gp_tcp_port", COLUMN_DATA_TYPE::INT),
+                table_column_info("init_gp_udp_port", COLUMN_DATA_TYPE::INT)};
+
+            if (alter_table(db, INSTANCE_TABLE, columns) == -1)
                 return -1;
         }
         return 0;
@@ -333,9 +409,11 @@ namespace sqlite
             sqlite3_bind_text(stmt, 6, info.ip.data(), info.ip.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 7, info.assigned_ports.peer_port) == SQLITE_OK &&
             sqlite3_bind_int64(stmt, 8, info.assigned_ports.user_port) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 9, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 10, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
-            sqlite3_bind_text(stmt, 11, info.image_name.data(), info.image_name.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 9, info.assigned_ports.gp_tcp_port_start) == SQLITE_OK &&
+            sqlite3_bind_int64(stmt, 10, info.assigned_ports.gp_udp_port_start) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 11, info.pubkey.data(), info.pubkey.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 12, info.contract_id.data(), info.contract_id.length(), SQLITE_STATIC) == SQLITE_OK &&
+            sqlite3_bind_text(stmt, 13, info.image_name.data(), info.image_name.length(), SQLITE_STATIC) == SQLITE_OK &&
             sqlite3_step(stmt) == SQLITE_DONE)
         {
             sqlite3_finalize(stmt);
@@ -366,6 +444,8 @@ namespace sqlite
             info.status = std::string(reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1)));
             info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 2);
             info.assigned_ports.user_port = sqlite3_column_int64(stmt, 3);
+            info.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+            info.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);
@@ -414,13 +494,22 @@ namespace sqlite
         {
             const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
             const uint16_t user_port = sqlite3_column_int64(stmt, 1);
+            const uint16_t gp_tcp_port_start = sqlite3_column_int64(stmt, 2);
+            const uint16_t gp_udp_port_start = sqlite3_column_int64(stmt, 3);
 
-            max_ports = {peer_port, user_port};
+            max_ports = {peer_port, user_port, gp_tcp_port_start, gp_udp_port_start};
         }
         // Initialize with default config values if either of the ports are zero.
         if (max_ports.peer_port == 0 || max_ports.user_port == 0)
         {
-            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1)};
+            max_ports = {(uint16_t)(conf::cfg.hp.init_peer_port - 1), (uint16_t)(conf::cfg.hp.init_user_port - 1), (uint16_t)(conf::cfg.hp.init_gp_tcp_port - 2), (uint16_t)(conf::cfg.hp.init_gp_udp_port - 2)};
+        }
+        else if (max_ports.gp_tcp_port_start == 0 || max_ports.gp_udp_port_start == 0)
+        {
+            const uint16_t increment = ((max_ports.peer_port - conf::cfg.hp.init_peer_port) * 2);
+            const uint16_t gp_tcp_port_start = conf::cfg.hp.init_gp_tcp_port + increment;
+            const uint16_t gp_udp_port_start = conf::cfg.hp.init_gp_udp_port + increment;
+            max_ports = {max_ports.user_port, max_ports.peer_port, gp_tcp_port_start, gp_udp_port_start};
         }
 
         // Finalize and distroys the statement.
@@ -446,7 +535,9 @@ namespace sqlite
             {
                 const uint16_t peer_port = sqlite3_column_int64(stmt, 0);
                 const uint16_t user_port = sqlite3_column_int64(stmt, 1);
-                vacant_ports.push_back({peer_port, user_port});
+                const uint16_t gp_tcp_port = sqlite3_column_int64(stmt, 2);
+                const uint16_t gp_udp_port = sqlite3_column_int64(stmt, 3);
+                vacant_ports.push_back({peer_port, user_port, gp_tcp_port, gp_udp_port});
             }
         }
 
@@ -500,9 +591,11 @@ namespace sqlite
                 info.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
                 info.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
                 info.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
-                info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
-                info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
-                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+                info.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+                info.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
+                info.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+                info.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
+                info.contract_id = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 8));
                 instances.push_back(info);
             }
         }
@@ -558,8 +651,10 @@ namespace sqlite
             instance.username = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 1));
             instance.assigned_ports.user_port = sqlite3_column_int64(stmt, 2);
             instance.assigned_ports.peer_port = sqlite3_column_int64(stmt, 3);
-            instance.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 4));
-            instance.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 5));
+            instance.assigned_ports.gp_tcp_port_start = sqlite3_column_int64(stmt, 4);
+            instance.assigned_ports.gp_udp_port_start = sqlite3_column_int64(stmt, 5);
+            instance.status = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 6));
+            instance.image_name = reinterpret_cast<const char *>(sqlite3_column_text(stmt, 7));
 
             // Finalize and distroys the statement.
             sqlite3_finalize(stmt);

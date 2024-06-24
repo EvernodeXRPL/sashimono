@@ -31,6 +31,10 @@
     repo_name="evernode-resources"
     desired_branch="main"
 
+    # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"
+    is_fresh_reputation_acc=false
+    reputation_account_mode=0
+
     latest_version_endpoint="https://api.github.com/repos/$repo_owner/$repo_name/releases/latest"
     latest_version_data=$(curl -s "$latest_version_endpoint")
     latest_version=$(echo "$latest_version_data" | jq -r '.tag_name')
@@ -97,7 +101,13 @@
     export MIN_OPERATIONAL_COST_PER_MONTH=5
     # 3 Month minimum operational duration is considered.
     export MIN_OPERATIONAL_DURATION=3
-    export MIN_REPUTATION_COST_PER_MONTH=10
+
+    # NOTE O2MCONST Composition:
+    # 0.000010 - AccoutSet Fee
+    # 0.4 - SetHook Fee
+    # 0.2*5 - Reserves for 5 states
+    export O2MCONST=$(echo "0.000010 + 0.4 + 0.2*5" | bc)
+    export O2OCONST=0.000010
 
     export NETWORK="${NETWORK:-mainnet}"
 
@@ -114,6 +124,8 @@
 
     # Default reputationd key path is set to a path in REPUTATIOND_USER home
     default_reputationd_key_filepath="/home/$REPUTATIOND_USER/.evernode-host/.host-reputationd-secret.key"
+
+    verbose_required_ops=("transfer" "deregister")
 
     # Helper to print multi line text.
     # (When passed as a parameter, bash auto strips spaces and indentation which is what we want)
@@ -376,7 +388,13 @@
 
         # Execute js helper asynchronously while collecting response to fifo file.
         [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
-        sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+
+        if echo "${verbose_required_ops[*]}" | grep -qiw "$1"; then
+            sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" 2>&1 &
+        else
+            sudo -u $noroot_user RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+        fi
+
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
@@ -393,7 +411,13 @@
 
         # Execute js helper asynchronously while collecting response to fifo file.
         [ "$fallback_rippled_servers" != "-" ] && local fb_server_param="fallback-servers:$fallback_rippled_servers"
-        RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+
+        if echo "${verbose_required_ops[*]}" | grep -qiw "$1"; then
+            RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" 2>&1 &
+        else
+            RESPFILE=$resp_file $nodejs_util_bin $jshelper_bin "$@" "network:$NETWORK" "$fb_server_param" >/dev/null 2>&1 &
+        fi
+
         local pid=$!
         local result=$(cat $resp_file) && [ "$result" != "-" ] && echo $result
 
@@ -585,6 +609,35 @@
         while [ -z "$init_user_port" ]; do
             read -ep "Please specify the starting port of the public 'User port range' your server is reachable at: " init_user_port </dev/tty
             ! check_port_validity $init_user_port && init_user_port="" && echo "Invalid port."
+        done
+    }
+
+    function set_init_gp_ports() {
+
+        # Take default ports in interactive mode or if 'default' is specified.
+        # Picked default ports according to https://www.iana.org/assignments/service-names-port-numbers/service-names-port-numbers.xhtml
+        # (36525-36601) and (39064-39680) ranges are unassigned.
+
+        # Default starting ports.
+        init_gp_tcp_port=36525
+        init_gp_udp_port=39064
+        gp_tcp_port_count=2
+        gp_udp_port_count=2
+
+        if [ -n "$init_gp_tcp_port" ] && [ -n "$init_gp_udp_port" ] && confirm "Selected default general purpose port ranges (TCP: $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)), UDP: $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).
+                                        This needs to be publicly reachable over internet. \n\nAre these the ports you want to use?"; then
+            return 0
+        fi
+
+        init_gp_tcp_port=""
+        init_gp_udp_port=""
+        while [ -z "$init_gp_tcp_port" ]; do
+            read -ep "Please specify the starting port of the public 'General purpose TCP port range' your server is reachable at: " init_gp_tcp_port </dev/tty
+            ! check_port_validity $init_gp_tcp_port && init_gp_tcp_port="" && echo "Invalid port."
+        done
+        while [ -z "$init_gp_udp_port" ]; do
+            read -ep "Please specify the starting port of the public 'General purpose UDP port range' your server is reachable at: " init_gp_udp_port </dev/tty
+            ! check_port_validity $init_gp_udp_port && init_gp_udp_port="" && echo "Invalid port."
         done
     }
 
@@ -958,7 +1011,7 @@
                 ! [[ $xrpl_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && exit 1
 
                 echo "Checking configured account keys..."
-                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && echo "Invalid account secret." && exit 1
+                ! exec_jshelper validate-keys $rippled_server $xrpl_address $xrpl_secret && echo "Unable to confirm secret, Invalid account secret, or bad Xahaud connection." && exit 1
             else
                 echo "Cannot resume the installation due to secret path issue." && exit 1
             fi
@@ -990,6 +1043,8 @@
             inetaddr=$(jq -r ".hp.host_address | select( . != null )" "$SASHIMONO_CONFIG")
             init_peer_port=$(jq ".hp.init_peer_port | select( . != null )" "$SASHIMONO_CONFIG")
             init_user_port=$(jq ".hp.init_user_port | select( . != null )" "$SASHIMONO_CONFIG")
+            init_gp_tcp_port=$(jq ".hp.init_gp_tcp_port | select( . != null )" "$SASHIMONO_CONFIG")
+            init_gp_udp_port=$(jq ".hp.init_gp_udp_port | select( . != null )" "$SASHIMONO_CONFIG")
             alloc_cpu=$(jq -r ".system.max_cpu_us | select( . != null )" "$SASHIMONO_CONFIG")
             alloc_ramKB=$(jq -r ".system.max_mem_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
             alloc_swapKB=$(jq -r ".system.max_swap_kbytes | select( . != null )" "$SASHIMONO_CONFIG")
@@ -997,12 +1052,21 @@
             alloc_instcount=$(jq -r ".system.max_instance_count | select( . != null )" "$SASHIMONO_CONFIG")
 
             # Validating important configurations.
-            ([ -z $inetaddr ] || [ -z $init_peer_port ] || [ -z $init_user_port ] || [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ]) && echo "Configuration file format has been altered." && exit 1
+            ([ -z $inetaddr ] || [ -z $init_peer_port ] || [ -z $init_user_port ] || [ -z $init_gp_tcp_port ] || [ -z $init_gp_udp_port ] || [ -z $alloc_cpu ] || [ -z $alloc_ramKB ] || [ -z $alloc_swapKB ] || [ -z $alloc_diskKB ] || [ -z $alloc_instcount ]) && echo "Configuration file format has been altered." && exit 1
         fi
     }
 
     function collect_host_xrpl_account_inputs() {
         # NOTE this method declares the accounts and secrets for a provided prefix.
+        if [ -z $rippled_server ]; then
+            if [ -f "$MB_XRPL_CONFIG" ]; then
+                local xahau_server=$(jq -r '.xrpl.rippledServer' $MB_XRPL_CONFIG)
+            else
+                echo "Message board configuration does not exist." && return 1
+            fi
+        else
+            local xahau_server="$rippled_server"
+        fi
         local xahau_account_address=""
         local xahau_account_secret=""
         local prefix="${1:-xrpl}"
@@ -1015,7 +1079,7 @@
             ! [[ $xahau_account_secret =~ ^s[1-9A-HJ-NP-Za-km-z]{25,35}$ ]] && echo "Invalid account secret." && continue
 
             echomult "\nChecking account keys..."
-            ! exec_jshelper validate-keys $rippled_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
+            ! exec_jshelper validate-keys $xahau_server $xahau_account_address $xahau_account_secret && xahau_account_secret="" && continue
 
             break
         done
@@ -1187,8 +1251,9 @@
 
             if ! confirm "Do you already have a Xahau account that has been used for reputation assessment?" "n"; then
                 generate_keys "reputationd"
+                is_fresh_reputation_acc=true
             else
-                collect_host_xrpl_account_inputs "reputationd_xrpl"
+                collect_host_xrpl_account_inputs "reputationd_xrpl" || exit 1
             fi
 
             echo "{ \"xrpl\": { \"secret\": \"$reputationd_xrpl_secret\" } }" >"$reputationd_key_file_path" &&
@@ -1421,7 +1486,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         # Filter logs with STAGE prefix and ommit the prefix when echoing.
         # If STAGE log contains -p arg, move the cursor to previous log line and overwrite the log.
-        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $countrycode $alloc_instcount \
+        ! UPGRADE=$upgrade EVERNODE_REGISTRY_ADDRESS=$registry_address ./sashimono-install.sh $inetaddr $init_peer_port $init_user_port $init_gp_tcp_port $init_gp_udp_port $countrycode $alloc_instcount \
             $alloc_cpu $alloc_ramKB $alloc_swapKB $alloc_diskKB $lease_amount $rippled_server $xrpl_address $key_file_path $email_address \
             $tls_key_file $tls_cert_file $tls_cabundle_file $description $ipv6_subnet $ipv6_net_interface $extra_txn_fee $fallback_rippled_servers 2>&1 |
             tee -a >(stdbuf --output=L grep -v "\[INFO\]" | awk '{ cmd="date -u +\"%Y-%m-%d %H:%M:%S\""; cmd | getline utc_time; close(cmd); print utc_time, $0 }' >>$logfile) | stdbuf --output=L grep -E '\[STAGE\]|\[INFO\]' |
@@ -2093,9 +2158,14 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         # Configure reputationd users and register host.
         echomult "Configuring Evernode reputation for reward distribution..."
 
+        local override_network=$(jq -r ".xrpl.network | select( . != null )" "$MB_XRPL_CONFIG")
+        if [ ! -z $override_network ]; then
+            NETWORK="$override_network"
+        fi
+
         if [ -f "$REPUTATIOND_CONFIG" ]; then
             reputationd_secret_path=$(jq -r '.xrpl.secretPath' "$REPUTATIOND_CONFIG" 2>/dev/null)
-            chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
+            [ -f $reputationd_secret_path ] && chown "$REPUTATIOND_USER":"$SASHIADMIN_GROUP" $reputationd_secret_path
         fi
         if [ "$upgrade" == "0" ]; then
             # Account generation,
@@ -2103,6 +2173,20 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echo "error setting up reputationd account."
                 return 1
             fi
+
+            if confirm "\nThe Xahau account that you are going to use with the reputationD service can be configured as a delegate account for multiple hosts. \
+                \nPlease note that if you set it up this way, there is a chance of missing the current reputation assessment if it is already being used by a single host.  \
+                \nAdditionally, using a single delegate account for multiple hosts may lead to simultaneous transaction submissions, which can cause some transaction failures.\
+                \nHowever, these transactions will succeed on the next attempt.\
+                \nWould you like to configure this account as a delegate account for multiple hosts for the reputationD service?" "n"; then
+                reputation_account_mode=2
+            else
+                [ !$is_fresh_reputation_acc ] && echomult "Warning !!!.\nIf you are planning to configure the delegate account dedicated to your own host, make sure it is not used by another host before continuing."
+                confirm "\nContinue?" || exit 1
+
+                reputation_account_mode=1
+            fi
+
         fi
 
         reputationd_user_dir=/home/"$REPUTATIOND_USER"
@@ -2122,22 +2206,21 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         if [ "$upgrade" == "0" ]; then
             echo -e "\nAccount setup is complete."
 
-            local message="Your host account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
+            local message="Your host reputation account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
             \nThe secret key of the account is located at $reputationd_key_file_path.
             \nNOTE: It is your responsibility to safeguard/backup this file in a secure manner.
             \nIf you lose it, you will not be able to access any funds in your Host account. NO ONE else can recover it.
             \n\nThis is the account that will represent this host on the Evernode host registry. You need to load up the account with following funds in order to continue with the installation."
 
-            local min_reputation_xah_requirement=$(echo "$MIN_REPUTATION_COST_PER_MONTH*$MIN_OPERATIONAL_DURATION + 1.2" | bc)
-            local lease_amount=$(jq ".xrpl.leaseAmount | select( . != null )" "$MB_XRPL_CONFIG")
-            # Format lease amount since jq gives it in exponential format.
-            local lease_amount=$(awk -v lease_amount="$lease_amount" 'BEGIN { printf("%f\n", lease_amount) }' </dev/null)
-            local min_reputation_evr_requirement=$(echo "$lease_amount*24*30*$MIN_OPERATIONAL_DURATION" | bc)
+            local min_reputation_xah_requirement=""
+            if [ "$reputation_account_mode" == "2" ]; then
+                min_reputation_xah_requirement=$(echo "$O2MCONST + 1.2" | bc)
+            else
+                min_reputation_xah_requirement=$(echo "$O2OCONST + 1.2" | bc)
+            fi
 
             local need_xah=$(echo "$min_reputation_xah_requirement > 0" | bc -l)
-            local need_evr=$(echo "$min_reputation_evr_requirement > 0" | bc -l)
             [[ "$need_xah" -eq 1 ]] && message="$message\n(*) At least $min_reputation_xah_requirement XAH to cover regular transaction fees for the first three months."
-            [[ "$need_evr" -eq 1 ]] && message="$message\n(*) At least $min_reputation_evr_requirement EVR to cover Evernode registration."
 
             message="$message\n\nYou can scan the following QR code in your wallet app to send funds based on the account condition:\n"
 
@@ -2150,24 +2233,22 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             echomult "To set up your reputationd host account, ensure a deposit of $min_reputation_xah_requirement XAH to cover the regular transaction fees for the first three months."
             echomult "\nChecking the reputationd account condition."
             while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" && break
+                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds NATIVE $min_reputation_xah_requirement" "Sufficient XAH funds have been received." && break
                 confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
             done
 
             sleep 2
         fi
-        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare && echo "Error preparing account" && return 1
 
-        if [ "$upgrade" == "0" ]; then
-            echomult "\n\nIn order to register in reputation and reward system you need to have $min_reputation_evr_requirement EVR balance in your host account. Please deposit the required amount in EVRs.
-            \nYou can scan the provided QR code in your wallet app to send funds."
+        ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN prepare $reputation_account_mode && echo "Error preparing account" && return 1
 
-            while true; do
-                wait_call "sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN wait-for-funds ISSUED $min_reputation_evr_requirement" && break
-                confirm "\nDo you want to retry?\nPressing 'n' would terminate the opting-in." || return 1
-            done
-
+        if [ "$reputation_account_mode" == "2" ]; then
+            echomult "\nInstalling Delegate Hook..."
+            ! sudo -u $REPUTATIOND_USER NETWORK=$NETWORK CONFIG_PATH=$REPUTATIOND_CONFIG WASM_PATH="$REPUTATIOND_BIN/delegate" node "$REPUTATIOND_BIN/delegate" && echo "Error when setting up Delegate Hook." && return 1
         fi
+
+        echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
+            \nhas a sufficient EVR balance to perform the instance acquisitions."
 
         if [ "$upgrade" == "1" ]; then
             ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN upgrade && echo "Error upgrading reputationd" && return 1
@@ -2380,6 +2461,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ ! -f "$SASHIMONO_CONFIG" ] && set_init_ports
         echo -e "Using peer port range $init_peer_port-$((init_peer_port + alloc_instcount)) and user port range $init_user_port-$((init_user_port + alloc_instcount))).\n"
 
+        [ ! -f "$SASHIMONO_CONFIG" ] && set_init_gp_ports
+        echo -e "Using general purpose TCP port range $init_gp_tcp_port-$((init_gp_tcp_port + gp_tcp_port_count * alloc_instcount)) and general purpose UDP port range $init_gp_udp_port-$((init_gp_udp_port + gp_udp_port_count * alloc_instcount))).\n"
+
         [ ! -f "$MB_XRPL_CONFIG" ] && set_lease_amount
         echo -e "Lease amount set as $lease_amount EVRs per Moment.\n"
 
@@ -2436,7 +2520,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
                 echomult "\nNOTE: By continuing with this, you will not LOSE the ACCOUNT SECRETs; those remain within the specified paths.
     \nThe path where the registration account secret is saved can be found inside the configuration stored at '$MB_XRPL_DATA/mb-xrpl.cfg'.
     \nIf you have configured a reputation account, the path where that account secret is saved can be found inside the configuration stored at $REPUTATIOND_DATA/reputationd.cfg"
-
 
                 ! confirm "\nAre you sure you want to continue?" && exit 1
 
@@ -2609,14 +2692,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             fi
         elif [ "$2" == "status" ]; then
             echo ""
-            if [ -f "$REPUTATIOND_CONFIG" ]; then
-                ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
-            fi
-            echo -e "\n"
             reputationd_info
-
-            echomult "\nNOTE: To participate in this reputation assessment process continuously, you need to ensure that your reputation account
-            \nhas a sufficient EVR balance to perform the instance acquisitions."
+            echo ""
+            ! sudo -u $REPUTATIOND_USER REPUTATIOND_DATA_DIR=$REPUTATIOND_DATA node $REPUTATIOND_BIN repinfo && echo "Error getting reputation status" && exit 1
         elif [ "$2" == "reimburse" ]; then
             if [ "$3" == "set" ]; then
                 if ! configure_reputationd_reimbursement; then

@@ -33,7 +33,7 @@ namespace conf
      * Create config here.
      * @return 0 for success. -1 for failure.
      */
-    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port, const uint16_t docker_registry_port,
+    int create(std::string_view host_addr, const uint16_t init_peer_port, const uint16_t init_user_port,const uint16_t init_gp_tcp_port, const uint16_t init_gp_udp_port, const uint16_t docker_registry_port,
                const size_t inst_count, const size_t cpu_us, const size_t ram_kbytes, const size_t swap_kbytes, const size_t disk_kbytes)
     {
         if (util::is_file_exists(ctx.config_file))
@@ -62,6 +62,8 @@ namespace conf
             cfg.hp.host_address = host_addr.empty() ? "127.0.0.1" : std::string(host_addr);
             cfg.hp.init_peer_port = !init_peer_port ? 22861 : init_peer_port;
             cfg.hp.init_user_port = !init_user_port ? 26201 : init_user_port;
+            cfg.hp.init_gp_tcp_port = !init_gp_tcp_port ? 36525 : init_gp_tcp_port;
+            cfg.hp.init_gp_udp_port = !init_gp_udp_port ? 39064 : init_gp_udp_port;
 
             cfg.system.max_instance_count = !inst_count ? 3 : inst_count;
             cfg.system.max_mem_kbytes = !ram_kbytes ? 1048576 : ram_kbytes;
@@ -229,6 +231,20 @@ namespace conf
                     std::cerr << "Configured init user port invalid. Should be greater than 1024\n";
                     return -1;
                 }
+
+                cfg.hp.init_gp_tcp_port = hp["init_gp_tcp_port"].as<uint16_t>();
+                if (cfg.hp.init_gp_tcp_port <= 1024)
+                {
+                    std::cerr << "Configured init general purpose tcp port invalid. Should be greater than 1024\n";
+                    return -1;
+                }
+
+                cfg.hp.init_gp_udp_port = hp["init_gp_udp_port"].as<uint16_t>();
+                if (cfg.hp.init_gp_udp_port <= 1024)
+                {
+                    std::cerr << "Configured init general purpose udp port invalid. Should be greater than 1024\n";
+                    return -1;
+                }
             }
             catch (const std::exception &e)
             {
@@ -324,6 +340,8 @@ namespace conf
             hp_config.insert_or_assign("host_address", cfg.hp.host_address);
             hp_config.insert_or_assign("init_peer_port", cfg.hp.init_peer_port);
             hp_config.insert_or_assign("init_user_port", cfg.hp.init_user_port);
+            hp_config.insert_or_assign("init_gp_tcp_port", cfg.hp.init_gp_tcp_port);
+            hp_config.insert_or_assign("init_gp_udp_port", cfg.hp.init_gp_udp_port);
 
             d.insert_or_assign("hp", hp_config);
         }

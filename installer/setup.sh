@@ -2120,10 +2120,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         [ $(stat -c "%a" "$host_key_file_path") != "440" ] && chmod 440 "$host_key_file_path"
 
         if [ "$upgrade" == "0" ]; then
-            configure_reputationd_reimbursement
-        fi
-
-        if [ "$upgrade" == "0" ]; then
             echo -e "\nAccount setup is complete."
 
             local message="Your host account with the address $reputationd_xrpl_address will be on Xahau $NETWORK.
@@ -2221,6 +2217,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         fi
 
         echo "Opted-in to the Evernode reputation for reward distribution."
+
+        configure_reputationd_reimbursement
     }
 
     function remove_reputationd() {

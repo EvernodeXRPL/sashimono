@@ -25,7 +25,7 @@ Tested on Ubuntu 20.04
 ## Build Sashimono Agent
 
 1. Run `git submodule update --init --recursive` to clone the bootstrap contract for first time.
-1. Run `cmake .` (You only have to do this once)
+1. Run `cmake .` (You only have to do this once).
 1. Run `make` (Sashimono agent binary 'sagent' and dependencies will be placed in build directory)
 
 ## Build Sashimono installer

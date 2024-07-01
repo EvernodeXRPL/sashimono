@@ -749,7 +749,7 @@ class MessageBoard {
         // If this is prune call at the startup and there are acquiring records, they won't be handled since there's no data for them in the memory.
         // Since above do not have timestamp we do not consider time margin, we just prune them.
         for (const lease of leases.filter(l => ((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
-            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED))) {
+            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED || l.status === LeaseStatus.DESTROYED))) {
             try {
                 // If lease does not have an instance.
                 this.sashiDb.open();
@@ -1014,7 +1014,8 @@ class MessageBoard {
             this.db.open();
             if (retry && (noLeaseRecord || await this.getLeaseStatus(leaseTxHash) == LeaseStatus.BURNED)) {
                 const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] });
+                // Don't send submission refs because there're two transactions here.
+                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP);
                 //Delete the lease record related to this instance (Permanent Delete).
                 if (!noLeaseRecord)
                     await this.deleteLeaseRecord(leaseTxHash);

@@ -748,8 +748,8 @@ class MessageBoard {
         // Only consider the older ones.
         // If this is prune call at the startup and there are acquiring records, they won't be handled since there's no data for them in the memory.
         // Since above do not have timestamp we do not consider time margin, we just prune them.
-        for (const lease of leases.filter(l => ((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
-            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED || l.status === LeaseStatus.DESTROYED))) {
+        for (const lease of leases.filter(l => l.status === LeaseStatus.DESTROYED || l.status === LeaseStatus.BURNED || (((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
+            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED)))) {
             try {
                 // If lease does not have an instance.
                 this.sashiDb.open();
@@ -758,10 +758,12 @@ class MessageBoard {
 
                 if (!instances || instances.length === 0) {
                     console.log(`Pruning orphan lease ${lease.container_name}...`);
-                    this.db.open();
-                    let leaseTxHash = await this.getLeaseTxHash(lease.container_name);
-                    await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
-                    this.db.close();
+                    if (lease.status !== LeaseStatus.BURNED) {
+                        this.db.open();
+                        let leaseTxHash = await this.getLeaseTxHash(lease.container_name);
+                        await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
+                        this.db.close();
+                    }
 
                     const uriToken = (await this.hostClient.getLeaseByIndex(lease.container_name));
                     if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {

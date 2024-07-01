@@ -991,7 +991,7 @@ class MessageBoard {
             const status = await this.getLeaseStatus(leaseTxHash);
             if (retry && (noLeaseRecord || status === LeaseStatus.DESTROYED || status === LeaseStatus.FAILED || status === LeaseStatus.SASHI_TIMEOUT)) {
                 // Burn the URIToken and recreate the offer.
-                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
+                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] });
                 if (!noLeaseRecord)
                     await this.updateLeaseStatus(leaseTxHash, LeaseStatus.BURNED);
             }
@@ -1013,7 +1013,7 @@ class MessageBoard {
             this.db.open();
             if (retry && (noLeaseRecord || await this.getLeaseStatus(leaseTxHash) == LeaseStatus.BURNED)) {
                 const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] }).catch(console.error);
+                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] });
                 //Delete the lease record related to this instance (Permanent Delete).
                 if (!noLeaseRecord)
                     await this.deleteLeaseRecord(leaseTxHash);

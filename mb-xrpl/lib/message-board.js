@@ -891,7 +891,8 @@ class MessageBoard {
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
-                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+                                // If there are leases, They are handled by prune job.
+                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId);
 
                                 if (!lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));

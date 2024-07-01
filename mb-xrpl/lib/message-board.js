@@ -1195,7 +1195,7 @@ class MessageBoard {
         await this.sashiCli.destroyInstance(containerName);
         let leaseTxHash = await this.getLeaseTxHash(containerName);
         await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
-        await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP).catch(console.error);
+        await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP);
     }
 
     async handleExtendLease(r) {

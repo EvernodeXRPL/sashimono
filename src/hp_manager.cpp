@@ -1095,58 +1095,16 @@ namespace hp
         }
     }
     /**
-     * Check whether there's a pending reboot and cgrules service is running and configured.
+     * Check whether there's a pending reboot
      * @return true if active and configured otherwise false.
      */
     bool system_ready()
     {
-        char buffer[20];
-
-        if (util::execute_bash_cmd(CGRULE_ACTIVE, buffer, 20) == -1)
-            return false;
-
-        // Check cgrules service status is active.
-        if (strncmp(buffer, "active", 6) != 0)
-        {
-            LOG_ERROR << "Cgrules service is inactive.";
-            return false;
-        }
-
-        // Check cgrules cpu and memory mounts exist.
-        if (!util::is_dir_exists(CGRULE_CPU_DIR) || !util::is_dir_exists(CGRULE_MEM_DIR))
-        {
-            LOG_ERROR << "Cgrules cpu or memory mounts does not exist.";
-            return false;
-        }
-
-        // Check cgrules config exist and configured.
-        int fd = open(CGRULE_CONF, O_RDONLY);
-        if (fd == -1)
-        {
-            LOG_ERROR << errno << ": Error opening the cgrules config file.";
-            return false;
-        }
-
-        std::string buf;
-        if (util::read_from_fd(fd, buf, 0) == -1)
-        {
-            LOG_ERROR << errno << ": Error reading the cgrules config file.";
-            close(fd);
-            return false;
-        }
-
-        close(fd);
-
-        if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
-        {
-            LOG_ERROR << "Cgrules config entry does not exist.";
-            return false;
-        }
-
         // Check there's a pending reboot.
         if (util::is_file_exists(REBOOT_FILE))
         {
-            fd = open(REBOOT_FILE, O_RDONLY);
+            std::string buf;
+            int fd = open(REBOOT_FILE, O_RDONLY);
             if (fd == -1)
             {
                 LOG_ERROR << errno << ": Error opening the reboot file.";

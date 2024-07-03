@@ -144,6 +144,9 @@ if [ -f $cleanup_script ]; then
     /bin/bash -c $cleanup_script
 fi
 
+# Removing AppArmor Profile
+sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit" && exit 1
+
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"

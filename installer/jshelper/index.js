@@ -629,8 +629,8 @@ const funcs = {
             catch (err) {
                 await xrplApi.disconnect();
                 if (err.data?.error === 'actNotFound') {
-                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor, { config: hostClient.config });
-                    await governorClient.connect({ skipConfigs: true });
+                    const governorClient = await evernode.HookClientFactory.create(evernode.HookTypes.governor);
+                    await governorClient.connect();
                     return { success: true, result: `${governorClient.config.hostRegFee}` };
                 }
                 return { success: false, result: "Error occurred in websocket connection." };

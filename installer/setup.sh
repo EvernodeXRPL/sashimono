@@ -1900,7 +1900,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             alloc_swapKB=$((swapMB * 1000))
             alloc_diskKB=$((diskMB * 1000))
 
-            ( ([[ $alloc_instcount -eq 0 ]] || [[ $max_instance_count == $alloc_instcount ]]) &&
+            ( [[ $alloc_instcount -eq 0 ]] &&
                 ([[ $alloc_ramKB -eq 0 ]] || [[ $max_mem_kbytes == $alloc_ramKB ]]) &&
                 ([[ $alloc_swapKB -eq 0 ]] || [[ $max_swap_kbytes == $alloc_swapKB ]]) &&
                 ([[ $alloc_diskKB -eq 0 ]] || [[ $max_storage_kbytes == $alloc_diskKB ]])) &&
@@ -2418,7 +2418,8 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         echomult "Installation successful! Installation log can be found at $logfile
             \n\nYour system is now registered on $evernode. You can check your system status with 'evernode status' command.
-            \n\nNOTE: Installation will only mint the lease tokens. Please use 'evernode offerlease' command to create offers for the minted lease tokens.
+            \n\nNOTE: Installation will only mint the lease tokens. Offers will be created upon the start of message board.
+            \nIf not you can use 'evernode offerlease' command to create offers for the minted lease tokens.
             \nThe host becomes eligible to send heartbeats after generating offers for minted lease tokens."
 
         installed=true

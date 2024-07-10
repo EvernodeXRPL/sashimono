@@ -251,6 +251,9 @@ class MessageBoard {
             }
         });
 
+        // Offer if there are any unoffered leases.
+        await this.#offerUnofferedLeases();
+
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
 
@@ -317,7 +320,7 @@ class MessageBoard {
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
                     console.error(`Queue action failed. Retrying attempt ${action.attempts}`, e);
-                    
+
                     if (this.cfg.xrpl.affordableExtraFee > 0 && e.status === "TOOK_LONG") {
                         this.#applyFeeUpliftment = true;
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
@@ -368,6 +371,43 @@ class MessageBoard {
                 this.#graceTimeoutRef = null;
             }, gracePeriod);
         }
+    }
+
+    async #offerUnofferedLeases() {
+        console.log("Checking for unoffered leases...");
+
+        const unoffered = await this.hostClient.getUnofferedLeases();
+        if (unoffered.length > 0) {
+            // Create lease offers.
+            console.log("Creating lease offers for instance slots...");
+            let i = 0;
+            for (let t of unoffered) {
+                const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
+                if (uriInfo.leaseAmount == this.cfg.xrpl.leaseAmount) {
+                    await this.#queueAction(async (submissionRefs) => {
+                        submissionRefs.refs ??= [{}];
+                        // Check again wether the transaction is validated before retry.
+                        const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                        if (txHash) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                return;
+                            }
+                        }
+                        await this.hostClient.offerMintedLease(t.index, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
+                    });
+                    console.log(`Queued lease offer ${i + 1} of ${unoffered.length}.`);
+                }
+                else {
+                    console.error(`Lease amount inconsistency detected. Lease amount in lease: ${uriInfo.leaseAmount}EVR, in config: ${this.cfg.xrpl.leaseAmount}EVR`);
+                    console.error(`Please re-configure the lease amount.`);
+                }
+                i++;
+            }
+        }
+
+        console.log("Unoffered lease check completed.");
     }
 
     // Expire leases

@@ -7,6 +7,8 @@ const { ConfigHelper } = require('./config-helper');
 const { GovernanceManager } = require('./governance-manager');
 const path = require('path');
 
+const LEASE_ID_REG_EXP = /^[0-9A-F]{64}$/;
+
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
     ACQUIRED: 'Acquired',
@@ -734,7 +736,7 @@ class MessageBoard {
             try {
                 const leaseIndex = leases.findIndex(l => l.container_name === instance.name);
                 const lease = leaseIndex >= 0 ? leases[leaseIndex] : null;
-                // If there's a lease record this is created from message board.
+                // If there's a lease record this is created from message board. Else this is created without obtaining a lease or this is a ghost instance.
                 if (lease) {
                     leases.splice(leaseIndex, 1);
                     const uriToken = (await this.hostClient.getLeaseByIndex(instance.name));
@@ -743,7 +745,7 @@ class MessageBoard {
                     // If the URIToken is still owned by the host we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
                     if (lease.status === LeaseStatus.ACQUIRING || !uriToken || uriToken.Owner === this.hostClient.xrplAcc.address) {
-                        console.log(`Pruning orphan instance ${instance.name}...`);
+                        console.log(`Pruning orphan instance with lease ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
                         this.db.open();
                         let leaseTxHash = await this.getLeaseTxHash(instance.name);
@@ -779,6 +781,12 @@ class MessageBoard {
                         if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
                             activeInstanceCount--;
                     }
+                }
+                else if (LEASE_ID_REG_EXP.test(instance.name)) {
+                    // If the instance does not have lease record, This should be already pruned by lease prune job.
+                    // So we destroy the instance.
+                    console.log(`Pruning orphan instance without lease ${instance.name}...`);
+                    await this.sashiCli.destroyInstance(instance.name);
                 }
             }
             catch (e) {

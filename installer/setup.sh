@@ -1900,7 +1900,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             alloc_swapKB=$((swapMB * 1000))
             alloc_diskKB=$((diskMB * 1000))
 
-            ( [[ $alloc_instcount -eq 0 ]] &&
+            ([[ $alloc_instcount -eq 0 ]] &&
                 ([[ $alloc_ramKB -eq 0 ]] || [[ $max_mem_kbytes == $alloc_ramKB ]]) &&
                 ([[ $alloc_swapKB -eq 0 ]] || [[ $max_swap_kbytes == $alloc_swapKB ]]) &&
                 ([[ $alloc_diskKB -eq 0 ]] || [[ $max_storage_kbytes == $alloc_diskKB ]])) &&

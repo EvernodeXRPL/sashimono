@@ -510,6 +510,7 @@ class Setup {
                     }
                 }
                 console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);
+                console.log(`\nReputation: ${hostInfo.hostReputation}`);
                 console.log(`\nCountry code: ${hostInfo.countryCode}`);
 
                 await hostClient.disconnect();

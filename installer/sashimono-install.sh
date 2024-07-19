@@ -476,7 +476,7 @@ rm -r "$tmp"
         -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh,user-cgroup-manager.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
 
 # Setup tls certs used for contract instance websockets.

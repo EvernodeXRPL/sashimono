@@ -175,15 +175,6 @@ function call_third_party() {
     return 1
 }
 
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
-
 function set_cpu_info() {
     [ -z $cpu_model_name ] && cpu_model_name=$(cat /proc/cpuinfo | grep -m 1 "model name" | sed -n 's/model name\s*: //p' | sed 's/ /_/g')
     [ -z $cpu_count ] && cpu_count=$(grep -c ^processor /proc/cpuinfo)
@@ -476,9 +467,8 @@ rm -r "$tmp"
         -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=HP/CN=$(jq -r '.hp.host_address' $SASHIMONO_DATA/sa.cfg)"
 
 # Install Sashimono agent binaries into sashimono bin dir.
-cp "$script_dir"/{sagent,hpfs,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh,user-cgroup-manager.sh} $SASHIMONO_BIN
+cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
-
 # Setup tls certs used for contract instance websockets.
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
@@ -564,6 +554,18 @@ stage "Configuring Sashimono services"
 ! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && abort
 
 # Install Sashimono Agent cgcreate service.
+# This is a oneshot service which runs once at system startup. This update user slices
+# all sashimono users every time the system boots up.
+echo "[Unit]
+Description=Sashimono cgroup creation service.
+After=network.target
+[Service]
+User=root
+Group=root
+Type=oneshot
+ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
+[Install]
+WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
 echo "Configuring sashimono agent service..."
 
 # Since gp ports are added as new feature we manually configure the default on upgrade mode if not exists.
@@ -617,6 +619,8 @@ RestartSec=5
 WantedBy=multi-user.target" >/etc/systemd/system/$SASHIMONO_SERVICE.service
 
 systemctl daemon-reload
+systemctl enable $CGCREATE_SERVICE
+systemctl start $CGCREATE_SERVICE
 systemctl enable $SASHIMONO_SERVICE
 # Here, $SASHIMONO_SERVICE is only enabled. Not started. It'll be started after pending reboot checks at
 # the bottom of this script.

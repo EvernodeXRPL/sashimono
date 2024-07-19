@@ -7,8 +7,6 @@ export TRANSFER=${TRANSFER:-0}
 mb_cli_exit_success="MB_CLI_SUCCESS"
 mb_cli_out_prefix="CLI_OUT"
 multi_choice_result=""
-cg_manager_service=user-cgroup-manager
-cg_manager_file="/etc/systemd/system/$cg_manager_service.service"
 
 [ "$UPGRADE" == "0" ] && echo "---Sashimono uninstaller---" || echo "---Sashimono uninstaller (for upgrade)---"
 
@@ -255,10 +253,10 @@ if [ "$UPGRADE" == "0" ]; then
     done
 fi
 
-echo "Removing CGroups Manager service..."
-systemctl stop $cg_manager_service
-systemctl disable $cg_manager_service
-rm $cg_manager_file
+echo "Removing Sashimono cgroup creation service..."
+systemctl stop $CGCREATE_SERVICE
+systemctl disable $CGCREATE_SERVICE
+rm /etc/systemd/system/$CGCREATE_SERVICE.service
 
 echo "Removing Sashimono service..."
 systemctl stop $SASHIMONO_SERVICE

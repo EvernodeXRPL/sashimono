@@ -212,29 +212,8 @@ else
     echo "cgroups v2 is already enabled."
 fi
 
-#{ "xrpl": { "secret": "ss3pbRgnGRkjvgnDCheMEUwy9fzJN" } }
-
 # If the res is not success(0) or alredy exist(100).
 [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX update failed." && exit 1
-
-cg_manager_service=user-cgroup-manager
-cg_manager_file="/etc/systemd/system/$cg_manager_service.service"
-if ! [ -f "$cg_manager_file" ]; then
-    echo "[Unit]
-Description=User-based cgroup manager
-[Service]
-Type=simple
-ExecStart=/usr/bin/sashimono/$cg_manager_service.sh
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target" >$cg_manager_file
-
-fi
-
-systemctl daemon-reload
-systemctl enable $cg_manager_service
-systemctl start $cg_manager_service
 
 # If updated we do update-grub and reboot.
 if [ $updated -eq 1 ]; then

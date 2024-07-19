@@ -82,6 +82,18 @@ if ! command -v snap &>/dev/null; then
     apt-get install -y snapd
 fi
 
+# Install snap (required for letsencrypt certbot install)
+if ! command -v dbus-user-session &>/dev/null; then
+    stage "Installing dbus-ser-session"
+    apt-get install -y dbus-user-session
+
+fi
+
+if ! command -v systemd-container &>/dev/null; then
+    stage "Installing systemd-container"
+    apt-get install -y systemd-container
+fi
+
 if ! command -v uidmap &>/dev/null; then
     stage "Installing uidmap"
     apt-get install -y uidmap
@@ -187,6 +199,65 @@ if [ $updated -eq 1 ]; then
 else
     rm -r "$tmp"
     echo "Fuse config already updated."
+fi
+
+# Check if cgroups v2 is enabled
+if ! mount | grep -q "type cgroup2"; then
+    echo "Enabling cgroups v2..."
+    # Edit GRUB configuration to enable cgroups v2
+    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub
+    res=$?
+    updated=1
+else
+    echo "cgroups v2 is already enabled."
+fi
+
+#{ "xrpl": { "secret": "ss3pbRgnGRkjvgnDCheMEUwy9fzJN" } }
+
+# If the res is not success(0) or alredy exist(100).
+[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX update failed." && exit 1
+
+cg_manager_service=user-cgroup-manager
+cg_manager_file="/etc/systemd/system/$cg_manager_service.service"
+if ! [ -f "$cg_manager_file" ]; then
+    echo "[Unit]
+Description=User-based cgroup manager
+[Service]
+Type=simple
+ExecStart=/usr/bin/sashimono/$cg_manager_service.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target" >$cg_manager_file
+
+fi
+
+systemctl daemon-reload
+systemctl enable $cg_manager_service
+systemctl start $cg_manager_service
+
+# If updated we do update-grub and reboot.
+if [ $updated -eq 1 ]; then
+    # Create a backup of original grub, So we can replace the backup with original if update-grub failed.
+    grub_backup=/etc/default/grub.sashi.bk
+    cp /etc/default/grub $grub_backup
+    mv "$tmpgrub" /etc/default/grub
+    rm -r "$tmp"
+    if ! update-grub >/dev/null 2>&1; then
+        mv $grub_backup /etc/default/grub
+        echo "Grub update failed."
+        exit 1
+    fi
+
+    # Indicate pending reboot in the standard reboot required file.
+    touch /run/reboot-required
+    rebootpkgs=/run/reboot-required.pkgs
+    (! [ -f $rebootpkgs ] || [ -z "$(grep sashimono $rebootpkgs)" ]) && echo "sashimono" >>$rebootpkgs
+
+    echo "Updated grub. System needs to be rebooted to apply grub changes."
+else
+    rm -r "$tmp"
+    echo "Grub already configured."
 fi
 
 exit 0

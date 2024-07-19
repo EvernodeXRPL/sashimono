@@ -931,7 +931,6 @@ namespace hp
             std::to_string(instance_ports.user_port),
             std::to_string(instance_ports.gp_tcp_port_start),
             std::to_string(instance_ports.gp_udp_port_start),
-
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,

@@ -682,6 +682,16 @@
         done
     }
 
+    function check_ipv4_req() {
+        # Check for IPv4 addresses
+        local ipv4_addresses=$(ip -4 addr show | grep inet)
+        if [ -z "$ipv4_addresses" ]; then
+            echomult "Your system does not support IPv4."
+            echomult "$evernode host registration requires IPv4 support for dApp deployment."
+            exit 1
+        fi
+    }
+
     function set_ipv6_subnet() {
 
         ipv6_subnet="-"
@@ -2317,6 +2327,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             to you since we will be making modifications to your system configuration.
             \n\nContinue?" && exit 1
 
+        check_ipv4_req
         check_sys_req
         check_prereq
 

@@ -316,6 +316,8 @@ class MessageBoard {
             catch (e) {
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
+                    console.error(`Queue action failed. Retrying attempt ${action.attempts}`, e);
+                    
                     if (this.cfg.xrpl.affordableExtraFee > 0 && e.status === "TOOK_LONG") {
                         this.#applyFeeUpliftment = true;
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
@@ -748,8 +750,8 @@ class MessageBoard {
         // Only consider the older ones.
         // If this is prune call at the startup and there are acquiring records, they won't be handled since there's no data for them in the memory.
         // Since above do not have timestamp we do not consider time margin, we just prune them.
-        for (const lease of leases.filter(l => ((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
-            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED))) {
+        for (const lease of leases.filter(l => l.status === LeaseStatus.DESTROYED || l.status === LeaseStatus.BURNED || (((isStartup && l.status === LeaseStatus.ACQUIRING) || l.timestamp < timeMargin) &&
+            (l.status === LeaseStatus.ACQUIRING || l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED)))) {
             try {
                 // If lease does not have an instance.
                 this.sashiDb.open();
@@ -758,10 +760,12 @@ class MessageBoard {
 
                 if (!instances || instances.length === 0) {
                     console.log(`Pruning orphan lease ${lease.container_name}...`);
-                    this.db.open();
-                    let leaseTxHash = await this.getLeaseTxHash(lease.container_name);
-                    await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
-                    this.db.close();
+                    if (lease.status !== LeaseStatus.BURNED) {
+                        this.db.open();
+                        let leaseTxHash = await this.getLeaseTxHash(lease.container_name);
+                        await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
+                        this.db.close();
+                    }
 
                     const uriToken = (await this.hostClient.getLeaseByIndex(lease.container_name));
                     if (uriToken && uriToken.Owner != this.hostClient.xrplAcc.address) {
@@ -891,7 +895,8 @@ class MessageBoard {
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
-                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+                                // If there are leases, They are handled by prune job.
+                                const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId);
 
                                 if (!lease) {
                                     const uriToken = (await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId));
@@ -991,7 +996,7 @@ class MessageBoard {
             const status = await this.getLeaseStatus(leaseTxHash);
             if (retry && (noLeaseRecord || status === LeaseStatus.DESTROYED || status === LeaseStatus.FAILED || status === LeaseStatus.SASHI_TIMEOUT)) {
                 // Burn the URIToken and recreate the offer.
-                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] }).catch(console.error);
+                await this.hostClient.expireLease(uriTokenId, { submissionRef: submissionRefs?.refs[0] });
                 if (!noLeaseRecord)
                     await this.updateLeaseStatus(leaseTxHash, LeaseStatus.BURNED);
             }
@@ -1013,7 +1018,8 @@ class MessageBoard {
             this.db.open();
             if (retry && (noLeaseRecord || await this.getLeaseStatus(leaseTxHash) == LeaseStatus.BURNED)) {
                 const leaseAmount = this.cfg.xrpl.leaseAmount ? this.cfg.xrpl.leaseAmount : parseFloat(this.hostClient.config.purchaserTargetPrice);
-                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP, { submissionRef: submissionRefs?.refs[1] }).catch(console.error);
+                // Don't send submission refs because there're two transactions here.
+                await this.hostClient.offerLease(leaseIndex, leaseAmount, appenv.TOS_HASH, outboundIP);
                 //Delete the lease record related to this instance (Permanent Delete).
                 if (!noLeaseRecord)
                     await this.deleteLeaseRecord(leaseTxHash);
@@ -1195,7 +1201,7 @@ class MessageBoard {
         await this.sashiCli.destroyInstance(containerName);
         let leaseTxHash = await this.getLeaseTxHash(containerName);
         await this.updateLeaseStatus(leaseTxHash, LeaseStatus.DESTROYED);
-        await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP).catch(console.error);
+        await this.recreateLeaseOffer(containerName, leaseIndex, outboundIP);
     }
 
     async handleExtendLease(r) {

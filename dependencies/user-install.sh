@@ -191,18 +191,18 @@ done
 
 # Creating AppArmor Profile for unpriviledged user
 filename=$(echo /home/$user/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
-cat <<EOF > /etc/apparmor.d/${filename}
+cat <<EOF > /etc/apparmor.d/$filename
 abi <abi/4.0>,
 include <tunables/global>
 
 "/home/$user/bin/rootlesskit" flags=(unconfined) {
   userns,
 
-  include if exists <local/${filename}>
+  include if exists <local/$filename>
 }
 EOF
 
-chown $user:$user /etc/apparmor.d/${filename}
+chown $user:$user /etc/apparmor.d/$filename
 
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
@@ -296,36 +296,27 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-relo
 # In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
 # Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us
 cores=$(grep -c ^processor /proc/cpuinfo)
-cpu_quota=$(expr $(expr $cores \* $cpu) / 10)
+cpu_period=1000000
+cpu_quota=$(expr $(expr $cores \* $cpu \* 100 \/ $cpu_period))
 
 echo "Setting up user cgroup resources."
 
 # Resource limiting for the unpriviledged user
-slice_file="/etc/systemd/system/user-$user.slice"
-cat <<EOL > $slice_file
-[Slice]
+mkdir /etc/systemd/system/user-$user_id.slice.d
+touch /etc/systemd/system/user-$user_id.slice.d/override.conf
+
+echo "[Slice]
+Slice=user.slice
 MemoryMax=${memory}K
 CPUQuota=${cpu_quota}% 
-MemorySwapMax=${swapmem}K
+MemorySwapMax=${swapmem}K"  |  sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
 
-EOL
 
-echo "Created slice file $SLICE_FILE with MemoryMax=${memory}K and CPUQuota=${cpu_quota}%"
-
-service_override_dir="/etc/systemd/system/user-${user_id}.service.d"
-mkdir -p $service_override_dir
-
-# Create the override file
-service_override="${service_override_dir}/override.conf"
-cat <<EOL > $service_override
-[Service]
-Slice=user-$user.slice
-EOL
+# Add all current members of the group to the cgroup
+# apply_cgroups $user
 
 systemctl daemon-reload
-systemctl restart user-${user_id}.service
 systemctl restart apparmor.service
-
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

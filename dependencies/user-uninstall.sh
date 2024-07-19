@@ -73,10 +73,8 @@ while true; do
     pkill -SIGKILL -u "$user"
 done
 
-echo "Removing cgroups"
-# Delete config values.
-cgdelete -g cpu:$user$cgroupsuffix
-cgdelete -g memory:$user$cgroupsuffix
+echo "Removing cgroups user slice override configuration"
+sudo rmdir /etc/systemd/system/user-$user_id.slice.d
 
 # Removing applied disk quota of the user before deleting.
 setquota -g -F vfsv0 "$user" 0 0 0 0 /
@@ -145,7 +143,8 @@ if [ -f $cleanup_script ]; then
 fi
 
 # Removing AppArmor Profile
-sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit" && exit 1
+echo "Removing AppArmor Profile '$user'"
+[ -f "/etc/apparmor.d/home.${user}.bin.rootlesskit" ] && sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit"
 
 echo "Deleting user '$user'"
 userdel "$user"

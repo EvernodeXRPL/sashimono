@@ -510,6 +510,7 @@ class Setup {
                     }
                 }
                 console.log(`Reputation: ${hostInfo.hostReputation}`);
+                console.log(`Accumulated rewards: ${hostInfo.accumulatedRewardAmount}`);
                 console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);
                 console.log(`\nCountry code: ${hostInfo.countryCode}`);
 

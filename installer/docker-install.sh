@@ -32,7 +32,8 @@ fi
 
 # Download the frozen image download file if not exists
 if [ ! -f "$docker_bin/download-frozen-image-v2.sh" ]; then
-    curl -s https://raw.githubusercontent.com/moby/moby/master/contrib/download-frozen-image-v2.sh --output $docker_bin/download-frozen-image-v2.sh
+    ! wget https://raw.githubusercontent.com/moby/moby/master/contrib/download-frozen-image-v2.sh --output-file $docker_bin/download-frozen-image-v2.sh &&
+        echo "Error downloading download-frozen-image-v2" && exit 1
     chmod +x $docker_bin/download-frozen-image-v2.sh
     chown -R $(id -u):$(id -g) $docker_bin/download-frozen-image-v2.sh
 fi

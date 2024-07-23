@@ -7,6 +7,8 @@ const { ConfigHelper } = require('./config-helper');
 const { GovernanceManager } = require('./governance-manager');
 const path = require('path');
 
+const LEASE_ID_REG_EXP = /^[0-9A-F]{64}$/;
+
 const LeaseStatus = {
     ACQUIRING: 'Acquiring',
     ACQUIRED: 'Acquired',
@@ -251,6 +253,9 @@ class MessageBoard {
             }
         });
 
+        // Offer if there are any unoffered leases.
+        await this.#offerUnofferedLeases();
+
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
 
@@ -317,7 +322,7 @@ class MessageBoard {
                 if (action.attempts < action.maxAttempts) {
                     action.attempts++;
                     console.error(`Queue action failed. Retrying attempt ${action.attempts}`, e);
-                    
+
                     if (this.cfg.xrpl.affordableExtraFee > 0 && e.status === "TOOK_LONG") {
                         this.#applyFeeUpliftment = true;
                         this.#feeUpliftment = Math.floor((this.cfg.xrpl.affordableExtraFee * action.attempts) / action.maxAttempts);
@@ -368,6 +373,43 @@ class MessageBoard {
                 this.#graceTimeoutRef = null;
             }, gracePeriod);
         }
+    }
+
+    async #offerUnofferedLeases() {
+        console.log("Checking for unoffered leases...");
+
+        const unoffered = await this.hostClient.getUnofferedLeases();
+        if (unoffered.length > 0) {
+            // Create lease offers.
+            console.log("Creating lease offers for instance slots...");
+            let i = 0;
+            for (let t of unoffered) {
+                const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
+                if (uriInfo.leaseAmount == this.cfg.xrpl.leaseAmount) {
+                    await this.#queueAction(async (submissionRefs) => {
+                        submissionRefs.refs ??= [{}];
+                        // Check again wether the transaction is validated before retry.
+                        const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                        if (txHash) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                return;
+                            }
+                        }
+                        await this.hostClient.offerMintedLease(t.index, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
+                    });
+                    console.log(`Queued lease offer ${i + 1} of ${unoffered.length}.`);
+                }
+                else {
+                    console.error(`Lease amount inconsistency detected. Lease amount in lease: ${uriInfo.leaseAmount}EVR, in config: ${this.cfg.xrpl.leaseAmount}EVR`);
+                    console.error(`Please re-configure the lease amount.`);
+                }
+                i++;
+            }
+        }
+
+        console.log("Unoffered lease check completed.");
     }
 
     // Expire leases
@@ -694,7 +736,7 @@ class MessageBoard {
             try {
                 const leaseIndex = leases.findIndex(l => l.container_name === instance.name);
                 const lease = leaseIndex >= 0 ? leases[leaseIndex] : null;
-                // If there's a lease record this is created from message board.
+                // If there's a lease record this is created from message board. Else this is created without obtaining a lease or this is a ghost instance.
                 if (lease) {
                     leases.splice(leaseIndex, 1);
                     const uriToken = (await this.hostClient.getLeaseByIndex(instance.name));
@@ -703,7 +745,7 @@ class MessageBoard {
                     // If the URIToken is still owned by the host we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
                     if (lease.status === LeaseStatus.ACQUIRING || !uriToken || uriToken.Owner === this.hostClient.xrplAcc.address) {
-                        console.log(`Pruning orphan instance ${instance.name}...`);
+                        console.log(`Pruning orphan instance with lease ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
                         this.db.open();
                         let leaseTxHash = await this.getLeaseTxHash(instance.name);
@@ -739,6 +781,12 @@ class MessageBoard {
                         if (lease.status === LeaseStatus.ACQUIRED || lease.status === LeaseStatus.EXTENDED)
                             activeInstanceCount--;
                     }
+                }
+                else if (LEASE_ID_REG_EXP.test(instance.name)) {
+                    // If the instance does not have lease record, This should be already pruned by lease prune job.
+                    // So we destroy the instance.
+                    console.log(`Pruning orphan instance without lease ${instance.name}...`);
+                    await this.sashiCli.destroyInstance(instance.name);
                 }
             }
             catch (e) {

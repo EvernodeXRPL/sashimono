@@ -509,6 +509,8 @@ class Setup {
                         console.log('The host becomes eligible to send heartbeats after generating offers for minted lease tokens.');
                     }
                 }
+                console.log(`Reputation: ${hostInfo.hostReputation}`);
+                console.log(`Accumulated rewards: ${hostInfo.accumulatedRewardAmount}`);
                 console.log(`\nHost status: ${hostInfo.active ? 'active' : 'inactive'}`);
                 console.log(`\nCountry code: ${hostInfo.countryCode}`);
 

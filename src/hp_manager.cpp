@@ -32,7 +32,7 @@ namespace hp
     // We keep docker logs at size limit of 10mb, We only need these logs for docker instance failure debugging since all other logs are kept in files.
     // For the local log driver compression, minimum max-file should be 2. So we keep two logs each max-size is 5mb
     constexpr const char *DOCKER_CREATE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock timeout --foreground -v -s SIGINT %ss %s/dockerbin/docker create -t -i --stop-signal=SIGINT --log-driver local \
-     --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s/udp --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
+     --log-opt max-size=5m --log-opt max-file=2 --name=%s -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s -p %s:%s -p %s:%s/udp -p %s:%s/udp --security-opt seccomp=unconfined --security-opt apparmor=unconfined --restart unless-stopped --mount type=bind,source=%s,target=/contract %s run /contract";
     constexpr const char *DOCKER_START = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker start %s";
     constexpr const char *DOCKER_STOP = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker stop %s";
     constexpr const char *DOCKER_REMOVE = "DOCKER_HOST=unix:///run/user/$(id -u %s)/docker.sock %s/dockerbin/docker rm -f %s";
@@ -317,7 +317,7 @@ namespace hp
         const std::string gp_udp_port_1 = std::to_string(assigned_ports.gp_udp_port_start);
         const std::string gp_udp_port_2 = std::to_string(assigned_ports.gp_udp_port_start + 1);
         const std::string timeout = std::to_string(DOCKER_CREATE_TIMEOUT_SECS);
-        const int len = 376 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + (gp_tcp_port_1.length() * 2) + (gp_tcp_port_2.length() * 2) + (gp_udp_port_1.length() * 2) + (gp_udp_port_2.length() * 2) + contract_dir.length() + image_name.length();
+        const int len = 376 + 69 + username.length() + timeout.length() + conf::ctx.exe_dir.length() + container_name.length() + (user_port.length() * 2) + (peer_port.length() * 4) + (gp_tcp_port_1.length() * 2) + (gp_tcp_port_2.length() * 2) + (gp_udp_port_1.length() * 2) + (gp_udp_port_2.length() * 2) + contract_dir.length() + image_name.length();
         char command[len];
         sprintf(command, DOCKER_CREATE, username.data(), timeout.data(), conf::ctx.exe_dir.data(), container_name.data(),
                 user_port.data(), user_port.data(),
@@ -1094,58 +1094,16 @@ namespace hp
         }
     }
     /**
-     * Check whether there's a pending reboot and cgrules service is running and configured.
+     * Check whether there's a pending reboot
      * @return true if active and configured otherwise false.
      */
     bool system_ready()
     {
-        char buffer[20];
-
-        if (util::execute_bash_cmd(CGRULE_ACTIVE, buffer, 20) == -1)
-            return false;
-
-        // Check cgrules service status is active.
-        if (strncmp(buffer, "active", 6) != 0)
-        {
-            LOG_ERROR << "Cgrules service is inactive.";
-            return false;
-        }
-
-        // Check cgrules cpu and memory mounts exist.
-        if (!util::is_dir_exists(CGRULE_CPU_DIR) || !util::is_dir_exists(CGRULE_MEM_DIR))
-        {
-            LOG_ERROR << "Cgrules cpu or memory mounts does not exist.";
-            return false;
-        }
-
-        // Check cgrules config exist and configured.
-        int fd = open(CGRULE_CONF, O_RDONLY);
-        if (fd == -1)
-        {
-            LOG_ERROR << errno << ": Error opening the cgrules config file.";
-            return false;
-        }
-
-        std::string buf;
-        if (util::read_from_fd(fd, buf, 0) == -1)
-        {
-            LOG_ERROR << errno << ": Error reading the cgrules config file.";
-            close(fd);
-            return false;
-        }
-
-        close(fd);
-
-        if (!std::regex_search(buf, std::regex(CGRULE_REGEXP)))
-        {
-            LOG_ERROR << "Cgrules config entry does not exist.";
-            return false;
-        }
-
         // Check there's a pending reboot.
         if (util::is_file_exists(REBOOT_FILE))
         {
-            fd = open(REBOOT_FILE, O_RDONLY);
+            std::string buf;
+            int fd = open(REBOOT_FILE, O_RDONLY);
             if (fd == -1)
             {
                 LOG_ERROR << errno << ": Error opening the reboot file.";

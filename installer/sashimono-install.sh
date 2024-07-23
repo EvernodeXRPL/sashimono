@@ -175,19 +175,10 @@ function call_third_party() {
     return 1
 }
 
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
-
 function set_cpu_info() {
-    [ -z $cpu_model_name ] && cpu_model_name=$(lscpu | grep -i "^Model name:" | sed 's/Model name://g; s/[#$%*@;]//g' | xargs | tr ' ' '_')
-    [ -z $cpu_count ] && cpu_count=$(lscpu | grep -i "^CPU(s):" | sed 's/CPU(s)://g' | xargs)
-    [ -z $cpu_mhz ] && cpu_mhz=$(lscpu | grep -i "^CPU MHz:" | sed 's/CPU MHz://g' | sed 's/\.[0-9]*//g' | xargs)
+    [ -z $cpu_model_name ] && cpu_model_name=$(cat /proc/cpuinfo | grep -m 1 "model name" | sed -n 's/model name\s*: //p' | sed 's/ /_/g')
+    [ -z $cpu_count ] && cpu_count=$(grep -c ^processor /proc/cpuinfo)
+    [ -z $cpu_mhz ] && cpu_mhz=$(cat /proc/cpuinfo | grep -m 1 "cpu MHz" | sed -n 's/cpu MHz\s*: //p')
 }
 
 function setup_certbot() {
@@ -442,13 +433,10 @@ function upgrade() {
     return 0
 }
 
-# Check cgroup rule config exists.
-[ ! -f /etc/cgred.conf ] && echo "cgroups is not configured. Make sure you've installed and configured cgroup-tools." && exit 1
 
 # Stop services before start upgrade.
 if [[ "$UPGRADE" == "1" ]]; then
     systemctl stop $SASHIMONO_SERVICE
-    systemctl stop $CGCREATE_SERVICE
     sudo -u "$MB_XRPL_USER" XDG_RUNTIME_DIR="$mb_user_runtime_dir" systemctl --user stop $MB_XRPL_SERVICE
 fi
 
@@ -481,7 +469,6 @@ rm -r "$tmp"
 # Install Sashimono agent binaries into sashimono bin dir.
 cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh,docker-registry-uninstall.sh} $SASHIMONO_BIN
 chmod -R +x $SASHIMONO_BIN
-
 # Setup tls certs used for contract instance websockets.
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
@@ -564,21 +551,10 @@ fi
 
 stage "Configuring Sashimono services"
 
-cgrulesengd_service=$(cgrulesengd_servicename)
-[ -z "$cgrulesengd_service" ] && echo "cgroups rules engine service does not exist." && abort
-
-# Setting up cgroup rules with sashiusers group (if not already setup).
-echo "Creating cgroup rules..."
 ! grep -q $SASHIUSER_GROUP /etc/group && ! groupadd $SASHIUSER_GROUP && echo "$SASHIUSER_GROUP group creation failed." && abort
-if ! grep -q $SASHIUSER_GROUP /etc/cgrules.conf; then
-    ! echo "@$SASHIUSER_GROUP       cpu,memory              %u$CG_SUFFIX" >>/etc/cgrules.conf && echo "Cgroup rule creation failed." && abort
-    # Restart the service to apply the cgrules config.
-    echo "Restarting the '$cgrulesengd_service' service."
-    systemctl restart $cgrulesengd_service || abort
-fi
 
 # Install Sashimono Agent cgcreate service.
-# This is a oneshot service which runs once at system startup. The intention is to run 'cgcreate' for
+# This is a oneshot service which runs once at system startup. This update user slices
 # all sashimono users every time the system boots up.
 echo "[Unit]
 Description=Sashimono cgroup creation service.
@@ -590,7 +566,6 @@ Type=oneshot
 ExecStart=$SASHIMONO_BIN/user-cgcreate.sh $SASHIMONO_DATA
 [Install]
 WantedBy=multi-user.target" >/etc/systemd/system/$CGCREATE_SERVICE.service
-
 echo "Configuring sashimono agent service..."
 
 # Since gp ports are added as new feature we manually configure the default on upgrade mode if not exists.

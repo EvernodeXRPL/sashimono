@@ -5,7 +5,6 @@
 # Adding user disk quota limitation capability
 # Enable user quota in fstab for root mount.
 # Enable cgroup memory and swapaccount capability.
-# Setup cgroups rules engine service.
 
 echo "---Sashimono prerequisites installer---"
 
@@ -14,9 +13,6 @@ tmpfstab=$tmp.tmp
 originalfstab=/etc/fstab
 cp $originalfstab "$tmpfstab"
 backup=$originalfstab.sashi.bk
-cgrulesengd_service=$1 # cgroups rules engine service name
-
-[ -z "$cgrulesengd_service" ] && cgrulesengd_service="cgrulesengd"
 
 function stage() {
     echo "STAGE $1" # This is picked up by the setup console output filter.
@@ -81,6 +77,24 @@ if ! command -v snap &>/dev/null; then
     stage "Installing snapd"
     apt-get install -y snapd
 fi
+
+# Install snap (required for letsencrypt certbot install)
+if ! command -v dbus-user-session &>/dev/null; then
+    stage "Installing dbus-ser-session"
+    apt-get install -y dbus-user-session
+
+fi
+
+if ! command -v systemd-container &>/dev/null; then
+    stage "Installing systemd-container"
+    apt-get install -y systemd-container
+fi
+
+if ! command -v uidmap &>/dev/null; then
+    stage "Installing uidmap"
+    apt-get install -y uidmap
+fi
+
 
 # -------------------------------
 # fstab changes
@@ -183,89 +197,15 @@ else
     echo "Fuse config already updated."
 fi
 
-# -------------------------------
-stage "Configuring cgroup rules engine"
-
-# Copy cgred.conf from examples if not exists to setup control groups.
-[ ! -f /etc/cgred.conf ] && cp /usr/share/doc/cgroup-tools/examples/cgred.conf /etc/
-
-# Create new cgconfig.conf if not exists to setup control groups.
-[ ! -f /etc/cgconfig.conf ] && : >/etc/cgconfig.conf
-
-# Create new cgrules.conf if not exists to setup control groups.
-[ ! -f /etc/cgrules.conf ] && : >/etc/cgrules.conf
-
-# Setup a service if not exists to run cgroup rules generator.
-cgrulesengd_file="/etc/systemd/system/$cgrulesengd_service.service"
-if ! [ -f "$cgrulesengd_file" ]; then
-    echo "[Unit]
-    Description=cgroups rules generator
-    After=network.target
-
-    [Service]
-    User=root
-    Group=root
-    Type=forking
-    EnvironmentFile=-/etc/cgred.conf
-    ExecStart=/usr/sbin/cgrulesengd
-    Restart=on-failure
-
-    [Install]
-    WantedBy=multi-user.target" >$cgrulesengd_file
-    systemctl daemon-reload
-fi
-systemctl enable $cgrulesengd_service
-systemctl start $cgrulesengd_service
-
-# -------------------------------
-stage "Configuring grub"
-
-# Enable cgroup memory and swapaccount if not already configured
-# We create a temp of the grub file and replace with original file only if success.
-tmp=$(mktemp -d)
-tmpgrub=$tmp.tmp
-cp /etc/default/grub "$tmpgrub"
-
-updated=0
-# Check GRUB_CMDLINE_LINUX exists, create new if not exists.
-# If exists check for cgroup_enable=memory and swapaccount=1 and configure them if not already configured.
-sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{q100}" "$tmpgrub"
-res=$?
-if [ $res -eq 100 ]; then
-    # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
-    sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
-    res=$?
-    if [ $res -eq 0 ]; then
-        sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" "$tmpgrub"
-        res=$?
-        updated=1
-    fi
-
-    # If there's no error.
-    if [ $res -eq 0 ] || [ $res -eq 100 ]; then
-        # Check swapaccount=1 exists, create new if not exists otherwise skip.
-        sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
-        res=$?
-        if [ $res -eq 0 ]; then
-            # Check whether there's swapaccount value other than 1, If so replace value with 1.
-            # Otherwise add swapaccount=1 after cgroup_enable=memory.
-            sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=/{q100}; }" "$tmpgrub"
-            res=$?
-            if [ $res -eq 100 ]; then
-                sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" "$tmpgrub"
-                res=$?
-                updated=1
-            elif [ $res -eq 0 ]; then
-                sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" "$tmpgrub"
-                res=$?
-                updated=1
-            fi
-        fi
-    fi
-elif [ $res -eq 0 ]; then
-    echo "GRUB_CMDLINE_LINUX=\"cgroup_enable=memory swapaccount=1\"" >>"$tmpgrub"
+# Check if cgroups v2 is enabled
+if ! mount | grep -q "type cgroup2"; then
+    echo "Enabling cgroups v2..."
+    # Edit GRUB configuration to enable cgroups v2
+    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub
     res=$?
     updated=1
+else
+    echo "cgroups v2 is already enabled."
 fi
 
 # If the res is not success(0) or alredy exist(100).

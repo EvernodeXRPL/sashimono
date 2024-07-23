@@ -485,7 +485,7 @@ check_dependencies
 stage "Installing docker packages"
 # Create docker bin directory.
 mkdir -p $DOCKER_BIN
-"$script_dir"/docker-install.sh $DOCKER_BIN
+! "$script_dir"/docker-install.sh $DOCKER_BIN && echo "DOCKER_INSTALL_FAILURE" && abort
 
 # Check whether docker installation dir is still empty.
 [ -z "$(ls -A $DOCKER_BIN 2>/dev/null)" ] && echo "Rootless Docker installation failed." && abort

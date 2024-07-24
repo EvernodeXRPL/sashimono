@@ -34,6 +34,7 @@ docker_bin=$script_dir/dockerbin
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
 echo "Uninstalling user '$user'."
 
@@ -143,8 +144,10 @@ if [ -f $cleanup_script ]; then
 fi
 
 # Removing AppArmor Profile
-echo "Removing AppArmor Profile '$user'"
-[ -f "/etc/apparmor.d/home.${user}.bin.rootlesskit" ] && sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit"
+if [ "$osversion" == "24.04" ]; then
+    echo "Removing AppArmor Profile '$user'"
+    [ -f "/etc/apparmor.d/home.${user}.bin.rootlesskit" ] && sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit"
+fi
 
 echo "Deleting user '$user'"
 userdel "$user"

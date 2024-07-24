@@ -90,12 +90,6 @@ if ! command -v systemd-container &>/dev/null; then
     apt-get install -y systemd-container
 fi
 
-if ! command -v uidmap &>/dev/null; then
-    stage "Installing uidmap"
-    apt-get install -y uidmap
-fi
-
-
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.
@@ -198,10 +192,10 @@ else
 fi
 
 # Check if cgroups v2 is enabled
-if ! mount | grep -q "type cgroup2"; then
+if ! mount | grep -q "type cgroup2" | grep -q "unified"; then
     echo "Enabling cgroups v2..."
     # Edit GRUB configuration to enable cgroups v2
-    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub
+    sed -i 's/GRUB_CMDLINE_LINUX="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub
     res=$?
     updated=1
 else

@@ -192,7 +192,7 @@ else
 fi
 
 # Check if cgroups v2 is enabled
-if ! mount | grep -q "type cgroup2" | grep -q "unified"; then
+if ! mount | grep "type cgroup2" | grep -q "/sys/fs/cgroup/unified"; then
     echo "Enabling cgroups v2..."
     # Edit GRUB configuration to enable cgroups v2
     sed -i 's/GRUB_CMDLINE_LINUX="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub

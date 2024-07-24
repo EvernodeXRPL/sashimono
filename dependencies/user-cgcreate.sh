@@ -55,7 +55,7 @@ CPUQuota=${instance_cpu_quota}%
 MemoryMax=${instance_mem_kbytes}K
 MemorySwapMax=${instance_swap_kbytes}K" | sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
 
-    sudo systemctl daemon-relaod
+    sudo systemctl daemon-reload
     sudo systemctl restart user-$user_id.slice
 }
 

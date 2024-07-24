@@ -153,7 +153,7 @@ rm -r /home/"${user:?}"
 # It'll be automatically deleted when we delete the user.
 
 # Removing process and file desctiptor limitations for the user after user deletion.
-sudo sed -i "/^$user soft " /etc/security/limits.conf
+sudo sed -i "/^$user/d" /etc/security/limits.conf
 
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 

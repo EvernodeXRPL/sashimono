@@ -35,6 +35,7 @@ cgroupsuffix="-cg"
 user_dir=/home/$user
 script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
+docker_img_dir=$docker_bin/images
 docker_service="docker.service"
 docker_pull_timeout_secs=120
 cleanup_script=$user_dir/uninstall_cleanup.sh
@@ -246,9 +247,21 @@ service_ready $docker_service || rollback "NO_DOCKERSVC"
 
 echo "Installed rootless dockerd."
 
-echo "Pulling the docker image $docker_image."
-DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
-echo "Docker image $docker_image pull complete."
+# echo "Pulling the docker image $docker_image."
+# DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
+# echo "Docker image $docker_image pull complete."
+
+echo "Downloading the docker image $docker_image."
+img_local_path=$docker_img_dir/$(echo "$docker_image" | tr : -)
+"$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_image || rollback "DOCKER_PULL"
+
+img_local_tar_path=$img_local_path.tar
+echo "Saving the downloaded image as a tarball: $img_local_tar_path"
+tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+
+echo "Loading the docker image $img_local_path."
+DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker load -i "$img_local_tar_path" || rollback "DOCKER_PULL"
+echo "Docker image $img_local_path pull complete."
 
 echo "Adding hpfs services for the instance."
 

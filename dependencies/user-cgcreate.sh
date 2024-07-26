@@ -61,7 +61,7 @@ MemorySwapMax=${instance_swap_kbytes}K" | sudo tee /etc/systemd/system/user-$use
 
 osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
-if [ "$osversion" = "24.04" ]; then
+if [ "$osversion" == "24.04" ]; then
     # Allow unpriviledged user namespaces (By Default restricted in Ubuntu 24.04)
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_unconfined=0
     sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0

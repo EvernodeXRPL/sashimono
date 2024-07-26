@@ -27,7 +27,7 @@
     root_user="root"
 
     repo_owner="EvernodeXRPL"
-    repo_name="evernode-test-resources"
+    repo_name="evernode-resources"
     desired_branch="main"
 
     # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"

@@ -78,11 +78,13 @@ function wait_for_dockerd() {
         sleep 1
     done
 }
-# Adding process and file desctiptor limitations for the user before user creation
-echo "$user soft nofile 500" | tee -a /etc/security/limits.conf
-echo "$user soft nproc 25" | tee -a /etc/security/limits.conf
 
-#TODO:- skip addling limitations to reputation user
+nofile_soft_limit=$(ulimit -n -S)
+nproc_soft_limit=$(ulimit -u -S)
+
+# Adding process and file descriptor limitations for the user before user creation
+echo "$user hard nofile $nofile_soft_limit" | tee -a /etc/security/limits.conf
+echo "$user hard nproc $nproc_soft_limit" | tee -a /etc/security/limits.conf
 
 # Setup user and dockerd service.
 useradd --shell /usr/sbin/nologin -m $user

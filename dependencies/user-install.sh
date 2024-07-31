@@ -41,10 +41,10 @@ docker_pull_timeout_secs=120
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
-
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -197,9 +197,10 @@ for ((i = 0; i < $gp_tcp_port_count; i++)); do
     fi
 done
 
-# Creating AppArmor Profile for unpriviledged user
-filename=$(echo /home/$user/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
-cat <<EOF > /etc/apparmor.d/$filename
+# Creating AppArmor Profile for unpriviledged user on Ubuntu 24.04
+if [ "$osversion" == "24.04" ]; then
+    filename=$(echo /home/$user/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
+    cat <<EOF > /etc/apparmor.d/$filename
 abi <abi/4.0>,
 include <tunables/global>
 
@@ -209,8 +210,9 @@ include <tunables/global>
   include if exists <local/$filename>
 }
 EOF
-
-chown $user:$user /etc/apparmor.d/$filename
+    chown $user:$user /etc/apparmor.d/$filename
+    systemctl restart apparmor.service
+fi
 
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
@@ -329,14 +331,12 @@ echo "[Slice]
 Slice=user.slice
 MemoryMax=${memory}K
 CPUQuota=${cpu_quota}% 
-MemorySwapMax=${swapmem}K"  |  sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
-
+MemorySwapMax=${swapmem}K" | sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
 
 # Add all current members of the group to the cgroup
 # apply_cgroups $user
 
 systemctl daemon-reload
-systemctl restart apparmor.service
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

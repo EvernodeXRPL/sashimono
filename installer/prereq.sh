@@ -90,12 +90,6 @@ if ! command -v systemd-container &>/dev/null; then
     apt-get install -y systemd-container
 fi
 
-if ! command -v uidmap &>/dev/null; then
-    stage "Installing uidmap"
-    apt-get install -y uidmap
-fi
-
-
 # -------------------------------
 # fstab changes
 # We do not edit original file, instead we create a temp file with original and edit it.
@@ -197,42 +191,96 @@ else
     echo "Fuse config already updated."
 fi
 
-# Check if cgroups v2 is enabled
-if ! mount | grep -q "type cgroup2"; then
-    echo "Enabling cgroups v2..."
-    # Edit GRUB configuration to enable cgroups v2
-    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="/&systemd.unified_cgroup_hierarchy=1 /' /etc/default/grub
+# Enable cgroup memory and swapaccount if not already configured
+# We create a temp of the grub file and replace with original file only if success.
+tmp=$(mktemp -d)
+tmpgrub=$tmp.tmp
+cp /etc/default/grub "$tmpgrub"
+
+updated=0
+
+if mount | grep "type cgroup2" | grep -q "/sys/fs/cgroup/unified"; then
+    stage "Configuring grub"
+    stage "Enabling Cgroups unified hierarchy"
+
+    sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{q100}" "$tmpgrub"
     res=$?
-    updated=1
-else
-    echo "cgroups v2 is already enabled."
-fi
+    if [ $res -eq 100 ]; then
 
-# If the res is not success(0) or alredy exist(100).
-[ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX update failed." && exit 1
+        # Check systemd.unified_cgroup_hierarchy=1exists, create new if not exists otherwise skip.
+        sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /systemd.unified_cgroup_hierarchy=1/{q100}; }" "$tmpgrub"
+        res=$?
+        if [ $res -eq 0 ]; then
+            sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/\"\s*\$/ systemd.unified_cgroup_hierarchy=1\"/ }" "$tmpgrub"
+            res=$?
+            updated=1
+        fi
 
-# If updated we do update-grub and reboot.
-if [ $updated -eq 1 ]; then
-    # Create a backup of original grub, So we can replace the backup with original if update-grub failed.
-    grub_backup=/etc/default/grub.sashi.bk
-    cp /etc/default/grub $grub_backup
-    mv "$tmpgrub" /etc/default/grub
-    rm -r "$tmp"
-    if ! update-grub >/dev/null 2>&1; then
-        mv $grub_backup /etc/default/grub
-        echo "Grub update failed."
-        exit 1
+        # If there's no error.
+        if [ $res -eq 0 ] || [ $res -eq 100 ]; then
+            # Check cgroup_enable=memory exists, create new if not exists otherwise skip.
+            sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /cgroup_enable=memory/{q100}; }" "$tmpgrub"
+            res=$?
+            if [ $res -eq 0 ]; then
+                sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/\"\s*\$/ cgroup_enable=memory\"/ }" "$tmpgrub"
+                res=$?
+                updated=1
+            fi
+        fi
+
+        # If there's no error.
+        if [ $res -eq 0 ] || [ $res -eq 100 ]; then
+            # Check swapaccount=1 exists, create new if not exists otherwise skip.
+            sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=1/{q100}; }" "$tmpgrub"
+            res=$?
+            if [ $res -eq 0 ]; then
+                # Check whether there's swapaccount value other than 1, If so replace value with 1.
+                # Otherwise add swapaccount=1 after cgroup_enable=memory.
+                sed -n -r -e "/^GRUB_CMDLINE_LINUX=/{ /swapaccount=/{q100}; }" "$tmpgrub"
+                res=$?
+                if [ $res -eq 100 ]; then
+                    sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/swapaccount=[0-9]*/swapaccount=1/ }" "$tmpgrub"
+                    res=$?
+                    updated=1
+                elif [ $res -eq 0 ]; then
+                    sed -i -r -e "/^GRUB_CMDLINE_LINUX=/{ s/cgroup_enable=memory/cgroup_enable=memory swapaccount=1/ }" "$tmpgrub"
+                    res=$?
+                    updated=1
+                fi
+            fi
+        fi
+    elif [ $res -eq 0 ]; then
+        echo "GRUB_CMDLINE_LINUX=\"systemd.unified_cgroup_hierarchy=1 cgroup_enable=memory swapaccount=1\"" >>"$tmpgrub"
+        res=$?
+        updated=1
     fi
 
-    # Indicate pending reboot in the standard reboot required file.
-    touch /run/reboot-required
-    rebootpkgs=/run/reboot-required.pkgs
-    (! [ -f $rebootpkgs ] || [ -z "$(grep sashimono $rebootpkgs)" ]) && echo "sashimono" >>$rebootpkgs
+    # If the res is not success(0) or alredy exist(100).
+    [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "Grub GRUB_CMDLINE_LINUX update failed." && exit 1
 
-    echo "Updated grub. System needs to be rebooted to apply grub changes."
-else
-    rm -r "$tmp"
-    echo "Grub already configured."
+    # If updated we do update-grub and reboot.
+    if [ $updated -eq 1 ]; then
+        # Create a backup of original grub, So we can replace the backup with original if update-grub failed.
+        grub_backup=/etc/default/grub.sashi.bk
+        cp /etc/default/grub $grub_backup
+        mv "$tmpgrub" /etc/default/grub
+        rm -r "$tmp"
+        if ! update-grub >/dev/null 2>&1; then
+            mv $grub_backup /etc/default/grub
+            echo "Grub update failed."
+            exit 1
+        fi
+
+        # Indicate pending reboot in the standard reboot required file.
+        touch /run/reboot-required
+        rebootpkgs=/run/reboot-required.pkgs
+        (! [ -f $rebootpkgs ] || [ -z "$(grep sashimono $rebootpkgs)" ]) && echo "sashimono" >>$rebootpkgs
+
+        echo "Updated grub. System needs to be rebooted to apply grub changes."
+    else
+        rm -r "$tmp"
+        echo "Grub already configured."
+    fi
 fi
 
 exit 0

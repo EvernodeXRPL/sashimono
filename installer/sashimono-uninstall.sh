@@ -282,16 +282,7 @@ echo "Deleting Sashimono CLI..."
 rm $USER_BIN/sashi
 
 if [ "$UPGRADE" == "0" ]; then
-    # When removing the cgrules service, we first edit the config and restart the service to apply the config.
-    # Then we remove the attached group.
-    echo "Deleting cgroup rules..."
-    sed -i -r "/^@$SASHIUSER_GROUP\s+cpu,memory\s+%u$CG_SUFFIX/d" /etc/cgrules.conf
-
-    cgrulesengd_service=$(cgrulesengd_servicename)
-    [ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
-
-    echo "Restarting the '$cgrulesengd_service' service..."
-    systemctl restart $cgrulesengd_service
+    # Remove the attached group.
     groupdel $SASHIUSER_GROUP
 fi
 

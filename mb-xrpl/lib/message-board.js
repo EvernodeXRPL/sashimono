@@ -201,6 +201,7 @@ class MessageBoard {
 
         this.hostClient.on(evernode.HostEvents.AcquireLease, r => this.handleAcquireLease(r));
         this.hostClient.on(evernode.HostEvents.ExtendLease, r => this.handleExtendLease(r));
+        this.hostClient.on(evernode.HostEvents.TerminateLease, r => this.handleTerminateLease(r));
 
         let hostRegFee = this.hostClient.config.hostRegFee;
         const checkAndRequestRebate = async () => {
@@ -539,7 +540,10 @@ class MessageBoard {
 
     async #expireInstance(lease, currentTime = evernode.UtilHelpers.getCurrentUnixTime()) {
         try {
-            console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
+            if (currentTime >= lease.expiryTimestamp)
+                console.log(`Moments exceeded (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
+            else
+                console.log(`Terminate received (current timestamp:${currentTime}, expiry timestamp:${lease.expiryTimestamp}). Destroying ${lease.containerName}`);
             // Expire the current lease agreement (Burn the instance URIToken) and re-minting and creating sell offer for the same lease index.
             const uriToken = (await this.hostClient.getLeaseByIndex(lease.containerName));
             // If there's no uriToken for this record it should be already burned and instance is destroyed, So we only delete the record.
@@ -1347,6 +1351,57 @@ class MessageBoard {
                 await this.hostClient.extendError(extendRefId, tenantAddress, e.content || 'invalid_extend_lease', amount, { submissionRef: submissionRefs?.refs[0] });
             });
         } finally {
+            this.db.close();
+        }
+    }
+
+    async handleTerminateLease(r) {
+        await this.#acquireLeaseUpdateLock();
+        this.db.open();
+
+        const uriTokenId = r.uriTokenId;
+        const tenantAddress = r.tenant;
+
+        try {
+            if (r.transaction.Destination !== this.cfg.xrpl.address)
+                throw "Invalid destination";
+
+            const hostingToken = await this.hostClient.getLeaseByIndex(uriTokenId);
+
+            // Update last watched ledger sequence number.
+            await this.updateLastIndexRecord(r.transaction.LedgerIndex);
+
+            if (!hostingToken || hostingToken.Owner !== tenantAddress)
+                throw "The URIToken ownership verification was failed in the lease extension process";
+
+            const instanceSearchCriteria = { container_name: hostingToken.index };
+
+            const instance = (await this.getLeaseRecords(instanceSearchCriteria)).find(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
+
+            if (!instance)
+                throw "No relevant instance was found to perform the lease extension";
+
+            console.log(`Received terminate lease from ${tenantAddress}`);
+
+            if (this.#instanceExpirationQueue.length && this.#instanceExpirationQueue.findIndex(i => i.containerName === hostingToken.index) >= 0) {
+                if (!this.#xrplHalted) {
+                    await this.#expireInstance(instance);
+                    // Remove from the queue
+                    this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != instance.container_name);
+                    console.log(`Terminated instance ${instance.container_name}`);
+                }
+                else {
+                    console.log("XRPL is halted.")
+                }
+            }
+            else {
+                console.log(`Instance ${instance.container_name} is not included in expiry queue.`)
+            }
+        }
+        catch (e) {
+            console.error(`Error occurred in terminating the instance ${uriTokenId}.`, e);
+        } finally {
+            await this.#releaseLeaseUpdateLock();
             this.db.close();
         }
     }

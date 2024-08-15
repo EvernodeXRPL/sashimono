@@ -1016,7 +1016,7 @@ class MessageBoard {
                 for (const trx of transactions) {
                     try {
                         const paramValues = trx.HookParameters.map(p => p.value);
-                        if (paramValues.includes(evernode.EventTypes.ACQUIRE_LEASE) || paramValues.includes(evernode.EventTypes.EXTEND_LEASE)) {
+                        if (paramValues.includes(evernode.EventTypes.ACQUIRE_LEASE) || paramValues.includes(evernode.EventTypes.EXTEND_LEASE) || paramValues.includes(evernode.EventTypes.TERMINATE_LEASE)) {
                             // Update last watched ledger sequence number.
                             await this.updateLastIndexRecord(trx.ledger_index);
 
@@ -1115,6 +1115,39 @@ class MessageBoard {
                                     }
                                 } else {
                                     console.log(`No lease was found: (URIToken : ${eventInfo.data.uriTokenId}).`);
+                                }
+                            } else if (paramValues.includes(evernode.EventTypes.TERMINATE_LEASE)) { // Handle Terminates.
+
+                                const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
+
+                                if (eventInfo.transaction.Destination === this.cfg.xrpl.address) {
+                                    const hostingToken = await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId);
+
+                                    if (hostingToken && hostingToken.Owner === eventInfo.data.tenant) {
+                                        const lease = leases.find(l => l.container_name === eventInfo.data.uriTokenId && (l.status === LeaseStatus.ACQUIRED || l.status === LeaseStatus.EXTENDED));
+
+                                        if (lease) {
+                                            console.log(`Received terminate lease from ${eventInfo.data.tenant}`);
+
+                                            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === lease.container_name) >= 0) {
+                                                this.removeFromExpiryList(lease.container_name);
+                                                await this.#expireInstance(lease);
+                                                console.log(`Terminated instance ${lease.container_name}`);
+                                            }
+                                            else {
+                                                console.log(`Instance ${lease.container_name} is not included in expiry list.`)
+                                            }
+                                        }
+                                        else {
+                                            console.log("No relevant instance was found to perform the lease extension");
+                                        }
+                                    }
+                                    else {
+                                        console.log("The URIToken ownership verification was failed in the lease extension process");
+                                    }
+                                }
+                                else {
+                                    console.log("Invalid destination");
                                 }
                             }
                         }
@@ -1495,7 +1528,7 @@ class MessageBoard {
 
             console.log(`Received terminate lease from ${tenantAddress}`);
 
-            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === instance.container_name)) {
+            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === instance.container_name) >= 0) {
                 if (!this.#xrplHalted) {
                     this.removeFromExpiryList(instance.container_name);
                     await this.#expireInstance(instance);

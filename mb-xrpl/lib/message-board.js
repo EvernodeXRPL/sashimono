@@ -1495,11 +1495,10 @@ class MessageBoard {
 
             console.log(`Received terminate lease from ${tenantAddress}`);
 
-            if (this.#instanceExpirationQueue.length && this.#instanceExpirationQueue.find(i => i.containerName == instance.container_name)) {
+            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === instance.container_name)) {
                 if (!this.#xrplHalted) {
+                    this.removeFromExpiryList(instance.container_name);
                     await this.#expireInstance(instance);
-                    // Remove from the queue
-                    this.#instanceExpirationQueue = this.#instanceExpirationQueue.filter(i => i.containerName != instance.container_name);
                     console.log(`Terminated instance ${instance.container_name}`);
                 }
                 else {
@@ -1507,7 +1506,7 @@ class MessageBoard {
                 }
             }
             else {
-                console.log(`Instance ${instance.container_name} is not included in expiry queue.`)
+                console.log(`Instance ${instance.container_name} is not included in expiry list.`)
             }
         }
         catch (e) {
@@ -1526,6 +1525,11 @@ class MessageBoard {
             expiryTimestamp: expiryTimestamp
         });
         console.log(`Container ${containerName} expiry set at ${expiryTimestamp} th timestamp`);
+    }
+
+    removeFromExpiryList(containerName) {
+        this.expiryList = this.expiryList.filter(i => i.containerName != containerName);
+        console.log(`Container ${containerName} removed from expiry list`);
     }
 
     async createLeaseTableIfNotExists() {

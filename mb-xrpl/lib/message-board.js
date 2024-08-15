@@ -1129,9 +1129,10 @@ class MessageBoard {
                                         if (lease) {
                                             console.log(`Received terminate lease from ${eventInfo.data.tenant}`);
 
-                                            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === lease.container_name) >= 0) {
+                                            const item = this.expiryList.find(i => i.containerName === lease.container_name);
+                                            if (item) {
                                                 this.removeFromExpiryList(lease.container_name);
-                                                await this.#expireInstance(lease);
+                                                await this.#expireInstance(item);
                                                 console.log(`Terminated instance ${lease.container_name}`);
                                             }
                                             else {
@@ -1525,10 +1526,11 @@ class MessageBoard {
 
             console.log(`Received terminate lease from ${tenantAddress}`);
 
-            if (this.expiryList?.length && this.expiryList.findIndex(i => i.containerName === instance.container_name) >= 0) {
+            const item = this.expiryList.find(i => i.containerName === instance.container_name);
+            if (item) {
                 if (!this.#xrplHalted) {
                     this.removeFromExpiryList(instance.container_name);
-                    await this.#expireInstance(instance);
+                    await this.#expireInstance(item);
                     console.log(`Terminated instance ${instance.container_name}`);
                 }
                 else {

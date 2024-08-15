@@ -1120,7 +1120,7 @@ class MessageBoard {
 
                                 const eventInfo = await this.hostClient.extractEvernodeEvent(trx);
 
-                                if (eventInfo.transaction.Destination === this.cfg.xrpl.address) {
+                                if (eventInfo.data.transaction.Destination === this.cfg.xrpl.address) {
                                     const hostingToken = await this.hostClient.getLeaseByIndex(eventInfo.data.uriTokenId);
 
                                     if (hostingToken && hostingToken.Owner === eventInfo.data.tenant) {
@@ -1145,9 +1145,6 @@ class MessageBoard {
                                     else {
                                         console.log("The URIToken ownership verification was failed in the lease extension process");
                                     }
-                                }
-                                else {
-                                    console.log("Invalid destination");
                                 }
                             }
                         }

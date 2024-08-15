@@ -6,6 +6,7 @@ const { SashiCLI } = require('./sashi-cli');
 const { ConfigHelper } = require('./config-helper');
 const { GovernanceManager } = require('./governance-manager');
 const path = require('path');
+const { UtilHelper } = require('./util-helper');
 
 const LEASE_ID_REG_EXP = /^[0-9A-F]{64}$/;
 
@@ -257,6 +258,9 @@ class MessageBoard {
         // Offer if there are any unoffered leases.
         await this.#offerUnofferedLeases();
 
+        // Fix lease inconsistencies.
+        await this.#fixLeaseInconsistencies();
+
         // Start a job to expire instances and check for halts
         this.#startSashimonoClockScheduler();
 
@@ -376,17 +380,65 @@ class MessageBoard {
         }
     }
 
-    async #offerUnofferedLeases() {
-        console.log("Checking for unoffered leases...");
+    async #fixLeaseInconsistencies() {
+        console.log("Checking for inconsistent leases...");
 
-        const unoffered = await this.hostClient.getUnofferedLeases();
-        if (unoffered.length > 0) {
-            // Create lease offers.
-            console.log("Creating lease offers for instance slots...");
-            let i = 0;
-            for (let t of unoffered) {
-                const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
-                if (uriInfo.leaseAmount == this.cfg.xrpl.leaseAmount) {
+        try {
+            const leaseAmount = this.cfg.xrpl.leaseAmount;
+            const outboundSubnet = this.cfg.networking?.ipv6?.subnet;
+
+            const sashiConfig = ConfigHelper.readSashiConfig(this.sashiConfigPath);
+            const totalInstanceCount = sashiConfig.system.max_instance_count;
+
+
+            this.db.open();
+            const leaseRecords = (await this.getLeaseRecords()).filter(i => (i.status === LeaseStatus.ACQUIRED || i.status === LeaseStatus.EXTENDED));
+            this.db.close();
+            const soldCount = leaseRecords.length;
+
+            if (totalInstanceCount && soldCount <= totalInstanceCount) {
+                // Get unsold URI Tokens.
+                const unsoldUriTokens = (await this.hostClient.xrplAcc.getURITokens()).filter(n => n.Issuer == this.hostClient.xrplAcc.address && evernode.EvernodeHelpers.isValidURI(n.URI, evernode.EvernodeConstants.LEASE_TOKEN_PREFIX_HEX))
+                    .map(n => { return { uriTokenId: n.index, leaseIndex: evernode.UtilHelpers.decodeLeaseTokenUri(n.URI).leaseIndex }; });
+                const unsoldCount = unsoldUriTokens.length;
+
+                async function getVacantLeaseIndexes(includeUnsold = true) {
+                    let acquired = includeUnsold ? [] : unsoldUriTokens.map(n => n.leaseIndex);
+                    let vacant = [];
+                    for (const l of leaseRecords) {
+                        try {
+                            const uriTokenId = l.container_name;
+                            const uriToken = (await this.hostClient.getLeaseByIndex(uriTokenId));
+                            if (uriToken) {
+                                const index = evernode.UtilHelpers.decodeLeaseTokenUri(uriToken.URI).leaseIndex;
+                                acquired.push(index);
+                            }
+                        } catch {
+                        }
+                    }
+                    let i = 0;
+                    while (vacant.length + acquired.length < totalInstanceCount) {
+                        if (!acquired.includes(i))
+                            vacant.push(i);
+                        i++;
+                    }
+                    return vacant;
+                }
+
+                let uriTokensToBurn = [];
+                let uriTokenIndexesToCreate = [];
+                if (totalInstanceCount && (soldCount + unsoldCount) !== totalInstanceCount) {
+                    if (totalInstanceCount < soldCount + unsoldCount) {
+                        uriTokensToBurn = unsoldUriTokens.sort((a, b) => a.leaseIndex - b.leaseIndex).slice(totalInstanceCount - soldCount);
+                        uriTokenIndexesToCreate = [];
+                    }
+                    else {
+                        uriTokensToBurn = [];
+                        uriTokenIndexesToCreate = await getVacantLeaseIndexes(false);
+                    }
+                }
+
+                for (const uriToken of uriTokensToBurn) {
                     await this.#queueAction(async (submissionRefs) => {
                         submissionRefs.refs ??= [{}];
                         // Check again wether the transaction is validated before retry.
@@ -398,19 +450,79 @@ class MessageBoard {
                                 return;
                             }
                         }
-                        await this.hostClient.offerMintedLease(t.index, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
+                        await this.hostClient.expireLease(uriToken.uriTokenId, { submissionRef: submissionRefs?.refs[0] });
                     });
-                    console.log(`Queued lease offer ${i + 1} of ${unoffered.length}.`);
+                    console.log(`Queued lease expiry.`);
                 }
-                else {
-                    console.error(`Lease amount inconsistency detected. Lease amount in lease: ${uriInfo.leaseAmount}EVR, in config: ${this.cfg.xrpl.leaseAmount}EVR`);
-                    console.error(`Please re-configure the lease amount.`);
+
+                for (const idx of uriTokenIndexesToCreate) {
+                    await this.#queueAction(async (submissionRefs) => {
+                        submissionRefs.refs ??= [{}];
+                        // Check again wether the transaction is validated before retry.
+                        const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                        if (txHash) {
+                            const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                            if (txResponse && txResponse.code === "tesSUCCESS") {
+                                console.log('Transaction is validated and success, Retry skipped!')
+                                return;
+                            }
+                        }
+                        await this.hostClient.offerLease(idx,
+                            leaseAmount,
+                            appenv.TOS_HASH,
+                            (outboundSubnet) ? UtilHelper.generateIPV6Address(outboundSubnet, idx) : null, { submissionRef: submissionRefs?.refs[0] });
+                    });
+                    console.log(`Queued lease create.`);
                 }
-                i++;
             }
+
+            console.log("Inconsistent lease check completed.");
+        }
+        catch (e) {
+            console.log("Error occurred in lease inconsistency check.", e);
+        }
+    }
+
+    async #offerUnofferedLeases() {
+        console.log("Checking for unoffered leases...");
+
+        try {
+            const unoffered = await this.hostClient.getUnofferedLeases();
+            if (unoffered.length > 0) {
+                // Create lease offers.
+                console.log("Creating lease offers for instance slots...");
+                let i = 0;
+                for (let t of unoffered) {
+                    const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(t.URI);
+                    if (uriInfo.leaseAmount == this.cfg.xrpl.leaseAmount) {
+                        await this.#queueAction(async (submissionRefs) => {
+                            submissionRefs.refs ??= [{}];
+                            // Check again wether the transaction is validated before retry.
+                            const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                            if (txHash) {
+                                const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                if (txResponse && txResponse.code === "tesSUCCESS") {
+                                    console.log('Transaction is validated and success, Retry skipped!')
+                                    return;
+                                }
+                            }
+                            await this.hostClient.offerMintedLease(t.index, this.cfg.xrpl.leaseAmount, { submissionRef: submissionRefs?.refs[0] });
+                        });
+                        console.log(`Queued lease offer ${i + 1} of ${unoffered.length}.`);
+                    }
+                    else {
+                        console.error(`Lease amount inconsistency detected. Lease amount in lease: ${uriInfo.leaseAmount}EVR, in config: ${this.cfg.xrpl.leaseAmount}EVR`);
+                        console.error(`Please re-configure the lease amount.`);
+                    }
+                    i++;
+                }
+            }
+            console.log("Unoffered lease check completed.");
+        }
+        catch (e) {
+            console.log("Error occurred in unoffered lease check.", e);
         }
 
-        console.log("Unoffered lease check completed.");
     }
 
     // Expire leases
@@ -1383,7 +1495,7 @@ class MessageBoard {
 
             console.log(`Received terminate lease from ${tenantAddress}`);
 
-            if (this.#instanceExpirationQueue.length && this.#instanceExpirationQueue.findIndex(i => i.containerName === hostingToken.index) >= 0) {
+            if (this.#instanceExpirationQueue.length && this.#instanceExpirationQueue.find(i => i.containerName == instance.container_name)) {
                 if (!this.#xrplHalted) {
                     await this.#expireInstance(instance);
                     // Remove from the queue

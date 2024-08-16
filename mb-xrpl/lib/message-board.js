@@ -690,7 +690,7 @@ class MessageBoard {
 
             if (currentMomentDuration <= acceptanceLimit) {
                 const maxDelay = acceptanceLimit - currentMomentDuration;
-                currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
+                const currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
                 let sendDuration = currentMomentDuration + currentHeartbeatSchedule;
                 const currentHeartbeatTimeout = (sendDuration < halfMomentSize) ? ((sendDuration + 60) * 1000) : (sendDuration * 1000);
 

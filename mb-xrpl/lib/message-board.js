@@ -775,7 +775,6 @@ class MessageBoard {
         const momentSize = this.hostClient.config.momentSize;
         const halfMomentSize = momentSize / 2; // Getting 50% of moment size
         const acceptanceLimit = Math.floor(momentSize * 0.75); // Getting 75% of moment size
-        const momentReserve = Math.floor(momentSize * 0.25); // Getting 25% of moment size
 
         const timeout = momentSize * 1000; // Converting seconds to milliseconds.
 
@@ -796,14 +795,34 @@ class MessageBoard {
         // NOTE : Initially checks whether host has sent a heartbeat in the current moment or not.
         // If it's true, then schedule the next heartbeat based on its last heartbeat.
         // If not, further check whether it is about to send a heartbeat at the which state of a moment.
-        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat withing the next moment in a random slot.
-        // If not, schedule it right now.
-        const schedule = (this.lastHeartbeatMoment === currentMoment)
-            ? momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex)
-            : (currentMomentDuration > acceptanceLimit && currentMomentDuration < momentSize) ? (Math.floor(Math.random() * (acceptanceLimit - momentReserve)) + momentReserve) : 0;
+        // If the current timestamp lies in the last quarter of the moment, then schedule the next heartbeat randomly within the first 75% of the next moment.
+        // If not, schedule it randomly within the first 75% of the current moment.
+        let schedule = 0;
+        if (this.lastHeartbeatMoment !== currentMoment) {
+            const buffer = Buffer.from(hostInfo.uriTokenId.slice(-4), 'hex');
+            const randomValue = buffer.readUInt16BE(0);
+            const momentRemainder = momentSize - currentMomentDuration;
+            schedule = Math.floor((randomValue / 0xFFFF) * acceptanceLimit) + momentRemainder;
+
+            if (currentMomentDuration <= acceptanceLimit) {
+                const maxDelay = acceptanceLimit - currentMomentDuration;
+                const currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
+                let sendDuration = currentMomentDuration + currentHeartbeatSchedule;
+                const currentHeartbeatTimeout = (sendDuration < halfMomentSize) ? ((sendDuration + 60) * 1000) : (sendDuration * 1000);
+                console.log(`This moment's heartbeat is scheduled to be sent in ${currentHeartbeatTimeout} milliseconds.`);
+
+                setTimeout(async () => {
+                    await this.#sendHeartbeat();
+                }, currentHeartbeatTimeout);
+            }
+        } else {
+            schedule = momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex);
+        }
 
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : ((schedule) * 1000);
+        let sendDuration = currentMomentDuration + schedule;
+        const startTimeout = ((sendDuration <= momentSize) ? sendDuration < halfMomentSize : sendDuration - momentSize < halfMomentSize)
+            ? ((schedule + 60) * 1000) : (schedule * 1000);
         console.log(`Heartbeat Scheduler scheduled to start in ${startTimeout} milliseconds.`);
 
         setTimeout(async () => {

@@ -688,7 +688,7 @@ class MessageBoard {
             const momentRemainder = momentSize - currentMomentDuration;
             schedule = Math.floor((randomValue / 0xFFFF) * acceptanceLimit) + momentRemainder;
 
-            if (currentMomentDuration <= acceptanceLimit || currentMomentDuration >= momentSize) {
+            if (currentMomentDuration <= acceptanceLimit) {
                 const maxDelay = acceptanceLimit - currentMomentDuration;
                 currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
                 let sendDuration = currentMomentDuration + currentHeartbeatSchedule;

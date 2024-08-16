@@ -685,20 +685,27 @@ class MessageBoard {
         if (this.lastHeartbeatMoment !== currentMoment) {
             const buffer = Buffer.from(hostInfo.uriTokenId.slice(-4), 'hex');
             const randomValue = buffer.readUInt16BE(0);
-            if (currentMomentDuration < acceptanceLimit) {
+            const momentRemainder = momentSize - currentMomentDuration;
+            schedule = Math.floor((randomValue / 0xFFFF) * acceptanceLimit) + momentRemainder;
+
+            if (currentMomentDuration <= acceptanceLimit || currentMomentDuration >= momentSize){
                 const maxDelay = acceptanceLimit - currentMomentDuration;
-                schedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
-            }else{
-                const maxDelay = acceptanceLimit;
-                const momentRemainder = momentSize - currentMomentDuration;
-                schedule = Math.floor((randomValue / 0xFFFF) * maxDelay) + momentRemainder;
+                currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
+                let sendDuration = currentMomentDuration + currentHeartbeatSchedule;
+                const currentHeartbeatTimeout = (sendDuration < halfMomentSize) ? ((sendDuration + 60) * 1000) : (sendDuration * 1000);
+                
+                setTimeout(async () => {
+                    await this.#sendHeartbeat();
+                }, currentHeartbeatTimeout);
             }
         } else {
             schedule = momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex);
         }
     
         // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
-        const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : (schedule * 1000);
+        let sendDuration = currentMomentDuration + schedule;
+        const startTimeout = ((sendDuration <= momentSize) ? sendDuration < halfMomentSize : sendDuration - momentSize < halfMomentSize)
+         ? ((schedule + 60) * 1000) : (schedule * 1000);
         console.log(`Heartbeat Scheduler scheduled to start in ${startTimeout} milliseconds.`);
 
         setTimeout(async () => {

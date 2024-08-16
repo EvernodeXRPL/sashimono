@@ -697,6 +697,7 @@ class MessageBoard {
             schedule = momentSize - (currentTimestamp - hostInfo.lastHeartbeatIndex);
         }
     
+        // If the start index is in the beginning of the moment, delay the heartbeat scheduler 1 minute to make sure the hook timestamp is not in previous moment when accepting the heartbeat.
         const startTimeout = (currentMomentDuration < halfMomentSize) ? ((schedule + 60) * 1000) : (schedule * 1000);
         console.log(`Heartbeat Scheduler scheduled to start in ${startTimeout} milliseconds.`);
 

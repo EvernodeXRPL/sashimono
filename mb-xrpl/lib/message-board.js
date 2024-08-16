@@ -693,6 +693,7 @@ class MessageBoard {
                 const currentHeartbeatSchedule = Math.floor((randomValue / 0xFFFF) * maxDelay);
                 let sendDuration = currentMomentDuration + currentHeartbeatSchedule;
                 const currentHeartbeatTimeout = (sendDuration < halfMomentSize) ? ((sendDuration + 60) * 1000) : (sendDuration * 1000);
+                console.log(`This moment's heartbeat is scheduled to be sent in ${currentHeartbeatTimeout} milliseconds.`);
 
                 setTimeout(async () => {
                     await this.#sendHeartbeat();

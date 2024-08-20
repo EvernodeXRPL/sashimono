@@ -867,7 +867,7 @@ class MessageBoard {
 
         // Remove the instances which are orphan.
         // Only consider the older ones.
-        for (const instance of instances.filter(i => i.time < timeMargin)) {
+        for (const instance of instances.filter(i => (isStartup || i.time < timeMargin))) {
             try {
                 const leaseIndex = leases.findIndex(l => l.container_name === instance.name);
                 const lease = leaseIndex >= 0 ? leases[leaseIndex] : null;
@@ -877,9 +877,10 @@ class MessageBoard {
                     const uriToken = (await this.hostClient.getLeaseByIndex(instance.name));
 
                     // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
+                    // If lease is in DESTROYED leases are handled but instance is not destroyed.
                     // If the URIToken is still owned by the host we destroy the instance since this is not a valid lease.
                     // In these cases, destroy the instance.
-                    if (lease.status === LeaseStatus.ACQUIRING || !uriToken || uriToken.Owner === this.hostClient.xrplAcc.address) {
+                    if ((lease.status === LeaseStatus.ACQUIRING || lease.status === LeaseStatus.DESTROYED) || !uriToken || uriToken.Owner === this.hostClient.xrplAcc.address) {
                         console.log(`Pruning orphan instance with lease ${instance.name}...`);
                         await this.sashiCli.destroyInstance(instance.name);
                         this.db.open();
@@ -1159,11 +1160,11 @@ class MessageBoard {
                                             }
                                         }
                                         else {
-                                            console.log("No relevant instance was found to perform the lease extension");
+                                            console.log("No relevant instance was found to perform the lease termination");
                                         }
                                     }
                                     else {
-                                        console.log("The URIToken ownership verification was failed in the lease extension process");
+                                        console.log("The URIToken ownership verification was failed in the lease termination process");
                                     }
                                 }
                             }
@@ -1329,9 +1330,6 @@ class MessageBoard {
                     // Add to in-memory expiry list, so the instance will get destroyed when the moments exceed,
                     this.addToExpiryList(acquireRefId, createRes.content.name, tenantAddress, this.getExpiryTimestamp(createdTimestamp, moments));
 
-                    // Update the database for acquired record.
-                    await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex, createdTimestamp);
-
                     // Update the active instance count.
                     this.activeInstanceCount++;
                     await this.#queueAction(async (submissionRefs) => {
@@ -1369,6 +1367,11 @@ class MessageBoard {
                             delete createRes.content.ip;
                             const options = instanceRequirements?.messageKey ? { messageKey: instanceRequirements.messageKey } : {};
                             await this.hostClient.acquireSuccess(acquireRefId, tenantAddress, createRes, { submissionRef: submissionRefs?.refs[1], ...options });
+
+                            // Update the database for acquired record.
+                            this.db.open();
+                            await this.updateAcquiredRecord(acquireRefId, currentLedgerIndex, createdTimestamp);
+                            this.db.close();
                         }
                     });
                 }

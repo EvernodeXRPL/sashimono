@@ -269,7 +269,7 @@
             version=$(node -v | cut -d '.' -f1)
             version=${version:1}
             if [[ $version -lt 20 ]]; then
-                echo "$evernode requires NodeJs 20.x or later. You system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 20.x."
+                echo "$evernode requires NodeJs 20.x or later. Your system has NodeJs $version installed. Either remove the NodeJs installation or upgrade to NodeJs 20.x."
                 exit 1
             fi
         fi

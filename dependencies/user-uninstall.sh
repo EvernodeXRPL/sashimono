@@ -155,6 +155,9 @@ rm -r /home/"${user:?}"
 # Even though we are creating a group specifically,
 # It'll be automatically deleted when we delete the user.
 
+# Removing process and file desctiptor limitations for the user after user deletion.
+sudo sed -i "/^$user/d" /etc/security/limits.conf
+
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 
 echo "UNINST_SUC"

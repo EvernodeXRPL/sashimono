@@ -59,7 +59,7 @@ MemorySwapMax=${instance_swap_kbytes}K" | sudo tee /etc/systemd/system/user-$use
     sudo systemctl restart user-$user_id.slice
 }
 
-osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
+osversion=$(grep -ioP '^VERSION_ID="\K[^"]+' /etc/os-release)
 
 if [ "$osversion" == "24.04" ]; then
     # Allow unpriviledged user namespaces (By Default restricted in Ubuntu 24.04)

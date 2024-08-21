@@ -247,15 +247,14 @@ function setup_tls_certs() {
             -out $SASHIMONO_DATA/contract_template/cfg/tlscert.pem -subj "/C=$country_code/CN=$inetaddr" &&
             echo "Error when generating self-signed certificate." && abort
 
-    elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ]; then
+    elif [ -f "$tls_key_file" ] && [ -f "$tls_cert_file" ] && [ -f "$tls_cabundle_file" ]; then
 
         stage "Transferring certificate files"
 
         cp $tls_key_file $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
         cp $tls_cert_file $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
-        # ca bundle is optional.
-        [ "$tls_cabundle_file" != "-" ] && [ -f "$tls_cabundle_file" ] &&
-            cat $tls_cabundle_file >>$SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        # ca bundle is also required.
+        cat $tls_cabundle_file >>$SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     else
         echo "Error when setting up SSL certificate." && abort

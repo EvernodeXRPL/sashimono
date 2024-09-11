@@ -30,6 +30,9 @@
     repo_name="evernode-test-resources"
     desired_branch="main"
 
+    # Regular expression pattern to match "0.*.*"
+    older_version_pattern="^0\.[0-9]+\.[0-9]+$"
+
     # Reputation modes : 0 - "none", 1 - "OneToOne", 2 - "OneToMany"
     is_fresh_reputation_acc=false
     reputation_account_mode=0
@@ -199,6 +202,12 @@
         [ "$1" == "deregister" ] &&
             echo "$evernode is already installed on your host. You cannot deregister without uninstalling. Use the 'evernode' command to manage your host." &&
             exit 1
+
+        current_evernode_version=$(jq -r '.version' "$MB_XRPL_CONFIG")
+        if [[ "$1" == "update" && $current_evernode_version =~ $older_version_pattern ]]; then
+            echomult "Update not supported on this machine. 
+            \nPlease back up your secrets, transfer your host, and perform a fresh installation instead of proceeding with the upgrade.." && exit 1
+        fi
 
         [ "$1" != "uninstall" ] && [ "$1" != "status" ] && [ "$1" != "list" ] && [ "$1" != "update" ] && [ "$1" != "log" ] && [ "$1" != "applyssl" ] && [ "$1" != "transfer" ] && [ "$1" != "config" ] && [ "$1" != "delete" ] && [ "$1" != "governance" ] && [ "$1" != "regkey" ] && [ "$1" != "offerlease" ] && [ "$1" != "reputationd" ] &&
             echomult "$evernode host management tool
@@ -2361,7 +2370,6 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
 
         [ ! -f "$MB_XRPL_CONFIG" ] && set_ipv6_subnet
         [ "$ipv6_subnet" != "-" ] && [ "$ipv6_net_interface" != "-" ] && echo -e "Using $ipv6_subnet IPv6 subnet on $ipv6_net_interface for contract instances.\n"
-
 
         [ ! -f "$SASHIMONO_CONFIG" ] && set_instance_alloc
         echo -e "Using allocation $(GB $alloc_ramKB) memory, $(GB $alloc_swapKB) Swap, $(GB $alloc_diskKB) disk space, distributed among $alloc_instcount contract instances.\n"

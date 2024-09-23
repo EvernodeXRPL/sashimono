@@ -198,7 +198,7 @@ function setup_certbot_renewal() {
     # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
     local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
 
-    if [ "$UPGRADE" == "0" ] || [ -f $deploy_hook ]; then
+    if [ -f $deploy_hook ]; then
         echo "Setting up certbot deploy hook $deploy_hook"
         echo "#!/bin/sh
 # This script is placed by Sashimono for automatic updataing of contract SSL certs.

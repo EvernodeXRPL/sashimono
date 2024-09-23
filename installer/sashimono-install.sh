@@ -193,12 +193,12 @@ function set_cpu_info() {
 function setup_certbot_renewal() {
     # We need to place our script in certbook deploy hooks dir.
     local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
-    ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
+    [ "$UPGRADE" == "0" ] && ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
 
     # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
     local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
 
-    if [ -f $deploy_hook ]; then
+    if [ "$UPGRADE" == "0" ] || [ -f $deploy_hook ]; then
         echo "Setting up certbot deploy hook $deploy_hook"
         echo "#!/bin/sh
 # This script is placed by Sashimono for automatic updataing of contract SSL certs.
@@ -497,7 +497,7 @@ chmod -R +x $SASHIMONO_BIN
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Update renewal of tls certs used for contract instance websockets.
-[ "$UPGRADE" != "0" ] || setup_certbot_renewal
+[ "$UPGRADE" == "1" ] && setup_certbot_renewal
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig

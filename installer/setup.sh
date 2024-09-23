@@ -1593,6 +1593,9 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
         if [ "$latest_installer_script_version" != "$current_installer_script_version" ]; then
             # This is added temporary to remove auto updater. This can later be removed.
             remove_evernode_auto_updater
+            
+            inetaddr=$(jq -r ".hp.host_address | select( . != null )" "$SASHIMONO_CONFIG")
+
             install_evernode 1
         fi
 

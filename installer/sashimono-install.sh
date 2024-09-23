@@ -497,7 +497,7 @@ chmod -R +x $SASHIMONO_BIN
 [ "$UPGRADE" == "0" ] && setup_tls_certs
 
 # Update renewal of tls certs used for contract instance websockets.
-[ "$UPGRADE" == "0" ] || setup_certbot_renewal
+[ "$UPGRADE" != "0" ] || setup_certbot_renewal
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig

@@ -678,7 +678,7 @@ class MessageBoard {
 
             await this.#queueAction(async (submissionRefs) => {
                 submissionRefs.refs ??= [{}];
-                // Check again wether the transaction is validated before retry.
+                // Check again whether the transaction is validated before retry.
                 const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
                 if (txHash) {
                     const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
@@ -1160,7 +1160,40 @@ class MessageBoard {
                                             }
                                         }
                                         else {
-                                            console.log("No relevant instance was found to perform the lease termination");
+                                            const uriInfo = evernode.UtilHelpers.decodeLeaseTokenUri(hostingToken.URI);
+                                            await this.#queueAction(async (submissionRefs) => {
+                                                submissionRefs.refs ??= [{}];
+                                                // Check again wether the transaction is validated before retry.
+                                                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                                if (txHash) {
+                                                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                        console.log('Transaction is validated and success, Retry skipped!')
+                                                        return;
+                                                    }
+                                                }
+                                                console.log(`Expire the terminated instance ${hostingToken.index} lease.`);
+                                                await this.hostClient.expireLease(hostingToken.index, { submissionRef: submissionRefs?.refs[0] });
+                                            });
+
+
+                                            await this.#queueAction(async (submissionRefs) => {
+                                                submissionRefs.refs ??= [{}];
+                                                // Check again wether the transaction is validated before retry.
+                                                const txHash = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
+                                                if (txHash) {
+                                                    const txResponse = await this.hostClient.xrplApi.getTransactionValidatedResults(txHash);
+                                                    if (txResponse && txResponse.code === "tesSUCCESS") {
+                                                        console.log('Transaction is validated and success, Retry skipped!')
+                                                        return;
+                                                    }
+                                                }
+                                                console.log(`Re-created lease offer for the terminated instance ${hostingToken.index}.`);
+                                                await this.hostClient.offerLease(uriInfo.leaseIndex,
+                                                    uriInfo.leaseAmount,
+                                                    appenv.TOS_HASH,
+                                                    uriInfo.outboundIP, { submissionRef: submissionRefs?.refs[0] });
+                                            });
                                         }
                                     }
                                     else {
@@ -1195,7 +1228,7 @@ class MessageBoard {
     async recreateLeaseOffer(uriTokenId, leaseIndex, outboundIP, noLeaseRecord = false) {
         await this.#queueAction(async (submissionRefs) => {
             submissionRefs.refs ??= [{}, {}];
-            // Check again wether the transaction is validated before retry.
+            // Check again whether the transaction is validated before retry.
             const txHash1 = submissionRefs?.refs[0]?.submissionResult?.result?.tx_json?.hash;
             let retry = true;
             if (txHash1) {

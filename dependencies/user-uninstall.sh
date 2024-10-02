@@ -11,8 +11,6 @@ instance_name=$6
 prefix="sashi"
 max_kill_attempts=5
 
-
-
 # Check whether this is a valid sashimono username.
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
@@ -34,6 +32,15 @@ docker_bin=$script_dir/dockerbin
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
+
+function cgrulesengd_servicename() {
+    # Find the cgroups rules engine service.
+    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+    if [ -n "$cgrulesengd_filepath" ]; then
+        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
+        echo "${cgrulesengd_filename%.*}"
+    fi
+}
 
 echo "Uninstalling user '$user'."
 
@@ -149,6 +156,12 @@ userdel "$user"
 rm -r /home/"${user:?}"
 # Even though we are creating a group specifically,
 # It'll be automatically deleted when we delete the user.
+
+cgrulesengd_service=$(cgrulesengd_servicename)
+if [ ! -z "$cgrulesengd_service" ]; then
+    echo "Restarting the '$cgrulesengd_service' service..."
+    systemctl restart $cgrulesengd_service
+fi
 
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 

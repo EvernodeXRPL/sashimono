@@ -181,6 +181,27 @@ function set_cpu_info() {
     [ -z $cpu_mhz ] && cpu_mhz=$(cat /proc/cpuinfo | grep -m 1 "cpu MHz" | sed -n 's/cpu MHz\s*: //p')
 }
 
+function setup_certbot_renewal() {
+    # We need to place our script in certbook deploy hooks dir.
+    local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
+    [ "$UPGRADE" == "0" ] && ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
+
+    # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
+    local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
+
+    if [ "$UPGRADE" == "0" ] || [ -f $deploy_hook ]; then
+        echo "Setting up certbot deploy hook $deploy_hook"
+        echo "#!/bin/sh
+# This script is placed by Sashimono for automatic updataing of contract SSL certs.
+# Domain name: $inetaddr
+certname=\$(basename \$RENEWED_LINEAGE)
+[ \"\$certname\" = \"$inetaddr\" ] && evernode applyssl \$RENEWED_LINEAGE/privkey.pem \$RENEWED_LINEAGE/cert.pem \$RENEWED_LINEAGE/fullchain.pem" >$deploy_hook
+        chmod +x $deploy_hook
+    fi
+
+    return 0
+}
+
 function setup_certbot() {
     stage "Setting up letsencrypt certbot"
 
@@ -211,24 +232,14 @@ function setup_certbot() {
     ufw allow http comment sashimono-certbot
 
     # Setup the certificates. If there're already certificates skip this.
-    if [ ! -f /etc/letsencrypt/live/$inetaddr/privkey.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/fullchain.pem ]; then
+    if [ ! -f /etc/letsencrypt/live/$inetaddr/privkey.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/fullchain.pem ] || [ ! -f /etc/letsencrypt/live/$inetaddr/cert.pem ]; then
         echo "Running certbot certonly"
         call_third_party "certbot certonly -n -d $inetaddr --agree-tos --email $email_address --standalone" "setup certificates" || return 1
     fi
 
-    # We need to place our script in certbook deploy hooks dir.
-    local deploy_hooks_dir="/etc/letsencrypt/renewal-hooks/deploy"
-    ! [ -d $deploy_hooks_dir ] && echo "$deploy_hooks_dir not found" && return 1
+    setup_certbot_renewal || return 1
 
-    # Setup deploy hook (update contract certs on certbot SSL auto-renewal)
-    local deploy_hook="/etc/letsencrypt/renewal-hooks/deploy/sashimono-$inetaddr.sh"
-    echo "Setting up certbot deploy hook $deploy_hook"
-    echo "#!/bin/sh
-# This script is placed by Sashimono for automatic updataing of contract SSL certs.
-# Domain name: $inetaddr
-certname=\$(basename \$RENEWED_LINEAGE)
-[ \"\$certname\" = \"$inetaddr\" ] && evernode applyssl \$RENEWED_LINEAGE/privkey.pem \$RENEWED_LINEAGE/fullchain.pem" >$deploy_hook
-    chmod +x $deploy_hook
+    return 0
 }
 
 function setup_tls_certs() {
@@ -238,7 +249,8 @@ function setup_tls_certs() {
 
         ! setup_certbot && echo "Error when setting up letsencrypt SSL certificate." && abort
         cp /etc/letsencrypt/live/$inetaddr/privkey.pem $SASHIMONO_DATA/contract_template/cfg/tlskey.pem
-        cp /etc/letsencrypt/live/$inetaddr/fullchain.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        cp /etc/letsencrypt/live/$inetaddr/cert.pem $SASHIMONO_DATA/contract_template/cfg/tlscert.pem
+        cat /etc/letsencrypt/live/$inetaddr/fullchain.pem >>$SASHIMONO_DATA/contract_template/cfg/tlscert.pem
 
     elif [ "$tls_key_file" == "self" ]; then
         # If user has not provided certs we generate self-signed ones.
@@ -470,6 +482,9 @@ cp "$script_dir"/{sagent,hpfs,user-cgcreate.sh,user-install.sh,user-uninstall.sh
 chmod -R +x $SASHIMONO_BIN
 # Setup tls certs used for contract instance websockets.
 [ "$UPGRADE" == "0" ] && setup_tls_certs
+
+# Update renewal of tls certs used for contract instance websockets.
+[ "$UPGRADE" == "1" ] && setup_certbot_renewal
 
 # Copy Blake3 and update linker library cache.
 [ ! -f /usr/local/lib/libblake3.so ] && cp "$script_dir"/libblake3.so /usr/local/lib/ && ldconfig

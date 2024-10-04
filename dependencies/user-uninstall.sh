@@ -11,8 +11,6 @@ instance_name=$6
 prefix="sashi"
 max_kill_attempts=5
 
-
-
 # Check whether this is a valid sashimono username.
 [ ${#user} -lt 24 ] || [ ${#user} -gt 32 ] || [[ ! "$user" =~ ^$prefix[0-9]+$ ]] && echo "ARGS,UNINST_ERR" && exit 1
 
@@ -35,6 +33,15 @@ cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
 osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
+
+function cgrulesengd_servicename() {
+    # Find the cgroups rules engine service.
+    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
+    if [ -n "$cgrulesengd_filepath" ]; then
+        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
+        echo "${cgrulesengd_filename%.*}"
+    fi
+}
 
 echo "Uninstalling user '$user'."
 

@@ -32,7 +32,7 @@ docker_bin=$script_dir/dockerbin
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
-osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release | tr -d '"')
 
 function cgrulesengd_servicename() {
     # Find the cgroups rules engine service.

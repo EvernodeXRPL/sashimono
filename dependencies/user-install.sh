@@ -41,7 +41,7 @@ docker_pull_timeout_secs=120
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
-osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release | tr -d '"')
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1

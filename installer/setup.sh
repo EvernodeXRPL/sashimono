@@ -27,7 +27,7 @@
     root_user="root"
 
     repo_owner="EvernodeXRPL"
-    repo_name="evernode-resources"
+    repo_name="evernode-24-resources"
     desired_branch="main"
 
     # Regular expression pattern to match "0.*.*"

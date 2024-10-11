@@ -329,7 +329,7 @@
         local osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
 
         local errors=""
-        ([ "$os" != "ubuntu" ] || ([ "$osversion" == "20.04" ] || [ "$osversion" == "24.04" ])) && errors=" OS: $os $osversion (Support is for Ubuntu 20.04 and 24.04 only.)\n"
+        ([ "$os" != "ubuntu" ] || [ "$osversion" != '"24.04"' ]) && errors=" OS: $os $osversion (required: Ubuntu 24.04)\n"
         [ $ramKB -lt 2000000 ] && errors="$errors RAM: $(GB $ramKB) (required: 2 GB RAM)\n"
         [ $swapKB -lt 2000000 ] && errors="$errors Swap: $(GB $swapKB) (required: 2 GB Swap)\n"
         [ $diskKB -lt 4000000 ] && errors="$errors Disk space (/home): $(GB $diskKB) (required: 4 GB)\n"

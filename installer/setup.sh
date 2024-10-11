@@ -338,7 +338,7 @@
             echo "System check complete. Your system is capable of becoming an $evernode host."
         else
             echomult "Your system does not meet following $evernode system requirements:\n $errors"
-            echomult "$evernode host registration requires Ubuntu 24.04 or 20.04 with minimum 2 GB RAM,
+            echomult "$evernode host registration requires Ubuntu 24.04 with minimum 2 GB RAM,
             2 GB Swap and 4 GB free disk space for /home. Aborting setup."
             exit 1
         fi

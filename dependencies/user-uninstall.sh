@@ -165,6 +165,9 @@ rm -r /home/"${user:?}"
 # Removing process and file desctiptor limitations for the user after user deletion.
 sudo sed -i "/^$user/d" /etc/security/limits.conf
 
+# Removing process and file desctiptor limitations for the user after user deletion.
+sudo sed -i "/^$user/d" /etc/security/limits.conf
+
 [ -d /home/"$user" ] && echo "NOT_CLEAN,UNINST_ERR" && exit 1
 
 echo "UNINST_SUC"

@@ -34,15 +34,6 @@ gp_udp_port_count=2
 gp_tcp_port_count=2
 osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release | tr -d '"')
 
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
-
 echo "Uninstalling user '$user'."
 
 echo "Stopping and cleaning hpfs systemd services."

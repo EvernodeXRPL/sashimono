@@ -79,15 +79,6 @@ function exec_mb() {
     return $return_code
 }
 
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
-
 function cleanup_certbot_ssl() {
     # revoke/delete certs if certbot is used.
     if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ]; then

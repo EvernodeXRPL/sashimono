@@ -41,12 +41,10 @@ docker_pull_timeout_secs=120
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release | tr -d '"')
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
-
-# Check cgroup mounts exists.
-{ [ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]; } && echo "CGROUP_ERR,INST_ERR" && exit 1
 
 function rollback() {
     echo "Rolling back user installation. $1"
@@ -199,6 +197,23 @@ for ((i = 0; i < $gp_tcp_port_count; i++)); do
     fi
 done
 
+# Creating AppArmor Profile for unpriviledged user on Ubuntu 24.04
+if [ "$osversion" == "24.04" ]; then
+    filename=$(echo /home/$user/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
+    cat <<EOF > /etc/apparmor.d/$filename
+abi <abi/4.0>,
+include <tunables/global>
+
+"/home/$user/bin/rootlesskit" flags=(unconfined) {
+  userns,
+
+  include if exists <local/$filename>
+}
+EOF
+    chown $user:$user /etc/apparmor.d/$filename
+    systemctl restart apparmor.service
+fi
+
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
@@ -303,15 +318,25 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-relo
 # In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
 # Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us
 cores=$(grep -c ^processor /proc/cpuinfo)
-cpu_quota=$(expr $(expr $cores \* $cpu) / 10)
+cpu_period=1000000
+cpu_quota=$(expr $(expr $cores \* $cpu \* 100 \/ $cpu_period))
+
 echo "Setting up user cgroup resources."
-! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "100000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-    echo "$cpu_quota" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$cgroupsuffix &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
-echo "Configured user cgroup resources."
+
+# Resource limiting for the unpriviledged user
+mkdir /etc/systemd/system/user-$user_id.slice.d
+touch /etc/systemd/system/user-$user_id.slice.d/override.conf
+
+echo "[Slice]
+Slice=user.slice
+MemoryMax=${memory}K
+CPUQuota=${cpu_quota}% 
+MemorySwapMax=${swapmem}K" | sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
+
+# Add all current members of the group to the cgroup
+# apply_cgroups $user
+
+systemctl daemon-reload
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

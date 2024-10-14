@@ -32,15 +32,7 @@ docker_bin=$script_dir/dockerbin
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
-
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release | tr -d '"')
 
 echo "Uninstalling user '$user'."
 
@@ -80,10 +72,8 @@ while true; do
     pkill -SIGKILL -u "$user"
 done
 
-echo "Removing cgroups"
-# Delete config values.
-cgdelete -g cpu:$user$cgroupsuffix
-cgdelete -g memory:$user$cgroupsuffix
+echo "Removing cgroups user slice override configuration"
+sudo rmdir /etc/systemd/system/user-$user_id.slice.d
 
 # Removing applied disk quota of the user before deleting.
 setquota -g -F vfsv0 "$user" 0 0 0 0 /
@@ -151,17 +141,20 @@ if [ -f $cleanup_script ]; then
     /bin/bash -c $cleanup_script
 fi
 
+# Removing AppArmor Profile
+if [ "$osversion" == "24.04" ]; then
+    echo "Removing AppArmor Profile '$user'"
+    [ -f "/etc/apparmor.d/home.${user}.bin.rootlesskit" ] && sudo rm -r "/etc/apparmor.d/home.${user}.bin.rootlesskit"
+fi
+
 echo "Deleting user '$user'"
 userdel "$user"
 rm -r /home/"${user:?}"
 # Even though we are creating a group specifically,
 # It'll be automatically deleted when we delete the user.
 
-cgrulesengd_service=$(cgrulesengd_servicename)
-if [ ! -z "$cgrulesengd_service" ]; then
-    echo "Restarting the '$cgrulesengd_service' service..."
-    systemctl restart $cgrulesengd_service
-fi
+# Removing process and file desctiptor limitations for the user after user deletion.
+sudo sed -i "/^$user/d" /etc/security/limits.conf
 
 # Removing process and file desctiptor limitations for the user after user deletion.
 sudo sed -i "/^$user/d" /etc/security/limits.conf

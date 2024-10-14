@@ -13,8 +13,8 @@ if [ -z "$(ls -A $docker_bin 2>/dev/null)" ]; then
 
     tmp=$(mktemp -d)
     cd $tmp
-    curl -s https://download.docker.com/linux/static/stable/x86_64/docker-24.0.5.tgz --output docker.tgz
-    curl -s https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extras-24.0.5.tgz --output rootless.tgz
+    curl -s https://download.docker.com/linux/static/stable/x86_64/docker-27.0.1.tgz --output docker.tgz
+    curl -s https://download.docker.com/linux/static/stable/x86_64/docker-rootless-extras-27.0.1.tgz --output rootless.tgz
 
     cd $docker_bin
     tar zxf $tmp/docker.tgz --strip-components=1

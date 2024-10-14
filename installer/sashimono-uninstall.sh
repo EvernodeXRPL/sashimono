@@ -79,15 +79,6 @@ function exec_mb() {
     return $return_code
 }
 
-function cgrulesengd_servicename() {
-    # Find the cgroups rules engine service.
-    local cgrulesengd_filepath=$(grep "ExecStart.*=.*/cgrulesengd$" /etc/systemd/system/*.service | head -1 | awk -F : ' { print $1 } ')
-    if [ -n "$cgrulesengd_filepath" ]; then
-        local cgrulesengd_filename=$(basename $cgrulesengd_filepath)
-        echo "${cgrulesengd_filename%.*}"
-    fi
-}
-
 function cleanup_certbot_ssl() {
     # revoke/delete certs if certbot is used.
     if command -v certbot &>/dev/null && [ -f "$SASHIMONO_DATA/sa.cfg" ]; then
@@ -282,16 +273,7 @@ echo "Deleting Sashimono CLI..."
 rm $USER_BIN/sashi
 
 if [ "$UPGRADE" == "0" ]; then
-    # When removing the cgrules service, we first edit the config and restart the service to apply the config.
-    # Then we remove the attached group.
-    echo "Deleting cgroup rules..."
-    sed -i -r "/^@$SASHIUSER_GROUP\s+cpu,memory\s+%u$CG_SUFFIX/d" /etc/cgrules.conf
-
-    cgrulesengd_service=$(cgrulesengd_servicename)
-    [ -z "$cgrulesengd_service" ] && echo "Warning: cgroups rules engine service does not exist."
-
-    echo "Restarting the '$cgrulesengd_service' service..."
-    systemctl restart $cgrulesengd_service
+    # Remove the attached group.
     groupdel $SASHIUSER_GROUP
 fi
 

@@ -1334,6 +1334,7 @@
     function install_failure() {
         echomult "There was an error during installation.
             \nPlease provide the file $logfile to the Evernode team by visiting this link: $report_url.
+            \n Please make sure to add the label UBUNTU_24_04 to the issue."
             \nThank you."
         exit 1
     }

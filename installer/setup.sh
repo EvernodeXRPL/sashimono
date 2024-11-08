@@ -2511,7 +2511,7 @@ WantedBy=timers.target" >/etc/systemd/system/$EVERNODE_AUTO_UPDATE_SERVICE.timer
             $has_error && echo "Error occured in transfer process. Check the error and try again." && exit 1
         fi
 
-        echo "Transfer process was successfully initiated. You can now install and register $evernode using the account $([ -z $transferee_address ] && echo "same account" || echo "$transferee_address")."
+        echo "Transfer process was successfully initiated. You can now install and register $evernode using the $([ -z $transferee_address ] && echo "same account" || echo "account $transferee_address")."
 
     elif [ "$mode" == "deregister" ]; then
         if ! $interactive; then

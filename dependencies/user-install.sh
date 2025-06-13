@@ -1,6 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
+version=0.99
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -37,10 +38,23 @@ script_dir=$(dirname "$(realpath "$0")")
 docker_bin=$script_dir/dockerbin
 docker_img_dir=$docker_bin/images
 docker_service="docker.service"
-docker_pull_timeout_secs=120
+docker_pull_timeout_secs=180
 cleanup_script=$user_dir/uninstall_cleanup.sh
 gp_udp_port_count=2
 gp_tcp_port_count=2
+osversion=$(grep -ioP '^VERSION_ID=\K.+' /etc/os-release)
+
+
+SA_CONFIG="/etc/sashimono/sa.cfg"
+MBXRPL_CONFIG="/etc/sashimono/mb-xrpl/mb-xrpl.cfg"
+TLS_TYPE=$(jq -r ".proxy.tls_type | select( . != null )" "$MBXRPL_CONFIG")
+EVERNODE_HOSTNAME="$(jq -r ".hp.host_address | select( . != null )" "$SA_CONFIG")"
+
+# configured urls
+DOCKER_AUTH_URL="https://auth.docker.io/token?service=registry.docker.io&scope=repository:"
+DOCKER_REGISTRY_URL="https://registry-1.docker.io/v2/"
+ACME_SH_URL="https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh"
+ACME_DNS_PLUGIN_URL="https://raw.githubusercontent.com/gadget78/sashimono/main/dependencies/dns_evernode.sh"
 
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
@@ -82,10 +96,23 @@ function wait_for_dockerd() {
 }
 
 nofile_soft_limit=$(ulimit -n -S)
+if [ $nofile_soft_limit -lt 250000 ]; then 
+    ulimit -n 250000
+    nofile_soft_limit=250000    
+fi
+max_instance_count=$(jq -r ".system.max_instance_count | select( . != null )" "$SA_CONFIG")
+if [ -n "$max_instance_count" ] && [ "$max_instance_count" -gt 0 ]; then
+    nofile_soft_limit=$((nofile_soft_limit / ( max_instance_count + 1 )))
+    echo "setting ulimit -n to $nofile_soft_limit"
+else
+    echo "Error: max_instance_count is not valid or not found in $SA_CONFIG, defaulting ulimit to 55000"
+    nofile_soft_limit=55000
+fi
 nproc_soft_limit=$(ulimit -u -S)
 
 # Adding process and file descriptor limitations for the user before user creation
 echo "$user hard nofile $nofile_soft_limit" | tee -a /etc/security/limits.conf
+echo "$user soft nofile $nofile_soft_limit" | tee -a /etc/security/limits.conf
 echo "$user hard nproc $nproc_soft_limit" | tee -a /etc/security/limits.conf
 
 # Setup user and dockerd service.
@@ -129,11 +156,133 @@ echo "Adding disk quota to the group."
 setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
 echo "Configured disk quota for the group."
 
+# Extract additional port settings if present, 1st it splits everything after :, then replaces all -- with  |, and uses that to create an array
+echo
+echo "# checking for any additional port config within image name :$docker_image"
+IFS='|' read -r -a image_array <<< "$( echo $docker_image | cut -d':' -f2 | sed 's/--/|/g' )"
+echo "captured additional docker settings, ${image_array[@]}"
+docker_image_version="${image_array[0]}"
+custom_docker_settings=false
+custom_docker_domain=""
+custom_docker_subdomain=""
+custom_docker_domain_ssl="true"
+internal_peer_port="$peer_port"
+internal_user_port="$user_port"
+internal_gptcp1_port="$gp_tcp_port_start"
+internal_gpudp1_port="$gp_udp_port_start"
+internal_gptcp2_port=$((gp_tcp_port_start + 1))
+internal_gpudp2_port=$((gp_udp_port_start + 1))
+internal_run_contract=""
+internal_env1_key="KEY1"
+internal_env1_value="1"
+internal_env2_key="KEY2"
+internal_env2_value="2"
+internal_env3_key="KEY3"
+internal_env3_value="3"
+internal_env4_key="KEY4"
+internal_env4_value="4"
+
+# Loop through the array to extract pairs
+for ((i = 1; i < ${#image_array[@]}; i += 2)); do
+    image_array_name="${image_array[i]}"
+    image_array_value="${image_array[i + 1]}"
+    echo "found additional setting, name: \"$image_array_name\"    value: \"$image_array_value\""
+    if [[ -n "$image_array_name" ]]; then
+        if [[ "$image_array_name" == "domain" ]]; then
+            custom_docker_settings="true"
+            custom_docker_domain=$image_array_value
+        fi
+        if [[ "$image_array_name" == "subdomain" ]]; then
+            custom_docker_settings="true"
+            custom_docker_subdomain=$image_array_value
+        fi
+        if [[ "$image_array_name" == "ssl" ]]; then
+            custom_docker_settings="true"
+            if [[ "$image_array_value" == "false" ]];then custom_docker_domain_ssl="false"; fi
+        fi
+        if [[ "$image_array_name" == "peer" ]]; then
+            custom_docker_settings="true"
+            internal_peer_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "user" ]]; then
+            custom_docker_settings="true"
+            internal_user_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "gptcp1" ]]; then
+            custom_docker_settings="true"
+            internal_gptcp1_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "gpudp1" ]]; then
+            custom_docker_settings="true"
+            internal_gpudp1_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "gptcp2" ]]; then
+            custom_docker_settings="true"
+            internal_gptcp2_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "gpudp2" ]]; then
+            custom_docker_settings="true"
+            internal_gpudp2_port=$image_array_value
+        fi
+        if [[ "$image_array_name" == "contract" ]]; then
+            if [ "$image_array_value" == "true" ]; then
+                custom_docker_settings="true"
+                internal_run_contract="run /contract"
+                echo "found contract command, enabling \"run /contract\""
+            fi
+        fi
+        if [[ "$image_array_name" == "env1" ]]; then
+            custom_docker_settings="true"
+            internal_env1_key=$(echo "$image_array_value" | cut -d'-' -f1)
+            internal_env1_value=${image_array_value#*-}
+            internal_env1_value=${internal_env1_value//__/ }
+            internal_env1_value=${internal_env1_value//../$}
+            echo "found env1, key>$internal_env1_key value>$internal_env1_value"
+        fi
+        if [[ "$image_array_name" == "env2" ]]; then
+            custom_docker_settings="true"
+            internal_env2_key=$(echo "$image_array_value" | cut -d'-' -f1)
+            internal_env2_value=${image_array_value#*-}
+            internal_env2_value=${internal_env2_value//__/ }
+            internal_env2_value=${internal_env2_value//../$}
+            echo "found env1, key>$internal_env2_key value>$internal_env2_value"
+        fi
+        if [[ "$image_array_name" == "env3" ]]; then
+            custom_docker_settings="true"
+            internal_env3_key=$(echo "$image_array_value" | cut -d'-' -f1)
+            internal_env3_value=${image_array_value#*-}
+            internal_env3_value=${internal_env3_value//__/ }
+            internal_env3_value=${internal_env3_value//../$}
+            echo "found env1, key>$internal_env3_key value>$internal_env3_value"
+        fi
+        if [[ "$image_array_name" == "env4" ]]; then
+            custom_docker_settings="true"
+            internal_env4_key=$(echo "$image_array_value" | cut -d'-' -f1)
+            internal_env4_value=${image_array_value#*-}
+            internal_env4_value=${internal_env4_value//__/ }
+            internal_env4_value=${internal_env4_value//../$}
+            echo "found env1, key>$internal_env4_key value>$internal_env4_value"
+        fi
+    fi
+done
+
+# adjust docker_pull_image, and set a "default" custom_docker_image, only if custom settings have been detected
+if [[ "$custom_docker_settings" == "true" ]]; then
+    docker_pull_image="$(echo "$docker_image" | cut -d':' -f1):${docker_image_version}"
+    echo "all additional port/custom settings found and saved, will be using a pull image of $docker_pull_image"
+    echo
+else
+    docker_pull_image="$docker_image"
+    echo "no additional port/custom settings found in image tag"
+    echo
+fi
+
 # Setup env variables for the user.
 echo "
 export XDG_RUNTIME_DIR=$user_runtime_dir
 export PATH=$docker_bin:\$PATH
-export DOCKER_HOST=$dockerd_socket" >>"$user_dir"/.bashrc
+export DOCKER_HOST=$dockerd_socket
+source /contract/env.vars" >>"$user_dir"/.bashrc
 echo "Updated user .bashrc."
 
 # Wait until user systemd is functioning.
@@ -199,6 +348,23 @@ for ((i = 0; i < $gp_tcp_port_count; i++)); do
     fi
 done
 
+# Creating AppArmor Profile for unpriviledged user on Ubuntu 24.04
+if [ "$osversion" == "24.04" ]; then
+    filename=$(echo /home/$user/bin/rootlesskit | sed -e s@^/@@ -e s@/@.@g)
+    cat <<EOF > /etc/apparmor.d/$filename
+abi <abi/4.0>,
+include <tunables/global>
+
+"/home/$user/bin/rootlesskit" flags=(unconfined) {
+  userns,
+
+  include if exists <local/$filename>
+}
+EOF
+    chown $user:$user /etc/apparmor.d/$filename
+    systemctl restart apparmor.service
+fi
+
 echo "Installing rootless dockerd for user."
 sudo -H -u "$user" PATH="$docker_bin":"$PATH" XDG_RUNTIME_DIR="$user_runtime_dir" "$docker_bin"/dockerd-rootless-setuptool.sh install
 
@@ -208,7 +374,48 @@ docker_service_override_conf="$user_dir/.config/systemd/user/$docker_service.d/o
 sudo -H -u "$user" mkdir $user_dir/.config/systemd/user/$docker_service.d
 sudo -H -u "$user" touch $docker_service_override_conf
 echo "[Service]
-    Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns" >$docker_service_override_conf
+Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns
+" >"$docker_service_override_conf"
+
+# Create nftables (aka iptables), to block traffic to the local LAN subnet (for IPv4 and IPv6)
+local_ip=$(hostname -I | awk '{print $1}' | xargs) 
+public_hostname_ip=$(dig +short "$EVERNODE_HOSTNAME" | head -n 1 | xargs)
+if [[ "$local_ip" != "$public_hostname_ip" ]]; then
+    nft flush table ip docker_filter_$user_id 2>/dev/null
+    nft delete table ip docker_filter_$user_id 2>/dev/null
+    nft add table ip docker_filter_$user_id
+    nft add chain ip docker_filter_$user_id OUTPUT '{ type filter hook output priority 0 ; policy accept ; }'
+
+    echo "detected local ip to $local_ip, allowing."
+    nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $local_ip accept
+
+    gateway=$(ip route show | grep default | awk '{print $3}')
+    if [ -z "$gateway" ]; then
+        echo "Warning: Could not detect gateway IP."
+    else
+        echo "detected gateway as $gateway, allowing."
+        nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $gateway accept
+    fi
+
+    proxy_ip=$(jq -r ".proxy.ip | select( . != null )" "$MBXRPL_CONFIG" )
+    if [ -z "$proxy_ip" ]; then proxy_ip=$(jq -r ".proxy.npm_url | select( . != null )" "$MBXRPL_CONFIG" | awk -F[/:] '{print $4}'); fi
+    if [ -z "$proxy_ip" ]; then
+        echo "Warning: Could not detect proxy IP."
+    else
+        echo "detected proxy ip to $proxy_ip, allowing."
+        nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $proxy_ip accept
+    fi
+
+    lan_subnet=$(ip route | grep -oP '(\d+\.\d+\.\d+\.\d+/\d+)' | head -n 1)
+    if [ -z "$lan_subnet" ]; then
+        echo "Error: Could not detect LAN subnet."
+    else
+        echo "detected lan subnet ip to $lan_subnet, blocking/dropping"
+        nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $lan_subnet drop
+    fi
+else
+    echo "a stand alone evernode with no subnet detected, no extra ip table rules needed"
+fi
 
 # We need to enable ipv6 configurations if outbound ipv6 address is specified.
 if [ "$outbound_ipv6" != "-" ] && [ "$outbound_net_interface" != "-" ]; then
@@ -233,7 +440,15 @@ if [ "$outbound_ipv6" != "-" ] && [ "$outbound_net_interface" != "-" ]; then
     # Add the outbound ipv6 address to the specified network interface.
     ip addr add $outbound_ipv6 dev $outbound_net_interface
 
-    # Add instructions to the cleanup script so the outbound ip assignment will be removed upon user install.
+    # add rules to iptables, to restrict access to ipv6 subnet
+    if [[ "$local_ip" != "$public_hostname_ip" ]]; then
+        ipv6_gateway=$(ip -6 route show | grep default | awk '{print $3}')
+        nft add rule ip6 docker_filter_$user_id OUTPUT ip6 daddr "$ipv6_gateway" accept
+        ipv6_subnet=$(ip -6 route show | grep -v default | grep -oP '([0-9a-f:]+/\d+)' | head -n 1)
+        nft add rule ip6 docker_filter_$user_id OUTPUT ip6 daddr "$ipv6_subnet" drop
+    fi
+
+    # Add instructions to the cleanup script so the outbound ip assignment will be removed upon user uninstall.
     echo "ip addr del $outbound_ipv6 dev $outbound_net_interface" >>$cleanup_script
 fi
 
@@ -251,26 +466,65 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user restart $do
 service_ready $docker_service || rollback "NO_DOCKERSVC"
 # Wait until docker daemon ready, If failed rollback.
 ! wait_for_dockerd && rollback "NO_DOCKERD"
+echo "finished Installing rootless dockerd."
 
-echo "Installed rootless dockerd."
 
-# echo "Pulling the docker image $docker_image."
-# DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
-# echo "Docker image $docker_image pull complete."
+mkdir -p $docker_img_dir
+img_local_path=$docker_img_dir/$(echo "$docker_pull_image" | tr : -)
+img_local_tar_path="$img_local_path.tar"
 
-echo "Downloading the docker image $docker_image."
-img_local_path=$docker_img_dir/$(echo "$docker_image" | tr : -)
-"$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_image || rollback "DOCKER_PULL"
+# Check if the image exists locally, and if it matches dockerhubs,  also using $docker_pull_image for image name, due to any custom settings.
+if [[ ! -d "$img_local_path" ]] || [[ ! -f "${img_local_path}/image_digest" ]]; then
 
-img_local_tar_path=$img_local_path.tar
-echo "Saving the downloaded image as a tarball: $img_local_tar_path"
-tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+    #echo "Image $docker_image not found locally. Pulling from registry..."
+    #DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
+    #echo "image $docker_image pull complete."
 
-echo "Loading the docker image $img_local_path."
+    echo "Image $docker_pull_image, or image hash not found locally, pulling docker image via frozen script..."
+    "$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image || rollback "DOCKER_PULL"
+        
+    echo "retrieving and saving image hash(digest) to file..."
+    TOKEN=$(curl -s "${DOCKER_AUTH_URL}$(echo "$docker_pull_image" | cut -d':' -f1):pull" | jq -r '.token') \
+    && IMAGE_DIGEST=$(curl -s --head -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Dd]ocker-[Cc]ontent-[Dd]igest: \(sha256:[a-f0-9]*\).*/\1/p')
+    echo "$IMAGE_DIGEST" > ${img_local_path}/image_digest
+
+    echo "Saving the downloaded image as a tarball: $img_local_tar_path"
+    tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+    echo "docker image saved as a tarball, $img_local_tar_path"
+else
+
+    echo "Image $docker_pull_image, already exists locally,"
+    TOKEN=$(curl -s "{DOCKER_AUTH_URL}$(echo "$docker_pull_image" | cut -d':' -f1):pull" | jq -r '.token') \
+    && IMAGE_DIGEST=$(curl -s --head -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Dd]ocker-[Cc]ontent-[Dd]igest: \(sha256:[a-f0-9]*\).*/\1/p') \
+    && RATE_LIMIT_REMAINING=$(curl -s --head -s -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Rr]atelimit-remaining: \([0-9]*\).*/\1/p')
+
+    # Check if re-pull is needed, and we have a good amount of "remaining" rate pulls left
+    if [[ "$IMAGE_DIGEST" != "$(cat "${img_local_path}/image_digest" 2>/dev/null)" ]] && [[ "$RATE_LIMIT_REMAINING" =~ ^[0-9]+$ ]] && [[ "$RATE_LIMIT_REMAINING" -gt 60 ]]; then
+        echo "local image hash not equal to docker hub image, and rate limit is above 60 (=${RATE_LIMIT_REMAINING}), re-pulling image, and saving as tarball..."
+        "$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image && tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+        echo "$IMAGE_DIGEST" > ${img_local_path}/image_digest
+        echo "docker image pulled, and saved as a tarball at $img_local_tar_path. and refreshed image digest record"
+    else
+        echo "File hash matches docker hub, AND the Rate limit result is above 60 (=${RATE_LIMIT_REMAINING})"
+        echo "local hash = $(cat ${img_local_path}/image_digest)"
+        echo "docker hash = ${IMAGE_DIGEST}"
+        echo "skipping image pull."
+    fi
+
+fi
+
+echo "Loading the docker image $img_local_tar_path."
 DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker load -i "$img_local_tar_path" || rollback "DOCKER_PULL"
-echo "Docker image $img_local_path pull complete."
+echo "Docker image $img_local_tar_path load complete."
 
-echo "Adding hpfs services for the instance."
+echo "making sure pulled image has both the original "version" tag, and the tag with any custom settings"
+DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker tag ${docker_pull_image} ${docker_image} || rollback "DOCKER_PULL"
+echo "Docker tag update complete, full image >$docker_image, original pulled image >$docker_pull_image"
+echo
+
+
+
+echo "Adding hpfs, docker_recreate and depending on recreate docker_vars services for the instance."
 
 echo "[Unit]
 Description=Running and monitoring contract fs.
@@ -298,7 +552,451 @@ RestartSec=5
 [Install]
 WantedBy=default.target" >"$user_dir"/.config/systemd/user/ledger_fs.service
 
+
+## setup NPM+ if host has NPMplus installed
+if [[ "$TLS_TYPE" == "NPMplus" ]]; then
+    echo "NPMplus install detected"
+
+    if [[ -n "$custom_docker_domain" ]]; then
+        if [[ ! -f "/usr/bin/sashimono/acme.sh" ]]; then
+            echo "base acme.sh missing, re-installing"
+            wget -O /usr/bin/sashimono/acme.sh "$ACME_SH_URL"
+            chmod +x /usr/bin/sashimono/acme.sh
+        fi
+        if [[ ! -f "/usr/bin/sashimono/dns_evernode.sh" ]]; then
+            echo "base evernode dns plugin for acme.sh missing, re-installing"
+            wget -O /usr/bin/sashimono/dns_evernode.sh "$ACME_DNS_PLUGIN_URL"
+            chmod +x /usr/bin/sashimono/dns_evernode.sh
+            mkdir -p /root/.acme.sh
+            cp /usr/bin/sashimono/dns_evernode.sh /root/.acme.sh/dns_evernode.sh
+        fi
+
+        mkdir -p $user_dir/.acme.sh/
+        cp /usr/bin/sashimono/acme.sh $user_dir/.acme.sh/acme.sh
+        cp /usr/bin/sashimono/dns_evernode.sh $user_dir/.acme.sh/dns_evernode.sh
+        chown -R $user:$user $user_dir/.acme.sh/acme.sh
+        chown -R $user:$user $user_dir/.acme.sh/dns_evernode.sh
+    fi
+
+cat > "$user_dir"/.docker/domain_ssl_update.sh <<EOF 
+#!/bin/bash
+# setup/update domain SSL and proxy host...
+echo "##########################################################" && echo "#" && echo "## script running date... > \$(date)" && echo
+version=$version
+custom_docker_domain="$custom_docker_domain"
+custom_docker_subdomain="$custom_docker_subdomain"
+tls_type="$TLS_TYPE"
+instance_slot=${user_port: -1}
+web_port="$gp_tcp_port_start"
+EVERNODE_HOSTNAME="$EVERNODE_HOSTNAME"
+
+# 1st check for blacklisted domain, and null if present.
+if [[ -n "\$custom_docker_domain" ]]; then
+    blacklist_domains=\$(jq -r ".proxy.blacklist[] | select( . != null )" "$MBXRPL_CONFIG")
+    for blacklist_domain_check in \$blacklist_domains; do
+        if [[ "\$custom_docker_domain" == *"\$blacklist_domain_check"* ]]; then
+            echo "blacklisted domain used in domain request :\$blacklist_domain_check NOT adding domain!."
+            tls_type="failed"
+            break
+        fi
+    done
+fi
+
+# 2nd check if domain has authorization to be used in this instance.
+if [[ -n "\$custom_docker_domain" ]]; then
+    contract_publickey=\$(jq -r ".contract.bin_args | select( . != null )" "$user_dir/$contract_dir/cfg/hp.cfg") || true
+    domain_txtrecord=\$(dig +short +time=10 +tries=3 TXT "\$custom_docker_domain" @1.1.1.1)
+    if echo "\$domain_txtrecord" | grep -q "\$contract_publickey"; then
+        echo "contract pubic key, '\$contract_publickey'"
+        echo "domain authorized, as found in the TXT records of \$custom_docker_domain, :\$domain_txtrecord"
+    else
+        echo "contract pubic key, '\$contract_publickey'"
+        echo "domain NOT authorized as NOT found in the TXT records of \$custom_docker_domain, :\$domain_txtrecord"
+        echo "not adding domain !"
+        tls_type="failed"
+    fi
+fi
+
+# setup domain on NPM+ (if requested. passed checks above, and host has NPMplus installed)
+if [[ "\$tls_type" == "NPMplus" ]]; then
+    echo "custom domain initial checks passed, continuing..."
+    echo
+
+    NPM_URL="$(jq -r ".proxy.npm_url | select( . != null )" "$MBXRPL_CONFIG")"
+    NPM_TOKEN="$(jq -r ".npm.token | select( . != null )" "$(jq -r ".proxy.npm_tokenPath | select( . != null )" "$MBXRPL_CONFIG")")"
+    NPM_CERT_ID_WILD="false"
+    NPM_CERT_UPDATE="false"
+
+
+    if [[ -z "\$NPM_URL" || -z "\$NPM_TOKEN" ]]; then
+        echo "NPMplus  URL, or Token not set...  url=\"\$NPM_URL\" token=\"\$NPM_TOKEN\""
+    else
+
+        if [[ -n "\$custom_docker_subdomain" ]]; then
+            custom_docker_domain="\$custom_docker_subdomain.\${EVERNODE_HOSTNAME#*.}"
+            echo "subdomain request detected, assigning domain as \$custom_docker_domain"
+        fi
+        if [[ -z "\$custom_docker_domain" ]]; then
+            custom_docker_domain="\${EVERNODE_HOSTNAME%%.*}-\${instance_slot}.\${EVERNODE_HOSTNAME#*.}"
+            custom_docker_subdomain="\${custom_docker_domain%%.*}"
+            echo "no custom domain settings found, setting up a default route of, \$custom_docker_domain"
+        fi
+
+        # get SSL files if needed
+        if [[ "$custom_docker_domain_ssl" == "true" ]]; then
+            echo "SSL request detected... "
+            NPM_CERT_EMAIL=\$(jq -r ".host.emailAddress | select( . != null )" "$MBXRPL_CONFIG")
+            NPM_CERT_LIST=\$(curl -k -s -m 100 -X GET -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates || echo "" )
+            NPM_CERT_ID=\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "'"\$custom_docker_domain"'") | .id // empty] | if length == 0 then "" else .[] end' || echo "" )
+            # check for wildcard domain too (mainly needed for subdomain/defaulted domain)
+            if [ "\$NPM_CERT_ID" == "" ]; then
+                NPM_CERT_ID=\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "*.'"\${custom_docker_domain#*.}"'") | .id // empty] | if length == 0 then "" else .[] end' || echo "" )
+                if [ -n "\$NPM_CERT_ID" ]; then 
+                    echo "wildcard SSL file detected"
+                    NPM_CERT_ID_WILD="true"
+                    NPM_CERT_PROVIDER="\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "*.'"\${custom_docker_domain#*.}"'") | .provider // empty] | if length == 0 then "" else .[] end' || echo "" )"
+                    NPM_CERT_EXPIRE="\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "*.'"\${custom_docker_domain#*.}"'") | .expires_on // empty] | if length == 0 then "" else .[] end' || echo "" )"
+                    NPM_CERT_EXPIRE_MONTH="\$(echo "\$NPM_CERT_EXPIRE" | cut -d'-' -f2)"
+                    if [ "\$NPM_CERT_PROVIDER" == "other" ]; then
+                        if [ "\$NPM_CERT_EXPIRE_MONTH" -le "\$(date +%m)" ]; then
+                            NPM_CERT_UPDATE="true"
+                        fi
+                    fi
+                fi
+            else
+                NPM_CERT_ID_WILD="false"
+                NPM_CERT_PROVIDER="\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "'"\${custom_docker_domain}"'") | .provider // empty] | if length == 0 then "" else .[] end' || echo "" )"
+                NPM_CERT_EXPIRE="\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "'"\${custom_docker_domain}"'") | .expires_on // empty] | if length == 0 then "" else .[] end' || echo "" )"
+                NPM_CERT_EXPIRE_MONTH="\$(echo "\$NPM_CERT_EXPIRE" | cut -d'-' -f2)"
+                if [ "\$NPM_CERT_PROVIDER" == "other" ]; then
+                    if [ "\$NPM_CERT_EXPIRE_MONTH" -le "\$(date +%m)" ]; then
+                        NPM_CERT_UPDATE="true"
+                    fi
+                fi
+            fi
+            #echo "ID check point NPM_CERT_ID:>\$NPM_CERT_ID<"
+
+            if [[ "\$NPM_CERT_ID" == "" || "\$NPM_CERT_UPDATE" == "true" ]]; then
+                echo "files for domain \$custom_docker_domain now being created (updating=\${NPM_CERT_UPDATE} provider=\${NPM_CERT_PROVIDER} expiry=\${NPM_CERT_EXPIRE} expiry month=\${NPM_CERT_EXPIRE_MONTH})... "
+                if [ -z "\$custom_docker_subdomain" ]; then 
+                    echo "true custom tenant domain detected, using acme.sh DNS-01 and evernodes DNS API to create SSL files, and upload to NPM+..."
+                    mkdir -p $user_dir/$contract_dir/tls
+                    $user_dir/.acme.sh/acme.sh --issue \\
+                        --server letsencrypt \\
+                        --dns dns_evernode \\
+                        --domain "\$custom_docker_domain" --force \\
+                        --accountemail "\$NPM_CERT_EMAIL" \\
+                        --nocron \\
+                        --noprofile \\
+                        --useragent  "evernode-domain-system" \\
+                        --cert-file $user_dir/$contract_dir/tls/cert.pem \\
+                        --key-file $user_dir/$contract_dir/tls/privkey.pem \\
+                        --ca-file $user_dir/$contract_dir/tls/chain.pem \\
+                        --fullchain-file $user_dir/$contract_dir/tls/fullchain.pem && 
+                        chown -R $user:$user $user_dir/$contract_dir/tls &&
+                        if [ "\$NPM_CERT_UPDATE" == "false" ]; then
+                        NPM_CERT_ADD=\$(curl -k -sS -m 100 -X POST -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" -d '{"provider":"other","nice_name":"'"\$custom_docker_domain"'","domain_names":["'"\$custom_docker_domain"'"],"meta":{ }}' \$NPM_URL/api/nginx/certificates ) &&
+                        NPM_CERT_ID=\$(jq -r '.id' <<< "\$NPM_CERT_ADD") &&
+                        echo "created new certificate, and entry for host domain \$custom_docker_domain, ID is \$NPM_CERT_ID, now uploading to NPM+..." 
+                        else echo "created new certificate, for host domain \$custom_docker_domain, updating existing NPM+ ID \$NPM_CERT_ID, now uploading to..."
+                        fi && \\
+                        NPM_CERT_UPLOAD=\$(curl -k -X POST "\$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID/upload" -H "Authorization: Bearer \$NPM_TOKEN" -F "certificate=@$user_dir/$contract_dir/tls/cert.pem" -F "certificate_key=@$user_dir/$contract_dir/tls/privkey.pem") \\
+                            || { \\
+                                echo "failed to create, add certificate ID, or Upload file, this WILL cause issues. ERROR; debug_ADD:\$NPM_CERT_ADD  debug_ID:\$NPM_CERT_ID  debug_UPLOAD:\$NPM_CERT_UPLOAD"; \\
+                                echo "flushing any entries from NPMplus for domain \$custom_docker_domain..."; \\
+                                curl -k -m 100 -X DELETE -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID; \\
+                                NPM_CERT_ID="";
+                                }
+                fi
+                if [[ -z "\$NPM_CERT_ID" || "\$NPM_CERT_ID" == "null" ]]; then
+                    if [ -z "\$custom_docker_subdomain" ]; then echo "certificate creation via DNS-01 method failed or was skipped."; fi
+                    echo
+                    echo "trying via NPM+ with a more standard HTTP-01 method..."
+                    NPM_CERT_ADD=\$(curl -k -s -m 100 -X POST -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" -d '{"provider":"letsencrypt","nice_name":"'"\$custom_docker_domain"'","domain_names":["'"\$custom_docker_domain"'"],"meta":{"letsencrypt_email":"'"\$NPM_CERT_EMAIL"'","letsencrypt_agree":true,"dns_challenge":false}}' \$NPM_URL/api/nginx/certificates ) || echo "failed to create certificate for this evernode, this WILL cause issues. ERROR; debug: \$NPM_CERT_ADD"
+                    NPM_CERT_ID=\$(jq -r '.id' <<< "\$NPM_CERT_ADD") && echo "created new certificate for host domain \$custom_docker_domain, ID is \$NPM_CERT_ID" || echo "failed to find certificate ID, this WILL cause issues. ERROR; debug1: \$NPM_CERT_ADD debug2: \$NPM_CERT_ID"
+                    if [[ -z "\$NPM_CERT_ID" || "\$NPM_CERT_ID" == "null" ]]; then
+                        echo "certificate add failed via http-01 method, setting up domain with no SSL. debug_ADD:\$NPM_CERT_ADD   debug_ID:\$NPM_CERT_ID"
+                        echo "flushing any broken ssl entries in NPMplus for domain \$custom_docker_domain"
+                        NPM_CERT_LIST=\$(curl -k -s -m 100 -X GET -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates || echo "" )
+                        NPM_CERT_ID=\$(echo "\$NPM_CERT_LIST" | jq -r '[.[] | select(.nice_name? == "'"\$custom_docker_domain"'") | .id // empty] | if length == 0 then "" else .[] end' || echo "" )
+                        NPM_CERT_DELETE=\$(curl -k -m 100 -X DELETE -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID)
+                        echo "flushed? debug_ID:\$NPM_CERT_ID debug_DELETE:\$NPM_CERT_DELETE"
+                        NPM_CERT_ID_STRING=",\"certificate_id\":0,\"ssl_forced\":0"
+                    else
+                        echo "certificate added, for host domain \$custom_docker_domain, with ID:\$NPM_CERT_ID  WILDCARD:\$NPM_CERT_ID_WILD"
+                        mkdir -p $user_dir/$contract_dir/tls
+                        if { 
+                            curl -k --output $user_dir/$contract_dir/tls/tls_files.zip -m 10 -X GET -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID/download &&
+                            unzip $user_dir/$contract_dir/tls/tls_files.zip -d $user_dir/$contract_dir/tls &&
+                            echo "downloaded certificate ID \$NPM_CERT_ID for evernode"
+                        }; then
+                            for tls_file in $user_dir/$contract_dir/tls/*.pem; do
+                                tls_newname=\$(echo \$(basename \$tls_file) | sed 's/[0-9]*//g')
+                                mv "\$tls_file" "$user_dir/$contract_dir/tls/\$tls_newname"
+                            done
+                            chown -R $user:$user $user_dir/$contract_dir/tls
+                            if [[ "\$NPM_CERT_ID_WILD" == "false" ]]; then echo "curl -k -m 100 -X DELETE -H \"Content-Type: application/json; charset=UTF-8\" -H \"Authorization: Bearer \$NPM_TOKEN\" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID" >>$cleanup_script; fi
+                            NPM_CERT_ID_STRING=",\"certificate_id\":\$NPM_CERT_ID,\"ssl_forced\":1"
+                        else
+                            echo "failed to download and unzip certificate ID \$NPM_CERT_ID, setting up domain with no SSL."
+                            echo "flushing broken ssl certificate with ID \$NPM_CERT_ID from NPMplus."
+                            curl -k -m 100 -X DELETE -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID
+                            NPM_CERT_ID_STRING=",\"certificate_id\":0,\"ssl_forced\":0"
+                        fi
+                    fi
+                else
+                    echo "certificate added, for host domain \$custom_docker_domain, with ID:\$NPM_CERT_ID   WILDCARD:\$NPM_CERT_ID_WILD"
+                    if [[ "\$NPM_CERT_ID_WILD" == "false" ]]; then echo "curl -k -m 100 -X DELETE -H \"Content-Type: application/json; charset=UTF-8\" -H \"Authorization: Bearer \$NPM_TOKEN\" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID" >>$cleanup_script; fi
+                    NPM_CERT_ID_STRING=",\"certificate_id\":\$NPM_CERT_ID,\"ssl_forced\":1"
+                fi
+            elif [ "\$NPM_CERT_PROVIDER" != "other" ]; then
+                echo "found existing certificate for host domain \$custom_docker_domain, with ID:\$NPM_CERT_ID   WILDCARD:\$NPM_CERT_ID_WILD"
+                mkdir -p $user_dir/$contract_dir/tls
+                if { 
+                    curl -k --output $user_dir/$contract_dir/tls/tls_files.zip -m 10 -X GET -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID/download &&
+                    unzip $user_dir/$contract_dir/tls/tls_files.zip -d $user_dir/$contract_dir/tls &&
+                    echo "downloaded certificate ID \$NPM_CERT_ID for evernode"
+                }; then
+                    for tls_file in $user_dir/$contract_dir/tls/*.pem; do
+                        tls_newname=\$(echo \$(basename \$tls_file) | sed 's/[0-9]*//g')
+                        mv "\$tls_file" "$user_dir/$contract_dir/tls/\$tls_newname"
+                    done
+                    chown -R $user:$user $user_dir/$contract_dir/tls
+                    if [[ "\$NPM_CERT_ID_WILD" == "false" ]]; then echo "curl -k -m 100 -X DELETE -H \"Content-Type: application/json; charset=UTF-8\" -H \"Authorization: Bearer \$NPM_TOKEN\" \$NPM_URL/api/nginx/certificates/\$NPM_CERT_ID" >>$cleanup_script; fi
+                    NPM_CERT_ID_STRING=",\"certificate_id\":\$NPM_CERT_ID,\"ssl_forced\":1"
+                else
+                    echo "failed to download and unzip certificate ID \$NPM_CERT_ID, setting up domain with no SSL."
+                    NPM_CERT_ID_STRING=",\"certificate_id\":0,\"ssl_forced\":0"
+                fi
+            elif [ "\$NPM_CERT_PROVIDER" == "other" ]; then
+                echo "found custom certificate for host domain \$custom_docker_domain, its already in date, with ID=\$NPM_CERT_ID, expiry=\$NPM_CERT_EXPIRE expiry month=\$NPM_CERT_EXPIRE_MONTH, WILDCARD=\$NPM_CERT_ID_WILD"
+                NPM_CERT_ID_STRING=",\"certificate_id\":\$NPM_CERT_ID,\"ssl_forced\":1"
+            fi
+        else
+        echo "SSL not requested. "
+        NPM_CERT_ID_STRING=",\"certificate_id\":0,\"ssl_forced\":0"
+        fi
+        echo
+
+        # ADD the domain to proxy_host list
+        NPM_PROXYHOSTS_LIST=\$( { curl -k -s -m 100 -X GET -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" \$NPM_URL/api/nginx/proxy-hosts || { msg_error "something went wrong getting NPM list of proxy hosts"; NPM_PROXYHOSTS_LIST={}; }; } )
+        NPM_PROXYHOSTS_ID=\$( { echo "\$NPM_PROXYHOSTS_LIST" | jq -r '.[] | select(.domain_names[] == "'"\$custom_docker_domain"'") | .id' || echo ""; } )
+        if [ "\$NPM_PROXYHOSTS_ID" == "" ]; then
+            echo "adding new proxy host domain \$custom_docker_domain using NPM_CERT_ID_STRING: \$NPM_CERT_ID_STRING"
+            NPM_ADD_RESPONSE=\$( { curl -k -s -m 100 -X POST -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" -d '{"domain_names":["'"\${custom_docker_domain//www./}"'","www.'"\${custom_docker_domain//www./}"'"],"forward_host":"'"\$(hostname -I | xargs | cut -d' ' -f1)"'","forward_port":'"\$web_port"',"access_list_id":0'"\$NPM_CERT_ID_STRING"',"caching_enabled":0,"block_exploits":1,"advanced_config":"add_header X-Served-By '"\$EVERNODE_HOSTNAME"';","meta":{"letsencrypt_agree":true,"nginx_online":true},"allow_websocket_upgrade":1,"http2_support":0,"forward_scheme":"https","locations":[],"hsts_enabled":0,"hsts_subdomains":0}' \$NPM_URL/api/nginx/proxy-hosts || { echo "something went wrong when adding \$custom_docker_domain proxy host"; NPM_ADD_RESPONSE="error"; }; } ) 
+            NPM_ADD_RESPONSE_CHECK=\$(jq -r '.enabled // "no enabled entry"' <<< "\$NPM_ADD_RESPONSE" || echo "jq error, no json output?")
+            if [[ "\$NPM_ADD_RESPONSE_CHECK" == "1" || "\$NPM_ADD_RESPONSE_CHECK" == "true" ]]; then
+                echo "added new proxy host to NPM with domain \$custom_docker_domain"
+                NPM_PROXYHOSTS_ID=\$( echo "\$NPM_ADD_RESPONSE" | jq -r '.id')
+                echo "curl -k -s -m 100 -X DELETE -H \"Content-Type: application/json; charset=UTF-8\" -H \"Authorization: Bearer \$NPM_TOKEN\" \$NPM_URL/api/nginx/proxy-hosts/\$NPM_PROXYHOSTS_ID >/dev/null 2>&1" >>$cleanup_script
+            else
+                echo "failed to add new proxy host domain on NPM+ \$custom_docker_domain, this will cause issues connecting via this domain. (debug_check:\$NPM_ADD_RESPONSE_CHECK   debug_response:\$NPM_ADD_RESPONSE )"
+            fi
+        elif [[ -z "\$custom_docker_subdomain" ]]; then
+            echo "proxy host already on NPM domain \$custom_docker_domain, updating (using a NPM_CERT_ID_STRING: \$NPM_CERT_ID_STRING)..."
+            NPM_EDIT_RESPONSE=\$( { curl -k -s -m 100 -X PUT -H "Content-Type: application/json; charset=UTF-8" -H "Authorization: Bearer \$NPM_TOKEN" -d '{"domain_names":["'"\${custom_docker_domain//www./}"'","www.'"\${custom_docker_domain//www./}"'"],"forward_host":"'"\$(hostname -I | xargs | cut -d' ' -f1)"'","forward_port":'"\$web_port"',"access_list_id":0'"\$NPM_CERT_ID_STRING"',"caching_enabled":0,"block_exploits":1,"advanced_config":"add_header X-Served-By '"\$EVERNODE_HOSTNAME"';","meta":{"letsencrypt_agree":true,"nginx_online":true},"allow_websocket_upgrade":1,"http2_support":0,"forward_scheme":"https","locations":[],"hsts_enabled":0,"hsts_subdomains":0}' \$NPM_URL/api/nginx/proxy-hosts/\$NPM_PROXYHOSTS_ID || { echo "something went wrong when updating \$custom_docker_domain proxy host"; NPM_EDIT_RESPONSE="error"; }; })
+            NPM_EDIT_RESPONSE_CHECK=\$(jq -r '.enabled // "no enabled entry"' <<< "\$NPM_EDIT_RESPONSE" || echo "jq error, no json output?")
+            if [[ "\$NPM_EDIT_RESPONSE_CHECK" == "1" || "\$NPM_EDIT_RESPONSE_CHECK" == "true" ]]; then
+                echo "updated proxy host with domain \$custom_docker_domain"
+                echo "curl -k -s -m 100 -X DELETE -H \"Content-Type: application/json; charset=UTF-8\" -H \"Authorization: Bearer \$NPM_TOKEN\" \$NPM_URL/api/nginx/proxy-hosts/\$NPM_PROXYHOSTS_ID >/dev/null 2>&1" >>$cleanup_script
+            else
+                echo "failed to edit proxy host domain on NPM+, this will cause issues connecting via this domain. ( debug_check:\$NPM_EDIT_RESPONSE_CHECK    debug_response:\$NPM_EDIT_RESPONSE )"
+            fi
+        fi
+    fi
+elif [[ "\$tls_type" == "letsencrypt" ]]; then
+    echo "todo: add support for stand alone evernodes via direct nginx"
+    # this can be utilized by adding nginx directly on the host, and then using the etc/nginx/site-enabled or sites-available, as well as changing how cert bot gets utilized. but its VERY possible.
+    echo
+elif [[ "\$tls_type" == "" ]]; then
+    echo "no supporting proxy settings to handle domain management config."
+    echo
+elif [[ "\$tls_type" == "failed" ]]; then
+    echo "custom domain checks failed."
+    echo  
+else
+    echo "no custom domain setup triggered... "
+    echo
+fi
+cp $user_dir/.docker/domain_ssl_update.log $user_dir/$contract_dir/tls/domain_ssl_update.log
+
+echo "............."
+EOF
+chmod +x $user_dir/.docker/domain_ssl_update.sh
+chown $user:$user $user_dir/.docker/domain_ssl_update.sh
+fi
+
+
+
+if [[ -n "$custom_docker_subdomain" ]]; then
+    custom_docker_domain="$custom_docker_subdomain.${EVERNODE_HOSTNAME#*.}"
+    echo "subdomain request detected, assigning domain as $custom_docker_domain"
+fi
+if [[ -z "$custom_docker_domain" ]]; then
+    custom_docker_domain="${EVERNODE_HOSTNAME%%.*}-${instance_slot}.${EVERNODE_HOSTNAME#*.}"
+    custom_docker_subdomain="${custom_docker_domain%%.*}"
+    echo "no custom domain settings found, setting up a default route of, $custom_docker_domain"
+fi
+
+cat > $user_dir/.docker/env.vars <<EOF 
+HOST_DOMAIN_ADDRESS=$(jq -r ".hp.host_address | select( . != null )" "$SA_CONFIG")
+CUSTOM_DOMAIN_ADDRESS=$custom_docker_domain
+EXTERNAL_PEER_PORT=$peer_port
+INTERNAL_PEER_PORT=$internal_peer_port
+EXTERNAL_USER_PORT=$user_port
+INTERNAL_USER_PORT=$internal_user_port
+EXTERNAL_GPTCP1_PORT=$gp_tcp_port_start
+INTERNAL_GPTCP1_PORT=$internal_gptcp1_port
+EXTERNAL_GPUDP1_PORT=$gp_udp_port_start
+INTERNAL_GPUDP1_PORT=$internal_gpudp1_port
+EXTERNAL_GPTCP2_PORT=$((gp_tcp_port_start + 1))
+INTERNAL_GPTCP2_PORT=$((internal_gptcp1_port + 1))
+EXTERNAL_GPUDP2_PORT=$((gp_udp_port_start + 1))
+INTERNAL_GPUDP2_PORT=$((internal_gpudp1_port + 1))
+$internal_env1_key=$internal_env1_value
+$internal_env2_key=$internal_env2_value
+$internal_env3_key=$internal_env3_value
+$internal_env4_key=$internal_env4_value
+EOF
+
+# if there is any extra docker setting requested, build and setup re-create script and a service to start it.
+if [[ "$custom_docker_settings" == "true" ]]; then
+    echo "custom docker settings detected, building docker re-create script and service"
+
+cat > "$user_dir"/.docker/docker_recreate.sh <<EOF
+#!/bin/bash
+CONTAINER_NAME=\$(${docker_bin}/docker ps -a --format "{{.Names}}" | head -n 1)
+if [[ -z "\$CONTAINER_NAME" ]]; then echo "unable to obtain the container name >\$CONTAINER_NAME"; exit 1;fi
+
+TIMEOUT_SECONDS=180
+INSPECT_DATA=\$(${docker_bin}/docker inspect \$CONTAINER_NAME)
+PORTS=\$(echo \$INSPECT_DATA | jq -r '.[0].HostConfig.PortBindings')
+MOUNT_SOURCE=\$(echo \$INSPECT_DATA | jq -r '.[0].HostConfig.Mounts[0].Source')
+MOUNT_TARGET=\$(echo \$INSPECT_DATA | jq -r '.[0].HostConfig.Mounts[0].Target')
+IMAGE=\$(echo \$INSPECT_DATA | jq -r '.[0].Config.Image')
+
+# Set Docker configs
+export DOCKER_HOST="unix://${user_runtime_dir}/docker.sock"
+
+# Build the docker create command
+docker_create_command="timeout --foreground -v -s SIGINT \${TIMEOUT_SECONDS}s ${docker_bin}/docker create -t -i --stop-signal=SIGINT --log-driver local --log-opt max-size=5m --log-opt max-file=2 --name=\${CONTAINER_NAME}"
+
+# Set the ports
+for port in \$(echo \$PORTS | jq -r 'to_entries | .[] | .key'); do
+    external_port=\$(echo \$PORTS | jq -r ".\\"\$port\\"[0].HostPort")
+    internal_port=\$port
+    if [[ "${peer_port}" == "\$external_port" ]]; then internal_port="${internal_peer_port}/\${port#*/}"; fi
+    if [[ "${user_port}" == "\$external_port" ]]; then internal_port="${internal_user_port}/\${port#*/}"; fi
+    if [[ "${gp_tcp_port_start}" == "\$external_port" ]]; then internal_port="${internal_gptcp1_port}/\${port#*/}"; fi
+    if [[ "${gp_udp_port_start}" == "\$external_port" ]]; then internal_port="${internal_gpudp1_port}/\${port#*/}"; fi
+    if [[ "$((gp_tcp_port_start + 1))" == "\$external_port" ]]; then internal_port="${internal_gptcp2_port}/\${port#*/}"; fi
+    if [[ "$((gp_udp_port_start + 1))" == "\$external_port" ]]; then internal_port="${internal_gpudp2_port}/\${port#*/}"; fi
+    echo "EXTERNAL \$external_port     INTERNAL \$internal_port"
+    docker_create_command="\$docker_create_command -p \$external_port:\$internal_port"
+done
+
+# Add Environment variables
+docker_create_command="\$docker_create_command --env-file $user_dir/.docker/env.vars"
+
+# Add security options
+docker_create_command="\$docker_create_command --security-opt seccomp=unconfined --security-opt apparmor=unconfined"
+
+# Add restart policy
+docker_create_command="\$docker_create_command --restart unless-stopped"
+
+# Add volume binding
+docker_create_command="\$docker_create_command --mount type=bind,source=\${MOUNT_SOURCE},target=\${MOUNT_TARGET}"
+
+# handle original container, and service
+${docker_bin}/docker stop \$CONTAINER_NAME
+${docker_bin}/docker rm \$CONTAINER_NAME
+
+# Execute the docker create command
+echo "docker_create_command built lets run >\$docker_create_command "
+\$docker_create_command \${IMAGE} $internal_run_contract
+${docker_bin}/docker start \$CONTAINER_NAME
+EOF
+chmod +x "$user_dir"/.docker/docker_recreate.sh
+
+
+# set up a service to run the docker recreate.sh AFTER docker has created the original container
+echo "[Unit]
+Description=Docker Create Event Watcher
+After=docker.service
+Requires=docker.service
+
+[Service]
+Environment="USER_DIR=/home/username"
+ExecStart=/bin/bash -c ' \\
+  ${docker_bin}/docker events --filter event=create | \\
+  while read -r create_event; do \\
+    echo \"Handling event: ${create_event}\" >> \"${user_dir}/.docker/docker_recreate.log\"; \\
+    bash \"${user_dir}/.docker/domain_ssl_update.sh\" 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log; \\
+    cp $user_dir/.docker/env.vars $user_dir/$contract_dir/env.vars; \\
+    echo \"0 0 */7 * * sleep \$((RANDOM*3540/32768)) && /usr/bin/bash ${user_dir}/.docker/domain_ssl_update.sh 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log\" | crontab -; \\
+    bash \"${user_dir}/.docker/docker_recreate.sh\" 2>&1 | tee -a ${user_dir}/.docker/docker_recreate.log; \\
+    break;\\
+  done'
+Restart=on-failure
+Type=simple
+SuccessExitStatus=0 143
+
+[Install]
+WantedBy=default.target" > "$user_dir"/.config/systemd/user/docker_recreate.service
+
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable docker_recreate.service
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_recreate.service
+echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_recreate.service" >>$cleanup_script
+echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_recreate.service" >>$cleanup_script
+echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
+echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
+chown -R $user:$user $cleanup_script
+
+
+else
+
+    echo "no custom port or other user settings found. setting up recreate service to copy .vars file and default domain-farwading/proxy-host"
+    if [[ "$TLS_TYPE" == "NPMplus" ]]; then
+        domain_ssl_update_1='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
+        domain_ssl_update_2='echo "0 0 */7 * * sleep $((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log" | crontab -'
+    else
+        domain_ssl_update_1='echo "no NPMplus intalled on host,"'
+        domain_ssl_update_2='not setting up any domain farwarding."'
+    fi
+# set up a service to copy in the .vars file AFTER docker has created the original container. (as container/image needs to be created, before we can copy it in)
+echo "[Unit]
+Description=Docker env.vars file copier, proxy and firewall setup.
+After=docker.service
+Requires=docker.service
+
+[Service]
+Environment="USER_DIR=/home/username"
+ExecStart=/bin/bash -c ' \\
+  ${docker_bin}/docker events --filter event=create | \\
+  while read -r create_event; do \\
+    cp $user_dir/.docker/env.vars $user_dir/$contract_dir/env.vars; \\
+    $domain_ssl_update_1; \\
+    $domain_ssl_update_2; \\
+    break; \\
+  done'
+Restart=false
+Type=simple
+SuccessExitStatus=0 143
+
+[Install]
+WantedBy=default.target" > "$user_dir"/.config/systemd/user/docker_vars.service
+
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable docker_vars.service
+sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_vars.service
+echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_vars.service" >>$cleanup_script
+echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_vars.service" >>$cleanup_script
+echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
+echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
+chown -R $user:$user $cleanup_script
+
+fi
 
 # In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
 # Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us

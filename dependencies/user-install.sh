@@ -59,9 +59,6 @@ ACME_DNS_PLUGIN_URL="https://raw.githubusercontent.com/gadget78/sashimono/main/d
 # Check if users already exists.
 [ "$(id -u "$user" 2>/dev/null || echo -1)" -ge 0 ] && echo "HAS_USER,INST_ERR" && exit 1
 
-# Check cgroup mounts exists.
-{ [ ! -d /sys/fs/cgroup/cpu ] || [ ! -d /sys/fs/cgroup/memory ]; } && echo "CGROUP_ERR,INST_ERR" && exit 1
-
 function rollback() {
     echo "Rolling back user installation. $1"
     "$script_dir"/user-uninstall.sh "$user"
@@ -152,16 +149,34 @@ user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-echo "Adding disk quota to the group."
-setquota -g -F vfsv0 "$user" "$disk" "$disk" 0 0 /
-echo "Configured disk quota for the group."
+echo "Adding disk quota of $disk to the user $user"
+if ! grep -q "usrjquota=" /etc/fstab; then
+    echo "User quota found not enabled, enabling user quotas..."
+    BACKUP="/etc/fstab.backup.$(date +%Y%m%d_%H%M%S)"
+    cp /etc/fstab "$BACKUP"
+    
+    {
+        sed -i 's/jqfmt=vfsv0/usrquota/' /etc/fstab
+        sync
+        mount -o remount /
+        quotacheck -cum / 2>/dev/null || quotacheck -cuma /
+        quotaon /
+        echo "User quotas enabled"
+    } || {
+        echo "Failed - rolling back..."
+        cp "$BACKUP" /etc/fstab
+        mount -o remount / 2>/dev/null || true
+    }
+fi
+setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+echo "Configured disk quota of $disk for the user $user"
 
 # Extract additional port settings if present, 1st it splits everything after :, then replaces all -- with  |, and uses that to create an array
 echo
 echo "# checking for any additional port config within image name :$docker_image"
 IFS='|' read -r -a image_array <<< "$( echo $docker_image | cut -d':' -f2 | sed 's/--/|/g' )"
 echo "captured additional docker settings, ${image_array[@]}"
-docker_image_version="${image_array[0]}"
+docker_image_version="${image_array[0]:-latest}"
 custom_docker_settings=false
 custom_docker_domain=""
 custom_docker_subdomain=""
@@ -282,7 +297,8 @@ echo "
 export XDG_RUNTIME_DIR=$user_runtime_dir
 export PATH=$docker_bin:\$PATH
 export DOCKER_HOST=$dockerd_socket
-source /contract/env.vars" >>"$user_dir"/.bashrc
+[ -f \"/contract/env.vars\" ] && source /contract/env.vars
+[ -f \"$user_dir/$contract_dir/env.vars\" ] && source $user_dir/$contract_dir/env.vars"  >>"$user_dir"/.bashrc
 echo "Updated user .bashrc."
 
 # Wait until user systemd is functioning.
@@ -494,7 +510,7 @@ if [[ ! -d "$img_local_path" ]] || [[ ! -f "${img_local_path}/image_digest" ]]; 
 else
 
     echo "Image $docker_pull_image, already exists locally,"
-    TOKEN=$(curl -s "{DOCKER_AUTH_URL}$(echo "$docker_pull_image" | cut -d':' -f1):pull" | jq -r '.token') \
+    TOKEN=$(curl -s "${DOCKER_AUTH_URL}$(echo "$docker_pull_image" | cut -d':' -f1):pull" | jq -r '.token') \
     && IMAGE_DIGEST=$(curl -s --head -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Dd]ocker-[Cc]ontent-[Dd]igest: \(sha256:[a-f0-9]*\).*/\1/p') \
     && RATE_LIMIT_REMAINING=$(curl -s --head -s -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Rr]atelimit-remaining: \([0-9]*\).*/\1/p')
 
@@ -971,7 +987,6 @@ After=docker.service
 Requires=docker.service
 
 [Service]
-Environment="USER_DIR=/home/username"
 ExecStart=/bin/bash -c ' \\
   ${docker_bin}/docker events --filter event=create | \\
   while read -r create_event; do \\
@@ -980,7 +995,7 @@ ExecStart=/bin/bash -c ' \\
     $domain_ssl_update_2; \\
     break; \\
   done'
-Restart=false
+Restart=on-failure
 Type=simple
 SuccessExitStatus=0 143
 
@@ -1000,16 +1015,24 @@ fi
 
 # In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
 # Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us
+
+ echo "Setting up user slice resources."
+
 cores=$(grep -c ^processor /proc/cpuinfo)
-cpu_quota=$(expr $(expr $cores \* $cpu) / 10)
-echo "Setting up user cgroup resources."
-! (cgcreate -g cpu:$user$cgroupsuffix &&
-    echo "100000" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_period_us &&
-    echo "$cpu_quota" >/sys/fs/cgroup/cpu/$user$cgroupsuffix/cpu.cfs_quota_us) && rollback "CGROUP_CPU_CREAT"
-! (cgcreate -g memory:$user$cgroupsuffix &&
-    echo "${memory}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.limit_in_bytes &&
-    echo "${swapmem}K" >/sys/fs/cgroup/memory/$user$cgroupsuffix/memory.memsw.limit_in_bytes) && rollback "CGROUP_MEM_CREAT"
-echo "Configured user cgroup resources."
+cpu_period=1000000
+cpu_quota=$(expr $(expr $cores \* $cpu \* 100 \/ $cpu_period))
+
+# Resource limiting for the unpriviledged user
+mkdir /etc/systemd/system/user-$user_id.slice.d
+touch /etc/systemd/system/user-$user_id.slice.d/override.conf
+echo "[Slice]
+MemoryAccounting=true
+CPUAccounting=true
+MemoryMax=${memory}K
+CPUQuota=${cpu_quota}% 
+MemorySwapMax=${swapmem}K" | sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
+
+systemctl daemon-reload
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"
 exit 0

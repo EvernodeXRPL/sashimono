@@ -150,25 +150,55 @@ user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
 echo "Adding disk quota of $disk to the user $user"
-if ! grep -q "usrjquota=" /etc/fstab; then
+if ! grep -q ",usrquota" /etc/fstab || [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
     echo "User quota found not enabled, enabling user quotas..."
+            
+    # Check if we are in a VM, and if linux-image-extra-virtual is installed
+    if [ "$(systemd-detect-virt)" != "none" ]; then
+        echo "Running in a VM: $(systemd-detect-virt)"
+        if ! dpkg -l linux-image-extra-virtual | grep -q '^ii'; then
+            echo "linux-image-extra-virtual not installed. Installing now..."
+            apt-get update && apt-get -y install linux-image-extra-virtual
+        else
+            echo "linux-image-extra-virtual is already installed."
+            echo "do we need to reboot ?"
+        fi
+    else
+        echo "Not running in a VM. Skipping linux-image-extra-virtual installation."
+    fi
     BACKUP="/etc/fstab.backup.$(date +%Y%m%d_%H%M%S)"
     cp /etc/fstab "$BACKUP"
-    
+    ROOT_FS=$(findmnt -n -o SOURCE /)
+    ROOT_MOUNT=$(findmnt -n -o TARGET /)
     {
-        sed -i 's/jqfmt=vfsv0/usrquota/' /etc/fstab
-        sync
-        mount -o remount /
-        quotacheck -cum / 2>/dev/null || quotacheck -cuma /
-        quotaon /
-        echo "User quotas enabled"
+        quotaoff "$ROOT_MOUNT" 2>/dev/null || true
+        rm -f "$ROOT_MOUNT"/quota.* "$ROOT_MOUNT"/aquota.* 2>/dev/null || true
+        # First remove any existing quota options
+        sed -i -E '/^[^#]*\s+\/\s+/ {
+            s/,?grpjquota=[^,\s]+//g
+            s/,?usrjquota=[^,\s]+//g
+            s/,?jqfmt=[^,\s]+//g
+            s/,?quota\b//g
+            s/,?usrquota\b//g
+            s/,?grpquota\b//g
+            s/,,+/,/g
+            s/(\s+)([^,\s]+),/\1\2/
+        }' /etc/fstab
+        # then add just usrquota entry
+        sed -i -E '/^[^#]*\s+\/\s+/ {
+            s/(\s+\S+)(\s+[0-9]+\s+[0-9]+\s*)$/\1,usrquota\2/
+            s/(\s+\S+),/\1/
+        }' /etc/fstab
+        sync && systemctl daemon-reload && mount -o remount "$ROOT_MOUNT"
+        quotacheck -cum "$ROOT_MOUNT" && quotaon -u "$ROOT_MOUNT"
+        quotaon -p "$ROOT_MOUNT" | grep user
     } || {
         echo "Failed - rolling back..."
         cp "$BACKUP" /etc/fstab
         mount -o remount / 2>/dev/null || true
     }
 fi
-setquota -u -F vfsv0 "$user" "$disk" "$disk" 0 0 /
+setquota -u "$user" "$disk" "$disk" 0 0 /
 echo "Configured disk quota of $disk for the user $user"
 
 # Extract additional port settings if present, 1st it splits everything after :, then replaces all -- with  |, and uses that to create an array
@@ -849,6 +879,7 @@ if [[ -n "$custom_docker_subdomain" ]]; then
     echo "subdomain request detected, assigning domain as $custom_docker_domain"
 fi
 if [[ -z "$custom_docker_domain" ]]; then
+    instance_slot=${user_port: -1}
     custom_docker_domain="${EVERNODE_HOSTNAME%%.*}-${instance_slot}.${EVERNODE_HOSTNAME#*.}"
     custom_docker_subdomain="${custom_docker_domain%%.*}"
     echo "no custom domain settings found, setting up a default route of, $custom_docker_domain"
@@ -857,6 +888,8 @@ fi
 cat > $user_dir/.docker/env.vars <<EOF 
 HOST_DOMAIN_ADDRESS=$(jq -r ".hp.host_address | select( . != null )" "$SA_CONFIG")
 CUSTOM_DOMAIN_ADDRESS=$custom_docker_domain
+INSTANCE_DISK_QUOTA="$(( disk / 1024 / 1024 )) GB"
+INSTANCE_RAM_QUOTA="$(( memory / 1024 / 1024 )) GB"
 EXTERNAL_PEER_PORT=$peer_port
 INTERNAL_PEER_PORT=$internal_peer_port
 EXTERNAL_USER_PORT=$user_port
@@ -874,6 +907,9 @@ $internal_env2_key=$internal_env2_value
 $internal_env3_key=$internal_env3_value
 $internal_env4_key=$internal_env4_value
 EOF
+#INSTANCE_DISK_FREE="\$(( INSTANCE_DISK_QUOTA - \$(quota -u $user | awk 'NR==3 {print \$2}') / 1024 / 1024 )) GB"
+#INSTANCE_DISK=\$(quota -u $user)
+#INSTANCE_DISK_USED="\$(( \$(quota -u $user | awk 'NR==3 {print \$2}') / 1024 / 1024 )) GB"
 
 # if there is any extra docker setting requested, build and setup re-create script and a service to start it.
 if [[ "$custom_docker_settings" == "true" ]]; then

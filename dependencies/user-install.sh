@@ -149,9 +149,9 @@ user_id=$(id -u "$user")
 user_runtime_dir="/run/user/$user_id"
 dockerd_socket="unix://$user_runtime_dir/docker.sock"
 
-echo "Adding disk quota of $disk to the user $user"
-if ! grep -q ",usrquota" /etc/fstab || [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
-    echo "User quota found not enabled, enabling user quotas..."
+echo "checking quota system, and adding disk quota of $disk to the user $user"
+if [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
+    echo "User quota found not enabled, enabling user quota system..."
             
     # Check if we are in a VM, and if linux-image-extra-virtual is installed
     if [ "$(systemd-detect-virt)" != "none" ]; then
@@ -166,36 +166,43 @@ if ! grep -q ",usrquota" /etc/fstab || [[ "$(quotaon -p / | grep user | awk '{pr
     else
         echo "Not running in a VM. Skipping linux-image-extra-virtual installation."
     fi
-    BACKUP="/etc/fstab.backup.$(date +%Y%m%d_%H%M%S)"
-    cp /etc/fstab "$BACKUP"
-    ROOT_FS=$(findmnt -n -o SOURCE /)
-    ROOT_MOUNT=$(findmnt -n -o TARGET /)
+
     {
-        quotaoff "$ROOT_MOUNT" 2>/dev/null || true
-        rm -f "$ROOT_MOUNT"/quota.* "$ROOT_MOUNT"/aquota.* 2>/dev/null || true
-        # First remove any existing quota options
-        sed -i -E '/^[^#]*\s+\/\s+/ {
-            s/,?grpjquota=[^,\s]+//g
-            s/,?usrjquota=[^,\s]+//g
-            s/,?jqfmt=[^,\s]+//g
-            s/,?quota\b//g
-            s/,?usrquota\b//g
-            s/,?grpquota\b//g
-            s/,,+/,/g
-            s/(\s+)([^,\s]+),/\1\2/
-        }' /etc/fstab
-        # then add just usrquota entry
-        sed -i -E '/^[^#]*\s+\/\s+/ {
-            s/(\s+\S+)(\s+[0-9]+\s+[0-9]+\s*)$/\1,usrquota\2/
-            s/(\s+\S+),/\1/
-        }' /etc/fstab
-        sync && systemctl daemon-reload && mount -o remount "$ROOT_MOUNT"
-        quotacheck -cum "$ROOT_MOUNT" && quotaon -u "$ROOT_MOUNT"
-        quotaon -p "$ROOT_MOUNT" | grep user
+        if ! grep -q ",usrquota" /etc/fstab; then
+            # Backup fstab 1st
+            BACKUP="/etc/fstab.backup.$(date +%Y%m%d_%H%M%S)"
+            cp /etc/fstab "$BACKUP"
+            # First remove any existing quota options
+            sed -i -E '/^[^#]*\s+\/\s+/ {
+                s/,?grpjquota=[^,\s]+//g
+                s/,?usrjquota=[^,\s]+//g
+                s/,?jqfmt=[^,\s]+//g
+                s/,?quota\b//g
+                s/,?usrquota\b//g
+                s/,?grpquota\b//g
+                s/,,+/,/g
+                s/(\s+)([^,\s]+),/\1\2/
+            }' /etc/fstab
+            # then add just usrquota entry
+            sed -i -E '/^[^#]*\s+\/\s+/ {
+                s/(\s+\S+)(\s+[0-9]+\s+[0-9]+\s*)$/\1,usrquota\2/
+                s/(\s+\S+),/\1/
+            }' /etc/fstab
+        fi
     } || {
         echo "Failed - rolling back..."
         cp "$BACKUP" /etc/fstab
         mount -o remount / 2>/dev/null || true
+    }
+    {
+        ROOT_MOUNT=$(findmnt -n -o TARGET /)
+        quotaoff "$ROOT_MOUNT" 2>/dev/null || true
+        rm -f "$ROOT_MOUNT"/quota.* "$ROOT_MOUNT"/aquota.* 2>/dev/null || true
+        sync && systemctl daemon-reload && mount -o remount "$ROOT_MOUNT"
+        quotacheck -cum "$ROOT_MOUNT" && quotaon -u "$ROOT_MOUNT"
+        quotaon -p "$ROOT_MOUNT" | grep user
+    } || {
+        echo "something failed when setting up user quota system..."
     }
 fi
 setquota -u "$user" "$disk" "$disk" 0 0 /
@@ -888,8 +895,12 @@ fi
 cat > $user_dir/.docker/env.vars <<EOF 
 HOST_DOMAIN_ADDRESS=$(jq -r ".hp.host_address | select( . != null )" "$SA_CONFIG")
 CUSTOM_DOMAIN_ADDRESS=$custom_docker_domain
-INSTANCE_DISK_QUOTA="$(( disk / 1024 / 1024 )) GB"
-INSTANCE_RAM_QUOTA="$(( memory / 1024 / 1024 )) GB"
+RAM_QUOTA="$(( memory / 1024 / 1024 ))GB"
+DISK_QUOTA="$(( disk / 1024 / 1024 ))GB"
+DISK_QUOTA_BYTES=$disk
+DISK_USED_BYTES=""
+DISK_USED="\$(( DISK_USED_BYTES / 1024 / 1024 ))GB"
+DISK_FREE="\$(( ( DISK_QUOTA_BYTES - DISK_USED_BYTES ) / 1024 / 1024 ))GB"
 EXTERNAL_PEER_PORT=$peer_port
 INTERNAL_PEER_PORT=$internal_peer_port
 EXTERNAL_USER_PORT=$user_port
@@ -907,9 +918,6 @@ $internal_env2_key=$internal_env2_value
 $internal_env3_key=$internal_env3_value
 $internal_env4_key=$internal_env4_value
 EOF
-#INSTANCE_DISK_FREE="\$(( INSTANCE_DISK_QUOTA - \$(quota -u $user | awk 'NR==3 {print \$2}') / 1024 / 1024 )) GB"
-#INSTANCE_DISK=\$(quota -u $user)
-#INSTANCE_DISK_USED="\$(( \$(quota -u $user | awk 'NR==3 {print \$2}') / 1024 / 1024 )) GB"
 
 # if there is any extra docker setting requested, build and setup re-create script and a service to start it.
 if [[ "$custom_docker_settings" == "true" ]]; then
@@ -970,31 +978,40 @@ ${docker_bin}/docker start \$CONTAINER_NAME
 EOF
 chmod +x "$user_dir"/.docker/docker_recreate.sh
 
+quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
+quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
+quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
+domain_ssl_update_2='(sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } ; echo "0 0 */7 * * sleep \$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
+domain_ssl_update_2='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
 
-# set up a service to run the docker recreate.sh AFTER docker has created the original container
-echo "[Unit]
+cat > "$user_dir"/.config/systemd/user/docker_recreate.service <<EOF
+[Unit]
 Description=Docker Create Event Watcher
 After=docker.service
 Requires=docker.service
 
 [Service]
-Environment="USER_DIR=/home/username"
-ExecStart=/bin/bash -c ' \\
+Type=simple
+Restart=on-failure
+ExecStart=/bin/bash -c '
   ${docker_bin}/docker events --filter event=create | \\
   while read -r create_event; do \\
-    echo \"Handling event: ${create_event}\" >> \"${user_dir}/.docker/docker_recreate.log\"; \\
-    bash \"${user_dir}/.docker/domain_ssl_update.sh\" 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log; \\
-    cp $user_dir/.docker/env.vars $user_dir/$contract_dir/env.vars; \\
-    echo \"0 0 */7 * * sleep \$((RANDOM*3540/32768)) && /usr/bin/bash ${user_dir}/.docker/domain_ssl_update.sh 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log\" | crontab -; \\
-    bash \"${user_dir}/.docker/docker_recreate.sh\" 2>&1 | tee -a ${user_dir}/.docker/docker_recreate.log; \\
-    break;\\
+    echo "Handling event: \${create_event}" >> "${user_dir}/.docker/docker_recreate.log"; \\
+    bash "${user_dir}/.docker/domain_ssl_update.sh" 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log; \\
+    cp ${user_dir}/.docker/env.vars ${user_dir}/${contract_dir}/env.vars; \\
+    ${quota_crontab_entry}; \\
+    ${domain_ssl_update_1}; \\
+    ${domain_ssl_update_2}; \\
+    break; \\
   done'
-Restart=on-failure
-Type=simple
+#Type=oneshot
+#RemainAfterExit=yes
 SuccessExitStatus=0 143
 
 [Install]
-WantedBy=default.target" > "$user_dir"/.config/systemd/user/docker_recreate.service
+WantedBy=default.target
+EOF
+
 
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable docker_recreate.service
@@ -1002,57 +1019,64 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docke
 echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_recreate.service" >>$cleanup_script
 echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_recreate.service" >>$cleanup_script
 echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
+echo "nft list ruleset > /etc/nftables.conf" >>$cleanup_script
 echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
 chown -R $user:$user $cleanup_script
 
-
 else
-
+    quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
+    quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
+    quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
     echo "no custom port or other user settings found. setting up recreate service to copy .vars file and default domain-farwading/proxy-host"
     if [[ "$TLS_TYPE" == "NPMplus" ]]; then
-        domain_ssl_update_1='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
-        domain_ssl_update_2='echo "0 0 */7 * * sleep $((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log" | crontab -'
+        domain_ssl_update_1='(crontab -l 2>/dev/null; echo "0 0 */7 * * sleep \\$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
+        domain_ssl_update_2='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
     else
         domain_ssl_update_1='echo "no NPMplus intalled on host,"'
         domain_ssl_update_2='not setting up any domain farwarding."'
     fi
+
 # set up a service to copy in the .vars file AFTER docker has created the original container. (as container/image needs to be created, before we can copy it in)
-echo "[Unit]
-Description=Docker env.vars file copier, proxy and firewall setup.
+cat > "$user_dir"/.config/systemd/user/docker_vars.service <<EOF
+[Unit]
+Description=Docker env.vars file setup, and proxy support.
 After=docker.service
 Requires=docker.service
 
 [Service]
+Type=simple
+Restart=on-failure
 ExecStart=/bin/bash -c ' \\
   ${docker_bin}/docker events --filter event=create | \\
   while read -r create_event; do \\
-    cp $user_dir/.docker/env.vars $user_dir/$contract_dir/env.vars; \\
-    $domain_ssl_update_1; \\
-    $domain_ssl_update_2; \\
+    cp "${user_dir}/.docker/env.vars" "${user_dir}/${contract_dir}/env.vars"; \\
+    ${quota_crontab_entry}; \\
+    ${domain_ssl_update_1}; \\
+    ${domain_ssl_update_2}; \\
     break; \\
   done'
-Restart=on-failure
-Type=simple
 SuccessExitStatus=0 143
 
 [Install]
-WantedBy=default.target" > "$user_dir"/.config/systemd/user/docker_vars.service
+WantedBy=default.target
+EOF
 
-sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
-sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable docker_vars.service
-sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_vars.service
-echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_vars.service" >>$cleanup_script
-echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_vars.service" >>$cleanup_script
-echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
-echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
-chown -R $user:$user $cleanup_script
+    sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user daemon-reload
+    sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable docker_vars.service
+    sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_vars.service
+    echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_vars.service" >>$cleanup_script
+    echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_vars.service" >>$cleanup_script
+    echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
+    echo "nft list ruleset > /etc/nftables.conf" >>$cleanup_script
+    echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
+    chown -R $user:$user $cleanup_script
 
 fi
 
 # In the Sashimono configuration, CPU time is 1000000us Sashimono is given max_cpu_us out of it.
 # Instance allocation is multiplied by number of cores to determined the number of cores per instance and devided by 10 since cfs_period_us is set to 100000us
 
- echo "Setting up user slice resources."
+echo "Setting up user slice resources."
 
 cores=$(grep -c ^processor /proc/cpuinfo)
 cpu_period=1000000
@@ -1068,6 +1092,9 @@ MemoryMax=${memory}K
 CPUQuota=${cpu_quota}% 
 MemorySwapMax=${swapmem}K" | sudo tee /etc/systemd/system/user-$user_id.slice.d/override.conf
 
+# save and make sure nft tables service persist after a restart
+nft list ruleset > /etc/nftables.conf
+systemctl enable nftables
 systemctl daemon-reload
 
 echo "$user_id,$user,$dockerd_socket,INST_SUC"

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
-version=0.99
+version=1.1
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -161,7 +161,7 @@ if [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
             apt-get update && apt-get -y install linux-image-extra-virtual
         else
             echo "linux-image-extra-virtual is already installed."
-            echo "do we need to reboot ?"
+            echo; echo "do we need to reboot ?"; echo
         fi
     else
         echo "Not running in a VM. Skipping linux-image-extra-virtual installation."
@@ -177,17 +177,14 @@ if [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
                 s/,?grpjquota=[^,\s]+//g
                 s/,?usrjquota=[^,\s]+//g
                 s/,?jqfmt=[^,\s]+//g
-                s/,?quota\b//g
                 s/,?usrquota\b//g
                 s/,?grpquota\b//g
+                s/,?quota\b//g
                 s/,,+/,/g
                 s/(\s+)([^,\s]+),/\1\2/
             }' /etc/fstab
             # then add just usrquota entry
-            sed -i -E '/^[^#]*\s+\/\s+/ {
-                s/(\s+\S+)(\s+[0-9]+\s+[0-9]+\s*)$/\1,usrquota\2/
-                s/(\s+\S+),/\1/
-            }' /etc/fstab
+            sed -i -E '/^[^#]*\s+\/\s+/ {s/(\s+\S+)(\s+[0-9]+\s+[0-9]+\s*)$/\1,usrquota\2/}' /etc/fstab
         fi
     } || {
         echo "Failed - rolling back..."
@@ -205,8 +202,7 @@ if [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
         echo "something failed when setting up user quota system..."
     }
 fi
-setquota -u "$user" "$disk" "$disk" 0 0 /
-echo "Configured disk quota of $disk for the user $user"
+setquota -u "$user" "$disk" "$disk" 0 0 / && echo "Configured disk quota of $disk for the user $user" || echo "Configuring disk quota failed"
 
 # Extract additional port settings if present, 1st it splits everything after :, then replaces all -- with  |, and uses that to create an array
 echo

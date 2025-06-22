@@ -872,7 +872,7 @@ cp $user_dir/.docker/domain_ssl_update.log $user_dir/$contract_dir/tls/domain_ss
 echo "............."
 EOF
 chmod +x $user_dir/.docker/domain_ssl_update.sh
-chown $user:$user $user_dir/.docker/domain_ssl_update.sh
+#chown $user:$user $user_dir/.docker/domain_ssl_update.sh
 fi
 
 
@@ -977,7 +977,7 @@ chmod +x "$user_dir"/.docker/docker_recreate.sh
 quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
 quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
 quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
-domain_ssl_update_2='(sudo crontab -l 2>&1 | { grep -v -E "^no crontab for|^sudo:" || true; } ; echo "0 0 */7 * * sleep \$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
+domain_ssl_update_1='(crontab -l 2>/dev/null; echo "0 0 */7 * * sleep \\$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
 domain_ssl_update_2='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
 
 cat > "$user_dir"/.config/systemd/user/docker_recreate.service <<EOF
@@ -989,7 +989,7 @@ Requires=docker.service
 [Service]
 Type=simple
 Restart=on-failure
-ExecStart=/bin/bash -c '
+ExecStart=/bin/bash -c ' \\
   ${docker_bin}/docker events --filter event=create | \\
   while read -r create_event; do \\
     echo "Handling event: \${create_event}" >> "${user_dir}/.docker/docker_recreate.log"; \\
@@ -1000,8 +1000,6 @@ ExecStart=/bin/bash -c '
     ${domain_ssl_update_2}; \\
     break; \\
   done'
-#Type=oneshot
-#RemainAfterExit=yes
 SuccessExitStatus=0 143
 
 [Install]
@@ -1024,12 +1022,12 @@ else
     quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
     quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
     echo "no custom port or other user settings found. setting up recreate service to copy .vars file and default domain-farwading/proxy-host"
-    if [[ "$TLS_TYPE" == "NPMplus" ]]; then
+    if [[ "$TLS_TYPE" == "NPMplus" ]] && [[ "$docker_pull_image" != *"reputation"* ]]; then
         domain_ssl_update_1='(crontab -l 2>/dev/null; echo "0 0 */7 * * sleep \\$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
         domain_ssl_update_2='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
     else
-        domain_ssl_update_1='echo "no NPMplus intalled on host,"'
-        domain_ssl_update_2='not setting up any domain farwarding."'
+        domain_ssl_update_1='echo "NPMplus NOT intalled on host,"'
+        domain_ssl_update_2='echo "or reputation contract detected."'
     fi
 
 # set up a service to copy in the .vars file AFTER docker has created the original container. (as container/image needs to be created, before we can copy it in)

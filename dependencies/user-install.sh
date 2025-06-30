@@ -174,12 +174,13 @@ if [[ "$(quotaon -p / | grep user | awk '{print $7}')" == "off" ]]; then
             cp /etc/fstab "$BACKUP"
             # First remove any existing quota options
             sed -i -E '/^[^#]*\s+\/\s+/ {
-                s/,?grpjquota=[^,\s]+//g
-                s/,?usrjquota=[^,\s]+//g
-                s/,?jqfmt=[^,\s]+//g
-                s/,?usrquota\b//g
-                s/,?grpquota\b//g
-                s/,?quota\b//g
+                s/,?grpjquota=[^,[:space:]]*//g
+                s/,?usrjquota=[^,[:space:]]*//g
+                s/,?jqfmt=[^,[:space:]]*//g
+                s/,?usrquota[^,[:space:]]*//g
+                s/,?grpquota[^,[:space:]]*//g
+                s/,?quota[^,[:space:]]*//g
+                s/remount-ro[^,[:space:]]*/remount-ro/g
                 s/,,+/,/g
                 s/(\s+)([^,\s]+),/\1\2/
             }' /etc/fstab

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
-version=1.1
+version=1.4
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -207,9 +207,10 @@ setquota -u "$user" "$disk" "$disk" 0 0 / && echo "Configured disk quota of $dis
 
 # Extract additional port settings if present, 1st it splits everything after :, then replaces all -- with  |, and uses that to create an array
 echo
-echo "# checking for any additional port config within image name :$docker_image"
+echo "# checking for any additional port config within image name $docker_image"
 IFS='|' read -r -a image_array <<< "$( echo $docker_image | cut -d':' -f2 | sed 's/--/|/g' )"
 echo "captured additional docker settings, ${image_array[@]}"
+[[ "$docker_image" == *":"* ]] || image_array[0]="latest"
 docker_image_version="${image_array[0]:-latest}"
 custom_docker_settings=false
 custom_docker_domain=""
@@ -427,6 +428,12 @@ echo "[Service]
 Environment=DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=slirp4netns
 " >"$docker_service_override_conf"
 
+# check nftables is installed (TODO, add this check to the main evernode installer)
+if ! command -v nft &> /dev/null; then
+    echo "nftables not installed. Installing now..."
+    apt-get update && apt-get -y install nftables
+fi
+
 # Create nftables (aka iptables), to block traffic to the local LAN subnet (for IPv4 and IPv6)
 local_ip=$(hostname -I | awk '{print $1}' | xargs) 
 public_hostname_ip=$(dig +short "$EVERNODE_HOSTNAME" | head -n 1 | xargs)
@@ -574,7 +581,7 @@ echo
 
 
 
-echo "Adding hpfs, docker_recreate and depending on recreate docker_vars services for the instance."
+echo "Adding hpfs mounts, and depending on instance options, docker_recreate or docker_vars services."
 
 echo "[Unit]
 Description=Running and monitoring contract fs.
@@ -624,8 +631,7 @@ if [[ "$TLS_TYPE" == "NPMplus" ]]; then
         mkdir -p $user_dir/.acme.sh/
         cp /usr/bin/sashimono/acme.sh $user_dir/.acme.sh/acme.sh
         cp /usr/bin/sashimono/dns_evernode.sh $user_dir/.acme.sh/dns_evernode.sh
-        chown -R $user:$user $user_dir/.acme.sh/acme.sh
-        chown -R $user:$user $user_dir/.acme.sh/dns_evernode.sh
+        chown -R $user:$user $user_dir/.acme.sh/
     fi
 
 cat > "$user_dir"/.docker/domain_ssl_update.sh <<EOF 
@@ -873,7 +879,7 @@ cp $user_dir/.docker/domain_ssl_update.log $user_dir/$contract_dir/tls/domain_ss
 echo "............."
 EOF
 chmod +x $user_dir/.docker/domain_ssl_update.sh
-#chown $user:$user $user_dir/.docker/domain_ssl_update.sh
+chown $user:$user $user_dir/.docker/domain_ssl_update.sh
 fi
 
 
@@ -918,7 +924,7 @@ EOF
 
 # if there is any extra docker setting requested, build and setup re-create script and a service to start it.
 if [[ "$custom_docker_settings" == "true" ]]; then
-    echo "custom docker settings detected, building docker re-create script and service"
+    echo "user custom docker settings detected, building docker re-create script and service"
 
 cat > "$user_dir"/.docker/docker_recreate.sh <<EOF
 #!/bin/bash
@@ -994,7 +1000,7 @@ ExecStart=/bin/bash -c ' \\
   ${docker_bin}/docker events --filter event=create | \\
   while read -r create_event; do \\
     echo "Handling event: \${create_event}" >> "${user_dir}/.docker/docker_recreate.log"; \\
-    bash "${user_dir}/.docker/domain_ssl_update.sh" 2>&1 | tee -a ${user_dir}/.docker/domain_ssl_update.log; \\
+    bash "${user_dir}/.docker/docker_recreate.sh" 2>&1 | tee -a ${user_dir}/.docker/docker_recreate.log; \\
     cp ${user_dir}/.docker/env.vars ${user_dir}/${contract_dir}/env.vars; \\
     ${quota_crontab_entry}; \\
     ${domain_ssl_update_1}; \\
@@ -1019,6 +1025,7 @@ echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log
 chown -R $user:$user $cleanup_script
 
 else
+    echo "no user custom docker settings detected, only adding env.vars file and quota system."
     quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
     quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
     quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'

@@ -5,14 +5,14 @@
 
 # Function to ADD a DNS TXT record
 dns_evernode_add() {
-  full_domain="$1"               # The full domain (e.g., _acme-challenge.example.com)
-  txtvalue="$2"                  # The TXT record value to add
-  apicall_success="false"        # variable used to keep tabs if API call was a success
+  full_domain="$1"                # The full domain (e.g., _acme-challenge.example.com)
+  txtvalue="$2"                   # The TXT record value to add
+  apicall_success="false"         # variable used to keep tabs if API call was a success
   api_subdomain="https://dnsapi." # subdomain that API is setup on the evernode
-  nameserver_override="@8.8.8.8" # a nameserver to use for all the "digs", so as not to use the "host default one"
+  nameserver_override="@8.8.8.8"  # a nameserver to use for all the "digs", so as not to use the "host default one"
 
-  _info "### Evernode DNS v.93 script running, this will collect all name servers that are held within $full_domain"
-  _info "###  then it will poll each name server to add the TXT record, (substituting subdomain for ${api_subdomain}) as long as one works the script wil continue."
+  _info "### Evernode DNS v.94 script running, this will collect all name servers that are held within $full_domain"
+  _info "### then it will poll each name server to add the TXT record, (substituting subdomain for ${api_subdomain}) as long as one works the script will continue."
 
   # Step 1: Fetch authoritative nameservers for the parent domain (_acme-challenge.subdomain.main.com -> subdomain.main.com)
   parent_domain="${full_domain#*.}"
@@ -23,9 +23,6 @@ dns_evernode_add() {
         grep -v "^;" | 
         sed -n 's/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS.*/\1/p' | 
         sort | tail -n1)
-    
-   #### v1 sed             | sed -n '/^[^;]/ {/NS[[:space:]]/s/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS.*/\1/p}' | tail -n 1)
-   ## used sed instead of, | awk '/^[^;]/ && $4 == "NS" {print $1}'
   else
     zone_parent_domain="$parent_domain"
   fi
@@ -52,7 +49,7 @@ dns_evernode_add() {
     # Step 3: get full list of "NS records" held for _acme-challenge subdomain for domain we want SSL for.
     ns_challenge_domain=$(dig +norecurse +noall +authority NS "$full_domain" @"$ns")
 
-    # process the above NS records, store in new variable, so we can check validity (using sed to comply with hook plugin environment)
+    # process the above NS records, store in new variable, so we can check validity (using sed to comply with acme.sh hook plugin environment)
     ns_records=$(echo "$ns_challenge_domain" | sed -n '/IN[[:space:]]\+NS/{s/.*[[:space:]]\([^[:space:]]\+\)$/\1/;p}')
 
     # Check if processed response is empty, if so, try next name server.
@@ -112,16 +109,18 @@ dns_evernode_rm() {
   api_subdomain="https://dnsapi." 
   nameserver_override="@8.8.8.8" # a nameserver to use for all the "digs", so as not to use the "host default one"
 
-  _info "### Evernode DNS v.9 script running, this will collect all name servers that are held within $full_domain"
-  _info "###  then it will poll each name server to now remove the TXT record, (substituting subdomain for ${api_subdomain})."
+  _info "### Evernode DNS v.94 script running, this will collect all name servers that are held within $full_domain"
+  _info "### then it will poll each name server to now remove the TXT record, (substituting subdomain for ${api_subdomain})."
 
   # Step 1: Fetch authoritative nameservers for the parent domain (_acme-challenge.subdomain.main.com -> subdomain.main.com)
   parent_domain="${full_domain#*.}"
   # make sure we have zone correct
   dots=$(echo "$parent_domain" | tr -cd '.' | wc -c)
   if [ "$dots" -gt 1 ]; then
-    zone_parent_domain=$(dig +trace +time=1 +tries=1 "$parent_domain" $nameserver_override | sed -n '/^[^;]/ {/NS[[:space:]]/s/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS.*/\1/p
-}' | tail -n 1)
+    zone_parent_domain=$(dig +trace +time=1 +tries=1 "$parent_domain" $nameserver_override | 
+        grep -v "^;" | 
+        sed -n 's/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS.*/\1/p' | 
+        sort | tail -n1)
   else
     zone_parent_domain="$parent_domain"
   fi
@@ -148,7 +147,7 @@ dns_evernode_rm() {
     # Step 3: get full list of "NS records" held for _acme-challenge subdomain for domain we want SSL for.
     ns_challenge_domain=$(dig +norecurse +noall +authority NS "$full_domain" @"$ns")
 
-    # process the above NS records, store in new variable, so we can check validity (using sed to comply with hook plugin environment)
+    # process the above NS records, store in new variable, so we can check validity (using sed to comply with acme.sh hook plugin environment)
     ns_records=$(echo "$ns_challenge_domain" | sed -n '/IN[[:space:]]\+NS/{s/.*[[:space:]]\([^[:space:]]\+\)$/\1/;p}')
 
     # Check if processed response is empty, if so, try next name server.

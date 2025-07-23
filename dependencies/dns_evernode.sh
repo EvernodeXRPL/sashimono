@@ -103,13 +103,13 @@ dns_evernode_add() {
 ################################################################################################################################################
 # Function to REMOVE a DNS TXT record
 dns_evernode_rm() {
-  full_domain="$1"         # The full domain (e.g., _acme-challenge.example.com)
-  txtvalue="$2"            # The TXT record value to add
-  apicall_success="false"  # variable used to keep tabs if API call was a success
-  api_subdomain="https://dnsapi." 
-  nameserver_override="@8.8.8.8" # a nameserver to use for all the "digs", so as not to use the "host default one"
+  full_domain="$1"                # The full domain (e.g., _acme-challenge.example.com)
+  txtvalue="$2"                   # The TXT record value to add
+  apicall_success="false"         # variable used to keep tabs if API call was a success
+  api_subdomain="https://dnsapi." # subdomain that API is setup on the evernode
+  nameserver_override="@8.8.8.8"  # a nameserver to use for all the "digs", so as not to use the "host default one"
 
-  _info "### Evernode DNS v.94 script running, this will collect all name servers that are held within $full_domain"
+  _info "### Evernode DNS v.96 script running, this will collect all name servers that are held within $full_domain"
   _info "### then it will poll each name server to now remove the TXT record, (substituting subdomain for ${api_subdomain})."
 
   # Step 1: Fetch authoritative nameservers for the parent domain (_acme-challenge.subdomain.main.com -> subdomain.main.com)
@@ -119,8 +119,8 @@ dns_evernode_rm() {
   if [ "$dots" -gt 1 ]; then
     zone_parent_domain=$(dig +trace +time=1 +tries=1 "$parent_domain" $nameserver_override | 
         grep -v "^;" | 
-        sed -n 's/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS.*/\1/p' | 
-        sort | tail -n1)
+        sed -n 's/^\([^[:space:]]\+\)[[:space:]]\+[0-9]\+[[:space:]]\+IN[[:space:]]\+NS[[:space:]].*/\1/p' | 
+        tail -n1)
   else
     zone_parent_domain="$parent_domain"
   fi

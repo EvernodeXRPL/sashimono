@@ -196,6 +196,11 @@ namespace hp
 
         const std::string contract_dir = util::get_user_contract_dir(username, container_name);
 
+        auto pos = image_name.find("--");
+        if (pos != std::string::npos) {
+        image_name = image_name.substr(0, pos);
+        }
+
         if (create_contract(username, owner_pubkey, contract_id, contract_dir, instance_ports, info) == -1 ||
             create_container(username, image_name, container_name, contract_dir, instance_ports, info) == -1)
         {

@@ -2,8 +2,6 @@
 
 ## What's here?
 
-_In development_
-
 A C++ version of sashimono agent
 
 ## Libraries

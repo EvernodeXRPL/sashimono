@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
-version=1.4
+version=1.5
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -210,8 +210,11 @@ echo
 echo "# checking for any additional port config within image name $docker_image"
 IFS='|' read -r -a image_array <<< "$( echo $docker_image | cut -d':' -f2 | sed 's/--/|/g' )"
 echo "captured additional docker settings, ${image_array[@]}"
-[[ "$docker_image" == *":"* ]] || image_array[0]="latest"
-docker_image_version="${image_array[0]:-latest}"
+if [[ "$docker_image" == *":"* ]]; then
+    docker_image_version="${image_array[0]:-latest}"
+else
+    docker_image_version="latest"
+fi
 custom_docker_settings=false
 custom_docker_domain=""
 custom_docker_subdomain=""
@@ -531,22 +534,25 @@ img_local_path=$docker_img_dir/$(echo "$docker_pull_image" | tr : -)
 img_local_tar_path="$img_local_path.tar"
 
 # Check if the image exists locally, and if it matches dockerhubs,  also using $docker_pull_image for image name, due to any custom settings.
-if [[ ! -d "$img_local_path" ]] || [[ ! -f "${img_local_path}/image_digest" ]]; then
+if [[ ! -d "$img_local_path" ]] || [[ ! -f "${img_local_tar_path}.image_digest" ]]; then
 
     #echo "Image $docker_image not found locally. Pulling from registry..."
     #DOCKER_HOST="$dockerd_socket" timeout --foreground -v -s SIGINT "$docker_pull_timeout_secs"s "$docker_bin"/docker pull "$docker_image" || rollback "DOCKER_PULL"
     #echo "image $docker_image pull complete."
 
-    echo "Image $docker_pull_image, or image hash not found locally, pulling docker image via frozen script..."
-    "$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image || rollback "DOCKER_PULL"
+    echo "Image $docker_pull_image, or image hash not found locally, pulling docker image..."
+    #"$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image || rollback "DOCKER_PULL"
+    DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker pull $docker_pull_image || rollback "DOCKER_PULL"
+    
         
     echo "retrieving and saving image hash(digest) to file..."
     TOKEN=$(curl -s "${DOCKER_AUTH_URL}$(echo "$docker_pull_image" | cut -d':' -f1):pull" | jq -r '.token') \
     && IMAGE_DIGEST=$(curl -s --head -H "Authorization: Bearer $TOKEN" ${DOCKER_REGISTRY_URL}$(echo "$docker_pull_image" | cut -d':' -f1)/manifests/${docker_image_version} | sed -n 's/.*[Dd]ocker-[Cc]ontent-[Dd]igest: \(sha256:[a-f0-9]*\).*/\1/p')
-    echo "$IMAGE_DIGEST" > ${img_local_path}/image_digest
+    echo "$IMAGE_DIGEST" > ${img_local_tar_path}.image_digest
 
     echo "Saving the downloaded image as a tarball: $img_local_tar_path"
-    tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+    #tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+    DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker save -o "$img_local_tar_path" $docker_pull_image|| rollback "DOCKER_PULL"
     echo "docker image saved as a tarball, $img_local_tar_path"
 else
 
@@ -558,7 +564,10 @@ else
     # Check if re-pull is needed, and we have a good amount of "remaining" rate pulls left
     if [[ "$IMAGE_DIGEST" != "$(cat "${img_local_path}/image_digest" 2>/dev/null)" ]] && [[ "$RATE_LIMIT_REMAINING" =~ ^[0-9]+$ ]] && [[ "$RATE_LIMIT_REMAINING" -gt 60 ]]; then
         echo "local image hash not equal to docker hub image, and rate limit is above 60 (=${RATE_LIMIT_REMAINING}), re-pulling image, and saving as tarball..."
-        "$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image && tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+        #"$docker_bin"/download-frozen-image-v2.sh $img_local_path $docker_pull_image && tar -cvf $img_local_tar_path -C $img_local_path . || rollback "DOCKER_PULL"
+        DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker pull $docker_pull_image || rollback "DOCKER_PULL"
+        DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker save -o "$img_local_tar_path" $docker_pull_image|| rollback "DOCKER_PULL"
+
         echo "$IMAGE_DIGEST" > ${img_local_path}/image_digest
         echo "docker image pulled, and saved as a tarball at $img_local_tar_path. and refreshed image digest record"
     else
@@ -566,19 +575,18 @@ else
         echo "local hash = $(cat ${img_local_path}/image_digest)"
         echo "docker hash = ${IMAGE_DIGEST}"
         echo "skipping image pull."
+        echo
+        echo "Loading the docker image $img_local_tar_path."
+        DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker load -i "$img_local_tar_path" || rollback "DOCKER_PULL"
+        echo "Docker image $img_local_tar_path load complete."
     fi
 
 fi
-
-echo "Loading the docker image $img_local_tar_path."
-DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker load -i "$img_local_tar_path" || rollback "DOCKER_PULL"
-echo "Docker image $img_local_tar_path load complete."
 
 echo "making sure pulled image has both the original "version" tag, and the tag with any custom settings"
 DOCKER_HOST="$dockerd_socket" "$docker_bin"/docker tag ${docker_pull_image} ${docker_image} || rollback "DOCKER_PULL"
 echo "Docker tag update complete, full image >$docker_image, original pulled image >$docker_pull_image"
 echo
-
 
 
 echo "Adding hpfs mounts, and depending on instance options, docker_recreate or docker_vars services."
@@ -983,7 +991,7 @@ chmod +x "$user_dir"/.docker/docker_recreate.sh
 
 quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
 quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
-quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
+quota_crontab_entry='echo "*/5 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
 domain_ssl_update_1='(crontab -l 2>/dev/null; echo "0 0 */7 * * sleep \\$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
 domain_ssl_update_2='bash "'${user_dir}'/.docker/domain_ssl_update.sh" 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log'
 
@@ -1019,6 +1027,7 @@ sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user enable dock
 sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_recreate.service
 echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_recreate.service" >>$cleanup_script
 echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_recreate.service" >>$cleanup_script
+echo "crontab -u $user -r" >>$cleanup_script
 echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
 echo "nft list ruleset > /etc/nftables.conf" >>$cleanup_script
 echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script
@@ -1028,7 +1037,7 @@ else
     echo "no user custom docker settings detected, only adding env.vars file and quota system."
     quota_crontab_awk_cmd="awk ''\'NR==3 {print \\\\\$2}''\'"
     quota_crontab_sed_cmd='sed \\"s/^DISK_USED_BYTES=.*/DISK_USED_BYTES=\\$USED_BYTES/\\"'
-    quota_crontab_entry='echo "*/1 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
+    quota_crontab_entry='echo "*/5 * * * * USED_BYTES=\\$(quota -u '${user}' 2>/dev/null | '${quota_crontab_awk_cmd}' || echo \\"0\\") && '${quota_crontab_sed_cmd}' \\"'${user_dir}'/'${contract_dir}'/env.vars\\" > \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" && [ -s '${user_dir}'/'${contract_dir}'/env.vars.tmp ] && mv \\"'${user_dir}'/'${contract_dir}'/env.vars.tmp\\" \\"'${user_dir}'/'${contract_dir}'/env.vars\\"" | crontab -'
     echo "no custom port or other user settings found. setting up recreate service to copy .vars file and default domain-farwading/proxy-host"
     if [[ "$TLS_TYPE" == "NPMplus" ]] && [[ "$docker_pull_image" != *"reputation"* ]]; then
         domain_ssl_update_1='(crontab -l 2>/dev/null; echo "0 0 */7 * * sleep \\$((RANDOM*3540/32768)) && /usr/bin/bash '${user_dir}'/.docker/domain_ssl_update.sh 2>&1 | tee -a '${user_dir}'/.docker/domain_ssl_update.log") | crontab -'
@@ -1068,6 +1077,7 @@ EOF
     sudo -u "$user" XDG_RUNTIME_DIR="$user_runtime_dir" systemctl --user start docker_vars.service
     echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user stop docker_vars.service" >>$cleanup_script
     echo "sudo -u \"$user\" XDG_RUNTIME_DIR=\"$user_runtime_dir\" systemctl --user disable docker_vars.service" >>$cleanup_script
+    echo "crontab -u $user -r" >>$cleanup_script
     echo "sudo nft flush table ip docker_filter_$user_id 2>/dev/null && sudo nft delete table ip docker_filter_$user_id 2>/dev/null && echo \"Cleaned up docker_filter_$user_id table\"" >>$cleanup_script
     echo "nft list ruleset > /etc/nftables.conf" >>$cleanup_script
     echo "cat $user_dir/.docker/domain_ssl_update.log >> /root/domain_ssl_update.log" >>$cleanup_script

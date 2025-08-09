@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
-version=1.5
+version=1.6
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -529,8 +529,8 @@ service_ready $docker_service || rollback "NO_DOCKERSVC"
 echo "finished Installing rootless dockerd."
 
 
-mkdir -p $docker_img_dir
 img_local_path=$docker_img_dir/$(echo "$docker_pull_image" | tr : -)
+mkdir -p $img_local_path
 img_local_tar_path="$img_local_path.tar"
 
 # Check if the image exists locally, and if it matches dockerhubs,  also using $docker_pull_image for image name, due to any custom settings.

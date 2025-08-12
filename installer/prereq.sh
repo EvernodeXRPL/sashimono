@@ -92,10 +92,10 @@ fi
 # If not add groupquota to the options.
 stage "Configuring fstab"
 updated=0
-sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*grpjquota=aquota.group\S*/{q100} }" "$tmpfstab"
+sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*usrquota\S*/{q100} }" "$tmpfstab"
 res=$?
 if [ $res -eq 0 ]; then
-    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,grpjquota=aquota.group/ }" "$tmpfstab"
+    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,usrquota/ }" "$tmpfstab"
     res=$?
     updated=1
 fi
@@ -103,13 +103,13 @@ fi
 # If the res is not success(0) or already exist(100).
 [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
 
-sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
-res=$?
-if [ $res -eq 0 ]; then
-    sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,jqfmt=vfsv0/ }" "$tmpfstab"
-    res=$?
-    updated=1
-fi
+# sed -n -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ /^\S+\s+\/\s+\S+\s+\S*jqfmt=vfsv0\S*/{q100} }" "$tmpfstab"
+# res=$?
+# if [ $res -eq 0 ]; then
+#     sed -i -r -e "/^[^#]\S+\s+\/\s+\S+\s+\S+\s+[0-9]+\s+[0-9]+\s*/{ s/^\S+\s+\/\s+\S+\s+\S+/&,jqfmt=vfsv0/ }" "$tmpfstab"
+#     res=$?
+#     updated=1
+# fi
 
 # If the res is not success(0) or alredy exist(100).
 [ ! $res -eq 0 ] && [ ! $res -eq 100 ] && echo "fstab update failed." && exit 1
@@ -130,8 +130,8 @@ fi
 
 # Check and turn on group quota if not enabled.
 if [ ! -f /aquota.group ]; then
-    quotacheck -ugm /
-    quotaon -v /
+    quotacheck -cum /
+    quotaon -u /
 fi
 
 # -------------------------------

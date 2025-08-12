@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sashimono contract instance user installation script.
 # This is intended to be called by Sashimono agent.
-version=1.6
+version=1.9
 
 # Check for user cpu and memory quotas.
 cpu=$1
@@ -470,6 +470,17 @@ if [[ "$local_ip" != "$public_hostname_ip" ]]; then
     if [ -z "$lan_subnet" ]; then
         echo "Error: Could not detect LAN subnet."
     else
+        local_dns=$(grep '^nameserver' /etc/resolv.conf | awk 'NR==1 {print $2}')
+        if [ -z "$local_dns" ]; then
+            echo "Warning: Could not detect local DNS IP."
+        else
+            if [ "$(echo "$local_dns" | cut -d'.' -f1-2)" = "$(echo "$lan_subnet" | cut -d'.' -f1-2)" ]; then
+                echo "detected local DNS IP as $local_dns, allowing. (as within the lan subnet of $lan_subnet)"
+                nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $local_dns accept
+            else
+                echo "detected local DNS IP as $local_dns, not part of lan subnet of $lan_subnet"
+            fi
+        fi
         echo "detected lan subnet ip to $lan_subnet, blocking/dropping"
         nft add rule ip docker_filter_$user_id OUTPUT meta skuid $user_id ip daddr $lan_subnet drop
     fi

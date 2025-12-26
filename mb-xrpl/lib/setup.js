@@ -908,7 +908,8 @@ class Setup {
                     const remainingMoments = lease.life_moments - spentMoments;
                     if (remainingMoments > 0) {
                         console.log(`Refunding tenant ${lease.tenant_xrp_address}...`);
-                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, (uriInfo.leaseAmount * remainingMoments).toString(), { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
+                        const refundAmount = UtilHelper.formatXrplAmount(uriInfo.leaseAmount, remainingMoments);
+                        await hostClient.refundTenant(lease.tx_hash, lease.tenant_xrp_address, refundAmount, { retryOptions: { maxRetryAttempts: MAX_TX_RETRY_ATTEMPTS, feeUplift: Math.floor(acc.affordableExtraFee / MAX_TX_RETRY_ATTEMPTS) } });
                     }
                 }
 

@@ -904,7 +904,7 @@ class MessageBoard {
                                     }
                                 }
                                 console.log(`Refunding tenant ${uriToken.Owner}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, uriToken.Owner, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
+                                await this.hostClient.refundTenant(lease.tx_hash, uriToken.Owner, UtilHelper.formatXrplAmount(uriInfo.leaseAmount), { submissionRef: submissionRefs?.refs[0] });
                             });
                         }
                         else {
@@ -970,7 +970,7 @@ class MessageBoard {
                             // If lease is in ACQUIRING status acquire response is not received by the tenant and lease is not in expiry list.
                             if (lease.status === LeaseStatus.ACQUIRING) {
                                 console.log(`Refunding tenant ${uriToken.Owner}...`);
-                                await this.hostClient.refundTenant(lease.tx_hash, uriToken.Owner, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
+                                await this.hostClient.refundTenant(lease.tx_hash, uriToken.Owner, UtilHelper.formatXrplAmount(uriInfo.leaseAmount), { submissionRef: submissionRefs?.refs[0] });
                             }
                         });
                     }
@@ -1101,7 +1101,7 @@ class MessageBoard {
                                                 }
                                             }
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for acquire...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, uriInfo.leaseAmount.toString(), { submissionRef: submissionRefs?.refs[0] });
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, UtilHelper.formatXrplAmount(uriInfo.leaseAmount), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     }
                                 }
@@ -1128,7 +1128,7 @@ class MessageBoard {
                                             }
                                             // The refund for the extension, if tenant still own the URIToken.
                                             console.log(`Refunding tenant ${eventInfo.data.tenant} for extend...`);
-                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, eventInfo.data.payment.toString(), { submissionRef: submissionRefs?.refs[0] });
+                                            await this.hostClient.refundTenant(trx.hash, eventInfo.data.tenant, UtilHelper.formatXrplAmount(eventInfo.data.payment), { submissionRef: submissionRefs?.refs[0] });
                                         });
                                     } else {
                                         console.log(`No such URIToken (${eventInfo.data.uriTokenId}) was found.`);

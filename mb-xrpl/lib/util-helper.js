@@ -1,4 +1,5 @@
 const ip6addr = require('ip6addr');
+const Decimal = require('decimal.js');
 
 class UtilHelper {
 
@@ -37,6 +38,14 @@ class UtilHelper {
             // This will be treated as ip validation failure.
             return false;
         }
+    }
+
+    static formatXrplAmount(amount, multiplier = 1) {
+        Decimal.set({ precision: 15, rounding: Decimal.ROUND_DOWN, toExpNeg: -15, toExpPos: 15 });
+        return new Decimal(amount)
+            .times(multiplier)
+            .toSignificantDigits(15)
+            .toFixed();
     }
 }
 

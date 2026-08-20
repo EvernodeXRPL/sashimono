@@ -100,7 +100,7 @@ namespace hp
 
     int install_user(int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes,
                      const size_t storage_kbytes, std::string_view container_name, const ports instance_ports, std::string_view docker_image,
-                     std::string_view outbound_ipv6, std::string_view outbound_net_interface);
+                     std::string_view outbound_ipv6, std::string_view outbound_net_interface, const std::string_view docker_request);
 
     int uninstall_user(std::string_view username, const ports assigned_ports, std::string_view instance_name);
 

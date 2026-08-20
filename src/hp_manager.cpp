@@ -165,7 +165,15 @@ namespace hp
         //     return -1;
         // }
 
+        std::string docker_request = image;
         std::string image_name = image;
+        
+        auto image_settings_pos = image_name.find("--");
+        if (image_settings_pos != std::string::npos)
+        {
+            image_name = image_name.substr(0, image_settings_pos);
+        }
+
 
         ports instance_ports;
         if (!vacant_ports.empty())
@@ -188,7 +196,7 @@ namespace hp
         std::string username;
         if (install_user(
                 user_id, username, instance_resources.cpu_us, instance_resources.mem_kbytes, instance_resources.swap_kbytes,
-                instance_resources.storage_kbytes, container_name, instance_ports, image_name, outbound_ipv6, outbound_net_interface) == -1)
+                instance_resources.storage_kbytes, container_name, instance_ports, image_name, outbound_ipv6, outbound_net_interface, docker_request) == -1)
         {
             error_msg = USER_INSTALL_ERROR;
             return -1;
@@ -922,7 +930,7 @@ namespace hp
      */
     int install_user(
         int &user_id, std::string &username, const size_t max_cpu_us, const size_t max_mem_kbytes, const size_t max_swap_kbytes, const size_t storage_kbytes,
-        std::string_view container_name, const ports instance_ports, std::string_view docker_image, std::string_view outbound_ipv6, std::string_view outbound_net_interface)
+        std::string_view container_name, const ports instance_ports, std::string_view docker_image, std::string_view outbound_ipv6, std::string_view outbound_net_interface, std::string_view docker_request)
     {
         const std::vector<std::string_view> input_params = {
             std::to_string(max_cpu_us),
@@ -939,7 +947,8 @@ namespace hp
             docker_image,
             conf::cfg.docker.registry_address,
             outbound_ipv6,
-            outbound_net_interface};
+            outbound_net_interface,
+            docker_request};
         std::vector<std::string> output_params;
         if (util::execute_bash_file(conf::ctx.user_install_sh, output_params, input_params) == -1)
             return -1;
